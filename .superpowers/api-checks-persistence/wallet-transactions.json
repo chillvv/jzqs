@@ -1,1 +1,0 @@
-﻿{"code":"OK","message":"success","data":{"items":[{"id":4,"customerId":1,"transactionType":"GRANT","mealDelta":5,"operatorName":"????","remark":"??","createdAt":"2026-05-10T12:00:00"},{"id":1,"customerId":1,"transactionType":"OPEN","mealDelta":33,"operatorName":"ç³»ç»","remark":"å¼å¡","createdAt":"2026-05-10T08:00:00"}],"page":1,"pageSize":20,"total":2}}
