@@ -6,8 +6,13 @@
 # 恢复与备份
 /_recovery/
 
-# 文档
-/docs/
+# AI & 工具产物 (Trae/Superpowers)
+/.trae/
+/.superpowers/
+/.kiro/
+/.claude/
+/docs/superpowers/
+.trae-sandbox/
 
 # IDE
 .idea/
