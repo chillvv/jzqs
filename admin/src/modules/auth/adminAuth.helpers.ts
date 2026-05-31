@@ -56,11 +56,13 @@ export function parseSavedAdminCredentials(rawValue: string | null | undefined):
   if (!parsed || typeof parsed !== "object") {
     return null;
   }
-  const phone = normalizeText((parsed as Record<string, unknown>).phone);
-  const password = typeof (parsed as Record<string, unknown>).password === "string"
-    ? (parsed as Record<string, unknown>).password
+  const record = parsed as Record<string, unknown>;
+  const phone = normalizeText(record.phone);
+  const rawPassword = record.password;
+  const password = typeof rawPassword === "string"
+    ? rawPassword
     : "";
-  const remember = (parsed as Record<string, unknown>).remember === true;
+  const remember = record.remember === true;
   if (!phone || !password || !remember) {
     return null;
   }
