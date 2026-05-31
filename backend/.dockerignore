@@ -1,0 +1,4 @@
+.backup
+target
+uploads
+*.log

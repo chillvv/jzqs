@@ -1,0 +1,57 @@
+<view class="container">
+  <view class="section-title">今日任务</view>
+
+  <view wx:if="{{viewState === 'guest'}}" class="card guest-card">
+    <view class="muted">先去我的里面登录</view>
+    <button class="primary-btn" style="margin-top: 20rpx;" bindtap="openQueue">去我的登录</button>
+  </view>
+
+  <view wx:elif="{{viewState === 'pending'}}" class="card state-card pending-card">
+    <view class="muted">待分配</view>
+  </view>
+
+  <view wx:elif="{{viewState === 'blocked'}}" class="card state-card blocked-card">
+    <view class="muted">已停用</view>
+  </view>
+
+  <block wx:else>
+  <view class="card hero-card">
+    <view class="row-between">
+      <view>
+        <view class="card-title">今日总览</view>
+        <view class="muted">只看任务，不展示骑手身份信息</view>
+      </view>
+      <view class="badge-blue">工作台</view>
+    </view>
+    <view class="stats-grid">
+      <view class="stat-cell">
+        <view class="stat-label">总单数</view>
+        <view class="stat-value">{{summary.totalCount || 0}}</view>
+      </view>
+      <view class="stat-cell">
+        <view class="stat-label">已送达</view>
+        <view class="stat-value">{{summary.deliveredCount || 0}}</view>
+      </view>
+      <view class="stat-cell">
+        <view class="stat-label">剩余单</view>
+        <view class="stat-value">{{summary.remainingCount || 0}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:for="{{cards}}" wx:key="batchId" class="card batch-card">
+    <view class="row-between">
+      <view class="card-title">{{item.mealLabel}}批次</view>
+      <text class="tag tag-blue">{{item.batchStatusLabel}}</text>
+    </view>
+    <view class="muted" style="margin-top: 8rpx;">总 {{item.totalCount}} 单 · 已送 {{item.deliveredCount}} 单 · 剩余 {{item.remainingCount}} 单</view>
+    <view class="muted" style="margin-top: 8rpx;">当前第 {{item.currentSequence}} 站：{{item.currentCustomerName}}</view>
+    <view class="muted" style="margin-top: 8rpx;">下一单：{{item.nextCustomerName}}</view>
+    <button class="primary-btn" style="margin-top: 20rpx;" bindtap="openQueue">进入队列</button>
+  </view>
+
+  <view wx:if="{{!cards.length && !loading}}" class="card muted">
+    今日暂无配送批次
+  </view>
+  </block>
+</view>

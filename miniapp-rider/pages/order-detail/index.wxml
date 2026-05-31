@@ -1,0 +1,205 @@
+<!--订单详情页面-->
+<view class="page-container">
+  
+  <!-- Header -->
+  <view class="header-bar" style="padding-top: {{statusBarHeight}}px; height: calc(112rpx + {{statusBarHeight}}px);">
+    <view class="header-left">
+      <view class="back-btn" bindtap="goBack">
+        <text class="material-symbols-outlined">arrow_back</text>
+      </view>
+      <text class="header-title">订单详情</text>
+      <view class="status-badge" wx:if="{{order.itemStatus === 'DELIVERED'}}">已送达</view>
+      <view class="status-badge status-badge-pending" wx:else>配送中</view>
+    </view>
+  </view>
+
+  <!-- 加载状态 -->
+  <view wx:if="{{loading}}" class="empty-state">
+    <text class="material-symbols-outlined empty-icon">hourglass_empty</text>
+    <text class="empty-text">加载中...</text>
+  </view>
+
+  <!-- 订单不存在 -->
+  <view wx:elif="{{!order}}" class="empty-state">
+    <text class="material-symbols-outlined empty-icon">error</text>
+    <text class="empty-text">订单不存在</text>
+  </view>
+
+  <!-- Main Content -->
+  <view wx:else class="main-content">
+    <!-- Address & Contact Card -->
+    <view class="detail-card address-card">
+      <view class="card-header">
+        <text class="material-symbols-outlined text-primary">location_on</text>
+        <text class="card-title">配送地址</text>
+      </view>
+      <view class="address-text" bindtap="handleCopyAddress">
+        <text wx:if="{{order.buildingInfo}}" class="address-building">{{order.buildingInfo}}</text>
+        {{order.deliveryAddress}}
+      </view>
+      
+      <view class="customer-info">
+        <view class="customer-details">
+          <text class="customer-name">{{order.customerName}}{{order.quantity > 1 ? ' ×' + order.quantity : ''}}</text>
+          <text class="customer-phone">{{order.customerPhone}}</text>
+        </view>
+        <view class="action-buttons">
+          <view class="action-btn phone-btn" bindtap="handleCall">
+            <text class="material-symbols-outlined btn-icon">call</text>
+            <text class="btn-text">联系</text>
+          </view>
+          <view class="action-btn nav-btn" bindtap="handleNavigate">
+            <text class="material-symbols-outlined btn-icon">navigation</text>
+            <text class="btn-text">导航</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- Remarks Grid -->
+    <view class="remarks-container" wx:if="{{order.customerNote || order.merchantNote}}">
+      <!-- User Remarks -->
+      <view class="detail-card remark-card user-remark" wx:if="{{order.customerNote}}">
+        <view class="remark-header text-primary">
+          <text class="material-symbols-outlined">person</text>
+          <text class="remark-title">用户备注</text>
+        </view>
+        <view class="remark-text">{{order.customerNote}}</view>
+      </view>
+      
+      <!-- Merchant Remarks -->
+      <view class="detail-card remark-card merchant-remark" wx:if="{{order.merchantNote}}">
+        <view class="remark-header text-warning">
+          <text class="material-symbols-outlined">storefront</text>
+          <text class="remark-title">商家嘱咐</text>
+        </view>
+        <view class="remark-text">{{order.merchantNote}}</view>
+      </view>
+    </view>
+
+    <!-- Proof of Delivery Section -->
+    <view class="detail-card proof-section">
+      <view class="card-header">
+        <text class="material-symbols-outlined text-success">verified</text>
+        <text class="card-title">送达凭证</text>
+      </view>
+      <view class="detail-note-card">
+        送达后请及时上传回执照片，顾客端会同步看到送达结果。
+      </view>
+      
+      <!-- 已送达且未进入编辑模式：显示已提交的回执 -->
+      <view wx:if="{{order.itemStatus === 'DELIVERED' && !isEditingReceipt}}">
+        <view class="delivered-receipt-view">
+          <!-- 显示已提交的照片 -->
+          <view class="submitted-photo" wx:if="{{order.receiptUrl}}">
+            <image class="receipt-img" src="{{order.receiptUrl}}" mode="aspectFill" bindtap="previewPhoto"></image>
+          </view>
+          <view class="no-photo-hint" wx:else>
+            <text class="material-symbols-outlined">image_not_supported</text>
+            <text>未上传照片</text>
+          </view>
+          
+          <!-- 显示回执说明（始终显示，即使没有照片） -->
+          <view class="submitted-note">
+            <text class="note-label">送达说明：</text>
+            <text class="note-text">{{order.receiptNote || '无'}}</text>
+          </view>
+          
+          <!-- 编辑按钮 -->
+          <view class="receipt-actions">
+            <button class="action-btn-secondary" bindtap="enterEditReceiptMode">
+              <text class="material-symbols-outlined">edit</text>
+              <text>编辑回执</text>
+            </button>
+            <button class="action-btn-danger" bindtap="handleUndoDelivery">
+              <text class="material-symbols-outlined">undo</text>
+              <text>撤回送达</text>
+            </button>
+          </view>
+        </view>
+      </view>
+      
+      <!-- 未送达或进入编辑模式：显示编辑表单 -->
+      <view wx:else>
+        <view class="proof-subtitle">
+          {{isEditingReceipt ? '可以重新拍照或修改说明（至少填写一项）' : '请上传照片或填写文字说明（至少填写一项）'}}
+        </view>
+        
+        <view class="photo-upload-area">
+          <view class="photo-preview" wx:if="{{receiptTempFilePath}}">
+            <image class="preview-img" src="{{receiptTempFilePath}}" mode="aspectFill" bindtap="previewPhoto"></image>
+            <view class="photo-delete-btn" catchtap="removePhoto">
+              <text class="material-symbols-outlined icon-sm">close</text>
+            </view>
+          </view>
+          
+          <view class="photo-upload-btn" bindtap="choosePhoto" wx:if="{{!receiptTempFilePath}}">
+            <text class="material-symbols-outlined">add_a_photo</text>
+            <text class="photo-upload-text">{{isEditingReceipt ? '重新拍照' : '拍照上传'}}</text>
+          </view>
+        </view>
+
+        <!-- Rider Note Input -->
+        <view class="rider-note-area">
+          <textarea 
+            class="rider-note-input" 
+            placeholder="{{isEditingReceipt ? '修改送达说明（选填）...' : '添加送达说明（选填）...'}}" 
+            value="{{receiptNote}}"
+            bindinput="onReceiptNoteInput"
+            maxlength="200"
+            auto-height
+          ></textarea>
+        </view>
+      </view>
+    </view>
+
+    <view class="detail-card detail-note-card detail-note-card--actions" wx:if="{{order.itemStatus !== 'DELIVERED' && !isEditingReceipt}}">
+      <view class="detail-note-title">异常与节奏处理</view>
+      <view class="detail-note-copy">如需调整配送顺序或遇到异常，请先在这里处理，再回到队列继续配送。</view>
+      <view class="detail-note-actions">
+        <button class="action-btn-secondary" bindtap="handleDefer">
+          <text class="material-symbols-outlined">schedule</text>
+          <text>稍后送这单</text>
+        </button>
+        <button class="action-btn-danger" bindtap="reportException">
+          <text class="material-symbols-outlined">warning</text>
+          <text>上报配送异常</text>
+        </button>
+      </view>
+    </view>
+
+    <!-- Bottom Spacing for Fixed Action Bar -->
+    <view class="bottom-spacer"></view>
+
+  </view>
+
+  <view class="bottom-action-bar" wx:if="{{order}}">
+    <!-- 未送达或编辑模式：显示操作按钮 -->
+    <view wx:if="{{order.itemStatus !== 'DELIVERED' || isEditingReceipt}}" class="action-bar-buttons">
+      <!-- 取消编辑按钮（仅编辑模式显示） -->
+      <button 
+        class="cancel-btn"
+        bindtap="cancelEditReceipt"
+        wx:if="{{isEditingReceipt}}"
+      >
+        取消
+      </button>
+      
+      <!-- 提交/更新按钮 -->
+      <button 
+        class="submit-btn {{submitting ? 'disabled' : ''}}"
+        disabled="{{submitting}}"
+        bindtap="handleSubmitReceipt"
+      >
+        {{submitting ? (isEditingReceipt ? '更新中...' : '提交中...') : (isEditingReceipt ? '保存更新' : '确认送达')}}
+      </button>
+    </view>
+    
+    <!-- 已送达且未编辑：显示已送达状态 -->
+    <view class="delivered-status-btn" wx:else>
+      <text class="material-symbols-outlined">check_circle</text>
+      <text>该订单已送达</text>
+    </view>
+  </view>
+
+</view>

@@ -1,0 +1,294 @@
+/* 主卡片 - 现代渐变设计 */
+.hero-card {
+  background: linear-gradient(135deg, #1677ff 0%, #0958d9 100%);
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 8rpx 32rpx rgba(22, 119, 255, 0.25);
+  padding: 32rpx;
+}
+
+.hero-card .card-title {
+  color: #ffffff;
+  font-size: 36rpx;
+  font-weight: 600;
+}
+
+.hero-card .muted {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 26rpx;
+}
+
+.badge-blue {
+  padding: 10rpx 20rpx;
+  border-radius: 20rpx;
+  background: rgba(255, 255, 255, 0.25);
+  color: #ffffff;
+  font-size: 22rpx;
+  font-weight: 600;
+  backdrop-filter: blur(10rpx);
+}
+
+/* 统计网格 */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12rpx;
+  margin-top: 24rpx;
+}
+
+.stat-cell {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 16rpx;
+  padding: 24rpx 16rpx;
+  text-align: center;
+  backdrop-filter: blur(10rpx);
+  transition: all 0.3s ease;
+}
+
+.stat-cell-success {
+  background: rgba(82, 196, 26, 0.25);
+}
+
+.stat-cell-warning {
+  background: rgba(250, 173, 20, 0.25);
+}
+
+.stat-label {
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 24rpx;
+  margin-bottom: 12rpx;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 52rpx;
+  font-weight: 700;
+  color: #ffffff;
+  line-height: 1;
+}
+
+/* 进度区域 */
+.progress-section {
+  margin-top: 24rpx;
+  padding: 20rpx;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 16rpx;
+  backdrop-filter: blur(10rpx);
+}
+
+/* 快捷操作 */
+.quick-actions {
+  margin-top: 28rpx;
+}
+
+.quick-actions .primary-btn {
+  background: #ffffff;
+  color: #1677ff;
+  font-weight: 600;
+  box-shadow: 0 4rpx 16rpx rgba(0, 0, 0, 0.1);
+}
+
+.quick-actions .secondary-btn {
+  margin-top: 16rpx;
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  border: 2rpx solid rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(10rpx);
+}
+
+.button-wrapper {
+  margin-top: 24rpx;
+}
+
+/* 批次卡片 - 紧凑版 */
+.batch-card-compact {
+  background: #ffffff;
+  border: 2rpx solid #e8e8e8;
+  padding: 24rpx;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.batch-card-compact:active {
+  transform: scale(0.98);
+  background: #fafafa;
+}
+
+.batch-header-compact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.batch-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  flex: 1;
+}
+
+.batch-icon {
+  font-size: 32rpx;
+  line-height: 1;
+}
+
+.batch-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.batch-count {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #666666;
+  margin-left: auto;
+  margin-right: 12rpx;
+}
+
+.batch-progress-compact {
+  margin-bottom: 12rpx;
+}
+
+.batch-action-hint {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 12rpx;
+  border-top: 1rpx solid #f0f0f0;
+}
+
+.hint-text {
+  font-size: 24rpx;
+  color: #1677ff;
+  font-weight: 500;
+}
+
+.hint-arrow {
+  font-size: 24rpx;
+  color: #1677ff;
+  font-weight: 700;
+}
+
+/* 批次卡片 - 详细版（保留用于未来） */
+.batch-card {
+  background: #ffffff;
+  border: 2rpx solid #e8e8e8;
+}
+
+.batch-header {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+/* 批次统计 */
+.batch-stats {
+  display: flex;
+  gap: 24rpx;
+  margin-top: 20rpx;
+  padding: 20rpx;
+  background: #fafafa;
+  border-radius: 12rpx;
+}
+
+.batch-stat {
+  font-size: 24rpx;
+  color: #666666;
+  font-weight: 500;
+}
+
+.batch-progress {
+  margin-top: 20rpx;
+}
+
+/* 批次信息 */
+.batch-info {
+  margin-top: 20rpx;
+  padding: 20rpx;
+  background: #f0f9ff;
+  border-radius: 12rpx;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12rpx;
+  line-height: 1.6;
+}
+
+.info-row:last-child {
+  margin-bottom: 0;
+}
+
+.info-label {
+  font-size: 26rpx;
+  color: #666666;
+  margin-right: 8rpx;
+  flex-shrink: 0;
+}
+
+.info-value {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: #1677ff;
+  flex: 1;
+}
+
+/* 游客卡片 */
+.guest-card {
+  background: #ffffff;
+  text-align: center;
+  padding: 60rpx 32rpx;
+}
+
+/* 状态卡片 */
+.state-card {
+  text-align: center;
+  padding: 60rpx 32rpx;
+}
+
+.state-icon {
+  font-size: 96rpx;
+  margin-bottom: 20rpx;
+  line-height: 1;
+}
+
+.state-title {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 12rpx;
+}
+
+.pending-card {
+  background: linear-gradient(135deg, #fff7e6 0%, #ffffff 100%);
+  border: 2rpx solid #faad14;
+}
+
+.blocked-card {
+  background: linear-gradient(135deg, #fff1f0 0%, #ffffff 100%);
+  border: 2rpx solid #ff4d4f;
+}
+
+/* 空状态卡片 */
+.empty-card {
+  text-align: center;
+  padding: 100rpx 32rpx;
+  background: #ffffff;
+}
+
+.empty-icon {
+  font-size: 120rpx;
+  margin-bottom: 28rpx;
+  opacity: 0.4;
+  line-height: 1;
+}
+
+.empty-text {
+  font-size: 28rpx;
+  color: #666666;
+  font-weight: 500;
+  margin-bottom: 12rpx;
+}

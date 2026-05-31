@@ -1,0 +1,130 @@
+<view class="container">
+  <view class="section-title">今日任务</view>
+
+  <!-- 待分配状态 -->
+  <view wx:if="{{viewState === 'pending'}}" class="card state-card pending-card">
+    <view class="state-icon">⏳</view>
+    <view class="state-title">待分配</view>
+    <view class="muted">请等待老板分配任务</view>
+  </view>
+
+  <!-- 已停用状态 -->
+  <view wx:elif="{{viewState === 'blocked'}}" class="card state-card blocked-card">
+    <view class="state-icon">🚫</view>
+    <view class="state-title">已停用</view>
+    <view class="muted">账号已停用，请联系老板</view>
+  </view>
+
+  <!-- 工作状态 -->
+  <block wx:else>
+    <!-- 总览卡片 -->
+    <view class="card hero-card">
+      <view class="row-between">
+        <view>
+          <view class="card-title">今日总览</view>
+          <view class="muted">{{summary.riderName}}</view>
+        </view>
+        <view class="badge-blue">工作台</view>
+      </view>
+
+      <!-- 统计数据 -->
+      <view class="stats-grid">
+        <view class="stat-cell">
+          <view class="stat-label">总单数</view>
+          <view class="stat-value">{{summary.totalCount}}</view>
+        </view>
+        <view class="stat-cell stat-cell-success">
+          <view class="stat-label">已送达</view>
+          <view class="stat-value">{{summary.deliveredCount}}</view>
+        </view>
+        <view class="stat-cell stat-cell-warning">
+          <view class="stat-label">剩余单</view>
+          <view class="stat-value">{{summary.remainingCount}}</view>
+        </view>
+      </view>
+
+      <!-- 进度条 -->
+      <view class="progress-section">
+        <progress-bar
+          current="{{summary.deliveredCount}}"
+          total="{{summary.totalCount}}"
+          color="#10b981"
+          height="20rpx"
+        />
+      </view>
+
+      <!-- 快捷操作 -->
+      <view class="quick-actions">
+        <button class="primary-btn" bindtap="openQueue">进入队列</button>
+        <button 
+          class="secondary-btn" 
+          bindtap="viewCompleted"
+          wx:if="{{summary.deliveredCount > 0}}"
+        >
+          查看已完成 ({{summary.deliveredCount}})
+        </button>
+      </view>
+    </view>
+
+    <!-- 午餐批次 -->
+    <view wx:if="{{lunchBatch}}" class="card batch-card-compact" bindtap="openQueueWithMeal" data-meal="LUNCH">
+      <view class="batch-header-compact">
+        <view class="batch-title-row">
+          <text class="batch-icon">🍱</text>
+          <text class="batch-title">{{lunchBatch.mealLabel}}批次</text>
+          <text class="batch-count">{{lunchBatch.deliveredCount}}/{{lunchBatch.totalCount}}</text>
+        </view>
+        <text class="tag tag-blue">{{lunchBatch.batchStatusLabel}}</text>
+      </view>
+
+      <view class="batch-progress-compact">
+        <progress-bar
+          current="{{lunchBatch.deliveredCount}}"
+          total="{{lunchBatch.totalCount}}"
+          color="#3b82f6"
+          height="12rpx"
+          showText="{{false}}"
+        />
+      </view>
+
+      <view class="batch-action-hint">
+        <text class="hint-text">点击进入午餐队列</text>
+        <text class="hint-arrow">→</text>
+      </view>
+    </view>
+
+    <!-- 晚餐批次 -->
+    <view wx:if="{{dinnerBatch}}" class="card batch-card-compact" bindtap="openQueueWithMeal" data-meal="DINNER">
+      <view class="batch-header-compact">
+        <view class="batch-title-row">
+          <text class="batch-icon">🍜</text>
+          <text class="batch-title">{{dinnerBatch.mealLabel}}批次</text>
+          <text class="batch-count">{{dinnerBatch.deliveredCount}}/{{dinnerBatch.totalCount}}</text>
+        </view>
+        <text class="tag tag-orange">{{dinnerBatch.batchStatusLabel}}</text>
+      </view>
+
+      <view class="batch-progress-compact">
+        <progress-bar
+          current="{{dinnerBatch.deliveredCount}}"
+          total="{{dinnerBatch.totalCount}}"
+          color="#f59e0b"
+          height="12rpx"
+          showText="{{false}}"
+        />
+      </view>
+
+      <view class="batch-action-hint">
+        <text class="hint-text">点击进入晚餐队列</text>
+        <text class="hint-arrow">→</text>
+      </view>
+    </view>
+
+    <!-- 无批次提示 -->
+    <view wx:if="{{!hasAnyBatch && !loading}}" class="card empty-card">
+      <view class="empty-icon">📦</view>
+      <view class="empty-text">今日暂无配送批次</view>
+      <view class="muted">请等待老板分配任务</view>
+    </view>
+  </block>
+</view>

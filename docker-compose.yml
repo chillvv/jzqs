@@ -1,0 +1,62 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: jzqs-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --performance_schema=OFF
+      - --innodb_buffer_pool_size=256M
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "3306:3306"
+    deploy:
+      resources:
+        limits:
+          memory: 800M
+
+  backend:
+    build:
+      context: ./backend
+    container_name: jzqs-backend
+    restart: unless-stopped
+    depends_on:
+      - mysql
+    environment:
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      SERVER_PORT: ${SERVER_PORT}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE}
+      TENCENT_MAP_KEY: ${TENCENT_MAP_KEY}
+      WECHAT_DEV_MODE: ${WECHAT_DEV_MODE}
+      WECHAT_APPID: ${WECHAT_APPID}
+      WECHAT_SECRET: ${WECHAT_SECRET}
+      WECHAT_CLOUD_ENV_ID: ${WECHAT_CLOUD_ENV_ID}
+      JAVA_OPTS: "-Xmx512m -Xms512m"
+    ports:
+      - "${BACKEND_PORT}:8080"
+    deploy:
+      resources:
+        limits:
+          memory: 800M
+
+  admin:
+    build:
+      context: ./admin
+    container_name: jzqs-admin
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${ADMIN_PORT}:80"
+
+volumes:
+  mysql_data:

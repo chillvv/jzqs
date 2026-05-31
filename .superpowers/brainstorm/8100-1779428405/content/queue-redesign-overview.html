@@ -1,0 +1,61 @@
+<h2>骑手小程序 - 队列页面重新设计方案</h2>
+<p class="subtitle">解决当前页面过长、操作繁琐、不够直观的问题</p>
+
+<div class="section">
+  <h3>当前设计的主要问题</h3>
+  <div class="pros-cons">
+    <div class="cons">
+      <h4>❌ 当前问题</h4>
+      <ul>
+        <li>页面太长，需要不停滚动才能看到队列</li>
+        <li>当前任务占据大量空间，但队列列表才是核心</li>
+        <li>拍照、回执等操作混在主页面，干扰视线</li>
+        <li>队列列表每一项太大，一屏只能看2-3单</li>
+        <li>上移/下移按钮不直观，应该用拖拽</li>
+        <li>没有快速操作，每个动作都要点很多次</li>
+      </ul>
+    </div>
+    <div class="pros">
+      <h4>✅ 重新设计目标</h4>
+      <ul>
+        <li>队列列表为核心，一屏显示6-8单</li>
+        <li>紧凑卡片设计，信息密度更高</li>
+        <li>点击进入详情页，所有操作在里面</li>
+        <li>支持拖拽排序，直观易用</li>
+        <li>快速操作：长按、滑动等手势</li>
+        <li>减少滚动，提升效率</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>接下来我会展示三个核心设计</h3>
+  <div class="options">
+    <div class="option" data-choice="queue-list" onclick="toggleSelect(this)">
+      <div class="letter">1</div>
+      <div class="content">
+        <h3>队列列表页（主页面）</h3>
+        <p>紧凑卡片 + 拖拽排序 + 快速操作</p>
+      </div>
+    </div>
+    <div class="option" data-choice="order-detail" onclick="toggleSelect(this)">
+      <div class="letter">2</div>
+      <div class="content">
+        <h3>订单详情页（点击进入）</h3>
+        <p>导航、拍照、回执、异常上报等所有操作</p>
+      </div>
+    </div>
+    <div class="option" data-choice="quick-actions" onclick="toggleSelect(this)">
+      <div class="letter">3</div>
+      <div class="content">
+        <h3>快速操作设计</h3>
+        <p>长按菜单、滑动操作、批量处理</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <p class="subtitle">点击上面的选项，我会详细展示每个设计方案</p>
+</div>

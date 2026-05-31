@@ -1,0 +1,108 @@
+.service-hero {
+  margin: -40rpx 24rpx 20rpx;
+  padding: 32rpx;
+  border-radius: 32rpx;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, #f7f9ee 100%);
+  box-shadow: 0 10rpx 28rpx rgba(146, 170, 64, 0.12);
+  position: relative;
+  z-index: 3;
+}
+
+.service-hero__eyebrow {
+  font-size: 22rpx;
+  font-weight: 700;
+  color: var(--brand-dark);
+  letter-spacing: 3rpx;
+  text-transform: uppercase;
+}
+
+.service-hero__title {
+  margin-top: 12rpx;
+  font-size: 42rpx;
+  font-weight: 800;
+  color: var(--text-main);
+  line-height: 1.35;
+}
+
+.service-hero__desc {
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: var(--text-sub);
+}
+
+.service-pill-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 24rpx;
+}
+
+.service-pill {
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: #ffffff;
+  border: 2rpx solid rgba(146, 170, 64, 0.2);
+  color: var(--brand-dark);
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.service-hero__cta {
+  margin-top: 24rpx;
+  width: 100%;
+  border: none;
+  border-radius: 999rpx;
+  background: var(--brand-primary);
+  color: #111111;
+  font-size: 28rpx;
+  font-weight: 700;
+  line-height: 88rpx;
+}
+
+.service-hero__cta::after {
+  border: none;
+}
+
+.service-guide-card {
+  margin: 0 24rpx 24rpx;
+  padding: 28rpx;
+  border-radius: 28rpx;
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
+}
+
+.service-guide-card__title {
+  font-size: 30rpx;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.service-guide-card__item {
+  display: flex;
+  gap: 16rpx;
+  margin-top: 20rpx;
+  align-items: flex-start;
+}
+
+.service-guide-card__index {
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 50%;
+  background: var(--brand-light);
+  color: var(--brand-dark);
+  font-size: 22rpx;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 4rpx;
+}
+
+.service-guide-card__text {
+  flex: 1;
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: var(--text-sub);
+}

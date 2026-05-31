@@ -1,0 +1,48 @@
+<view class="subpage register-page">
+  <view class="subpage-card register-hero">
+    <view class="subpage-title">新用户注册</view>
+    <view class="subpage-subtitle">首次使用请先填写姓名和手机号，注册完成后返回上一页登录。</view>
+  </view>
+
+  <view class="subpage-card">
+    <view class="section-label">基本信息</view>
+
+    <view class="inline-form-item">
+      <view class="inline-form-label">姓名</view>
+      <input
+        class="form-input"
+        type="nickname"
+        maxlength="20"
+        placeholder="请输入姓名"
+        value="{{form.nickname}}"
+        bindinput="onNicknameInput"
+      />
+    </view>
+
+    <view class="inline-form-item">
+      <view class="inline-form-label">手机号</view>
+      <input
+        class="form-input"
+        type="number"
+        maxlength="11"
+        placeholder="输入11位手机号"
+        value="{{form.phoneNumber}}"
+        bindinput="onPhoneInput"
+      />
+    </view>
+
+    <view class="register-phone-hint" wx:if="{{phoneHint}}">
+      已填写：<text class="register-phone-value">{{phoneHint}}</text>
+    </view>
+  </view>
+
+  <view class="register-actions">
+    <button
+      class="sub-btn primary full-btn"
+      loading="{{saving}}"
+      disabled="{{saving}}"
+      bindtap="submitRegister"
+    >确认注册</button>
+    <view class="register-login-link" bindtap="backToLogin">已有账号，返回登录</view>
+  </view>
+</view>

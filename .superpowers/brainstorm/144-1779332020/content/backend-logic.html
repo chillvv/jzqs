@@ -1,0 +1,100 @@
+<h2>后端逻辑调整方案</h2>
+<p class="subtitle">配送流程改为两步：先归区域 → 再分配骑手</p>
+
+<div class="section">
+  <h3>当前问题</h3>
+  <ul style="font-size: 14px; line-height: 1.8;">
+    <li><code>AREA_ONLY</code> 模式实际上也自动选了骑手，不符合"只归区域"的需求</li>
+    <li>待分配列表包含已分配订单（<code>hasDispatchAssignment === true</code>），需要过滤掉</li>
+    <li>地址匹配用硬编码 keyword，区域关键词不可维护</li>
+    <li>智能派单未考虑"只归区域"的场景</li>
+  </ul>
+</div>
+
+<div class="section">
+  <h3>改动方案</h3>
+</div>
+
+<div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+  <h4 style="margin: 0 0 8px 0;">1. 待分配列表 — 只返回真正未分配的订单</h4>
+  <p style="font-size: 13px; color: #475569; margin: 0;">
+    <code>pendingItems()</code> SQL 添加 <code>AND da.id IS NULL</code>，已存在 <code>dispatch_assignments</code> 的订单不再出现。
+  </p>
+</div>
+
+<div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+  <h4 style="margin: 0 0 8px 0;">2. 批量分配改为"只归区域"</h4>
+  <p style="font-size: 13px; color: #475569; margin: 0;">
+    去掉 <code>AREA_AND_RIDER</code> 模式。<code>AREA_ONLY</code> 只创建 <code>dispatch_assignments</code> 记录（<code>rider_name = NULL</code>，<code>status = 'AREA_ASSIGNED'</code>），不分配骑手。<br>
+    前端批量工具栏只保留"选择区域"→"归入区域"，去掉骑手选择。
+  </p>
+</div>
+
+<div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+  <h4 style="margin: 0 0 8px 0;">3. 区域管理 — 分配骑手</h4>
+  <p style="font-size: 13px; color: #475569; margin: 0;">
+    新增逻辑：在区域管理中给区域分配骑手时，将该区域下所有 <code>status = 'AREA_ASSIGNED'</code> 的订单批量更新 <code>rider_name</code> 和 <code>status = 'DISPATCHING'</code>。<br>
+    也可以单独给某订单分配骑手（弹窗选择）。
+  </p>
+</div>
+
+<div style="background: #f8fafc; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+  <h4 style="margin: 0 0 8px 0;">4. 地址匹配 — 关键词可维护</h4>
+  <p style="font-size: 13px; color: #475569; margin: 0;">
+    去掉 SQL 里的硬编码 <code>UNION ALL</code> keyword，改用 <code>dispatch_area_bindings.keywords</code> 字段进行 LIKE 匹配。<br>
+    商家可以在区域管理中配置关键词，例如"高新区 → 科技路、软件园、创业大厦"。</p>
+</div>
+
+<div class="section" style="margin-top: 16px;">
+  <h3>数据流变化</h3>
+</div>
+
+<div style="background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px;">
+  <div style="font-size: 13px; font-family: monospace; line-height: 2;">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <span style="background: #fef3c7; padding: 2px 8px; border-radius: 4px;">待分配订单</span>
+      <span>→</span>
+      <span style="background: #dbeafe; padding: 2px 8px; border-radius: 4px;">归入区域</span>
+      <span>→</span>
+      <span style="background: #e0e7ff; padding: 2px 8px; border-radius: 4px;">AREA_ASSIGNED</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+      <span style="background: #dbeafe; padding: 2px 8px; border-radius: 4px;">AREA_ASSIGNED</span>
+      <span>→</span>
+      <span style="background: #f0fdf4; padding: 2px 8px; border-radius: 4px;">分配骑手（区域管理）</span>
+      <span>→</span>
+      <span style="background: #dcfce7; padding: 2px 8px; border-radius: 4px;">DISPATCHING</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+      <span style="background: #dcfce7; padding: 2px 8px; border-radius: 4px;">DISPATCHING</span>
+      <span>→</span>
+      <span style="background: #f0fdf4; padding: 2px 8px; border-radius: 4px;">送达回执</span>
+      <span>→</span>
+      <span style="background: #f0fdf4; padding: 2px 8px; border-radius: 4px;">DELIVERED</span>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 16px;">
+  <h3>影响范围</h3>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px;">
+    <div style="padding: 12px; background: #f0fdf4; border-radius: 8px;">
+      <div style="font-weight: 600; font-size: 13px; color: #16a34a; margin-bottom: 4px;">后端修改</div>
+      <ul style="font-size: 12px; color: #475569; margin: 0; padding-left: 14px; line-height: 1.7;">
+        <li><code>DispatchServiceImpl.java</code> — pendingItems、batchAssign 逻辑</li>
+        <li><code>BatchAssignRequest.java</code> — 简化，去掉 riderName</li>
+        <li><code>DispatchController.java</code> — 新增/修改端点</li>
+      </ul>
+    </div>
+    <div style="padding: 12px; background: #eff6ff; border-radius: 8px;">
+      <div style="font-weight: 600; font-size: 13px; color: #2563eb; margin-bottom: 4px;">前端修改</div>
+      <ul style="font-size: 12px; color: #475569; margin: 0; padding-left: 14px; line-height: 1.7;">
+        <li><code>DispatchHomePage.tsx</code> — 简化表格和工具栏</li>
+        <li><code>DispatchAreasPage.tsx</code> — 融入配送看板和骑手分配</li>
+        <li><code>http.ts / types.ts</code> — 调整 API 调用和类型</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<p class="subtitle" style="margin-top: 20px;">这个后端方案可以吗？确认后我出完整的设计文档。</p>

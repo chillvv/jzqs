@@ -1,0 +1,23 @@
+package com.jzqs.app.order.api;
+public record OrderPrepItemResponse(
+    long id,
+    String customerName,
+    String customerPhone,
+    String mealSummary,
+    int quantity,
+    String userNote,
+    String adminNote,
+    String specialTag,
+    String deliveryAddress,
+    String source,
+    boolean priorityCustomer,
+    boolean fixedSubscription,
+    String status,
+    String displayStatus,
+    String displayStatusLabel,
+    boolean canAssign,
+    boolean canCancel,
+    boolean canReceipt,
+    String walletStatusLabel
+) {
+}

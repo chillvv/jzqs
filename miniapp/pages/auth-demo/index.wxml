@@ -1,0 +1,86 @@
+<view class="container">
+  <view class="header">
+    <text class="title">统一认证演示</text>
+    <text class="subtitle">微信小程序统一登录方案</text>
+  </view>
+
+  <view class="card">
+    <view class="card-title">认证状态</view>
+    <view class="status-item">
+      <text class="label">就绪状态:</text>
+      <text class="value {{authState?.ready ? 'success' : 'error'}}">
+        {{authState?.ready ? '已就绪' : '未就绪'}}
+      </text>
+    </view>
+    <view class="status-item">
+      <text class="label">登录状态:</text>
+      <text class="value {{authState?.loggedIn ? 'success' : 'error'}}">
+        {{authState?.loggedIn ? '已登录' : '未登录'}}
+      </text>
+    </view>
+    <view class="status-item">
+      <text class="label">注册状态:</text>
+      <text class="value {{authState?.registered ? 'success' : 'error'}}">
+        {{authState?.registered ? '已注册' : '未注册'}}
+      </text>
+    </view>
+    <view class="status-item">
+      <text class="label">用户类型:</text>
+      <text class="value">{{authState?.userType || '未知'}}</text>
+    </view>
+    <view class="status-item">
+      <text class="label">用户ID:</text>
+      <text class="value">{{authState?.userId || '未登录'}}</text>
+    </view>
+    <view class="status-item">
+      <text class="label">状态信息:</text>
+      <text class="value">{{message}}</text>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="card-title">操作</view>
+    
+    <button 
+      class="btn {{loading ? 'btn-disabled' : 'btn-primary'}}" 
+      bindtap="handleSilentLogin"
+      disabled="{{loading}}"
+    >
+      {{loading ? '处理中...' : '静默登录'}}
+    </button>
+    
+    <button 
+      class="btn btn-primary" 
+      open-type="getPhoneNumber"
+      bindgetphonenumber="handleGetPhoneNumber"
+    >
+      微信一键登录
+    </button>
+    
+    <button 
+      class="btn btn-secondary" 
+      bindtap="testApi"
+      disabled="{{!authState?.loggedIn}}"
+    >
+      测试 API
+    </button>
+    
+    <button 
+      class="btn btn-danger" 
+      bindtap="handleLogout"
+      disabled="{{!authState?.loggedIn}}"
+    >
+      退出登录
+    </button>
+  </view>
+
+  <view class="card">
+    <view class="card-title">说明</view>
+    <view class="tips">
+      <text>1. 静默登录：通过 wx.login() 获取 openid</text>
+      <text>2. 微信一键登录：使用新版 getPhoneNumber API</text>
+      <text>3. 退出登录：清除本地 token</text>
+      <text>4. 测试 API：验证 token 有效性</text>
+    </view>
+  </view>
+</view>

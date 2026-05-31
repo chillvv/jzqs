@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: jzqs-backend
+  jackson:
+    time-zone: Asia/Shanghai
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://127.0.0.1:3306/jzqs?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+    show-sql: false
+  flyway:
+    enabled: true
+    repair-on-migrate: true
+
+logging:
+  level:
+    org.springframework.jdbc.core: INFO
+    org.springframework.jdbc.core.JdbcTemplate: INFO
+    org.springframework.jdbc.core.StatementCreatorUtils: INFO
+    # 只显示 SQL 语句，不显示结果集详情
+    com.baomidou.mybatisplus: INFO
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    # 注释掉详细日志输出，只在需要调试时开启
+    # log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+
+server:
+  port: ${SERVER_PORT:8081}
+
+tencent:
+  map:
+    key: ${TENCENT_MAP_KEY:}
+
+# 微信小程序配置
+wechat:
+  # 开发模式：true 时不调用微信接口，使用模拟数据
+  dev-mode: ${WECHAT_DEV_MODE:true}
+  # 小程序 AppID（生产模式必填）
+  appid: ${WECHAT_APPID:}
+  # 小程序 AppSecret（生产模式必填）
+  secret: ${WECHAT_SECRET:}
+  # 云开发环境 ID
+  cloud-env-id: ${WECHAT_CLOUD_ENV_ID:cloud1-4g88w3e2dedee471}

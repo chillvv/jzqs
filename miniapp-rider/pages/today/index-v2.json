@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "今日任务",
+  "enablePullDownRefresh": true,
+  "backgroundColor": "#F5F6F7",
+  "backgroundTextStyle": "dark",
+  "usingComponents": {
+    "progress-bar": "../../components/progress-bar/index"
+  }
+}

@@ -1,0 +1,178 @@
+/**
+ * 拖拽排序 WXS 模块（优化版）
+ * 特性：
+ * 1. 移动一定距离后触发拖拽（防止误触）
+ * 2. 平滑的拖拽体验
+ * 3. 清晰的视觉反馈
+ * 4. 阻止页面滚动
+ */
+var g = {
+  startY: 0,
+  startX: 0,
+  startIndex: -1,
+  curIndex: -1,
+  itemHeight: 160,
+  itemCount: 0,
+  isDragging: false,
+  isLongPress: false,
+  startTime: 0
+};
+
+var LONG_PRESS_TIME = 350;  // 长按时间（毫秒）
+var MOVE_THRESHOLD = 15;     // 移动阈值（像素）
+
+/**
+ * 触摸开始
+ */
+function touchStart(e, owner) {
+  var ds = e.currentTarget.dataset;
+  var index = ds.index;
+  
+  if (index === undefined) return;
+  if (!ds.editMode) return;
+  if (ds.itemStatus === 'DELIVERED') return;
+
+  var touch = e.touches[0];
+  g.startY = touch.clientY;
+  g.startX = touch.clientX;
+  g.startIndex = index;
+  g.curIndex = index;
+  g.itemCount = ds.listLen || 0;
+  g.itemHeight = ds.itemHeight || 160;
+  g.isLongPress = false;
+  g.isDragging = false;
+  g.startTime = e.timeStamp;
+}
+
+/**
+ * 触摸移动
+ */
+function touchMove(e, owner) {
+  var touch = e.touches[0];
+  var deltaX = touch.clientX - g.startX;
+  var deltaY = touch.clientY - g.startY;
+  var absDeltaX = Math.abs(deltaX);
+  var absDeltaY = Math.abs(deltaY);
+  
+  // 检查是否长按（时间超过阈值）
+  if (!g.isLongPress && (e.timeStamp - g.startTime) >= LONG_PRESS_TIME) {
+    g.isLongPress = true;
+  }
+  
+  // 如果是横向滑动，不触发拖拽
+  if (absDeltaX > absDeltaY && absDeltaX > MOVE_THRESHOLD) {
+    return;
+  }
+  
+  // 检查是否应该开始拖拽：长按 + 移动超过阈值
+  if (!g.isDragging && g.isLongPress && absDeltaY > MOVE_THRESHOLD) {
+    g.isDragging = true;
+    owner.callMethod('_dragStart', { 
+      index: g.startIndex, 
+      itemId: e.currentTarget.dataset.itemId 
+    });
+  }
+  
+  // 只有在拖拽状态才处理移动
+  if (!g.isDragging) return;
+  
+  var h = g.itemHeight;
+  if (h <= 0) h = 160;
+
+  // 计算目标索引
+  var moveSteps = Math.round(deltaY / h);
+  var newIdx = g.startIndex + moveSteps;
+  newIdx = Math.max(0, Math.min(newIdx, g.itemCount - 1));
+
+  // 边界交叉 -> 通知 JS 振动
+  if (newIdx !== g.curIndex) {
+    owner.callMethod('_dragCross', { 
+      from: g.curIndex, 
+      to: newIdx 
+    });
+    g.curIndex = newIdx;
+  }
+
+  setTransforms(owner, deltaY, newIdx, h);
+}
+
+/**
+ * 触摸结束
+ */
+function touchEnd(e, owner) {
+  // 如果没有进入拖拽状态，直接返回
+  if (!g.isDragging) {
+    resetState();
+    return;
+  }
+  
+  g.isDragging = false;
+
+  owner.callMethod('_dragEnd', {
+    from: g.startIndex,
+    to: g.curIndex
+  });
+
+  resetState();
+}
+
+/**
+ * 触摸取消
+ */
+function touchCancel(e, owner) {
+  if (g.isDragging) {
+    g.isDragging = false;
+    owner.callMethod('_dragCancel', {});
+  }
+  
+  resetState();
+}
+
+/**
+ * 设置 transform
+ */
+function setTransforms(owner, deltaY, newIdx, h) {
+  var data = {};
+  var arr = [];
+  var len = g.itemCount;
+  var start = g.startIndex;
+
+  for (var i = 0; i < len; i++) {
+    if (i === start) {
+      // 被拖拽的元素跟随手指
+      arr[i] = Math.round(deltaY);
+    } else if (newIdx > start && i > start && i <= newIdx) {
+      // 向下拖拽，中间元素向上移
+      arr[i] = -h;
+    } else if (newIdx < start && i >= newIdx && i < start) {
+      // 向上拖拽，中间元素向下移
+      arr[i] = h;
+    } else {
+      // 其他元素保持不动
+      arr[i] = 0;
+    }
+  }
+  
+  data['itemTransforms'] = arr;
+  owner.setData(data);
+}
+
+/**
+ * 重置状态
+ */
+function resetState() {
+  g.startY = 0;
+  g.startX = 0;
+  g.startIndex = -1;
+  g.curIndex = -1;
+  g.itemCount = 0;
+  g.isLongPress = false;
+  g.startTime = 0;
+}
+
+module.exports = {
+  touchStart: touchStart,
+  touchMove: touchMove,
+  touchEnd: touchEnd,
+  touchCancel: touchCancel
+};

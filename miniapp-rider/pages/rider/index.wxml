@@ -1,0 +1,74 @@
+<view class="container">
+  <view class="section-title">骑手工作台</view>
+  <view class="card">
+    <view class="card-title">当前骑手</view>
+    <view>{{riderName}}</view>
+  </view>
+  <view class="card">
+    <view class="filter-row">
+      <view
+        wx:for="{{filters}}"
+        wx:key="value"
+        class="filter-chip {{currentFilter === item.value ? 'active' : ''}}"
+        data-filter="{{item.value}}"
+        bindtap="onFilterTap"
+      >
+        {{item.label}}
+      </view>
+    </view>
+  </view>
+  <view class="card" wx:for="{{items}}" wx:key="mealSlotOrderId">
+    <view class="row-between">
+      <view style="font-weight:600;">{{item.customerName}}</view>
+      <text class="tag {{item.statusClass}}">{{item.deliveryStatusLabel}}</text>
+    </view>
+    <view class="muted" style="margin-top: 10rpx;">{{item.customerPhone}}</view>
+    <view class="muted" style="margin-top: 8rpx;">{{item.deliveryAddress}}</view>
+    <view style="margin-top: 12rpx;">
+      <text class="tag {{item.mealPeriod === 'LUNCH' ? 'tag-orange' : 'tag-green'}}">{{item.mealLabel}}</text>
+      <text>{{item.mealName}}</text>
+    </view>
+    <view class="muted" style="margin-top: 8rpx;">订单备注：{{item.note}}</view>
+    <view class="muted" style="margin-top: 8rpx;">回执状态：{{item.receiptStatusLabel}}</view>
+
+    <view wx:if="{{item.canSubmit}}" class="receipt-form">
+      <view class="form-item">
+        <text class="form-label">回执备注</text>
+        <input
+          class="input"
+          placeholder="例如：已放前台 / 已交本人"
+          value="{{item.receiptNoteDraft}}"
+          data-index="{{index}}"
+          bindinput="onReceiptNoteInput"
+        />
+      </view>
+      <view class="form-item">
+        <text class="form-label">回执图片 URL</text>
+        <input
+          class="input"
+          placeholder="可选，不填则后端自动补默认地址"
+          value="{{item.receiptUrlDraft}}"
+          data-index="{{index}}"
+          bindinput="onReceiptUrlInput"
+        />
+      </view>
+      <button
+        class="primary-btn"
+        style="margin-top: 16rpx;"
+        data-id="{{item.mealSlotOrderId}}"
+        data-index="{{index}}"
+        bindtap="submitReceipt"
+        loading="{{submittingTaskId === item.mealSlotOrderId}}"
+        disabled="{{submittingTaskId === item.mealSlotOrderId}}"
+      >
+        确认送达并上传回执
+      </button>
+    </view>
+
+    <view wx:else class="done-block">
+      <view style="color:#059669;">已完成送达，回执已上传</view>
+      <button wx:if="{{item.receiptUrl}}" class="secondary-btn" style="margin-top: 16rpx;" data-url="{{item.receiptUrl}}" bindtap="previewReceipt">查看回执图片</button>
+    </view>
+  </view>
+  <view class="card muted" wx:if="{{!items.length && !loading}}">当前筛选下没有配送任务</view>
+</view>

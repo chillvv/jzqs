@@ -1,0 +1,42 @@
+<view 
+  class="queue-card {{highlight ? 'queue-card-current' : ''}} {{delivered ? 'queue-card-delivered' : ''}}"
+  bindtap="onTap"
+  bindlongpress="onLongPress"
+>
+  <!-- 序号 -->
+  <view class="queue-sequence">{{sequence}}</view>
+  
+  <!-- 主要内容区 -->
+  <view class="queue-content">
+    <!-- 客户名称和状态 -->
+    <view class="queue-header">
+      <text class="customer-name">{{customerName}}</text>
+      <text class="tag {{statusClass}}">{{statusLabel}}</text>
+    </view>
+    
+    <!-- 地址（单行截断） -->
+    <view class="queue-address">{{address}}</view>
+    
+    <!-- 餐期标签和备注 -->
+    <view class="queue-meta">
+      <text class="tag tag-gray meal-tag">{{mealLabel}}</text>
+      <text class="queue-note" wx:if="{{note && note !== '-'}}">{{note}}</text>
+    </view>
+    
+    <!-- 快捷操作按钮（仅当前订单显示） -->
+    <view class="queue-actions" wx:if="{{highlight}}">
+      <button class="action-btn action-navigate" catchtap="onNavigate" hover-class="action-btn-hover">
+        <text class="action-icon">🧭</text>
+        <text class="action-text">导航</text>
+      </button>
+      <button class="action-btn action-call" catchtap="onCall" hover-class="action-btn-hover">
+        <text class="action-icon">📞</text>
+        <text class="action-text">电话</text>
+      </button>
+      <button class="action-btn action-done" catchtap="onMarkDone" hover-class="action-btn-hover">
+        <text class="action-icon">✓</text>
+        <text class="action-text">完成</text>
+      </button>
+    </view>
+  </view>
+</view>

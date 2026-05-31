@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "今日已完成",
+  "enablePullDownRefresh": true,
+  "backgroundColor": "#F5F6F7",
+  "backgroundTextStyle": "dark"
+}

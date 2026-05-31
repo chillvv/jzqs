@@ -1,0 +1,107 @@
+<view class="subpage">
+  <view wx:if="{{!targetOrderId}}" class="subpage-card">
+    <view class="hero-inline-main">每日送达回执</view>
+  </view>
+
+  <view wx:if="{{items.length}}">
+    <block wx:if="{{targetOrderId}}">
+      <view wx:for="{{items}}" wx:key="id" class="detail-page-stack">
+        <view class="subpage-card detail-hero-card">
+          <view class="detail-hero-top">
+            <view class="detail-status-badge">订单已完成</view>
+            <view class="status-pill delivered">已送达</view>
+          </view>
+          <view class="detail-status-title">{{item.mealName}}</view>
+          <view class="detail-status-subtitle">{{item.serveDateText}} {{item.periodText}}</view>
+          <view class="detail-hero-meta">
+            <view class="detail-hero-meta-item">
+              <view class="detail-hero-meta-label">送达时间</view>
+              <view class="detail-hero-meta-value">{{item.deliveredAt || '待更新'}}</view>
+            </view>
+            <view class="detail-hero-meta-item">
+              <view class="detail-hero-meta-label">下单来源</view>
+              <view class="detail-hero-meta-value">{{item.sourceText}}</view>
+            </view>
+          </view>
+          <view class="detail-chip-row">
+            <view class="detail-chip">{{item.periodText}}</view>
+            <view class="detail-chip">{{item.serveDateText}}</view>
+          </view>
+        </view>
+
+        <view class="subpage-card detail-section-card">
+          <view class="detail-section-head">
+            <view class="detail-section-title">订单信息</view>
+            <view class="detail-section-desc">配送内容与订单备注</view>
+          </view>
+          <view class="detail-info-list">
+            <view class="detail-info-row detail-info-primary">
+              <text class="detail-info-label">配送地址</text>
+              <text class="detail-info-value detail-address-text">{{item.deliveryAddress}}</text>
+            </view>
+            <view class="detail-info-row" wx:if="{{item.mealDetail && item.mealDetail !== item.mealName}}">
+              <text class="detail-info-label">餐品内容</text>
+              <text class="detail-info-value">{{item.mealDetail}}</text>
+            </view>
+            <view class="detail-info-row">
+              <text class="detail-info-label">下单来源</text>
+              <text class="detail-info-value">{{item.sourceText}}</text>
+            </view>
+            <view class="detail-info-row" wx:if="{{item.note && item.note !== '-'}}">
+              <text class="detail-info-label">订单备注</text>
+              <text class="detail-info-value">{{item.note}}</text>
+            </view>
+            <view class="detail-info-row" wx:if="{{item.merchantNote && item.merchantNote !== '-'}}">
+              <text class="detail-info-label">商家备注</text>
+              <text class="detail-info-value">{{item.merchantNote}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="subpage-card detail-section-card">
+          <view class="detail-section-head">
+            <view class="detail-section-title">送达回执</view>
+            <view class="detail-section-desc">骑手提交的送达信息</view>
+          </view>
+          <view class="detail-info-list">
+            <view class="detail-info-row">
+              <text class="detail-info-label">送达时间</text>
+              <text class="detail-info-value detail-strong-value">{{item.deliveredAt || '待更新'}}</text>
+            </view>
+            <view class="detail-info-row rider-note-block">
+              <text class="detail-info-label">骑手备注</text>
+              <text class="detail-info-value rider-note-text">{{item.receiptNote || '暂无'}}</text>
+            </view>
+          </view>
+          <view wx:if="{{item.canShowReceiptImage}}" class="receipt-photo-panel">
+            <view class="receipt-photo-panel-title">回执图片</view>
+            <image class="receipt-photo" src="{{item.receiptUrl}}" mode="widthFix" bindtap="previewReceipt" data-url="{{item.receiptUrl}}" />
+            <view class="receipt-photo-hint">点击图片可查看大图</view>
+          </view>
+          <view wx:elif="{{item.receiptHint}}" class="receipt-inline-hint">{{item.receiptHint}}</view>
+        </view>
+      </view>
+    </block>
+    <block wx:else>
+      <view wx:for="{{items}}" wx:key="id" class="subpage-card">
+        <view class="order-head">
+          <view>
+            <view class="section-label">{{item.serveDateText}} {{item.periodText}}</view>
+            <view class="subpage-subtitle">{{item.mealName}}</view>
+          </view>
+          <view class="status-pill delivered">已送达</view>
+        </view>
+        <view class="detail-line">配送地址：{{item.deliveryAddress}}</view>
+        <view class="detail-line" wx:if="{{item.deliveredAt}}">送达时间：{{item.deliveredAt}}</view>
+        <view class="detail-line rider-note-line">骑手备注：{{item.receiptNote || '暂无'}}</view>
+        <view class="action-row">
+          <button class="sub-btn primary" data-id="{{item.id}}" bindtap="openOrderDetail">查看订单详情</button>
+        </view>
+      </view>
+    </block>
+  </view>
+
+  <view wx:elif="{{!loading}}" class="subpage-card">
+    <view class="empty-text">{{targetOrderId ? '该订单暂时没有可查看的订单详情' : '暂无送达回执'}}</view>
+  </view>
+</view>

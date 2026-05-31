@@ -1,0 +1,1 @@
+-- Weekly menu seed moved to V9__rebuild_weekly_menu_module.sql.

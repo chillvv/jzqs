@@ -1,0 +1,34 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/order/index",
+    "pages/profile/index",
+    "pages/register/index",
+    "pages/orders/index",
+    "pages/aftersale-apply/index",
+    "pages/receipts/index",
+    "pages/addresses/index",
+    "pages/wallet/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "简知轻食",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F5F6F7",
+    "backgroundTextStyle": "light"
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#666666",
+    "selectedColor": "#92AA40",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      { "pagePath": "pages/home/index", "text": "首页", "iconPath": "assets/icons/home.png", "selectedIconPath": "assets/icons/home-active.png" },
+      { "pagePath": "pages/order/index", "text": "点餐", "iconPath": "assets/icons/order.png", "selectedIconPath": "assets/icons/order-active.png" },
+      { "pagePath": "pages/profile/index", "text": "我的", "iconPath": "assets/icons/profile.png", "selectedIconPath": "assets/icons/profile-active.png" }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

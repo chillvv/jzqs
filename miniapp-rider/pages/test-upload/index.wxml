@@ -1,0 +1,33 @@
+<view class="container">
+  <view class="header">
+    <text class="title">上传测试工具</text>
+  </view>
+
+  <view class="form">
+    <view class="form-item">
+      <text class="label">骑手姓名</text>
+      <input class="input" type="text" value="{{riderName}}" bindinput="onRiderNameInput" />
+    </view>
+
+    <view class="form-item">
+      <text class="label">图片</text>
+      <button class="btn-choose" bindtap="chooseImage">选择图片</button>
+      <image wx:if="{{imagePath}}" class="preview" src="{{imagePath}}" mode="aspectFit" />
+    </view>
+  </view>
+
+  <view class="actions">
+    <button class="btn" bindtap="testUpload">测试上传（通过 service）</button>
+    <button class="btn" bindtap="testDirectUpload">测试上传（直接调用）</button>
+  </view>
+
+  <view class="logs">
+    <view class="logs-header">
+      <text class="logs-title">日志</text>
+      <text class="logs-clear" bindtap="clearLogs">清除</text>
+    </view>
+    <view class="log-item" wx:for="{{logs}}" wx:key="index">
+      {{item}}
+    </view>
+  </view>
+</view>

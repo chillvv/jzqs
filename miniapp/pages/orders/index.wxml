@@ -1,0 +1,76 @@
+<view class="subpage">
+  <view class="subpage-card">
+    <view class="hero-inline-main">我的预订记录</view>
+  </view>
+
+  <view class="subpage-card">
+    <view class="filter-row">
+      <view
+        wx:for="{{filters}}"
+        wx:key="value"
+        class="filter-chip {{currentStatus === item.value ? 'active' : ''}}"
+        data-status="{{item.value}}"
+        bindtap="onFilterTap"
+      >
+        {{item.label}}
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{items.length}}">
+    <view
+      wx:for="{{items}}"
+      wx:key="id"
+      class="subpage-card order-card {{targetOrderId && item.id == targetOrderId ? 'highlight-card' : ''}}"
+    >
+      <view class="order-card-top">
+        <view class="order-title-wrap">
+          <view class="order-kicker-row">
+            <view class="section-label order-date-label">{{item.serveDateText}} {{item.periodText}}</view>
+            <view class="order-source-chip">{{item.sourceText}}</view>
+          </view>
+          <view class="order-title">{{item.mealName}}</view>
+        </view>
+        <view class="order-head-side">
+          <view class="status-pill {{item.statusClass}}" bindtap="showStatusDetail" data-item="{{item}}">
+            {{item.statusText}}
+            <text wx:if="{{item.afterSaleStatus === 'REJECTED'}}" class="detail-icon">ⓘ</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="order-address-panel">
+        <view class="order-address-label">配送地址</view>
+        <view class="order-address-value">{{item.deliveryAddress}}</view>
+      </view>
+
+      <view class="order-meta-line">{{item.orderMetaText}}</view>
+      <view class="detail-line">{{item.guidanceText}}</view>
+
+      <view class="order-note-stack" wx:if="{{(item.mealDetail && item.mealDetail !== item.mealName) || (item.note && item.note !== '-') || (item.merchantNote && item.merchantNote !== '-')}}">
+        <view class="order-note-item" wx:if="{{item.mealDetail && item.mealDetail !== item.mealName}}">
+          <text class="order-note-key">餐品内容</text>
+          <text class="order-note-value">{{item.mealDetail}}</text>
+        </view>
+        <view class="order-note-item" wx:if="{{item.note && item.note !== '-'}}">
+          <text class="order-note-key">订单备注</text>
+          <text class="order-note-value">{{item.note}}</text>
+        </view>
+        <view class="order-note-item" wx:if="{{item.merchantNote && item.merchantNote !== '-'}}">
+          <text class="order-note-key">商家备注</text>
+          <text class="order-note-value">{{item.merchantNote}}</text>
+        </view>
+      </view>
+
+      <view class="action-row action-row-wrap" wx:if="{{item.canCancel || item.canApplyAftersale || item.canViewReceipt}}">
+        <button class="sub-btn primary order-primary-btn" wx:if="{{item.canViewReceipt}}" data-id="{{item.id}}" bindtap="openReceipt">{{item.orderPrimaryActionText}}</button>
+        <button class="sub-btn ghost order-secondary-btn" wx:if="{{item.canCancel}}" data-id="{{item.id}}" bindtap="cancelOrder">取消订单</button>
+        <button class="sub-btn ghost order-secondary-btn" wx:if="{{item.canApplyAftersale}}" data-id="{{item.id}}" bindtap="openAftersale">申请售后</button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:elif="{{!loading}}" class="subpage-card">
+    <view class="empty-text">当前筛选条件下暂无订单</view>
+  </view>
+</view>

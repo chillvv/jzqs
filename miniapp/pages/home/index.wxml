@@ -1,0 +1,47 @@
+<!-- =====================================
+      Tab 1：首页 (周一到周日全部列出，图片修复)
+      ===================================== -->
+<view id="tab-home" class="content">
+  <view class="hero-banner {{heroExpanded ? 'expanded' : ''}}">
+    <swiper class="hero-swiper" circular autoplay interval="3000" indicator-dots="{{home.bannerImages.length > 1}}" wx:if="{{home && home.bannerImages && home.bannerImages.length > 0}}">
+      <swiper-item wx:for="{{home.bannerImages}}" wx:key="*this" bindtap="toggleHero">
+        <image class="hero-banner-img" src="{{item}}" mode="{{heroExpanded ? 'aspectFit' : 'aspectFill'}}"></image>
+      </swiper-item>
+    </swiper>
+    <image wx:else class="hero-banner-img" src="../../assets/hero-new.jpg" mode="{{heroExpanded ? 'aspectFit' : 'aspectFill'}}" bindtap="toggleHero"></image>
+    <view class="hero-banner-mask {{heroExpanded ? 'hidden' : ''}}"></view>
+  </view>
+  <view class="menu-section">
+    <view class="poster-header">
+      <view>
+        <view class="poster-title">本周主厨菜单</view>
+      </view>
+      <view class="poster-range">{{rangeText}}</view>
+    </view>
+    <view class="menu-list">
+      <view wx:if="{{home && !home.orderingEnabled}}" class="rest-card" style="margin-bottom: 0;">{{home.holidayNoticeTitle}}：{{home.holidayNoticeDesc}}</view>
+      <block wx:for="{{weekCards}}" wx:key="serveDate">
+        <view wx:if="{{item.slotStatus === 'ACTIVE'}}" class="day-card-full">
+          <view class="day-card-header"><text class="day-title">{{item.weekdayLabel}}</text><text class="day-date">{{item.shortDate}}</text></view>
+          <block wx:for="{{item.items}}" wx:key="id" wx:for-item="subitem">
+            <view class="meal-row">
+              <view class="meal-badge">{{subitem.mealPeriod === 'LUNCH' ? '午' : '晚'}}</view>
+              <view class="meal-info">
+                <view class="meal-main">
+                  <view wx:for="{{subitem.dishItems}}" wx:key="*this" wx:for-item="dish">- {{dish}}</view>
+                </view>
+                <view class="meal-meta">
+                  <text class="meal-note">{{subitem.merchantNote && subitem.merchantNote !== '-' ? '备注：' + subitem.merchantNote : ''}}</text>
+                  <text class="meal-kcal">🔥 {{subitem.totalCalories}} kcal</text>
+                </view>
+              </view>
+            </view>
+          </block>
+        </view>
+        <view wx:elif="{{item.slotStatus === 'UNCONFIGURED'}}" class="rest-card" style="margin-bottom: 0;">{{item.weekdayLabel}}菜单待配置，请稍后查看</view>
+        <view wx:else class="rest-card" style="margin-bottom: 0;">🌿 {{item.weekdayLabel}}店休，法定节假日正常接单</view>
+      </block>
+      <view wx:if="{{!weekCards.length && !loading}}" class="rest-card">暂无菜单数据</view>
+    </view>
+  </view>
+</view>

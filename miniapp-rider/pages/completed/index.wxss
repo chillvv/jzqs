@@ -1,0 +1,614 @@
+/**
+ * 已完成页面样式 - 完全按照HTML设计的小而美风格
+ */
+
+.completed-page {
+  min-height: 100vh;
+  background: #F5F5F7;
+  padding-bottom: 160rpx;
+}
+
+/* 页面头部 */
+.page-header {
+  background: linear-gradient(135deg, #34C759 0%, #30B350 100%);
+  padding: 48rpx 32rpx 32rpx;
+  color: #FFFFFF;
+}
+
+.header-title {
+  font-size: 48rpx;
+  line-height: 64rpx;
+  font-weight: 700;
+  margin-bottom: 8rpx;
+}
+
+.header-subtitle {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  font-weight: 400;
+  opacity: 0.9;
+}
+
+/* 统计卡片 */
+.stats-card {
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.05);
+  padding: 32rpx;
+  margin: -48rpx 32rpx 32rpx;
+  position: relative;
+  z-index: 1;
+}
+
+.stats-row {
+  display: flex;
+  justify-content: space-around;
+  gap: 24rpx;
+}
+
+.stat-item {
+  text-align: center;
+  flex: 1;
+}
+
+.stat-value {
+  font-size: 48rpx;
+  line-height: 64rpx;
+  font-weight: 700;
+  color: #34C759;
+  margin-bottom: 4rpx;
+}
+
+.stat-label {
+  font-size: 26rpx;
+  line-height: 36rpx;
+  font-weight: 500;
+  color: #666666;
+}
+
+/* 完成列表 */
+.completed-list {
+  padding: 0 32rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+/* 日期分组 */
+.date-group {
+  margin-bottom: 16rpx;
+}
+
+.date-header {
+  font-size: 26rpx;
+  line-height: 36rpx;
+  font-weight: 600;
+  color: #666666;
+  padding: 16rpx 8rpx 8rpx;
+  letter-spacing: 0.02em;
+}
+
+/* 完成项卡片 */
+.completed-item {
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  box-shadow: 0 4rpx 24rpx rgba(0, 0, 0, 0.05);
+  padding: 24rpx;
+  position: relative;
+  overflow: hidden;
+  border: 2rpx solid #F0EDEF;
+  transition: transform 0.2s ease;
+}
+
+.completed-item:active {
+  transform: translateX(8rpx);
+}
+
+.completed-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8rpx;
+  height: 100%;
+  background: #34C759;
+}
+
+/* 完成项头部 */
+.item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-left: 16rpx;
+  margin-bottom: 16rpx;
+}
+
+.item-main-info {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  flex: 1;
+  min-width: 0;
+}
+
+.item-number {
+  width: 64rpx;
+  height: 64rpx;
+  background: rgba(52, 199, 89, 0.1);
+  border-radius: 999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34rpx;
+  line-height: 48rpx;
+  font-weight: 600;
+  color: #34C759;
+  flex-shrink: 0;
+}
+
+.item-customer-info {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.item-customer-name {
+  font-size: 34rpx;
+  line-height: 48rpx;
+  font-weight: 600;
+  color: #1B1B1D;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.item-customer-address {
+  font-size: 26rpx;
+  line-height: 36rpx;
+  font-weight: 400;
+  color: #666666;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 回执徽章 */
+.receipt-badge {
+  background: rgba(52, 199, 89, 0.1);
+  color: #006825;
+  font-size: 22rpx;
+  line-height: 28rpx;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  padding: 4rpx 16rpx;
+  border-radius: 999rpx;
+  border: 2rpx solid rgba(52, 199, 89, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 4rpx;
+  flex-shrink: 0;
+}
+
+.receipt-icon {
+  font-size: 28rpx;
+}
+
+/* 完成项详情 */
+.item-details {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-left: 16rpx;
+  padding-top: 16rpx;
+  border-top: 2rpx solid #F0EDEF;
+}
+
+.item-time {
+  font-size: 26rpx;
+  line-height: 36rpx;
+  font-weight: 400;
+  color: #666666;
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.time-icon {
+  font-size: 32rpx;
+}
+
+.item-amount {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  font-weight: 600;
+  color: #34C759;
+}
+
+/* 紧凑版完成项（用于列表较长时） */
+.completed-item-compact {
+  background: #FFFFFF;
+  border-radius: 16rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+  padding: 20rpx;
+  position: relative;
+  overflow: hidden;
+  border: 2rpx solid #F0EDEF;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.completed-item-compact::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 6rpx;
+  height: 100%;
+  background: #34C759;
+}
+
+.compact-number {
+  width: 56rpx;
+  height: 56rpx;
+  background: rgba(52, 199, 89, 0.1);
+  border-radius: 999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28rpx;
+  line-height: 40rpx;
+  font-weight: 600;
+  color: #34C759;
+  flex-shrink: 0;
+  margin-left: 8rpx;
+}
+
+.compact-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.compact-name {
+  font-size: 28rpx;
+  line-height: 40rpx;
+  font-weight: 500;
+  color: #1B1B1D;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-bottom: 2rpx;
+}
+
+.compact-time {
+  font-size: 22rpx;
+  line-height: 28rpx;
+  font-weight: 400;
+  color: #999999;
+}
+
+.compact-badge {
+  width: 48rpx;
+  height: 48rpx;
+  background: rgba(52, 199, 89, 0.1);
+  border-radius: 999rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #34C759;
+  flex-shrink: 0;
+}
+
+.compact-badge-icon {
+  font-size: 32rpx;
+}
+
+/* 空状态 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 160rpx 48rpx;
+  text-align: center;
+}
+
+.empty-icon {
+  font-size: 160rpx;
+  opacity: 0.3;
+  margin-bottom: 32rpx;
+  color: #34C759;
+}
+
+.empty-text {
+  font-size: 32rpx;
+  color: #666666;
+  font-weight: 500;
+}
+
+.empty-tip {
+  font-size: 26rpx;
+  color: #999999;
+  margin-top: 16rpx;
+}
+
+/* 回执操作区域 */
+.receipt-actions {
+  display: flex;
+  gap: 12rpx;
+  align-items: center;
+}
+
+.edit-badge {
+  background: rgba(0, 122, 255, 0.1);
+  color: #007AFF;
+  font-size: 22rpx;
+  line-height: 28rpx;
+  font-weight: 500;
+  padding: 4rpx 16rpx;
+  border-radius: 999rpx;
+  border: 2rpx solid rgba(0, 122, 255, 0.2);
+}
+
+/* 弹窗遮罩 */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 32rpx;
+}
+
+/* 弹窗内容 */
+.modal-content {
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  width: 100%;
+  max-width: 640rpx;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 弹窗头部 */
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 32rpx;
+  border-bottom: 2rpx solid #F0EDEF;
+}
+
+.modal-title {
+  font-size: 36rpx;
+  font-weight: 600;
+  color: #1B1B1D;
+}
+
+.modal-close {
+  font-size: 48rpx;
+  color: #999999;
+  line-height: 1;
+  padding: 8rpx;
+}
+
+/* 弹窗主体 */
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 32rpx;
+}
+
+.edit-order-info {
+  background: #F5F5F7;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 32rpx;
+}
+
+.info-label {
+  display: block;
+  font-size: 26rpx;
+  line-height: 36rpx;
+  color: #666666;
+  margin-bottom: 8rpx;
+}
+
+.info-label:last-child {
+  margin-bottom: 0;
+}
+
+/* 图片编辑区域 */
+.edit-image-section {
+  margin-bottom: 32rpx;
+}
+
+.section-label {
+  display: block;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1B1B1D;
+  margin-bottom: 16rpx;
+}
+
+.image-preview {
+  width: 100%;
+  height: 400rpx;
+  border-radius: 16rpx;
+  overflow: hidden;
+  margin-bottom: 16rpx;
+  position: relative;
+  background: #F5F5F7;
+}
+
+.preview-img {
+  width: 100%;
+  height: 100%;
+}
+
+.preview-hint {
+  position: absolute;
+  bottom: 16rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  color: #FFFFFF;
+  font-size: 22rpx;
+  padding: 8rpx 24rpx;
+  border-radius: 999rpx;
+}
+
+/* 说明编辑区域 */
+.edit-note-section {
+  margin-bottom: 32rpx;
+}
+
+.note-textarea {
+  width: 100%;
+  min-height: 200rpx;
+  background: #F5F5F7;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  font-size: 28rpx;
+  line-height: 40rpx;
+  color: #1B1B1D;
+}
+
+/* 弹窗底部 */
+.modal-footer {
+  display: flex;
+  gap: 16rpx;
+  padding: 24rpx 32rpx;
+  border-top: 2rpx solid #F0EDEF;
+}
+
+.cancel-btn {
+  flex: 1;
+  background: #F5F5F7;
+  color: #666666;
+  font-size: 28rpx;
+  font-weight: 600;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  border: none;
+}
+
+.confirm-btn {
+  flex: 1;
+  background: #007AFF;
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: 600;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  border: none;
+}
+
+.confirm-btn[disabled] {
+  opacity: 0.5;
+}
+
+/* 按钮样式 */
+.secondary-btn {
+  width: 100%;
+  background: #F5F5F7;
+  color: #007AFF;
+  font-size: 28rpx;
+  font-weight: 600;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  border: 2rpx solid #007AFF;
+}
+
+.primary-btn {
+  background: #34C759;
+  color: #FFFFFF;
+  font-size: 28rpx;
+  font-weight: 600;
+  border-radius: 16rpx;
+  padding: 24rpx 48rpx;
+  border: none;
+  margin-top: 32rpx;
+}
+
+/* 加载状态 */
+.loading-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 80rpx;
+}
+
+.loading-text {
+  font-size: 28rpx;
+  color: #999999;
+}
+
+/* 紧凑版样式补充 */
+.item-header-compact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12rpx;
+  padding-left: 12rpx;
+}
+
+.item-time-compact {
+  font-size: 22rpx;
+  color: #999999;
+}
+
+.tag {
+  font-size: 22rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  font-weight: 500;
+}
+
+.tag-green {
+  background: rgba(52, 199, 89, 0.1);
+  color: #34C759;
+}
+
+.item-main-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  padding-left: 12rpx;
+  margin-bottom: 12rpx;
+}
+
+.customer-name-compact {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #1B1B1D;
+}
+
+.address-text-compact {
+  font-size: 24rpx;
+  color: #666666;
+}
+
+.item-footer-compact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-left: 12rpx;
+}
+
+.meal-tag-compact {
+  font-size: 22rpx;
+  padding: 4rpx 12rpx;
+  border-radius: 999rpx;
+  background: rgba(255, 149, 0, 0.1);
+  color: #FF9500;
+  font-weight: 500;
+}

@@ -1,0 +1,16 @@
+function replacePlus(str) {
+  if (!str) return '';
+  return str.replace(getRegExp('\\+', 'g'), ' ✦ ');
+}
+
+function splitByPlus(str) {
+  if (!str) return [];
+  return str.split('+').map(function(s) {
+    return s.trim();
+  });
+}
+
+module.exports = {
+  replacePlus: replacePlus,
+  splitByPlus: splitByPlus
+};

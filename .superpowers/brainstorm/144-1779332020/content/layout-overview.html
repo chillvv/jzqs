@@ -1,0 +1,100 @@
+<h2>配送工作台 — 设计草案</h2>
+<p class="subtitle">整体布局预览，看看大方向对不对</p>
+
+<div class="mockup" style="margin-top: 16px;">
+  <div class="mockup-header">配送工作台 · 布局结构</div>
+  <div class="mockup-body" style="padding: 16px;">
+    <!-- 顶部统计栏 -->
+    <div style="background: #f8fafc; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px;">
+      <div style="display: flex; gap: 16px;">
+        <div style="flex:1; background: #fff; border-radius: 6px; padding: 10px 14px; border: 1px solid #e2e8f0;">
+          <div style="font-size: 12px; color: #94a3b8;">待分配</div>
+          <div style="font-size: 22px; font-weight: 700; color: #f59e0b;">12</div>
+        </div>
+        <div style="flex:1; background: #fff; border-radius: 6px; padding: 10px 14px; border: 1px solid #e2e8f0;">
+          <div style="font-size: 12px; color: #94a3b8;">未分配骑手的区域</div>
+          <div style="font-size: 22px; font-weight: 700; color: #ef4444;">3</div>
+        </div>
+        <div style="flex:1; background: #fff; border-radius: 6px; padding: 10px 14px; border: 1px solid #e2e8f0;">
+          <div style="font-size: 12px; color: #94a3b8;">配送中</div>
+          <div style="font-size: 22px; font-weight: 700; color: #3b82f6;">8</div>
+        </div>
+        <div style="flex:1; background: #fff; border-radius: 6px; padding: 10px 14px; border: 1px solid #e2e8f0;">
+          <div style="font-size: 12px; color: #94a3b8;">区域/骑手</div>
+          <div style="font-size: 22px; font-weight: 700; color: #10b981;">4/6</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 待分配订单区域 -->
+    <div style="border: 2px dashed #cbd5e1; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="font-weight: 700; font-size: 16px;">待分配订单</div>
+          <div style="background: #fef3c7; color: #f59e0b; font-size: 12px; padding: 2px 8px; border-radius: 10px;">12单</div>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <div class="mock-button" style="font-size: 11px; padding: 4px 10px;">搜索</div>
+          <div class="mock-button" style="font-size: 11px; padding: 4px 10px; background: #3b82f6; color: #fff;">智能归区</div>
+        </div>
+      </div>
+      <!-- 表格 -->
+      <div style="background: #fff; border-radius: 6px; border: 1px solid #e2e8f0;">
+        <div style="display: grid; grid-template-columns: 30px 1fr 2fr 1fr 1fr; gap: 8px; padding: 8px 12px; border-bottom: 1px solid #e2e8f0; font-size: 12px; color: #94a3b8; font-weight: 600;">
+          <div>□</div><div>客户</div><div>配送地址</div><div>推荐区域</div><div>操作</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 30px 1fr 2fr 1fr 1fr; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px;">
+          <div>□</div><div style="font-weight: 600;">张三</div><div style="color: #64748b;">高新区科技路1号</div><div><span style="background: #dbeafe; color: #3b82f6; padding: 2px 8px; border-radius: 4px; font-size: 11px;">高新区 ✓</span></div><div style="color: #94a3b8; font-size: 11px;">自动匹配</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 30px 1fr 2fr 1fr 1fr; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; font-size: 13px;">
+          <div>□</div><div style="font-weight: 600;">李四</div><div style="color: #64748b;">人民路三段15号</div><div><span style="background: #dbeafe; color: #3b82f6; padding: 2px 8px; border-radius: 4px; font-size: 11px;">老城区 ✓</span></div><div style="color: #94a3b8; font-size: 11px;">自动匹配</div>
+        </div>
+        <div style="display: grid; grid-template-columns: 30px 1fr 2fr 1fr 1fr; gap: 8px; padding: 10px 12px; font-size: 13px;">
+          <div>□</div><div style="font-weight: 600;">王五</div><div style="color: #64748b;">新源大道88号创新园</div><div>
+            <span style="background: #fef3c7; color: #d97706; padding: 2px 8px; border-radius: 4px; font-size: 11px;">未识别</span>
+          </div><div><span style="background: #f1f5f9; color: #64748b; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;">选择区域 ▾</span></div>
+        </div>
+      </div>
+      <!-- 底部批量操作栏 -->
+      <div style="margin-top: 12px; display: flex; gap: 10px; align-items: center; padding: 10px 12px; background: #f8fafc; border-radius: 6px;">
+        <div style="font-size: 12px; color: #64748b;">已选 2 单 → 归入区域</div>
+        <div style="flex: 1; max-width: 180px;"><span style="background: #fff; border: 1px solid #e2e8f0; border-radius: 4px; padding: 4px 8px; font-size: 12px; color: #94a3b8;">选择区域 ▾</span></div>
+        <div class="mock-button" style="font-size: 12px; padding: 4px 12px;">归入区域</div>
+      </div>
+    </div>
+
+    <!-- 区域配送看板 -->
+    <div style="border: 2px dashed #cbd5e1; border-radius: 8px; padding: 16px;">
+      <div style="font-weight: 700; font-size: 16px; margin-bottom: 12px;">区域配送看板</div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+        <div style="background: #fff; border-radius: 8px; border: 1px solid #e2e8f0; padding: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div><strong>高新区</strong> <span style="color: #94a3b8; font-size: 11px;">骑手: 王大力</span></div>
+            <span style="background: #dbeafe; font-size: 11px; padding: 2px 8px; border-radius: 10px;">5单</span>
+          </div>
+        </div>
+        <div style="background: #fff; border-radius: 8px; border: 1px solid #e2e8f0; padding: 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div><strong>老城区</strong> <span style="color: #ef4444; font-size: 11px;">未分配骑手</span></div>
+            <span style="background: #fef3c7; font-size: 11px; padding: 2px 8px; border-radius: 10px;">3单</span>
+          </div>
+          <div style="margin-top: 8px;"><span style="background: #f1f5f9; color: #64748b; padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer;">+ 分配骑手</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top: 20px;">
+  <h3>核心变化</h3>
+  <ul style="font-size: 14px; line-height: 1.8;">
+    <li>✅ <strong>去掉订单号列</strong> — 商家不关心内部ID</li>
+    <li>✅ <strong>去掉"当前问题"和"带入处理栏"</strong> — 不再制造焦虑</li>
+    <li>✅ <strong>待分配只显示真正未分配的订单</strong> — 已分配但状态未更新的自动隐藏</li>
+    <li>✅ <strong>批量操作只归区域</strong> — 不选骑手，简化操作</li>
+    <li>✅ <strong>区域看板可单独分配骑手</strong> — 归区域后再给区域配骑手</li>
+    <li>✅ <strong>顶部只保留关键指标</strong> — 4个卡片替代现在的8个</li>
+  </ul>
+</div>
+
+<p class="subtitle" style="margin-top: 16px;">整体结构对了吗？没问题我继续细化每个区域的交互细节。</p>

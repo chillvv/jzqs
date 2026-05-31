@@ -1,0 +1,92 @@
+<view class="container">
+  <view class="page-header">
+    <view class="header-title">今日已完成</view>
+    <view class="header-count">共 {{totalCount}} 单</view>
+  </view>
+
+  <view class="completed-list">
+    <view wx:for="{{items}}" wx:key="mealSlotOrderId" class="completed-item-compact">
+      <!-- 头部：时间和状态 -->
+      <view class="item-header-compact">
+        <text class="item-time-compact">{{item.deliveredAtFormatted}}</text>
+        <text class="tag tag-green">✓</text>
+      </view>
+
+      <!-- 客户和地址 -->
+      <view class="item-main-compact">
+        <text class="customer-name-compact">{{item.customerName}}</text>
+        <text class="address-text-compact">📍 {{item.deliveryAddress}}</text>
+      </view>
+
+      <!-- 回执标识和操作 -->
+      <view class="item-footer-compact">
+        <text class="meal-tag-compact">{{item.mealLabel}}</text>
+        <view class="receipt-actions">
+          <text wx:if="{{item.receiptUrl}}" class="receipt-badge" bindtap="viewReceipt" data-url="{{item.receiptUrl}}">📸 查看回执</text>
+          <text class="edit-badge" bindtap="editReceipt" data-index="{{index}}">✏️ 编辑</text>
+        </view>
+      </view>
+    </view>
+
+    <!-- 空状态 -->
+    <view wx:if="{{!loading && items.length === 0}}" class="empty-state">
+      <text class="empty-icon">📦</text>
+      <text class="empty-text">今日暂无已完成订单</text>
+      <button class="primary-btn" bindtap="backToQueue">返回队列</button>
+    </view>
+  </view>
+
+  <!-- 加载中 -->
+  <view wx:if="{{loading}}" class="loading-state">
+    <text class="loading-text">加载中...</text>
+  </view>
+
+  <!-- 编辑回执弹窗 -->
+  <view wx:if="{{showEditModal}}" class="modal-overlay" bindtap="closeEditModal">
+    <view class="modal-content" catchtap="{{null}}">
+      <view class="modal-header">
+        <text class="modal-title">编辑回执</text>
+        <text class="modal-close" bindtap="closeEditModal">✕</text>
+      </view>
+
+      <view class="modal-body">
+        <!-- 订单信息 -->
+        <view class="edit-order-info">
+          <text class="info-label">客户：{{editingItem.customerName}}</text>
+          <text class="info-label">地址：{{editingItem.deliveryAddress}}</text>
+        </view>
+
+        <!-- 图片预览 -->
+        <view class="edit-image-section">
+          <text class="section-label">回执图片</text>
+          <view wx:if="{{receiptPreviewUrl}}" class="image-preview" bindtap="previewImage">
+            <image src="{{receiptPreviewUrl}}" mode="aspectFill" class="preview-img" />
+            <text class="preview-hint">点击查看大图</text>
+          </view>
+          <button class="secondary-btn" bindtap="chooseNewImage">
+            {{receiptTempFilePath ? '重新选择' : '选择新图片'}}
+          </button>
+        </view>
+
+        <!-- 回执说明 -->
+        <view class="edit-note-section">
+          <text class="section-label">回执说明</text>
+          <textarea 
+            class="note-textarea" 
+            value="{{receiptNote}}" 
+            bindinput="onReceiptNoteInput"
+            placeholder="请输入回执说明"
+            maxlength="200"
+          />
+        </view>
+      </view>
+
+      <view class="modal-footer">
+        <button class="cancel-btn" bindtap="closeEditModal">取消</button>
+        <button class="confirm-btn" bindtap="submitUpdate" disabled="{{submitting}}">
+          {{submitting ? '提交中...' : '确认更新'}}
+        </button>
+      </view>
+    </view>
+  </view>
+</view>

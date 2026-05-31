@@ -1,0 +1,460 @@
+.profile-name {
+  font-size: 36rpx;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.profile-meta {
+  flex: 1;
+}
+
+.profile-sub {
+  margin-top: 8rpx;
+  font-size: 26rpx;
+  color: var(--text-sub);
+}
+
+.profile-badge {
+  display: inline-flex;
+  margin-top: 16rpx;
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.profile-guest-action {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 12rpx;
+  padding: 12rpx 32rpx;
+  border-radius: 999rpx;
+  background: var(--brand-light);
+  color: var(--brand-dark);
+  font-size: 24rpx;
+  font-weight: 700;
+  gap: 8rpx;
+  box-shadow: 0 4rpx 12rpx rgba(184, 208, 96, 0.2);
+  border: 2rpx solid rgba(184, 208, 96, 0.4);
+}
+
+.profile-guest-action .arrow {
+  font-family: Arial, sans-serif;
+  font-weight: normal;
+  color: #999999;
+}
+
+.profile-badge.member {
+  background: #eef9f0;
+  color: #237b4b;
+}
+
+.guest-service-card {
+  margin: 0 24rpx 24rpx;
+  padding: 32rpx;
+  border-radius: 32rpx;
+  background: linear-gradient(180deg, #ffffff 0%, #f7f9ee 100%);
+  box-shadow: var(--shadow-sm);
+}
+
+.guest-service-card__title {
+  font-size: 36rpx;
+  font-weight: 800;
+  color: var(--text-main);
+}
+
+.guest-service-card__desc {
+  margin-top: 14rpx;
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: var(--text-sub);
+}
+
+.guest-service-card__primary,
+.guest-service-card__secondary {
+  margin-top: 24rpx;
+  width: 100%;
+  border-radius: 999rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+}
+
+.guest-service-card__primary {
+  background: var(--brand-primary);
+  color: #111111;
+}
+
+.guest-service-card__secondary {
+  background: #ffffff;
+  color: var(--text-main);
+  border: 2rpx solid var(--border);
+}
+
+.guest-service-card__primary::after,
+.guest-service-card__secondary::after {
+  border: none;
+}
+
+.list-copy {
+  flex: 1;
+}
+
+.list-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.list-desc {
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: var(--text-sub);
+}
+
+
+/* 完善信息弹窗 UI */
+.auth-popup-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 1000;
+  visibility: hidden;
+  opacity: 0;
+  transition: all 0.3s ease;
+}
+
+.auth-popup-mask.show {
+  visibility: visible;
+  opacity: 1;
+}
+
+.auth-popup-container {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: #F5F6F7;
+  border-radius: 32rpx 32rpx 0 0;
+  z-index: 1001;
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  padding-bottom: calc(env(safe-area-inset-bottom) + 160rpx);
+}
+
+.auth-popup-container.show {
+  transform: translateY(0);
+}
+
+.auth-popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 32rpx 40rpx 20rpx;
+}
+
+.auth-popup-title {
+  font-size: 36rpx;
+  font-weight: 800;
+  color: #1A1A1A;
+}
+
+.auth-popup-close {
+  font-size: 44rpx;
+  color: #999;
+  line-height: 1;
+  padding: 10rpx;
+  font-weight: 300;
+}
+
+.auth-popup-body {
+  padding: 0 40rpx 72rpx;
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-popup-copy {
+  margin-bottom: 24rpx;
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: #666666;
+}
+
+.auth-form-group {
+  background: #FFFFFF;
+  border-radius: 24rpx;
+  padding: 0 32rpx;
+  margin-bottom: 32rpx;
+  border: 1px solid #EEEEEE;
+}
+
+.auth-form-item {
+  display: flex;
+  align-items: center;
+  padding: 24rpx 0;
+  border-bottom: 1px solid #EEEEEE;
+  min-height: 104rpx;
+}
+
+.auth-form-item.border-none {
+  border-bottom: none;
+  display: block;
+  padding: 0;
+  min-height: 0;
+}
+
+.auth-form-label {
+  width: 120rpx;
+  font-size: 30rpx;
+  color: #1A1A1A;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.auth-avatar-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  text-align: right;
+  line-height: normal;
+  min-height: 92rpx;
+}
+
+.auth-avatar-btn::after {
+  border: none;
+}
+
+.auth-avatar-img {
+  width: 92rpx;
+  height: 92rpx;
+  border-radius: 50%;
+  background: #F5F6F7;
+  border: 2rpx solid #EEEEEE;
+}
+
+.auth-avatar-arrow {
+  font-size: 44rpx;
+  color: #CCCCCC;
+  margin-left: 16rpx;
+  font-family: Arial, sans-serif;
+}
+
+.auth-form-input {
+  flex: 1;
+  font-size: 28rpx;
+  color: #1A1A1A;
+  text-align: left;
+  padding-left: 24rpx;
+  min-height: 52rpx;
+  line-height: 52rpx;
+}
+
+.auth-form-input::placeholder {
+  color: #999999;
+}
+
+.form-row {
+  display: flex;
+  align-items: center;
+  padding: 36rpx 0;
+  border-bottom: 1px solid #eeeeee;
+  min-height: 120rpx;
+}
+
+.label {
+  width: 128rpx;
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #333333;
+  flex-shrink: 0;
+}
+
+.phone-input {
+  flex: 1;
+  min-width: 0;
+  font-size: 30rpx;
+  color: #333333;
+  padding-right: 24rpx;
+  min-height: 52rpx;
+  line-height: 52rpx;
+}
+
+.ph-color {
+  color: #999999;
+}
+
+.quick-get-btn {
+  background: transparent;
+  margin: 0;
+  outline: none;
+  border: 2rpx solid #b3cf64;
+  color: #b3cf64;
+  font-size: 24rpx;
+  font-weight: 600;
+  height: 58rpx;
+  line-height: 54rpx;
+  border-radius: 29rpx;
+  padding: 0 24rpx;
+  flex-shrink: 0;
+}
+
+.quick-get-btn::after {
+  border: none;
+}
+
+.phone-auth-panel {
+  padding: 32rpx 0 36rpx;
+}
+
+.phone-auth-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.phone-auth-value {
+  margin-top: 20rpx;
+  font-size: 26rpx;
+  line-height: 1.6;
+  color: #999999;
+}
+
+.phone-auth-value.authorized {
+  color: var(--brand-dark);
+  font-weight: 700;
+}
+
+.phone-manual-input {
+  margin-top: 20rpx;
+  width: 100%;
+  height: 72rpx;
+  line-height: 72rpx;
+  font-size: 30rpx;
+  color: #1A1A1A;
+  background: #F5F6F7;
+  border-radius: 16rpx;
+  padding: 0 20rpx;
+  box-sizing: border-box;
+  border: 2rpx solid #EEEEEE;
+}
+
+.phone-manual-input::placeholder {
+  color: #BBBBBB;
+  font-size: 28rpx;
+}
+
+.phone-manual-input:focus {
+  border-color: var(--brand-primary);
+}
+
+.phone-auth-hint {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  color: #999999;
+}
+
+/* (Removed unused auth-agreement) */
+
+.auth-submit-btn {
+  width: 100%;
+  height: 92rpx;
+  line-height: 92rpx;
+  background: var(--brand-primary);
+  color: #111111;
+  font-size: 30rpx;
+  font-weight: 600;
+  border-radius: 46rpx;
+  border: none;
+  box-shadow: 0 6rpx 16rpx rgba(184, 208, 96, 0.25);
+  margin: 0 auto;
+  display: block;
+  text-align: center;
+  padding: 0;
+}
+
+.auth-submit-btn::after {
+  border: none;
+}
+
+/* 禁用状态 */
+.auth-submit-btn[disabled] {
+  opacity: 0.6;
+}
+
+.auth-entry-btn {
+  width: 320rpx !important;
+  height: 88rpx;
+  line-height: 88rpx;
+  border-radius: 44rpx;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+}
+
+.auth-register-link {
+  margin-top: 24rpx;
+  text-align: center;
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--brand-dark);
+}
+
+/* 微信快捷登录 (次要按钮) */
+.btn-wechat-alt {
+  background: #07C160;
+  color: #FFFFFF;
+  font-size: 26rpx;
+  font-weight: 500;
+  border: none;
+  margin: 0 auto;
+  margin: 20rpx auto 0;
+}
+
+.btn-wechat-alt::after { border: none; }
+.btn-wechat-alt:active { opacity: 0.8; }
+
+/* 分隔线 */
+.or-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 64rpx 0 40rpx;
+  color: #AAAAAA;
+  font-size: 24rpx;
+  gap: 24rpx;
+}
+
+.or-divider::before,
+.or-divider::after {
+  content: '';
+  width: 60rpx;
+  height: 1px;
+  background: #EEEEEE;
+}
+
+/* 表单项 */
+.auth-form-item-last {
+  border-bottom: none !important;
+}
+
+/* 手机号已填写提示 */
+.phone-hint {
+  font-size: 24rpx;
+  color: #999;
+  margin: -12rpx 0 32rpx;
+  padding: 0 4rpx;
+}
+
+.phone-hint-val {
+  color: #237b4b;
+  font-weight: 600;
+}

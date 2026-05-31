@@ -1,0 +1,99 @@
+.task-card {
+  background: #ffffff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  border: 2rpx solid #e5e7eb;
+  transition: all 0.3s ease;
+}
+
+.task-card-highlight {
+  border-color: #3b82f6;
+  background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%);
+  box-shadow: 0 4rpx 12rpx rgba(59, 130, 246, 0.1);
+}
+
+.task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16rpx;
+}
+
+.task-sequence {
+  width: 48rpx;
+  height: 48rpx;
+  border-radius: 12rpx;
+  background: #eff6ff;
+  color: #2563eb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+
+.task-status {
+  display: flex;
+  gap: 12rpx;
+}
+
+.task-customer {
+  margin-bottom: 12rpx;
+}
+
+.customer-name {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: #0f172a;
+  margin-right: 16rpx;
+}
+
+.customer-phone {
+  font-size: 26rpx;
+  color: #64748b;
+}
+
+.task-address {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 12rpx;
+  padding: 16rpx;
+  background: #f8fafc;
+  border-radius: 12rpx;
+}
+
+.address-icon {
+  font-size: 28rpx;
+  margin-right: 8rpx;
+  flex-shrink: 0;
+}
+
+.address-text {
+  font-size: 28rpx;
+  color: #0f172a;
+  line-height: 1.6;
+  flex: 1;
+}
+
+.task-note {
+  padding: 12rpx 16rpx;
+  background: #fef3c7;
+  border-radius: 8rpx;
+  margin-bottom: 12rpx;
+}
+
+.note-label {
+  font-size: 24rpx;
+  color: #92400e;
+  font-weight: 600;
+}
+
+.note-text {
+  font-size: 24rpx;
+  color: #92400e;
+}
+
+.task-actions {
+  margin-top: 16rpx;
+}

@@ -1,0 +1,92 @@
+const { canCancelMiniappOrder } = require("./order-guards");
+const { request } = require("./request");
+const { statusLabel, transactionLabel } = require("./mobile");
+
+function resolveOrderActions({ status, serveDate, now, afterSaleOpen }) {
+  if (afterSaleOpen) {
+    return { canCancel: false, canApplyAftersale: false, actionText: "处理中" };
+  }
+  if (canCancelMiniappOrder({ status, serveDate, now })) {
+    return { canCancel: true, canApplyAftersale: false, actionText: "取消订单" };
+  }
+  if (status === "PENDING_DISPATCH" || status === "DELIVERED") {
+    return { canCancel: false, canApplyAftersale: true, actionText: "申请售后" };
+  }
+  return { canCancel: false, canApplyAftersale: false, actionText: "" };
+}
+
+function resolveOrderStatusText({ status, afterSaleStatus }) {
+  if (status === "REFUNDED") {
+    return "已退款";
+  }
+  if (afterSaleStatus === "PENDING" || afterSaleStatus === "PROCESSING") {
+    return "售后处理中";
+  }
+  if (afterSaleStatus === "REJECTED") {
+    return "售后未通过";
+  }
+  return statusLabel(status);
+}
+
+function buildRejectedAftersaleDetail(adminRemark) {
+  const detail = adminRemark && adminRemark.trim()
+    ? adminRemark.trim()
+    : "后台暂未填写说明，请联系客服处理。";
+  return `售后申请未通过。\n处理结果：${detail}`;
+}
+
+function submitAftersaleApplication(orderId, payload) {
+  return request({
+    url: `/api/mobile/customer/orders/${orderId}/after-sales`,
+    method: "POST",
+    data: payload
+  });
+}
+
+function resolveWalletTransactionTitle(item) {
+  if (item.transactionType === "REFUND_RETURN") {
+    return "退款退回";
+  }
+  return transactionLabel(item.transactionType);
+}
+
+function resolveWalletTransactionStatusText(item) {
+  if (item.transactionType === "REFUND_RETURN") {
+    return "退款已回补";
+  }
+  if (item.refunded) {
+    return "已退款";
+  }
+  return "";
+}
+
+function resolveWalletTransactionRemark(item) {
+  if (item.transactionType === "REFUND_RETURN" && item.refundReasonText) {
+    return `退款原因：${item.refundReasonText}`;
+  }
+  if (item.refunded && item.refundReasonText) {
+    return `原扣餐已退款，原因：${item.refundReasonText}`;
+  }
+  if (item.refunded) {
+    return "原扣餐已退款";
+  }
+  return item.remark || "";
+}
+
+function formatWalletTransaction(item) {
+  return {
+    ...item,
+    title: resolveWalletTransactionTitle(item),
+    deltaText: `${item.mealDelta > 0 ? "+" : ""}${item.mealDelta}`,
+    statusText: resolveWalletTransactionStatusText(item),
+    remarkText: resolveWalletTransactionRemark(item)
+  };
+}
+
+module.exports = {
+  resolveOrderActions,
+  resolveOrderStatusText,
+  buildRejectedAftersaleDetail,
+  submitAftersaleApplication,
+  formatWalletTransaction
+};

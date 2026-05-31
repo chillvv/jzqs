@@ -1,0 +1,16 @@
+<view class="container">
+  <view class="header">
+    <text class="title">云开发测试</text>
+  </view>
+
+  <view class="actions">
+    <button type="primary" bindtap="testUpload">测试上传图片</button>
+    <button type="default" bindtap="clearLogs">清空日志</button>
+  </view>
+
+  <view class="logs">
+    <view class="log-item" wx:for="{{logs}}" wx:key="index">
+      {{item}}
+    </view>
+  </view>
+</view>

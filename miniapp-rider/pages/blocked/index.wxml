@@ -1,0 +1,35 @@
+﻿<view class="state-page">
+  <view class="state-banner banner-red">
+    <view class="state-badge">账号禁用</view>
+    <view class="state-title">当前骑手账号已停用</view>
+    <view class="state-desc">系统暂时关闭了你的配送工作台访问权限，请联系老板确认后续安排。</view>
+  </view>
+  <view class="card">
+    <view class="card-title">账号信息</view>
+    <view class="info-row">
+      <text class="label">骑手姓名</text>
+      <text class="value">{{riderProfile.displayName || '--'}}</text>
+    </view>
+    <view class="info-row">
+      <text class="label">手机号</text>
+      <text class="value">{{riderProfile.phone || '--'}}</text>
+    </view>
+    <view class="info-row">
+      <text class="label">账号状态</text>
+      <text class="value">{{riderProfile.riderStatus || 'DISABLED'}}</text>
+    </view>
+    <view class="info-row">
+      <text class="label">最近登录</text>
+      <text class="value">{{riderProfile.lastLoginAt || '--'}}</text>
+    </view>
+  </view>
+  <view class="card notice-card">
+    <view class="card-title">处理建议</view>
+    <view class="muted">如果只是临时停用，请让老板在后台重新启用并分配区域；刷新状态后即可恢复进入工作台。</view>
+  </view>
+  <view class="action-stack">
+    <button class="primary-btn" loading="{{refreshing}}" disabled="{{refreshing}}" bindtap="refreshStatus">刷新账号状态</button>
+    <button class="secondary-btn" bindtap="contactMerchant">联系老板处理</button>
+    <button class="secondary-btn" bindtap="logout">重新登录</button>
+  </view>
+</view>
