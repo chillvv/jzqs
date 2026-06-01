@@ -15,7 +15,6 @@ import com.jzqs.app.mobile.api.RiderBatchSummaryResponse;
 import com.jzqs.app.mobile.api.RiderDeliveryUploadResponse;
 import com.jzqs.app.mobile.api.RiderQueueItemResponse;
 import com.jzqs.app.mobile.api.RiderTaskItemResponse;
-import com.jzqs.app.mobile.api.GeocodeResponse;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.multipart.MultipartFile;
@@ -88,8 +87,6 @@ public interface MobilePortalService {
     Map<String, Object> deferRiderQueueItem(String riderName, long batchItemId);
 
     Map<String, Object> resumeRiderQueueItem(String riderName, long batchItemId);
-
-    GeocodeResponse geocode(String address);
 
     Map<String, Object> reportDeliveryException(long mealSlotOrderId, String riderName, String exceptionType, String exceptionNote, List<String> exceptionImages);
 

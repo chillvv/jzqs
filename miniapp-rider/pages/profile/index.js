@@ -215,6 +215,16 @@ Page({
     }
   },
   logout() {
-    getApp().logoutRider();
+    wx.showModal({
+      title: '退出登录',
+      content: '确定要退出当前账号吗？',
+      success: async (res) => {
+        if (!res.confirm) {
+          return;
+        }
+        await getApp().logoutRider();
+        wx.showToast({ title: '已退出', icon: 'success' });
+      }
+    });
   }
 });

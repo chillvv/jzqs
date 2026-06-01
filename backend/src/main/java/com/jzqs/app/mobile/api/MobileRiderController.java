@@ -91,17 +91,6 @@ public class MobileRiderController {
         return ApiResponse.success(mobilePortalService.resumeRiderQueueItem(riderName, batchItemId));
     }
 
-    @GetMapping("/geocode")
-    public ApiResponse<GeocodeResponse> geocode(
-        @RequestParam String riderName,
-        @RequestParam String address
-    ) {
-        if (riderName == null || riderName.isBlank()) {
-            throw new IllegalArgumentException("骑手信息无效");
-        }
-        return ApiResponse.success(mobilePortalService.geocode(address));
-    }
-
     @PostMapping("/tasks/{mealSlotOrderId}/report-exception")
     public ApiResponse<Map<String, Object>> reportException(
         @PathVariable long mealSlotOrderId,

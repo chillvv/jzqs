@@ -38,10 +38,6 @@ mybatis-plus:
 server:
   port: ${SERVER_PORT:8081}
 
-tencent:
-  map:
-    key: ${TENCENT_MAP_KEY:}
-
 # 微信小程序配置
 wechat:
   # 开发模式：true 时不调用微信接口，使用模拟数据

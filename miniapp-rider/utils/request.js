@@ -25,40 +25,7 @@ function request({ url, method = 'GET', data, header, requireWorkbench = true })
         requestHeader.Authorization = `Bearer ${token}`;
       }
       
-      // 优先使用云开发云托管调用
-      if (wx.cloud) {
-        wx.cloud.callContainer({
-          config: {
-            env: "cloud1-4g88w3e2dedee471"
-          },
-          header: requestHeader,
-          path: url,
-          method,
-          data,
-          success(res) {
-            const body = res.data || {};
-            // token 失效处理
-            if (res.statusCode === 401) {
-              console.log('[请求] Token 失效，清除本地 token');
-              wx.removeStorageSync(AUTH_TOKEN_KEY);
-              app.resetRiderAuthState(true);
-              reject(new Error('登录已过期，请重新登录'));
-              return;
-            }
-            if (res.statusCode >= 200 && res.statusCode < 300 && body.code === 'OK') {
-              resolve(body.data);
-              return;
-            }
-            reject(new Error(body.message || '请求失败'));
-          },
-          fail(err) {
-            console.error('[云托管请求失败]', err);
-            reject(new Error('暂时无法连接服务，请确认云托管已启动'));
-          }
-        });
-        return;
-      }
-
+      // 直接使用常规 wx.request（开发模式下可以用 HTTP/IP，正式模式需要 HTTPS/域名）
       wx.request({
         url: `${app.globalData.apiBaseUrl}${url}`,
         method,

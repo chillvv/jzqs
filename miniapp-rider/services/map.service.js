@@ -1,15 +1,12 @@
 /**
  * 地图导航服务
- * 提供多种地图导航方式
+ * 提供外部地图跳转和地址复制
  */
-
-const { request } = require('../utils/request');
 
 /**
  * 地图导航选项
  */
 const MAP_OPTIONS = [
-  { name: '微信地图导航（推荐）', value: 'wechat' },
   { name: '高德地图', value: 'amap' },
   { name: '腾讯地图', value: 'tencent' },
   { name: '复制地址', value: 'copy' }
@@ -45,56 +42,6 @@ function showMapOptions(item, callback) {
       }
     }
   });
-}
-
-/**
- * 微信地图导航
- * @param {Object} item - 配送任务项
- */
-async function openWechatMap(item) {
-  wx.showLoading({ title: '正在定位...' });
-
-  try {
-    const app = getApp();
-    const riderName = app.getActiveRiderName();
-
-    // 调用后台地理编码接口
-    const geocode = await request({
-      url: `/api/mobile/rider/geocode?riderName=${encodeURIComponent(riderName)}&address=${encodeURIComponent(item.deliveryAddress)}`
-    });
-
-    wx.hideLoading();
-
-    // 打开微信地图
-    wx.openLocation({
-      latitude: geocode.latitude,
-      longitude: geocode.longitude,
-      name: item.customerName || '配送地址',
-      address: item.deliveryAddress,
-      scale: 18
-    });
-
-    // 记录导航日志
-    console.log('[地图导航] 微信地图', {
-      fromCache: geocode.fromCache,
-      confidence: geocode.confidence
-    });
-
-  } catch (error) {
-    wx.hideLoading();
-    console.error('[地图导航] 失败', error);
-
-    // 降级到复制地址
-    wx.showModal({
-      title: '定位失败',
-      content: error.message || '无法获取地址坐标，是否复制地址手动导航？',
-      success: (res) => {
-        if (res.confirm) {
-          copyAddress(item);
-        }
-      }
-    });
-  }
 }
 
 /**
@@ -178,9 +125,6 @@ function copyAddress(item) {
 function navigate(item) {
   showMapOptions(item, (type, taskItem) => {
     switch (type) {
-      case 'wechat':
-        openWechatMap(taskItem);
-        break;
       case 'amap':
         openAmapNavigation(taskItem);
         break;
@@ -199,7 +143,6 @@ function navigate(item) {
 module.exports = {
   navigate,
   showMapOptions,
-  openWechatMap,
   openAmapNavigation,
   openTencentMapNavigation,
   copyAddress

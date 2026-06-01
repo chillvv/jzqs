@@ -57,14 +57,8 @@
     </view>
   </view>
   
-  <view class="menu-group" wx:if="{{viewState === 'active' || viewState === 'pending' || viewState === 'blocked'}}">
-    <button class="list-item list-item-btn" bindtap="logout">
-      <view class="list-copy" style="color: #FF4D4F;">
-        <view class="list-title">退出登录</view>
-        <view class="list-desc">退出当前骑手账号并返回登录态。</view>
-      </view>
-      <text class="list-arrow">›</text>
-    </button>
+  <view class="logout-section" wx:if="{{viewState === 'active' || viewState === 'pending' || viewState === 'blocked'}}">
+    <button class="btn-logout" bindtap="logout">退出登录</button>
   </view>
 
   <!-- 半屏登录弹窗 -->

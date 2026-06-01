@@ -23,7 +23,6 @@ import com.jzqs.app.mobile.api.RiderBatchSummaryResponse;
 import com.jzqs.app.mobile.api.RiderDeliveryUploadResponse;
 import com.jzqs.app.mobile.api.RiderQueueItemResponse;
 import com.jzqs.app.mobile.api.RiderTaskItemResponse;
-import com.jzqs.app.mobile.api.GeocodeResponse;
 import java.io.IOException;
 import com.jzqs.app.order.service.OrderPrepService;
 import java.sql.PreparedStatement;
@@ -42,13 +41,9 @@ import java.nio.file.Path;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.client.RestTemplate;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 
 @Service
 public class MobilePortalServiceImpl implements MobilePortalService {
@@ -59,8 +54,6 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     private final ObjectMapper objectMapper;
     private final MobilePortalServiceExtension extension;
     private final AftersaleService aftersaleService;
-    @Value("${tencent.map.key:}")
-    private String tencentMapKey;
 
     public MobilePortalServiceImpl(
         JdbcTemplate jdbcTemplate,
@@ -1437,93 +1430,6 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             return objectMapper.readValue(rawJson, new TypeReference<List<String>>() { });
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("菜品列表解析失败", ex);
-        }
-    }
-
-    @Override
-    public GeocodeResponse geocode(String address) {
-        if (address == null || address.isBlank()) {
-            throw new IllegalArgumentException("地址不能为空");
-        }
-        
-        String trimmedAddress = address.trim();
-        
-        // 1. 先查数据库缓存（30天内有效）
-        try {
-            GeocodeResponse cached = jdbcTemplate.queryForObject("""
-                SELECT latitude, longitude, address, formatted_address, confidence
-                FROM address_geocode_cache
-                WHERE address = ?
-                AND updated_at > DATE_SUB(NOW(), INTERVAL 30 DAY)
-                LIMIT 1
-                """,
-                (rs, rowNum) -> new GeocodeResponse(
-                    rs.getDouble("latitude"),
-                    rs.getDouble("longitude"),
-                    rs.getString("address"),
-                    rs.getString("formatted_address"),
-                    true,  // fromCache
-                    rs.getInt("confidence")
-                ),
-                trimmedAddress
-            );
-            
-            // 更新命中次数
-            jdbcTemplate.update(
-                "UPDATE address_geocode_cache SET hit_count = hit_count + 1 WHERE address = ?",
-                trimmedAddress
-            );
-            
-            return cached;
-        } catch (Exception e) {
-            // 缓存未命中，继续调用API
-        }
-        
-        // 2. 检查是否配置了腾讯地图Key
-        if (tencentMapKey == null || tencentMapKey.isBlank()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "地理编码服务未配置，请联系管理员配置腾讯地图Key");
-        }
-        
-        // 3. 调用腾讯地图API
-        try {
-            String url = String.format(
-                "https://apis.map.qq.com/ws/geocoder/v1/?address=%s&key=%s",
-                URLEncoder.encode(trimmedAddress, StandardCharsets.UTF_8),
-                tencentMapKey
-            );
-            
-            RestTemplate restTemplate = new RestTemplate();
-            Map<String, Object> response = restTemplate.getForObject(url, Map.class);
-            
-            if (response != null && (int) response.get("status") == 0) {
-                Map<String, Object> result = (Map<String, Object>) response.get("result");
-                Map<String, Object> location = (Map<String, Object>) result.get("location");
-                
-                double lat = ((Number) location.get("lat")).doubleValue();
-                double lng = ((Number) location.get("lng")).doubleValue();
-                String formattedAddress = String.valueOf(result.get("title"));
-                
-                // 4. 保存到缓存
-                jdbcTemplate.update("""
-                    INSERT INTO address_geocode_cache 
-                    (address, latitude, longitude, formatted_address, confidence, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, NOW(), NOW())
-                    ON DUPLICATE KEY UPDATE
-                        latitude = VALUES(latitude),
-                        longitude = VALUES(longitude),
-                        formatted_address = VALUES(formatted_address),
-                        confidence = VALUES(confidence),
-                        updated_at = NOW()
-                    """,
-                    trimmedAddress, lat, lng, formattedAddress, 100
-                );
-                
-                return new GeocodeResponse(lat, lng, trimmedAddress, formattedAddress, false, 100);
-            }
-            
-            throw new RuntimeException("地理编码失败：" + response.get("message"));
-        } catch (Exception e) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "地理编码服务异常：" + e.getMessage());
         }
     }
 

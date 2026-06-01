@@ -96,6 +96,27 @@ page {
 .list-item-btn::after {
   border: none;
 }
+
+.logout-section {
+  padding: 40rpx;
+  margin-top: 20rpx;
+}
+
+.btn-logout {
+  background: #fff;
+  color: #ff4d4f;
+  border: 1rpx solid #ff4d4f;
+  border-radius: 40rpx;
+  font-size: 28rpx;
+  padding: 20rpx 0;
+  line-height: 1;
+  text-align: center;
+}
+
+.btn-logout::after {
+  border: none;
+}
+
 /* 访客态卡片 */
 .guest-card { background: #FFFFFF; border-radius: 32rpx; margin: 0 24rpx 32rpx; padding: 48rpx 40rpx; box-shadow: var(--shadow-sm); }
 .guest-title { font-size: 40rpx; font-weight: 800; color: var(--text-main); margin-bottom: 12rpx; text-align: center; }

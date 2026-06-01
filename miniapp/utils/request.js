@@ -19,36 +19,7 @@ function request({ url, method = 'GET', data, header, requireAuth = true }) {
         finalHeader.Authorization = `Bearer ${token}`;
       }
 
-      // 优先使用云开发云托管调用
-      if (wx.cloud) {
-        wx.cloud.callContainer({
-          config: {
-            env: "cloud1-4g88w3e2dedee471"
-          },
-          header: finalHeader,
-          path: url,
-          method,
-          data,
-          success(res) {
-            const body = res.data || {};
-            if (res.statusCode >= 200 && res.statusCode < 300 && body.code === 'OK') {
-              resolve(body.data);
-              return;
-            }
-            if (body.code === 'UNAUTHORIZED') {
-              app.handleUnauthorized();
-            }
-            reject(new Error(body.message || '请求失败'));
-          },
-          fail(err) {
-            console.error('[云托管请求失败]', err);
-            reject(new Error('暂时无法连接服务，请确认云托管已启动'));
-          }
-        });
-        return;
-      }
-
-      // 备选方案：常规 wx.request
+      // 直接使用常规 wx.request（开发模式下可以用 HTTP/IP，正式模式需要 HTTPS/域名）
       wx.request({
         url: `${app.globalData.apiBaseUrl}${url}`,
         method,

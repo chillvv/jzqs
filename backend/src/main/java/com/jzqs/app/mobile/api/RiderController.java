@@ -251,23 +251,6 @@ public class RiderController {
     }
 
     /**
-     * 地理编码（地址转坐标）
-     */
-    @GetMapping("/geocode")
-    @Operation(summary = "地理编码", description = "将地址转换为经纬度坐标")
-    public ApiResponse<GeocodeResponse> geocode(
-        @Parameter(description = "骑手姓名", required = true)
-        @RequestParam String riderName,
-        @Parameter(description = "地址", required = true)
-        @RequestParam String address
-    ) {
-        if (riderName == null || riderName.isBlank()) {
-            throw new IllegalArgumentException("骑手信息无效");
-        }
-        return ApiResponse.success(mobilePortalService.geocode(address));
-    }
-
-    /**
      * 上报配送异常
      */
     @PostMapping("/orders/{orderId}/report-exception")
