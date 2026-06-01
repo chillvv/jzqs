@@ -1,0 +1,9 @@
+jzqs.top {
+    encode gzip
+
+    reverse_proxy admin:80
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    }
+}
