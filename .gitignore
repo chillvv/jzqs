@@ -41,10 +41,12 @@
 *.log
 backend/*.log
 admin/*.log
+backend/*.txt
 
 # 临时文件
 *.tmp
 *.temp
+backend/tmp_*
 
 # 操作系统
 .DS_Store

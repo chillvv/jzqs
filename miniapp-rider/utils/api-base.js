@@ -1,6 +1,6 @@
-// 开发时可以换成你的本地或测试服务器地址（开发模式下可以用 HTTP/IP）
-// 正式上线默认走 HTTPS 正式域名
-const DEFAULT_API_BASE_URL = 'https://jzqs.top';
+// 当前默认指向服务器 IP，便于 Docker 服务器直接部署联调
+// 小程序正式上线前仍建议切回 HTTPS 域名
+const DEFAULT_API_BASE_URL = 'http://150.158.81.55';
 
 function resolveApiBaseUrl(value) {
   const normalized = String(value || '').trim().replace(/\/+$/, '');

@@ -1,9 +1,0 @@
-history = ('30', 'aftersale refund traceability', -1292599668, 1)
-related_transaction_id = ('related_transaction_id', 'bigint', 'YES', 'MUL', None, '')
-refunded = ('refunded', 'tinyint(1)', 'NO', '', '0', '')
-refund_reason_code = ('refund_reason_code', 'varchar(64)', 'YES', '', None, '')
-refund_reason_text = ('refund_reason_text', 'varchar(255)', 'YES', '', None, '')
-idx_wallet_transactions_related_transaction = ('wallet_transactions', 1, 'idx_wallet_transactions_related_transaction', 1, 'related_transaction_id', 'A', 1, None, None, 'YES', 'BTREE', '', '', 'YES', None)
-idx_wallet_transactions_related_aftersale = ('wallet_transactions', 1, 'idx_wallet_transactions_related_aftersale', 1, 'related_aftersale_id', 'A', 1, None, None, 'YES', 'BTREE', '', '', 'YES', None)
-flyway_line_crc[src/main/resources/db/migration/V30__aftersale_refund_traceability.sql] = -1292599668
-flyway_line_crc[target/classes/db/migration/V30__aftersale_refund_traceability.sql] = -1292599668

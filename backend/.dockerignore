@@ -2,3 +2,5 @@
 target
 uploads
 *.log
+*.txt
+tmp_*
