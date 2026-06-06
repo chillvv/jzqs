@@ -28,6 +28,37 @@ public class MobileAuthServiceImpl implements MobileAuthService {
     }
 
     @Override
+    public Map<String, Object> verify(String token) {
+        if (token == null || token.trim().isEmpty()) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态无效");
+        }
+        try {
+            Map<String, Object> claims = JwtUtils.parseToken(token.trim());
+            Long userId = extractUserId(claims);
+            String userType = stringClaim(claims.get("userType"));
+            if (userId == null || !"customer".equalsIgnoreCase(userType)) {
+                throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态无效");
+            }
+            verifyCustomerExists(userId);
+
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("valid", true);
+            result.put("userId", userId);
+            result.put("userType", "customer");
+            return result;
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "登录状态无效");
+        }
+    }
+
+    @Override
+    public void logout(String token) {
+        // 当前 JWT 为无状态实现，前端清除本地 token 即可
+    }
+
+    @Override
     public Map<String, Object> wxLogin(String code) {
         String openid = buildDevOpenid(code);
         Long customerId = findCustomerIdByOpenid(openid);
@@ -38,6 +69,37 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             return authState(openid, false, true, false, null);
         }
         return authState(openid, true, false, false, customerId);
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> phoneLogin(String openid, String phone) {
+        String finalOpenid = requireOpenid(openid);
+        String finalPhone = requirePhone(phone);
+        LocalDateTime now = LocalDateTime.now();
+        Long customerId = findCustomerIdByPhone(finalPhone);
+        if (customerId == null) {
+            throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "该手机号未注册，请先注册");
+        }
+        jdbcTemplate.update(
+            """
+                UPDATE customers
+                SET openid = ?,
+                    current_openid = ?,
+                    session_key = ?,
+                    profile_completed = TRUE,
+                    last_login_at = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+            finalOpenid,
+            finalOpenid,
+            "session_" + finalOpenid,
+            Timestamp.valueOf(now),
+            Timestamp.valueOf(now),
+            customerId
+        );
+        return authState(finalOpenid, true, false, false, customerId);
     }
 
     @Override
@@ -391,6 +453,35 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         }
 
         return authState(finalOpenid, true, false, false, customerId);
+    }
+
+    private void verifyCustomerExists(Long customerId) {
+        Integer count = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM customers WHERE id = ? AND active = TRUE",
+            Integer.class,
+            customerId
+        );
+        if (count == null || count == 0) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "用户不存在或已被禁用");
+        }
+    }
+
+    private Long extractUserId(Map<String, Object> claims) {
+        Object userId = claims.get("userId");
+        if (userId == null) {
+            userId = claims.get("customerId");
+        }
+        if (userId instanceof Long value) {
+            return value;
+        }
+        if (userId instanceof Number value) {
+            return value.longValue();
+        }
+        return null;
+    }
+
+    private String stringClaim(Object value) {
+        return value == null ? "" : String.valueOf(value).trim();
     }
 
     private Long findCustomerIdByOpenid(String openid) {

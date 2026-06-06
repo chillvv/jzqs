@@ -7,6 +7,12 @@ import java.util.Map;
 public interface MobileAuthService {
     Map<String, Object> wxLogin(String code);
 
+    Map<String, Object> verify(String token);
+
+    void logout(String token);
+
+    Map<String, Object> phoneLogin(String openid, String phone);
+
     Map<String, Object> bindDevPhone(String openid, String phone);
 
     Map<String, Object> riderWxLogin(String code);

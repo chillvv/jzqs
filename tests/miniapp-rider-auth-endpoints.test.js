@@ -6,7 +6,8 @@ const repoRoot = path.resolve(__dirname, '..');
 const filesToCheck = [
   path.join(repoRoot, 'miniapp-rider', 'utils', 'auth.js'),
   path.join(repoRoot, 'miniapp-rider', 'app.js'),
-  path.join(repoRoot, 'miniapp-rider', 'pages', 'test-login', 'index.js')
+  path.join(repoRoot, 'miniapp-rider', 'pages', 'test-login', 'index.js'),
+  path.join(repoRoot, 'miniapp-rider', 'services', 'auth.service.js')
 ];
 
 const forbiddenEndpoints = [

@@ -56,32 +56,7 @@ Page({
 
     this.setData({ saving: true });
     try {
-      const app = getApp();
-      const authState = auth.getAuthState();
-
-      await new Promise((resolve, reject) => {
-        wx.request({
-          url: app.globalData.apiBaseUrl + '/api/auth/register-phone',
-          method: 'POST',
-          data: {
-            phone: this.data.form.phoneNumber,
-            nickname: this.data.form.nickname.trim(),
-            openid: authState.openid || '',
-            userType: 'customer'
-          },
-          success(res) {
-            const body = res.data || {};
-            if (res.statusCode >= 200 && res.statusCode < 300 && body.code === 'OK') {
-              resolve(body.data);
-            } else {
-              reject(new Error(body.message || '注册失败'));
-            }
-          },
-          fail() {
-            reject(new Error('暂时无法连接服务'));
-          }
-        });
-      });
+      await auth.register(this.data.form.phoneNumber, this.data.form.nickname.trim());
 
       const phoneNumber = this.data.form.phoneNumber;
       updatePreviousProfilePage(phoneNumber);

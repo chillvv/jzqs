@@ -58,7 +58,7 @@ async function riderMixedLogin(phone, name, openid) {
  */
 async function getRiderProfile(riderName) {
   return await request({
-    url: `/api/rider/me?riderName=${encodeURIComponent(riderName)}`,
+    url: `/api/mobile/rider-auth/me?riderName=${encodeURIComponent(riderName)}`,
     requireWorkbench: false
   });
 }

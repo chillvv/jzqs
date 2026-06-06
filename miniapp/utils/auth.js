@@ -1,7 +1,7 @@
 /**
- * 统一认证模块 - 顾客端
- * 基于微信小程序统一登录方案
- * 
+ * 缁熶竴璁よ瘉妯″潡 - 椤惧绔?
+ * 鍩轰簬寰俊灏忕▼搴忕粺涓€鐧诲綍鏂规
+ *
  * @author Kiro AI
  * @since 2026-05-23
  */
@@ -19,133 +19,222 @@ class Auth {
       loggedIn: false,
       openid: '',
       registered: false,
-      needPhoneAuth: false
+      needPhoneAuth: false,
+      authMode: 'UNKNOWN'
     };
   }
 
   /**
-   * 初始化认证状态
-   * 小程序启动时调用一次
+   * 鍒濆鍖栬璇佺姸鎬?
+   * 灏忕▼搴忓惎鍔ㄦ椂璋冪敤涓€娆?
    */
   async init() {
-    // 1. 检查本地 token
+    // 1. 妫€鏌ユ湰鍦?token
     const token = wx.getStorageSync(AUTH_TOKEN_KEY);
-    
+
     if (token) {
-      // 2. 验证 token 是否有效
+      // 2. 楠岃瘉 token 鏄惁鏈夋晥
       try {
-        const result = await this.request('/api/auth/verify', 'GET', null, token);
+        const result = await this.request('/api/mobile/auth/verify', 'GET', null, token);
         if (result.valid && result.userType === 'customer') {
           this.globalData.token = token;
           this.globalData.userId = result.userId;
           this.globalData.userType = result.userType;
           this.globalData.loggedIn = true;
           this.globalData.ready = true;
+          this.globalData.authMode = 'TOKEN';
+          this.syncAppGlobalData();
           return;
         }
       } catch (e) {
-        // token 无效，继续走登录流
-        console.log('[Auth] Token 验证失败:', e.message);
+        // token 鏃犳晥锛岀户缁蛋鐧诲綍娴?
+        console.log('[Auth] Token 楠岃瘉澶辫触:', e.message);
       }
       wx.removeStorageSync(AUTH_TOKEN_KEY);
     }
 
-    // 3. 无有效 token，走微信静默登录
-    await this.silentLogin();
+    // 3. 鏃犳湁鏁?token锛岃蛋寰俊闈欓粯鐧诲綍
+    try {
+      await this.silentLogin();
+    } catch (error) {
+      console.error('[Auth] 闈欓粯鐧诲綍澶辫触锛岃繘鍏ユ湭鐧诲綍鐘舵€?', error);
+      this.syncAppGlobalData();
+    }
     this.globalData.ready = true;
+    this.syncAppGlobalData();
   }
 
   /**
-   * 微信静默登录（wx.login → code → 后端换 openid）
+   * 寰俊闈欓粯鐧诲綍锛坵x.login 鈫?code 鈫?鍚庣鎹?openid锛?
    */
   async silentLogin() {
     try {
       const { code } = await wx.login();
-      const result = await this.request('/api/auth/login', 'POST', { 
-        code, 
-        userType: 'customer' 
+      const result = await this.request('/api/mobile/auth/wx-login', 'POST', {
+        code
       });
-      
+
       this.applyAuthState(result);
       return result;
     } catch (error) {
-      console.error('[Auth] 静默登录失败:', error);
+      console.error('[Auth] 闈欓粯鐧诲綍澶辫触:', error);
       throw error;
     }
   }
 
   /**
-   * 微信一键登录（绑定手机号）- 新版 API
-   * @param {string} code getPhoneNumber 返回的动态令牌
+   * 鎵嬫満鍙风櫥褰?
    */
-  async bindPhone(code) {
+  async phoneLogin(phone) {
     try {
-      const result = await this.request('/api/auth/bind-phone', 'POST', {
-        code,
-        userType: 'customer'
+      const result = await this.request('/api/mobile/auth/phone-login', 'POST', {
+        openid: this.globalData.openid,
+        phone
       });
-      
-      this.applyAuth(result);
+      this.applyAuthState(result);
       return result;
     } catch (error) {
-      console.error('[Auth] 绑定手机号失败:', error);
+      console.error('[Auth] 鎵嬫満鍙风櫥褰曞け璐?', error);
       throw error;
     }
   }
 
   /**
-   * 应用认证状态（静默登录结果）
+   * 鎵嬪姩娉ㄥ唽骞剁粦瀹氭墜鏈哄彿
    */
-  applyAuthState(result) {
-    this.globalData.openid = result.openid || '';
-    this.globalData.registered = result.registered || false;
-    this.globalData.needPhoneAuth = !result.registered;
-    
-    if (result.token) {
-      this.applyAuth(result);
+  async register(phone, nickname) {
+    try {
+      const result = await this.request('/api/mobile/auth/register', 'POST', {
+        openid: this.globalData.openid,
+        phone,
+        nickname
+      });
+      this.applyAuthState(result);
+      return result;
+    } catch (error) {
+      console.error('[Auth] 椤惧娉ㄥ唽澶辫触:', error);
+      throw error;
     }
   }
 
   /**
-   * 应用认证结果（登录成功）
+   * 瀹屾垚椤惧棣栨璧勬枡琛ュ叏
+   */
+  async completeProfile(nickname) {
+    try {
+      const result = await this.request('/api/mobile/auth/complete-profile', 'POST', {
+        openid: this.globalData.openid,
+        nickname
+      });
+      this.applyAuthState(result);
+      return result;
+    } catch (error) {
+      console.error('[Auth] 瀹屽杽璧勬枡澶辫触:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 鍏煎鏃ц皟鐢細浣跨敤鎵嬪姩鎵嬫満鍙锋敞鍐屾浛浠ｅ井淇℃墜鏈哄彿瑙ｅ瘑
+   */
+  async bindPhone(payload) {
+    if (!payload || typeof payload !== 'object') {
+      throw new Error('璇锋墜鍔ㄨ緭鍏ユ墜鏈哄彿瀹屾垚鐧诲綍');
+    }
+    const { phone, nickname = '' } = payload;
+    if (!nickname) {
+      return this.phoneLogin(phone);
+    }
+    try {
+      const result = await this.register(phone, nickname);
+      return result;
+    } catch (error) {
+      console.error('[Auth] 缁戝畾鎵嬫満鍙峰け璐?', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 搴旂敤璁よ瘉鐘舵€侊紙闈欓粯鐧诲綍缁撴灉锛?
+   */
+  applyAuthState(result) {
+    this.globalData.authMode = result.authMode || 'MINIAPP_WX';
+    this.globalData.openid = result.openid || '';
+    this.globalData.registered = result.registered || false;
+    this.globalData.needPhoneAuth = Boolean(result.needPhoneAuth || !result.registered);
+
+    if (result.token) {
+      this.applyAuth(result);
+      return;
+    }
+    this.syncAppGlobalData();
+  }
+
+  /**
+   * 搴旂敤璁よ瘉缁撴灉锛堢櫥褰曟垚鍔燂級
    */
   applyAuth(result) {
     if (result.token) {
       wx.setStorageSync(AUTH_TOKEN_KEY, result.token);
       this.globalData.token = result.token;
-      this.globalData.userId = result.userId;
-      this.globalData.userType = result.userType;
+      this.globalData.userId = result.userId || result.customerId || null;
+      this.globalData.userType = result.userType || 'customer';
       this.globalData.loggedIn = true;
       this.globalData.registered = true;
       this.globalData.needPhoneAuth = false;
+      this.globalData.authMode = result.authMode || this.globalData.authMode;
+      this.syncAppGlobalData();
     }
   }
 
   /**
-   * 退出登录
+   * 閫€鍑虹櫥褰?
    */
   async logout() {
     const token = this.globalData.token || wx.getStorageSync(AUTH_TOKEN_KEY);
 
     try {
       if (token) {
-        await this.request('/api/auth/logout', 'POST', {}, token);
+        await this.request('/api/mobile/auth/logout', 'POST', {}, token);
       }
     } catch (error) {
-      console.warn('[Auth] 退出登录请求失败:', error);
+      console.warn('[Auth] 閫€鍑虹櫥褰曡姹傚け璐?', error);
     } finally {
       wx.removeStorageSync(AUTH_TOKEN_KEY);
       wx.removeStorageSync(AUTH_STATE_KEY);
       this.globalData.token = null;
       this.globalData.userId = null;
+      this.globalData.openid = '';
       this.globalData.loggedIn = false;
       this.globalData.registered = false;
+      this.globalData.needPhoneAuth = false;
+      this.globalData.authMode = 'UNKNOWN';
       this.globalData.ready = true;
+      this.syncAppGlobalData();
+    }
+  }
+
+  syncAppGlobalData() {
+    try {
+      const app = getApp();
+      if (!app || !app.globalData) {
+        return;
+      }
+      app.globalData.token = this.globalData.token;
+      app.globalData.loggedIn = this.globalData.loggedIn;
+      app.globalData.needPhoneAuth = this.globalData.needPhoneAuth;
+      app.globalData.registered = this.globalData.registered;
+      app.globalData.openid = this.globalData.openid;
+      app.globalData.userId = this.globalData.userId;
+      app.globalData.userType = this.globalData.userType;
+      app.globalData.authMode = this.globalData.authMode;
+    } catch (error) {
+      // getApp 鍦ㄦ瀬鏃╂湡鏃跺彲鑳藉皻鏈畬鍏ㄥ彲鐢紝杩欓噷闈欓粯璺宠繃鍗冲彲
     }
   }
 
   /**
-   * 封装的请求，自动带 token
+   * 灏佽鐨勮姹傦紝鑷姩甯?token
    */
   async request(url, method, data, customToken) {
     const token = customToken || this.globalData.token;
@@ -158,7 +247,7 @@ class Auth {
         success(res) {
           const body = res.data || {};
           if (body.code === 'UNAUTHORIZED') {
-            // 401：清除状态，跳登录
+            // 401锛氭竻闄ょ姸鎬侊紝璺崇櫥褰?
             wx.removeStorageSync(AUTH_TOKEN_KEY);
             wx.redirectTo({ url: '/pages/profile/index' });
             reject(new Error(body.message));
@@ -168,17 +257,17 @@ class Auth {
             resolve(body.data);
             return;
           }
-          reject(new Error(body.message || '请求失败'));
+          reject(new Error(body.message || '璇锋眰澶辫触'));
         },
         fail() {
-          reject(new Error('暂时无法连接服务'));
+          reject(new Error('鏆傛椂鏃犳硶杩炴帴鏈嶅姟'));
         }
       });
     });
   }
 
   /**
-   * 等待认证就绪
+   * 绛夊緟璁よ瘉灏辩华
    */
   waitForAuth() {
     return new Promise((resolve) => {
@@ -194,7 +283,7 @@ class Auth {
   }
 
   /**
-   * 获取认证状态
+   * 鑾峰彇璁よ瘉鐘舵€?
    */
   getAuthState() {
     return {
@@ -204,26 +293,27 @@ class Auth {
       needPhoneAuth: this.globalData.needPhoneAuth,
       openid: this.globalData.openid,
       userId: this.globalData.userId,
-      userType: this.globalData.userType
+      userType: this.globalData.userType,
+      authMode: this.globalData.authMode
     };
   }
 
   /**
-   * 判断是否需要跳转到登录/注册页面
+   * 鍒ゆ柇鏄惁闇€瑕佽烦杞埌鐧诲綍/娉ㄥ唽椤甸潰
    */
   shouldRedirectToAuth() {
     return this.globalData.ready && !this.globalData.loggedIn;
   }
 
   /**
-   * 判断是否需要绑定手机号
+   * 鍒ゆ柇鏄惁闇€瑕佺粦瀹氭墜鏈哄彿
    */
   shouldBindPhone() {
     return this.globalData.ready && !this.globalData.registered && this.globalData.needPhoneAuth;
   }
 }
 
-// 创建单例
+// 鍒涘缓鍗曚緥
 const auth = new Auth();
 
 module.exports = auth;

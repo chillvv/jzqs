@@ -21,18 +21,12 @@ function shouldStartRegister(error) {
 }
 
 function applyCustomerAuthResult(result) {
-  if (!result || !result.token) {
+  if (!result) {
     return;
   }
-  wx.setStorageSync('auth_token', result.token);
-  auth.globalData.token = result.token;
-  auth.globalData.userId = result.userId;
-  auth.globalData.userType = result.userType || 'customer';
-  auth.globalData.loggedIn = true;
-  auth.globalData.registered = true;
-  auth.globalData.needPhoneAuth = false;
+  auth.applyAuthState(result);
   auth.globalData.ready = true;
-  getApp().globalData.token = result.token;
+  auth.syncAppGlobalData();
 }
 
 Page({
@@ -181,27 +175,19 @@ Page({
     this.setData({ savingProfile: true });
 
     try {
-      const app = getApp();
-      const code = e.detail.code;
+      const phone = String(e.detail.phoneNumber || '').replace(/\D/g, '');
+      if (!phone) {
+        this.openAuthPopup();
+        wx.showToast({ title: '请手动输入手机号完成登录', icon: 'none' });
+        return;
+      }
 
-      // 新版 API：code 直接换手机号并登录/注册
-      const result = await new Promise((resolve, reject) => {
-        wx.request({
-          url: app.globalData.apiBaseUrl + '/api/auth/bind-phone',
-          method: 'POST',
-          header: { 'content-type': 'application/json' },
-          data: { code, userType: 'customer' },
-          success(res) {
-            const body = res.data || {};
-            if (res.statusCode >= 200 && res.statusCode < 300 && body.code === 'OK') {
-              resolve(body.data);
-            } else {
-              reject(new Error(body.message || '微信授权失败'));
-            }
-          },
-          fail() { reject(new Error('无法连接服务器')); }
-        });
+      this.setData({
+        'profileForm.phoneNumber': phone,
+        phoneAuthHint: maskPhone(phone)
       });
+
+      const result = await auth.phoneLogin(phone);
 
       applyCustomerAuthResult(result);
 
@@ -222,7 +208,6 @@ Page({
       this.setData({ showAuthPopup: false, phoneAuthHint: '' });
       setTimeout(() => this.refreshPage(), 1200);
     } catch (error) {
-      // 降级：把手机号填入表单（开发模式 / 旧版基础库）
       const phone = e.detail.phoneNumber || '';
       if (shouldStartRegister(error)) {
         this.startRegisterFlow({ phoneNumber: phone });
@@ -267,43 +252,8 @@ Page({
 
     this.setData({ savingProfile: true });
     try {
-      const app = getApp();
-      const apiBaseUrl = app.globalData.apiBaseUrl;
-      const authState = auth.getAuthState();
-
-      const result = await new Promise((resolve, reject) => {
-        wx.request({
-          url: apiBaseUrl + '/api/auth/customer-phone-login',
-          method: 'POST',
-          data: {
-            phone: this.data.profileForm.phoneNumber,
-            openid: authState.openid || ''
-          },
-          success(res) {
-            const body = res.data || {};
-            if (res.statusCode >= 200 && res.statusCode < 300 && body.code === 'OK') {
-              resolve(body.data);
-            } else {
-              reject(new Error(body.message || '登录失败'));
-            }
-          },
-          fail() {
-            reject(new Error('暂时无法连接服务'));
-          }
-        });
-      });
-
-      if (result.token) {
-        wx.setStorageSync('auth_token', result.token);
-        auth.globalData.token = result.token;
-        auth.globalData.userId = result.userId;
-        auth.globalData.userType = result.userType || 'customer';
-        auth.globalData.loggedIn = true;
-        auth.globalData.registered = true;
-        auth.globalData.needPhoneAuth = false;
-        auth.globalData.ready = true;
-        getApp().globalData.token = result.token;
-      }
+      const result = await auth.phoneLogin(this.data.profileForm.phoneNumber);
+      applyCustomerAuthResult(result);
 
       wx.showToast({ title: '登录成功', icon: 'success' });
       this.setData({
@@ -342,33 +292,10 @@ Page({
 
     this.setData({ savingProfile: true });
     try {
-      const app = getApp();
-      const authState = auth.getAuthState();
-
-      const result = await new Promise((resolve, reject) => {
-        wx.request({
-          url: app.globalData.apiBaseUrl + '/api/auth/register-phone',
-          method: 'POST',
-          data: {
-            phone: this.data.profileForm.phoneNumber,
-            nickname: this.data.profileForm.nickname.trim(),
-            openid: authState.openid || '',
-            userType: 'customer'
-          },
-          success(res) {
-            const body = res.data || {};
-            if (res.statusCode >= 200 && res.statusCode < 300 && body.code === 'OK') {
-              resolve(body.data);
-            } else {
-              reject(new Error(body.message || '注册失败'));
-            }
-          },
-          fail() {
-            reject(new Error('暂时无法连接服务'));
-          }
-        });
-      });
-
+      const result = await auth.register(
+        this.data.profileForm.phoneNumber,
+        this.data.profileForm.nickname.trim()
+      );
       applyCustomerAuthResult(result);
       wx.showToast({ title: '注册成功', icon: 'success' });
       this.setData({
@@ -400,11 +327,8 @@ Page({
 
     this.setData({ savingProfile: true });
     try {
-      await request({
-        url: '/api/mobile/customer/profile',
-        method: 'POST',
-        data: { name: nickname }
-      });
+      const result = await auth.completeProfile(nickname);
+      applyCustomerAuthResult(result);
 
       wx.showToast({ title: '注册成功', icon: 'success' });
       this.setData({
@@ -427,11 +351,9 @@ Page({
     wx.showModal({
       title: '退出登录',
       content: '确定要退出当前账号吗？',
-      success: (res) => {
+      success: async (res) => {
         if (res.confirm) {
-          wx.removeStorageSync('auth_token');
-          getApp().globalData.token = null;
-          getApp().globalData.loggedIn = false;
+          await auth.logout();
           getApp().globalData.announcementShown = false;
           this.refreshPage();
           wx.showToast({ title: '已退出', icon: 'success' });
