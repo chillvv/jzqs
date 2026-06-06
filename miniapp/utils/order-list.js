@@ -51,7 +51,16 @@ function mapOrderForDisplay(item) {
   };
 }
 
+function resolveVisibleOrders(items, targetOrderId) {
+  if (!targetOrderId) {
+    return items;
+  }
+  const matchedItem = (items || []).find((item) => String(item.id) === String(targetOrderId));
+  return matchedItem ? [matchedItem] : [];
+}
+
 module.exports = {
   mapOrderForDisplay,
-  resolveOrderSourceText
+  resolveOrderSourceText,
+  resolveVisibleOrders
 };

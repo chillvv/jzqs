@@ -1,6 +1,10 @@
 <view class="subpage">
   <view class="subpage-card">
-    <view class="hero-inline-main">我的预订记录</view>
+    <view class="hero-inline-main">{{showingTargetOrderOnly ? '关联订单' : '我的预订记录'}}</view>
+    <view wx:if="{{showingTargetOrderOnly}}" class="target-order-hint">
+      <text>已为你直达餐次流水对应订单</text>
+      <button class="sub-btn ghost target-order-btn" bindtap="viewAllOrders">查看全部订单</button>
+    </view>
   </view>
 
   <view class="subpage-card">
@@ -71,6 +75,9 @@
   </view>
 
   <view wx:elif="{{!loading}}" class="subpage-card">
-    <view class="empty-text">当前筛选条件下暂无订单</view>
+    <view class="empty-text">{{targetOrderId ? '未找到对应的关联订单' : '当前筛选条件下暂无订单'}}</view>
+    <view wx:if="{{targetOrderId}}" class="action-row">
+      <button class="sub-btn ghost target-order-btn" bindtap="viewAllOrders">查看全部订单</button>
+    </view>
   </view>
 </view>

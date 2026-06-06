@@ -1,4 +1,5 @@
 const { formatMonthDay, periodLabel } = require('./mobile');
+const { resolveMediaUrl } = require('./media-url');
 
 function resolveOrderSourceText(source) {
   if (source === 'BACKEND') {
@@ -21,9 +22,10 @@ function getReceiptDisplayState(item) {
   };
 }
 
-function mapReceiptRecord(item) {
+function mapReceiptRecord(item, baseUrl) {
   return {
     ...item,
+    receiptUrl: resolveMediaUrl(item.receiptUrl, baseUrl),
     serveDateText: formatMonthDay(item.serveDate),
     periodText: periodLabel(item.mealPeriod),
     sourceText: resolveOrderSourceText(item.source),

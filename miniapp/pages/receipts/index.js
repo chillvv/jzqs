@@ -27,6 +27,7 @@ Page({
 
   async loadReceipts() {
     const { targetOrderId } = this.data;
+    const app = getApp();
     this.setData({ loading: true });
     try {
       const response = await request({
@@ -34,7 +35,7 @@ Page({
       });
       let items = (response.items || [])
         .filter((item) => item.receiptUrl || item.receiptNote || item.deliveredAt)
-        .map(mapReceiptRecord);
+        .map((item) => mapReceiptRecord(item, app.globalData.apiBaseUrl));
       if (targetOrderId) {
         items = items.filter((item) => String(item.id) === targetOrderId);
       }

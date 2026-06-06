@@ -1,6 +1,10 @@
 jzqs.top {
     encode gzip
 
+    handle /uploads/* {
+        reverse_proxy backend:8080
+    }
+
     handle /api/* {
         reverse_proxy backend:8080
     }

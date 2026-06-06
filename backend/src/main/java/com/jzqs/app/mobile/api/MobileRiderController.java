@@ -5,6 +5,7 @@ import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.mobile.MobilePortalService;
 import jakarta.validation.Valid;
 import java.util.Map;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -37,6 +38,14 @@ public class MobileRiderController {
     @GetMapping("/queue")
     public ApiResponse<PageResponse<RiderQueueItemResponse>> queue(@RequestParam String riderName) {
         return ApiResponse.success(mobilePortalService.riderQueue(riderName));
+    }
+
+    @PostMapping(value = "/uploads/receipt", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ApiResponse<RiderDeliveryUploadResponse> uploadReceipt(
+        @RequestParam String riderName,
+        @RequestPart("file") MultipartFile file
+    ) {
+        return ApiResponse.success(mobilePortalService.uploadRiderReceipt(riderName, file));
     }
 
     @PostMapping("/tasks/{mealSlotOrderId}/receipt")

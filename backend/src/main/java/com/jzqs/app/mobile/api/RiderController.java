@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.Map;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -196,6 +197,16 @@ public class RiderController {
     }
 
     // ==================== 文件上传 ====================
+
+    @PostMapping(value = "/uploads/receipt", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "上传送达图片", description = "上传骑手回执图片到本地服务器存储")
+    public ApiResponse<RiderDeliveryUploadResponse> uploadReceipt(
+        @Parameter(description = "骑手姓名", required = true)
+        @RequestParam String riderName,
+        @RequestPart("file") MultipartFile file
+    ) {
+        return ApiResponse.success(mobilePortalService.uploadRiderReceipt(riderName, file));
+    }
 
     /**
      * 更新送达照片
