@@ -49,7 +49,7 @@
           >晚餐</view>
         </view>
         <view wx:if="{{currentStatusFilter === 'PENDING'}}" class="edit-btn-inline" bindtap="toggleEditMode">
-          <text class="material-symbols-outlined edit-icon">{{isEditMode ? 'check' : 'sort'}}</text>
+          <image class="edit-icon" src="{{isEditMode ? '/assets/icons/check.svg' : '/assets/icons/sort.svg'}}" mode="aspectFit"></image>
           <text class="edit-text">{{isEditMode ? '完成' : '排序'}}</text>
         </view>
       </view>

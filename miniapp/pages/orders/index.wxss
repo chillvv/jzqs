@@ -131,3 +131,17 @@
 .order-secondary-btn {
   min-width: 172rpx;
 }
+
+.target-order-hint {
+  margin-top: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20rpx;
+  font-size: 24rpx;
+  color: #64748b;
+}
+
+.target-order-btn {
+  min-width: 188rpx;
+}

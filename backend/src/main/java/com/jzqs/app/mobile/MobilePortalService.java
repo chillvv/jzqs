@@ -76,6 +76,8 @@ public interface MobilePortalService {
 
     RiderQueueItemResponse riderQueueItem(long batchItemId, String riderName);
 
+    RiderDeliveryUploadResponse uploadRiderReceipt(String riderName, MultipartFile file);
+
     Map<String, Object> submitRiderReceipt(long mealSlotOrderId, String riderName, String receiptFileKey, String receiptNote, String deliveredAt);
 
     Map<String, Object> updateRiderReceipt(long mealSlotOrderId, String riderName, String receiptFileKey, String receiptNote, String deliveredAt);

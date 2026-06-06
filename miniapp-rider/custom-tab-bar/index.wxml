@@ -1,10 +1,10 @@
 <view class="custom-tab-bar">
   <view class="tab-item {{selected === 0 ? 'active' : ''}}" data-path="/pages/queue/index" data-index="0" bindtap="switchTab">
-    <image class="tab-icon" src="{{selected === 0 ? '/assets/tab-order-active.png' : '/assets/tab-order.png'}}"></image>
+    <image class="tab-icon" src="{{selected === 0 ? '/assets/icons/queue-active.svg' : '/assets/icons/queue.svg'}}" mode="aspectFit"></image>
     <text class="tab-text">订单</text>
   </view>
   <view class="tab-item {{selected === 1 ? 'active' : ''}}" data-path="/pages/profile/index" data-index="1" bindtap="switchTab">
-    <image class="tab-icon" src="{{selected === 1 ? '/assets/tab-profile-active.png' : '/assets/tab-profile.png'}}"></image>
+    <image class="tab-icon" src="{{selected === 1 ? '/assets/icons/profile-active.svg' : '/assets/icons/profile.svg'}}" mode="aspectFit"></image>
     <text class="tab-text">我的</text>
   </view>
 </view>

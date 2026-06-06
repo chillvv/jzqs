@@ -26,14 +26,14 @@
       { 
         "pagePath": "pages/queue/index", 
         "text": "订单",
-        "iconPath": "assets/tab-order.png",
-        "selectedIconPath": "assets/tab-order-active.png"
+        "iconPath": "assets/icons/queue.png",
+        "selectedIconPath": "assets/icons/queue-active.png"
       },
       { 
         "pagePath": "pages/profile/index", 
         "text": "我的",
-        "iconPath": "assets/tab-profile.png",
-        "selectedIconPath": "assets/tab-profile-active.png"
+        "iconPath": "assets/icons/profile.png",
+        "selectedIconPath": "assets/icons/profile-active.png"
       }
     ]
   },

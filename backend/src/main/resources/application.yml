@@ -38,6 +38,9 @@ mybatis-plus:
 server:
   port: ${SERVER_PORT:8081}
 
+app:
+  upload-dir: ${APP_UPLOAD_DIR:./uploads}
+
 # 微信小程序配置
 wechat:
   # 开发模式：true 时不调用微信接口，使用模拟数据

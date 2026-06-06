@@ -6,8 +6,13 @@
 const taskService = require('../../services/task.service');
 const mapService = require('../../services/map.service');
 const imageUtil = require('../../utils/image');
+const { resolveMediaUrl } = require('../../utils/media-url');
 const { formatCurrentDateTime, getMealPeriodLabel } = require('../../utils/formatter');
 const { EXCEPTION_TYPE_OPTIONS } = require('../../utils/constants');
+
+function isStoredReceiptReference(value) {
+  return /^https?:\/\//i.test(value) || value.startsWith('cloud://') || value.startsWith('/uploads/');
+}
 
 Page({
   data: {
@@ -74,6 +79,7 @@ Page({
       // 规范化订单数据
       const normalizedOrder = {
         ...order,
+        receiptUrl: resolveMediaUrl(order.receiptUrl, app.globalData.apiBaseUrl),
         mealLabel: getMealPeriodLabel(order.mealPeriod)
       };
 
@@ -370,18 +376,16 @@ Page({
       let receiptFileKey = '';
       
       // 1. 上传图片 (如果选择了图片)
-      if (receiptTempFilePath && !receiptTempFilePath.startsWith('https://') && !receiptTempFilePath.startsWith('cloud://')) {
+      if (receiptTempFilePath && !isStoredReceiptReference(receiptTempFilePath)) {
         console.log('[提交回执] 开始上传图片', receiptTempFilePath);
         const uploadResult = await taskService.uploadReceipt(riderName, receiptTempFilePath);
         receiptFileKey = uploadResult.fileKey;
         console.log('[提交回执] 上传成功，fileKey:', receiptFileKey);
-        
-        // 验证上传结果
-        if (!receiptFileKey || !receiptFileKey.startsWith('https://')) {
+
+        if (!receiptFileKey) {
           throw new Error('图片上传失败，请重试');
         }
-      } else if (receiptTempFilePath && (receiptTempFilePath.startsWith('https://') || receiptTempFilePath.startsWith('cloud://'))) {
-        // 如果是原有的HTTPS URL或云存储fileID，直接使用
+      } else if (receiptTempFilePath && isStoredReceiptReference(receiptTempFilePath)) {
         receiptFileKey = receiptTempFilePath;
         console.log('[提交回执] 使用已有URL:', receiptFileKey);
       } else {

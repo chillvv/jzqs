@@ -1,5 +1,5 @@
 const { request } = require('../../utils/request');
-const { mapOrderForDisplay } = require('../../utils/order-list');
+const { mapOrderForDisplay, resolveVisibleOrders } = require('../../utils/order-list');
 const { buildOrderStatusGuidance } = require('../../utils/customer-order-flow');
 const { buildRejectedAftersaleDetail } = require('../../utils/aftersale');
 
@@ -12,6 +12,7 @@ Page({
     ],
     currentStatus: '',
     targetOrderId: null,
+    showingTargetOrderOnly: false,
     items: [],
     loading: false
   },
@@ -19,6 +20,7 @@ Page({
   onLoad(options) {
     if (options.orderId) {
       this.setData({ targetOrderId: options.orderId });
+      wx.setNavigationBarTitle({ title: '关联订单' });
     }
   },
 
@@ -46,19 +48,11 @@ Page({
           guidanceText: buildOrderStatusGuidance(displayItem.status)
         };
       });
-      
-      if (targetOrderId) {
-        // If targetOrderId is provided, we might want to show only that order or highlight it.
-        // For now, let's just make sure it's in the list and maybe filter for it if it's not "all".
-        // But usually it's better to show the specific order at the top.
-        const targetItem = items.find(item => String(item.id) === String(targetOrderId));
-        if (targetItem) {
-          items = [targetItem, ...items.filter(item => String(item.id) !== String(targetOrderId))];
-        }
-      }
+      items = resolveVisibleOrders(items, targetOrderId);
 
       this.setData({
-        items
+        items,
+        showingTargetOrderOnly: Boolean(targetOrderId)
       });
     } catch (error) {
       wx.showToast({ title: error.message || '加载失败', icon: 'none' });
@@ -74,6 +68,19 @@ Page({
       return;
     }
     this.setData({ currentStatus: status, items: [] });
+    this.loadOrders();
+  },
+
+  viewAllOrders() {
+    if (!this.data.targetOrderId) {
+      return;
+    }
+    this.setData({
+      targetOrderId: null,
+      showingTargetOrderOnly: false,
+      items: []
+    });
+    wx.setNavigationBarTitle({ title: '我的订单' });
     this.loadOrders();
   },
 

@@ -24,6 +24,7 @@ import com.jzqs.app.mobile.api.RiderDeliveryUploadResponse;
 import com.jzqs.app.mobile.api.RiderQueueItemResponse;
 import com.jzqs.app.mobile.api.RiderTaskItemResponse;
 import java.io.IOException;
+import java.net.URI;
 import com.jzqs.app.order.service.OrderPrepService;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
@@ -38,6 +39,8 @@ import java.util.List;
 import java.util.Map;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -48,12 +51,14 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class MobilePortalServiceImpl implements MobilePortalService {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final long MAX_RECEIPT_UPLOAD_SIZE = 5L * 1024 * 1024;
     private final JdbcTemplate jdbcTemplate;
     private final OrderPrepService orderPrepService;
     private final DeliveryService deliveryService;
     private final ObjectMapper objectMapper;
     private final MobilePortalServiceExtension extension;
     private final AftersaleService aftersaleService;
+    private final Path uploadRootDir;
 
     public MobilePortalServiceImpl(
         JdbcTemplate jdbcTemplate,
@@ -61,7 +66,8 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         DeliveryService deliveryService,
         ObjectMapper objectMapper,
         MobilePortalServiceExtension extension,
-        AftersaleService aftersaleService
+        AftersaleService aftersaleService,
+        @Value("${app.upload-dir:./uploads}") String uploadDir
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.orderPrepService = orderPrepService;
@@ -69,6 +75,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         this.objectMapper = objectMapper;
         this.extension = extension;
         this.aftersaleService = aftersaleService;
+        this.uploadRootDir = Path.of(uploadDir).toAbsolutePath().normalize();
     }
 
     private String safeString(Object value) {
@@ -801,6 +808,37 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         return results.isEmpty() ? null : results.get(0);
     }
 
+    @Override
+    public RiderDeliveryUploadResponse uploadRiderReceipt(String riderName, MultipartFile file) {
+        if (isBlank(riderName)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "骑手姓名不能为空");
+        }
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请先选择回执图片");
+        }
+        if (file.getSize() > MAX_RECEIPT_UPLOAD_SIZE) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "回执图片不能超过 5MB");
+        }
+
+        String extension = resolveUploadExtension(file.getOriginalFilename(), file.getContentType());
+        LocalDate today = LocalDate.now();
+        String fileName = sanitizeFileKey(riderName) + "-" + System.currentTimeMillis() + "-" + UUID.randomUUID() + extension;
+        Path relativePath = Path.of("rider-receipts", today.toString(), fileName);
+        Path targetPath = uploadRootDir.resolve(relativePath).normalize();
+
+        ensureWithinUploadRoot(targetPath);
+
+        try {
+            Files.createDirectories(targetPath.getParent());
+            file.transferTo(targetPath);
+        } catch (IOException ex) {
+            throw new IllegalStateException("保存回执图片失败", ex);
+        }
+
+        String storedPath = toPublicUploadPath(relativePath);
+        return new RiderDeliveryUploadResponse(storedPath, storedPath, file.getSize());
+    }
+
     @Transactional
     public Map<String, Object> submitRiderReceipt(long mealSlotOrderId, String riderName, String receiptFileKey, String receiptNote, String deliveredAt) {
         Integer count = jdbcTemplate.queryForObject("""
@@ -864,7 +902,12 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         if (receiptCount == null || receiptCount == 0) {
             throw new BusinessException(ErrorCode.RIDER_TASK_NOT_FOUND, "未找到回执记录");
         }
-        
+        String previousReceiptUrl = jdbcTemplate.queryForObject("""
+            SELECT receipt_url
+            FROM delivery_receipts
+            WHERE meal_slot_order_id = ?
+            """, String.class, mealSlotOrderId);
+
         String finalReceiptUrl = isBlank(receiptFileKey)
             ? ""
             : buildReceiptUrl(receiptFileKey);
@@ -893,6 +936,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             !visibleAt.isAfter(LocalDateTime.now()),
             mealSlotOrderId
         );
+        deleteManagedReceiptFileQuietly(previousReceiptUrl, finalReceiptUrl);
         
         return Map.of(
             "mealSlotOrderId", mealSlotOrderId,
@@ -925,7 +969,12 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         if (receiptCount == null || receiptCount == 0) {
             throw new BusinessException(ErrorCode.RIDER_TASK_NOT_FOUND, "未找到回执记录");
         }
-        
+        String previousReceiptUrl = jdbcTemplate.queryForObject("""
+            SELECT receipt_url
+            FROM delivery_receipts
+            WHERE meal_slot_order_id = ?
+            """, String.class, mealSlotOrderId);
+
         // 清空照片URL，但保留回执记录
         jdbcTemplate.update("""
             UPDATE delivery_receipts
@@ -933,6 +982,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 visible_to_customer = FALSE
             WHERE meal_slot_order_id = ?
             """, mealSlotOrderId);
+        deleteManagedReceiptFileQuietly(previousReceiptUrl, "");
         
         return Map.of(
             "mealSlotOrderId", mealSlotOrderId,
@@ -1390,9 +1440,85 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         return base.replaceAll("[^0-9A-Za-z\\u4e00-\\u9fa5_-]", "_");
     }
 
+    private String resolveUploadExtension(String originalFilename, String contentType) {
+        String lowerContentType = contentType == null ? "" : contentType.toLowerCase();
+        if (lowerContentType.contains("png")) {
+            return ".png";
+        }
+        if (lowerContentType.contains("webp")) {
+            return ".webp";
+        }
+        if (lowerContentType.contains("gif")) {
+            return ".gif";
+        }
+
+        String normalizedName = originalFilename == null ? "" : originalFilename.trim().toLowerCase();
+        if (normalizedName.endsWith(".png")) {
+            return ".png";
+        }
+        if (normalizedName.endsWith(".webp")) {
+            return ".webp";
+        }
+        if (normalizedName.endsWith(".gif")) {
+            return ".gif";
+        }
+        return ".jpg";
+    }
+
+    private void ensureWithinUploadRoot(Path targetPath) {
+        if (!targetPath.startsWith(uploadRootDir)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "非法的图片存储路径");
+        }
+    }
+
+    private String toPublicUploadPath(Path relativePath) {
+        return "/uploads/" + relativePath.toString().replace('\\', '/');
+    }
+
     private String buildReceiptUrl(String receiptFileKey) {
-        // 直接返回云存储 fileID 或完整 URL
-        return receiptFileKey;
+        String normalized = isBlank(receiptFileKey) ? "" : receiptFileKey.trim();
+        if (normalized.isEmpty()) {
+            return "";
+        }
+        if (normalized.startsWith("cloud://")) {
+            return normalized;
+        }
+        if (normalized.startsWith("/uploads/")) {
+            return normalized;
+        }
+        if (normalized.startsWith("uploads/")) {
+            return "/" + normalized;
+        }
+        if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
+            try {
+                URI uri = URI.create(normalized);
+                String path = uri.getPath();
+                if (path != null && path.startsWith("/uploads/")) {
+                    return path;
+                }
+            } catch (IllegalArgumentException ignored) {
+                return normalized;
+            }
+        }
+        return normalized;
+    }
+
+    private void deleteManagedReceiptFileQuietly(String previousReceiptUrl, String nextReceiptUrl) {
+        String previousPath = buildReceiptUrl(previousReceiptUrl);
+        String nextPath = buildReceiptUrl(nextReceiptUrl);
+        if (isBlank(previousPath) || previousPath.equals(nextPath) || !previousPath.startsWith("/uploads/")) {
+            return;
+        }
+
+        Path relativePath = Path.of(previousPath.substring("/uploads/".length()));
+        Path filePath = uploadRootDir.resolve(relativePath).normalize();
+        ensureWithinUploadRoot(filePath);
+
+        try {
+            Files.deleteIfExists(filePath);
+        } catch (IOException ignored) {
+            // Ignore stale file cleanup failures so receipt flow itself can continue.
+        }
     }
 
     private LocalDateTime resolveReceiptVisibleAt(long mealSlotOrderId, LocalDateTime deliveredDateTime) {

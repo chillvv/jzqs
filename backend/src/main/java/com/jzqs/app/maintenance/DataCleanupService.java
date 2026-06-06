@@ -2,6 +2,9 @@ package com.jzqs.app.maintenance;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -12,6 +15,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -30,10 +34,16 @@ public class DataCleanupService {
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final Path uploadRootDir;
 
-    public DataCleanupService(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    public DataCleanupService(
+        JdbcTemplate jdbcTemplate,
+        ObjectMapper objectMapper,
+        @Value("${app.upload-dir:./uploads}") String uploadDir
+    ) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+        this.uploadRootDir = Path.of(uploadDir).toAbsolutePath().normalize();
     }
 
     /**
@@ -307,11 +317,22 @@ public class DataCleanupService {
     }
 
     /**
-     * 清理14天前的回执照片记录
-     * 注意：云存储图片通过生命周期规则自动删除（1天后），这里只清理数据库记录
+     * 清理昨天及之前的回执记录，并删除本地落盘图片
      */
     private int cleanupOldReceipts() {
-        LocalDateTime cutoffTime = LocalDateTime.now().minusDays(14);
+        LocalDateTime cutoffTime = LocalDate.now().atStartOfDay();
+        List<String> localReceiptPaths = jdbcTemplate.queryForList(
+            """
+            SELECT receipt_url
+            FROM delivery_receipts
+            WHERE delivered_at < ?
+              AND receipt_url LIKE '/uploads/%'
+            LIMIT 1000
+            """,
+            String.class,
+            cutoffTime
+        );
+        int deletedLocalFiles = deleteLocalReceiptFiles(localReceiptPaths);
 
         int count = jdbcTemplate.update("""
             DELETE FROM delivery_receipts
@@ -319,9 +340,8 @@ public class DataCleanupService {
             LIMIT 1000
             """, cutoffTime);
 
-        if (count > 0) {
-            log.info("清理回执记录: {}", count);
-            log.info("提示：云存储图片已通过生命周期规则自动删除（上传1天后）");
+        if (count > 0 || deletedLocalFiles > 0) {
+            log.info("清理回执记录: records={}, local_files={}", count, deletedLocalFiles);
         }
         return count;
     }
@@ -401,7 +421,8 @@ public class DataCleanupService {
     private String buildCleanupRangeLabel() {
         LocalDateTime now = LocalDateTime.now();
         return "订单<" + LocalDate.now().minusDays(30)
-            + "，配送/回执/通知/区域调整<" + now.minusDays(14).format(RANGE_FORMATTER)
+            + "，配送/通知/区域调整<" + now.minusDays(14).format(RANGE_FORMATTER)
+            + "，回执图片<" + LocalDate.now().atStartOfDay().format(RANGE_FORMATTER)
             + "，地址绑定/钱包流水<" + LocalDate.now().minusDays(90);
     }
 
@@ -425,6 +446,28 @@ public class DataCleanupService {
 
     private int safeInt(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private int deleteLocalReceiptFiles(List<String> localReceiptPaths) {
+        int deletedCount = 0;
+        for (String receiptPath : localReceiptPaths) {
+            if (receiptPath == null || !receiptPath.startsWith("/uploads/")) {
+                continue;
+            }
+            Path relativePath = Path.of(receiptPath.substring("/uploads/".length()));
+            Path filePath = uploadRootDir.resolve(relativePath).normalize();
+            if (!filePath.startsWith(uploadRootDir)) {
+                continue;
+            }
+            try {
+                if (Files.deleteIfExists(filePath)) {
+                    deletedCount++;
+                }
+            } catch (IOException ex) {
+                log.warn("删除本地回执图片失败: {}", filePath, ex);
+            }
+        }
+        return deletedCount;
     }
 
     private LocalDateTime toLocalDateTime(ResultSet rs, String column) throws SQLException {

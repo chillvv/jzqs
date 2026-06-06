@@ -1,4 +1,5 @@
 const { request } = require('../../utils/request');
+const { resolveMediaUrl } = require('../../utils/media-url');
 
 Page({
   data: {
@@ -27,8 +28,14 @@ Page({
         request({ url: '/api/mobile/customer/home', requireAuth: false }),
         request({ url: '/api/mobile/customer/menu/current-week', requireAuth: false })
       ]);
+      const resolvedHome = {
+        ...home,
+        bannerImages: (home.bannerImages || []).map((item) =>
+          resolveMediaUrl(item, app.globalData.apiBaseUrl)
+        )
+      };
       this.setData({
-        home,
+        home: resolvedHome,
         rangeText: `${currentWeek.weekStartDate.slice(5).replace('-', '.')} - ${currentWeek.weekEndDate.slice(5).replace('-', '.')}`,
         weekCards: currentWeek.days.map((day) => ({
           ...day,
@@ -38,10 +45,15 @@ Page({
         }))
       });
 
-      if (app.globalData.token && home.popupAnnouncementEnabled && home.popupAnnouncementContent && !app.globalData.announcementShown) {
+      if (
+        app.globalData.token &&
+        resolvedHome.popupAnnouncementEnabled &&
+        resolvedHome.popupAnnouncementContent &&
+        !app.globalData.announcementShown
+      ) {
         wx.showModal({
           title: '系统公告',
-          content: home.popupAnnouncementContent,
+          content: resolvedHome.popupAnnouncementContent,
           showCancel: false,
           confirmText: '我知道了',
           confirmColor: '#92AA40',

@@ -93,61 +93,17 @@ async function resumeQueueItem(riderName, batchItemId) {
 }
 
 /**
- * 上传送达图片（使用微信云存储）
+ * 上传送达图片（改为后端本地存储）
  * @param {string} riderName - 骑手姓名
  * @param {string} filePath - 图片路径
- * @returns {Promise<Object>} 上传结果 { fileKey: HTTPS链接 }
+ * @returns {Promise<Object>} 上传结果
  */
 async function uploadReceipt(riderName, filePath) {
-  console.log('[上传回执] 开始上传', { riderName, filePath });
-  
-  // 检查云开发是否初始化
-  if (!wx.cloud) {
-    console.error('[上传回执] wx.cloud 未定义，云开发未初始化');
-    throw new Error('云开发未初始化，请重启小程序');
-  }
-  
-  try {
-    // 生成云存储路径
-    const cloudPath = cloudStorage.generateCloudPath(riderName, 'jpg');
-    console.log('[上传回执] 云存储路径', cloudPath);
-    
-    // 上传到微信云存储
-    const fileID = await cloudStorage.uploadToCloud(filePath, cloudPath);
-    console.log('[上传回执] 云存储成功', { fileID, cloudPath });
-    
-    // 获取临时 HTTPS 链接（公开读权限下，此链接永久有效）
-    const httpsUrl = await cloudStorage.getTempFileURL(fileID);
-    console.log('[上传回执] 获取 HTTPS 链接成功', { fileID, httpsUrl });
-    
-    // 验证链接格式
-    if (!httpsUrl.startsWith('https://')) {
-      console.error('[上传回执] 链接格式错误', httpsUrl);
-      throw new Error('获取的链接格式不正确，请检查云存储权限设置');
-    }
-
-    // 往云数据库写一条记录，供定时清理云函数使用
-    // 失败不影响主流程
-    try {
-      await wx.cloud.database().collection('receipt_files').add({
-        data: {
-          fileID,
-          riderName,
-          uploadedAt: wx.cloud.database().serverDate()
-        }
-      });
-    } catch (dbErr) {
-      console.warn('[上传回执] 写云数据库失败（不影响上传）', dbErr.message);
-    }
-    
-    return {
-      fileKey: httpsUrl, // 返回 HTTPS 链接，后台可直接访问
-      previewUrl: fileID // 小程序内部使用 fileID
-    };
-  } catch (error) {
-    console.error('[上传回执] 失败', error);
-    throw new Error(error.message || '上传失败，请重试');
-  }
+  return uploadFile({
+    url: `/api/mobile/rider/uploads/receipt?riderName=${encodeURIComponent(riderName)}`,
+    filePath,
+    name: 'file'
+  });
 }
 
 /**

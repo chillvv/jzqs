@@ -6,6 +6,7 @@
 const taskService = require('../../services/task.service');
 const { formatDateTime, getMealPeriodLabel, formatCurrentDateTime } = require('../../utils/formatter');
 const imageUtil = require('../../utils/image');
+const { resolveMediaUrl } = require('../../utils/media-url');
 
 Page({
   data: {
@@ -47,6 +48,7 @@ Page({
       const page = await taskService.getCompletedToday(riderName);
       const items = (page.items || []).map(item => ({
         ...item,
+        receiptUrl: resolveMediaUrl(item.receiptUrl, app.globalData.apiBaseUrl),
         mealLabel: getMealPeriodLabel(item.mealPeriod),
         deliveredAtFormatted: formatDateTime(item.deliveredAt)
       }));
@@ -170,9 +172,7 @@ Page({
         const upload = await taskService.uploadReceipt(riderName, receiptTempFilePath);
         fileKey = upload.fileKey;
       } else {
-        // 使用原图片的 fileKey（从 URL 中提取）
-        const urlParts = editingItem.receiptUrl.split('/');
-        fileKey = urlParts[urlParts.length - 1];
+        fileKey = editingItem.receiptUrl || '';
       }
 
       // 更新回执
