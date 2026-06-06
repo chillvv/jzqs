@@ -131,7 +131,10 @@
 }
 
 .edit-icon {
-  font-size: 36rpx;
+  width: 36rpx;
+  height: 36rpx;
+  display: block;
+  flex: 0 0 36rpx;
 }
 
 .edit-text {
