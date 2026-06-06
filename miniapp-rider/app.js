@@ -79,8 +79,8 @@ App({
 
   async verifyToken(token) {
     try {
-      const result = await auth.request('/api/auth/verify', 'GET', null, token);
-      return result.valid;
+      await auth.verifyToken(token);
+      return true;
     } catch (error) {
       return false;
     }

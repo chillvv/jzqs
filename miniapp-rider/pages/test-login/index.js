@@ -115,7 +115,7 @@ Page({
         return;
       }
       
-      const response = await auth.request('/api/auth/verify', 'GET', null, authToken);
+      const response = await auth.verifyToken(authToken);
       
       this.addLog(`验证成功: ${JSON.stringify(response)}`);
     } catch (error) {

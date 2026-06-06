@@ -8,6 +8,10 @@
 
 const AUTH_TOKEN_KEY = 'auth_token';
 const AUTH_STATE_KEY = 'auth_state';
+const RIDER_WX_LOGIN_URL = '/api/mobile/rider-auth/wx-login';
+const RIDER_VERIFY_TOKEN_URL = '/api/mobile/rider-auth/verify-token';
+const RIDER_PROFILE_URL = '/api/mobile/rider-auth/me';
+const WECHAT_ONE_TAP_UNAVAILABLE_MESSAGE = '当前环境暂不支持微信一键登录，请使用手机号登录';
 
 class Auth {
   constructor() {
@@ -38,16 +42,10 @@ class Auth {
     if (token) {
       // 2. 验证 token 是否有效
       try {
-        const result = await this.request('/api/auth/verify', 'GET', null, token);
-        if (result.valid && result.userType === 'rider') {
-          this.globalData.token = token;
-          this.globalData.userId = result.userId;
-          this.globalData.userType = result.userType;
-          this.globalData.loggedIn = true;
+        const result = await this.verifyToken(token);
+        if (result && result.riderId) {
+          this.applyVerifiedAuthState(token, result);
           this.globalData.ready = true;
-          
-          // 获取骑手详细信息
-          await this.loadRiderProfile();
           return;
         }
       } catch (e) {
@@ -72,9 +70,9 @@ class Auth {
   async silentLogin() {
     try {
       const { code } = await wx.login();
-      const result = await this.request('/api/auth/login', 'POST', { 
+      const result = await this.request(RIDER_WX_LOGIN_URL, 'POST', {
         code, 
-        userType: 'rider' 
+        userType: 'rider'
       });
       
       this.applyAuthState(result);
@@ -90,29 +88,8 @@ class Auth {
    * @param {string} code getPhoneNumber 返回的动态令牌
    */
   async bindPhone(code) {
-    try {
-      const result = await this.request('/api/auth/bind-phone', 'POST', {
-        code,
-        userType: 'rider'
-      });
-      
-      if (!result.success && !result.token) {
-        throw new Error(result.message || '微信登录失败');
-      }
-      
-      // 统一走认证模块自身状态更新，避免页面和 app 层各写一份登录态
-      if (result.token) {
-        this.applyAuth(result);
-        this.globalData.riderStatus = result.riderStatus || 'ACTIVE';
-        this.globalData.workbenchEnabled = true;
-        this.globalData.riderName = result.riderName || '';
-      }
-      
-      return result;
-    } catch (error) {
-      console.error('[Auth] 绑定手机号失败:', error);
-      throw error;
-    }
+    console.warn('[Auth] 已阻止旧的微信一键登录调用:', code ? '带 code' : '无 code');
+    throw new Error(WECHAT_ONE_TAP_UNAVAILABLE_MESSAGE);
   }
 
   /**
@@ -200,6 +177,12 @@ class Auth {
     this.globalData.openid = result.openid || '';
     this.globalData.registered = result.registered || false;
     this.globalData.needPhoneAuth = !result.registered;
+    this.globalData.riderStatus = result.status || result.riderStatus || this.globalData.riderStatus;
+    this.globalData.workbenchEnabled = typeof result.workbenchEnabled === 'boolean'
+      ? result.workbenchEnabled
+      : this.globalData.workbenchEnabled;
+    this.globalData.riderName = result.name || result.riderName || this.globalData.riderName;
+    this.globalData.phone = result.phone || this.globalData.phone;
     
     if (result.token) {
       this.applyAuth(result);
@@ -218,8 +201,39 @@ class Auth {
       this.globalData.loggedIn = true;
       this.globalData.registered = true;
       this.globalData.needPhoneAuth = false;
+      this.globalData.riderStatus = result.status || result.riderStatus || this.globalData.riderStatus;
+      this.globalData.workbenchEnabled = typeof result.workbenchEnabled === 'boolean'
+        ? result.workbenchEnabled
+        : this.globalData.riderStatus === 'ACTIVE';
+      this.globalData.riderName = result.name || result.riderName || this.globalData.riderName;
       this.globalData.phone = result.phone || '';
     }
+  }
+
+  /**
+   * 应用 token 校验后的认证结果
+   */
+  applyVerifiedAuthState(token, result) {
+    this.globalData.token = token;
+    this.globalData.userId = result.riderId || null;
+    this.globalData.userType = 'rider';
+    this.globalData.loggedIn = true;
+    this.globalData.registered = true;
+    this.globalData.needPhoneAuth = false;
+    this.globalData.openid = result.openid || '';
+    this.globalData.riderStatus = result.status || result.riderStatus || 'UNAUTHORIZED';
+    this.globalData.workbenchEnabled = typeof result.workbenchEnabled === 'boolean'
+      ? result.workbenchEnabled
+      : this.globalData.riderStatus === 'ACTIVE';
+    this.globalData.riderName = result.name || result.riderName || '';
+    this.globalData.phone = result.phone || '';
+  }
+
+  /**
+   * 校验骑手 token
+   */
+  async verifyToken(token) {
+    return this.request(RIDER_VERIFY_TOKEN_URL, 'POST', { token });
   }
 
   /**
@@ -232,7 +246,7 @@ class Auth {
         return;
       }
       
-      const profile = await this.request(`/api/rider/me?riderName=${encodeURIComponent(riderName)}`, 'GET');
+      const profile = await this.request(`${RIDER_PROFILE_URL}?riderName=${encodeURIComponent(riderName)}`, 'GET');
       
       this.globalData.riderStatus = profile.riderStatus;
       this.globalData.workbenchEnabled = profile.workbenchEnabled;
