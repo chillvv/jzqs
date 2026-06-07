@@ -27,6 +27,8 @@ public interface MobileAuthService {
 
     Map<String, Object> completeProfile(String openid, String nickname);
 
+    Map<String, Object> bindPhoneByCode(String openid, String code);
+
     Map<String, Object> bindPhone(String openid, String phone, String nickname);
 
     /**
@@ -37,7 +39,7 @@ public interface MobileAuthService {
     /**
      * 骑手微信一键登录
      */
-    RiderLoginResponse riderWechatLogin(String openid, String code, String encryptedData, String iv);
+    RiderLoginResponse riderWechatLogin(String openid, String code);
 
     /**
      * 骑手手机号登录

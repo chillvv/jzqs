@@ -135,18 +135,22 @@ class Auth {
   }
 
   /**
-   * 鍏煎鏃ц皟鐢細浣跨敤鎵嬪姩鎵嬫満鍙锋敞鍐屾浛浠ｅ井淇℃墜鏈哄彿瑙ｅ瘑
+   * 微信手机号一键登录
    */
   async bindPhone(payload) {
     if (!payload || typeof payload !== 'object') {
-      throw new Error('璇锋墜鍔ㄨ緭鍏ユ墜鏈哄彿瀹屾垚鐧诲綍');
+      throw new Error('请重新发起微信手机号授权');
     }
-    const { phone, nickname = '' } = payload;
-    if (!nickname) {
-      return this.phoneLogin(phone);
+    const code = String(payload.code || '').trim();
+    if (!code) {
+      throw new Error('微信手机号授权失败，请重试');
     }
     try {
-      const result = await this.register(phone, nickname);
+      const result = await this.request('/api/mobile/auth/bind-phone', 'POST', {
+        code,
+        openid: this.globalData.openid
+      });
+      this.applyAuthState(result);
       return result;
     } catch (error) {
       console.error('[Auth] 缁戝畾鎵嬫満鍙峰け璐?', error);

@@ -6,14 +6,14 @@ function resolvePhoneAuthResult(detail) {
   if (!detail || detail.errMsg !== 'getPhoneNumber:ok') {
     return {
       ok: false,
-      phoneNumber: '',
+      code: '',
       message: '已取消手机号授权'
     };
   }
 
   return {
     ok: true,
-    phoneNumber: detail.phoneNumber || ''
+    code: String(detail.code || '').trim()
   };
 }
 

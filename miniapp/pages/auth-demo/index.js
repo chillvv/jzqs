@@ -1,4 +1,5 @@
 const auth = require('../../utils/auth');
+const { ensurePhonePrivacyPermission, getPhonePrivacyErrorMessage } = require('../../utils/privacy-auth');
 
 Page({
   data: {
@@ -52,6 +53,14 @@ Page({
     });
   },
 
+  async preparePhonePrivacyPermission() {
+    try {
+      await ensurePhonePrivacyPermission();
+    } catch (error) {
+      wx.showToast({ title: getPhonePrivacyErrorMessage(error), icon: 'none' });
+    }
+  },
+
   handleLogout() {
     auth.logout();
     this.loadAuthState();
@@ -61,21 +70,21 @@ Page({
   // 寰俊涓€閿櫥褰曟寜閽簨浠?
   handleGetPhoneNumber(e) {
     if (e.detail.errMsg === 'getPhoneNumber:ok') {
-      const phone = String(e.detail.phoneNumber || '').replace(/\D/g, '');
-      if (!phone) {
-        wx.showToast({ title: '璇峰埌涓汉涓績鎵嬪姩杈撳叆鎵嬫満鍙?, icon: 'none' });
+      const code = String(e.detail.code || '').trim();
+      if (!code) {
+        wx.showToast({ title: '寰俊鎺堟潈澶辫触锛岃閲嶈瘯', icon: 'none' });
         return;
       }
-      this.bindPhone(phone);
+      this.bindPhone(code);
     } else {
-      wx.showToast({ title: '鍙栨秷鎺堟潈', icon: 'none' });
+      wx.showToast({ title: getPhonePrivacyErrorMessage(e && e.detail), icon: 'none' });
     }
   },
 
-  async bindPhone(phone) {
+  async bindPhone(code) {
     this.setData({ loading: true, message: '缁戝畾鎵嬫満鍙蜂腑...' });
     try {
-      await auth.phoneLogin(phone);
+      await auth.bindPhone({ code });
       this.loadAuthState();
       wx.showToast({ title: '缁戝畾鎴愬姛', icon: 'success' });
     } catch (error) {

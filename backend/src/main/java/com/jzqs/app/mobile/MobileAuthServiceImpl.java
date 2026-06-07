@@ -4,6 +4,7 @@ import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.common.util.JwtUtils;
 import com.jzqs.app.common.util.PasswordUtils;
+import com.jzqs.app.common.wechat.WeChatService;
 import com.jzqs.app.mobile.api.RiderAuthProfileResponse;
 import com.jzqs.app.mobile.api.RiderLoginResponse;
 import java.sql.Timestamp;
@@ -21,9 +22,11 @@ public class MobileAuthServiceImpl implements MobileAuthService {
     private static final String SOURCE_DEV = "MINIAPP_DEV";
     private static final String SOURCE_WX_PHONE = "MINIAPP_WX_PHONE";
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private final WeChatService weChatService;
     private final JdbcTemplate jdbcTemplate;
 
-    public MobileAuthServiceImpl(JdbcTemplate jdbcTemplate) {
+    public MobileAuthServiceImpl(WeChatService weChatService, JdbcTemplate jdbcTemplate) {
+        this.weChatService = weChatService;
         this.jdbcTemplate = jdbcTemplate;
     }
 
@@ -388,6 +391,88 @@ public class MobileAuthServiceImpl implements MobileAuthService {
 
     @Override
     @Transactional
+    public Map<String, Object> bindPhoneByCode(String openid, String code) {
+        String finalCode = requirePhoneCode(code);
+        String finalOpenid = stringClaim(openid);
+        // #region debug-point B:customer-bind-by-code-entry
+        debugReport("B", "MobileAuthServiceImpl.java:bindPhoneByCode:entry", "[DEBUG] customer bindPhoneByCode entry", Map.of("hasOpenid", !finalOpenid.isEmpty(), "codeLength", finalCode.length()));
+        // #endregion
+        String finalPhone = weChatService.getPhoneNumber(finalCode);
+        LocalDateTime now = LocalDateTime.now();
+        Long customerId = finalOpenid.isEmpty() ? null : findCustomerIdByOpenid(finalOpenid);
+        if (customerId == null) {
+            customerId = findCustomerIdByPhone(finalPhone);
+        }
+
+        if (customerId == null) {
+            jdbcTemplate.update(
+                """
+                    INSERT INTO customers (
+                        name, phone, source, source_channel, openid, current_openid, session_key,
+                        profile_completed, active, customer_status, registered_at, last_login_at, openid_updated_at,
+                        created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                guestNickname(finalPhone),
+                finalPhone,
+                "MINIAPP",
+                SOURCE_WX_PHONE,
+                finalOpenid.isEmpty() ? null : finalOpenid,
+                finalOpenid.isEmpty() ? null : finalOpenid,
+                finalOpenid.isEmpty() ? null : "session_" + finalOpenid,
+                true,
+                true,
+                "INTENTION",
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now)
+            );
+            customerId = findCustomerIdByPhone(finalPhone);
+        } else {
+            jdbcTemplate.update(
+                """
+                    UPDATE customers
+                    SET phone = ?,
+                        openid = CASE WHEN ? = '' THEN openid ELSE ? END,
+                        current_openid = CASE WHEN ? = '' THEN current_openid ELSE ? END,
+                        openid_updated_at = CASE WHEN ? = '' THEN openid_updated_at ELSE ? END,
+                        session_key = CASE WHEN ? = '' THEN session_key ELSE ? END,
+                        source = ?,
+                        source_channel = ?,
+                        profile_completed = TRUE,
+                        last_login_at = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                finalPhone,
+                finalOpenid,
+                finalOpenid,
+                finalOpenid,
+                finalOpenid,
+                finalOpenid,
+                Timestamp.valueOf(now),
+                finalOpenid,
+                "session_" + finalOpenid,
+                "MINIAPP",
+                SOURCE_WX_PHONE,
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now),
+                customerId
+            );
+        }
+
+        if (customerId == null) {
+            throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "微信手机号登录失败");
+        }
+
+        return authState(finalOpenid, true, false, false, customerId);
+    }
+
+    @Override
+    @Transactional
     public Map<String, Object> bindPhone(String openid, String phone, String nickname) {
         String finalOpenid = requireOpenid(openid);
         String finalPhone = requirePhone(phone);
@@ -634,6 +719,14 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         return value;
     }
 
+    private String requirePhoneCode(String code) {
+        String value = code == null ? "" : code.trim();
+        if (value.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "微信手机号动态令牌不能为空");
+        }
+        return value;
+    }
+
     private String requireNickname(String nickname) {
         String value = nickname == null ? "" : nickname.trim();
         if (value.isEmpty()) {
@@ -783,14 +876,36 @@ public class MobileAuthServiceImpl implements MobileAuthService {
 
     @Override
     @Transactional
-    public RiderLoginResponse riderWechatLogin(String openid, String code, String encryptedData, String iv) {
-        // TODO: 实现微信手机号解密
-        // 1. 使用 code 换取 session_key
-        // 2. 使用 session_key 解密 encryptedData 获取手机号
-        // 3. 根据手机号查询骑手并登录
-        
-        throw new BusinessException(ErrorCode.VALIDATION_ERROR, "微信一键登录功能开发中，请使用手机号登录");
+    public RiderLoginResponse riderWechatLogin(String openid, String code) {
+        String finalCode = requirePhoneCode(code);
+        // #region debug-point B:rider-wechat-login-entry
+        debugReport("B", "MobileAuthServiceImpl.java:riderWechatLogin:entry", "[DEBUG] rider wechat login entry", Map.of("hasOpenid", openid != null && !openid.trim().isEmpty(), "codeLength", finalCode.length()));
+        // #endregion
+        String phone = weChatService.getPhoneNumber(finalCode);
+        String finalOpenid = stringClaim(openid);
+        return riderPhoneLogin(phone, finalOpenid.isEmpty() ? null : finalOpenid);
     }
+
+    // #region debug-point B:mobile-auth-debug-report-helper
+    private void debugReport(String hypothesisId, String location, String msg, Map<String, ?> data) {
+        try {
+            restTemplate().postForObject("http://127.0.0.1:7777/event", Map.of(
+                "sessionId", "wechat-phone-login",
+                "runId", "pre-fix",
+                "hypothesisId", hypothesisId,
+                "location", location,
+                "msg", msg,
+                "data", data,
+                "ts", System.currentTimeMillis()
+            ), String.class);
+        } catch (Exception ignored) {
+        }
+    }
+
+    private org.springframework.web.client.RestTemplate restTemplate() {
+        return new org.springframework.web.client.RestTemplate();
+    }
+    // #endregion
 
     @Override
     @Transactional

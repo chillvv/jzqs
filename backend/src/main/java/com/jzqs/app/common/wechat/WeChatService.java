@@ -7,10 +7,14 @@ import com.jzqs.app.common.error.ErrorCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -88,9 +92,15 @@ public class WeChatService {
      * @param code getPhoneNumber 返回的动态令牌
      */
     public String getPhoneNumber(String code) {
+        // #region debug-point C:wechat-get-phone-entry
+        debugReport("C", "WeChatService.java:getPhoneNumber:entry", "[DEBUG] enter getPhoneNumber", Map.of("devMode", devMode, "codeLength", code == null ? 0 : code.length(), "appidConfigured", appid != null && !appid.trim().isEmpty(), "secretConfigured", secret != null && !secret.trim().isEmpty()));
+        // #endregion
         if (devMode) {
             // 开发模式：code 直接当手机号
             log.info("开发模式：getPhoneNumber，code={}", code);
+            // #region debug-point C:wechat-get-phone-dev
+            debugReport("C", "WeChatService.java:getPhoneNumber:dev-mode", "[DEBUG] using dev-mode phone fallback", Map.of("codePreview", code == null ? "" : code));
+            // #endregion
             // 如果 code 是 11 位数字，直接返回；否则返回测试手机号
             if (code.matches("^1\\d{10}$")) {
                 return code;
@@ -108,6 +118,9 @@ public class WeChatService {
 
             String response = restTemplate.postForObject(url, requestBody, String.class);
             JsonNode json = objectMapper.readTree(response);
+            // #region debug-point C:wechat-get-phone-response
+            debugReport("C", "WeChatService.java:getPhoneNumber:response", "[DEBUG] wechat getPhoneNumber response", Map.of("response", response == null ? "" : response));
+            // #endregion
 
             if (json.has("errcode") && json.get("errcode").asInt() != 0) {
                 String errmsg = json.get("errmsg").asText();
@@ -127,6 +140,25 @@ public class WeChatService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "获取手机号失败，请稍后重试");
         }
     }
+
+    // #region debug-point C:wechat-debug-report-helper
+    private void debugReport(String hypothesisId, String location, String msg, Map<String, ?> data) {
+        try {
+            Map<String, Object> payload = new LinkedHashMap<>();
+            payload.put("sessionId", "wechat-phone-login");
+            payload.put("runId", "pre-fix");
+            payload.put("hypothesisId", hypothesisId);
+            payload.put("location", location);
+            payload.put("msg", msg);
+            payload.put("data", data);
+            payload.put("ts", System.currentTimeMillis());
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            restTemplate.postForObject("http://127.0.0.1:7777/event", new HttpEntity<>(payload, headers), String.class);
+        } catch (Exception ignored) {
+        }
+    }
+    // #endregion
 
     /**
      * 获取 access_token（带缓存）

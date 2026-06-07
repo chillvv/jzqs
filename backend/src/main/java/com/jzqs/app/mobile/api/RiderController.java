@@ -64,9 +64,7 @@ public class RiderController {
         return ApiResponse.success(
             mobileAuthService.riderWechatLogin(
                 request.openid(),
-                request.code(),
-                request.encryptedData(),
-                request.iv()
+                request.code()
             )
         );
     }

@@ -11,7 +11,6 @@ const AUTH_STATE_KEY = 'auth_state';
 const RIDER_WX_LOGIN_URL = '/api/mobile/rider-auth/wx-login';
 const RIDER_VERIFY_TOKEN_URL = '/api/mobile/rider-auth/verify-token';
 const RIDER_PROFILE_URL = '/api/mobile/rider-auth/me';
-const WECHAT_ONE_TAP_UNAVAILABLE_MESSAGE = '当前环境暂不支持微信一键登录，请使用手机号登录';
 
 class Auth {
   constructor() {
@@ -88,8 +87,40 @@ class Auth {
    * @param {string} code getPhoneNumber 返回的动态令牌
    */
   async bindPhone(code) {
-    console.warn('[Auth] 已阻止旧的微信一键登录调用:', code ? '带 code' : '无 code');
-    throw new Error(WECHAT_ONE_TAP_UNAVAILABLE_MESSAGE);
+    const finalCode = String(code || '').trim();
+    if (!finalCode) {
+      throw new Error('微信手机号授权失败，请重试');
+    }
+
+    try {
+      const result = await this.request('/api/rider/wechat-login', 'POST', {
+        code: finalCode,
+        openid: this.globalData.openid
+      });
+
+      if (!result.token) {
+        throw new Error(result.message || '微信登录失败');
+      }
+
+      this.applyAuth(result);
+      this.globalData.userId = result.userId || result.riderId || this.globalData.userId;
+      this.globalData.userType = 'rider';
+      this.globalData.loggedIn = true;
+      this.globalData.registered = true;
+      this.globalData.needPhoneAuth = false;
+      this.globalData.riderStatus = result.riderStatus || result.status || 'ACTIVE';
+      this.globalData.workbenchEnabled = typeof result.workbenchEnabled === 'boolean'
+        ? result.workbenchEnabled
+        : this.globalData.riderStatus === 'ACTIVE';
+      this.globalData.riderName = result.riderName || result.name || '';
+      this.globalData.phone = result.phone || this.globalData.phone;
+      this.globalData.ready = true;
+
+      return result;
+    } catch (error) {
+      console.error('[Auth] 微信手机号登录失败:', error);
+      throw error;
+    }
   }
 
   /**

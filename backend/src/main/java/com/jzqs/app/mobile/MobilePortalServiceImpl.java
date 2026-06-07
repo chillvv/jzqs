@@ -1698,12 +1698,12 @@ public class MobilePortalServiceImpl implements MobilePortalService {
 
     private List<String> parseBannerImages(Object bannerImages) {
         if (bannerImages == null || String.valueOf(bannerImages).isBlank() || "null".equals(String.valueOf(bannerImages))) {
-            return List.of("../../assets/hero-new.jpg");
+            return List.of("../../assets/green-intro.jpg");
         }
         try {
             return objectMapper.readValue(String.valueOf(bannerImages), new TypeReference<List<String>>() {});
         } catch (JsonProcessingException e) {
-            return List.of("../../assets/hero-new.jpg");
+            return List.of("../../assets/green-intro.jpg");
         }
     }
 }

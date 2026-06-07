@@ -1,6 +1,7 @@
 const { request } = require('../../utils/request');
 const { maskPhone } = require('../../utils/mobile');
 const { getSubmitProfileError } = require('../../utils/profile-auth');
+const { ensurePhonePrivacyPermission, getPhonePrivacyErrorMessage } = require('../../utils/privacy-auth');
 const auth = require('../../utils/auth');
 
 function displayName(name) {
@@ -165,9 +166,26 @@ Page({
     });
   },
 
+  async preparePhonePrivacyPermission() {
+    try {
+      await ensurePhonePrivacyPermission();
+    } catch (error) {
+      wx.showToast({
+        title: getPhonePrivacyErrorMessage(error),
+        icon: 'none'
+      });
+    }
+  },
+
   async getPhoneNumber(e) {
+    // #region debug-point A:customer-phone-event
+    wx.request({ url: 'http://192.168.1.3:7777/event', method: 'POST', data: { sessionId: 'wechat-phone-login', runId: 'pre-fix', hypothesisId: 'A', location: 'miniapp/pages/profile/index.js:getPhoneNumber:entry', msg: '[DEBUG] customer getPhoneNumber event', data: { errMsg: e && e.detail ? e.detail.errMsg : '', hasCode: !!(e && e.detail && e.detail.code), codeLength: e && e.detail && e.detail.code ? String(e.detail.code).length : 0 }, ts: Date.now() } });
+    // #endregion
     if (e.detail.errMsg !== 'getPhoneNumber:ok') {
-      wx.showToast({ title: '获取手机号失败', icon: 'none' });
+      wx.showToast({
+        title: getPhonePrivacyErrorMessage(e && e.detail),
+        icon: 'none'
+      });
       return;
     }
 
@@ -175,19 +193,16 @@ Page({
     this.setData({ savingProfile: true });
 
     try {
-      const phone = String(e.detail.phoneNumber || '').replace(/\D/g, '');
-      if (!phone) {
-        this.openAuthPopup();
-        wx.showToast({ title: '请手动输入手机号完成登录', icon: 'none' });
+      const code = String(e.detail.code || '').trim();
+      if (!code) {
+        // #region debug-point A:customer-phone-missing-code
+        wx.request({ url: 'http://192.168.1.3:7777/event', method: 'POST', data: { sessionId: 'wechat-phone-login', runId: 'pre-fix', hypothesisId: 'A', location: 'miniapp/pages/profile/index.js:getPhoneNumber:missing-code', msg: '[DEBUG] customer missing phone code', data: { errMsg: e.detail.errMsg }, ts: Date.now() } });
+        // #endregion
+        wx.showToast({ title: '微信手机号授权失败，请重试', icon: 'none' });
         return;
       }
 
-      this.setData({
-        'profileForm.phoneNumber': phone,
-        phoneAuthHint: maskPhone(phone)
-      });
-
-      const result = await auth.phoneLogin(phone);
+      const result = await auth.bindPhone({ code });
 
       applyCustomerAuthResult(result);
 
@@ -198,7 +213,7 @@ Page({
           home
         });
         this.startCompleteProfileFlow({
-          phoneNumber: e.detail.phoneNumber || ''
+          phoneNumber: home && home.phone ? String(home.phone).replace(/\D/g, '') : ''
         });
         wx.showToast({ title: '请填写姓名完成注册', icon: 'none' });
         return;
@@ -208,16 +223,12 @@ Page({
       this.setData({ showAuthPopup: false, phoneAuthHint: '' });
       setTimeout(() => this.refreshPage(), 1200);
     } catch (error) {
-      const phone = e.detail.phoneNumber || '';
+      // #region debug-point B:customer-phone-error
+      wx.request({ url: 'http://192.168.1.3:7777/event', method: 'POST', data: { sessionId: 'wechat-phone-login', runId: 'pre-fix', hypothesisId: 'B', location: 'miniapp/pages/profile/index.js:getPhoneNumber:catch', msg: '[DEBUG] customer bind phone failed', data: { message: error && error.message ? error.message : '' }, ts: Date.now() } });
+      // #endregion
       if (shouldStartRegister(error)) {
-        this.startRegisterFlow({ phoneNumber: phone });
+        this.startRegisterFlow();
         wx.showToast({ title: '请填写姓名完成注册', icon: 'none' });
-      } else if (phone) {
-        this.setData({
-          'profileForm.phoneNumber': phone,
-          phoneAuthHint: maskPhone(phone)
-        });
-        wx.showToast({ title: '手机号已填入，请点确认登录', icon: 'none' });
       } else {
         wx.showToast({ title: error.message || '微信授权失败', icon: 'none' });
       }

@@ -7,7 +7,8 @@ const filesToCheck = [
   path.join(repoRoot, 'miniapp-rider', 'utils', 'auth.js'),
   path.join(repoRoot, 'miniapp-rider', 'app.js'),
   path.join(repoRoot, 'miniapp-rider', 'pages', 'test-login', 'index.js'),
-  path.join(repoRoot, 'miniapp-rider', 'services', 'auth.service.js')
+  path.join(repoRoot, 'miniapp-rider', 'services', 'auth.service.js'),
+  path.join(repoRoot, 'miniapp-rider', 'pages', 'profile', 'index.js')
 ];
 
 const forbiddenEndpoints = [
@@ -16,6 +17,14 @@ const forbiddenEndpoints = [
   '/api/auth/bind-phone',
   '/api/rider/me'
 ];
+
+const filesForbiddenPhoneFields = [
+  path.join(repoRoot, 'miniapp-rider', 'pages', 'profile', 'index.js'),
+  path.join(repoRoot, 'miniapp-rider', 'utils', 'rider-profile-auth.js')
+];
+
+const riderServiceFile = path.join(repoRoot, 'miniapp-rider', 'services', 'auth.service.js');
+const riderAuthFile = path.join(repoRoot, 'miniapp-rider', 'utils', 'auth.js');
 
 for (const file of filesToCheck) {
   const content = fs.readFileSync(file, 'utf8');
@@ -28,4 +37,29 @@ for (const file of filesToCheck) {
   }
 }
 
-console.log('PASS: 骑手小程序未再引用会触发 appid missing 的旧认证接口');
+for (const file of filesForbiddenPhoneFields) {
+  const content = fs.readFileSync(file, 'utf8');
+  assert.equal(
+    content.includes('detail.phoneNumber'),
+    false,
+    `${path.relative(repoRoot, file)} 仍在直接读取微信明文手机号`
+  );
+}
+
+const riderServiceContent = fs.readFileSync(riderServiceFile, 'utf8');
+for (const legacyField of ['encryptedData', 'iv']) {
+  assert.equal(
+    riderServiceContent.includes(legacyField),
+    false,
+    `miniapp-rider/services/auth.service.js 仍依赖旧字段: ${legacyField}`
+  );
+}
+
+const riderAuthContent = fs.readFileSync(riderAuthFile, 'utf8');
+assert.equal(
+  riderAuthContent.includes('当前环境暂不支持微信一键登录，请使用手机号登录'),
+  false,
+  'miniapp-rider/utils/auth.js 仍在前端阻止微信手机号登录'
+);
+
+console.log('PASS: 骑手小程序已改为微信手机号 code -> 后端换号链路');

@@ -1,4 +1,5 @@
 const { resolvePhoneAuthResult, getSubmitProfileError } = require('../../utils/rider-profile-auth');
+const { ensurePhonePrivacyPermission, getPhonePrivacyErrorMessage } = require('../../utils/privacy-auth');
 const auth = require('../../utils/auth');
 
 function maskPhone(phone) {
@@ -126,6 +127,17 @@ Page({
       'profileForm.phoneNumber': e.detail.value
     });
   },
+  async preparePhonePrivacyPermission() {
+    try {
+      await ensurePhonePrivacyPermission();
+    } catch (error) {
+      wx.showToast({
+        title: getPhonePrivacyErrorMessage(error),
+        icon: 'none',
+        duration: 3000
+      });
+    }
+  },
   async submitProfile() {
     const phone = this.data.profileForm.phoneNumber.trim();
     
@@ -188,8 +200,15 @@ Page({
    * 微信一键登录
    */
   async onWechatLogin(e) {
+    // #region debug-point A:rider-phone-event
+    wx.request({ url: 'http://192.168.1.3:7777/event', method: 'POST', data: { sessionId: 'wechat-phone-login', runId: 'pre-fix', hypothesisId: 'A', location: 'miniapp-rider/pages/profile/index.js:onWechatLogin:entry', msg: '[DEBUG] rider getPhoneNumber event', data: { errMsg: e && e.detail ? e.detail.errMsg : '', hasCode: !!(e && e.detail && e.detail.code), codeLength: e && e.detail && e.detail.code ? String(e.detail.code).length : 0 }, ts: Date.now() } });
+    // #endregion
     if (e.detail.errMsg !== 'getPhoneNumber:ok') {
-      wx.showToast({ title: '获取手机号失败，请重试', icon: 'none' });
+      wx.showToast({
+        title: getPhonePrivacyErrorMessage(e && e.detail),
+        icon: 'none',
+        duration: 3000
+      });
       return;
     }
 
@@ -197,6 +216,9 @@ Page({
 
     try {
       const code = e.detail.code;
+      // #region debug-point B:rider-phone-code
+      wx.request({ url: 'http://192.168.1.3:7777/event', method: 'POST', data: { sessionId: 'wechat-phone-login', runId: 'pre-fix', hypothesisId: 'B', location: 'miniapp-rider/pages/profile/index.js:onWechatLogin:code', msg: '[DEBUG] rider submit phone code', data: { hasCode: !!code, codeLength: code ? String(code).length : 0 }, ts: Date.now() } });
+      // #endregion
       const app = getApp();
       await auth.bindPhone(code);
       app.syncRiderGlobals();
@@ -205,6 +227,9 @@ Page({
       this.setData({ agreed: false });
       setTimeout(() => this.refreshPage(), 1200);
     } catch (error) {
+      // #region debug-point B:rider-phone-error
+      wx.request({ url: 'http://192.168.1.3:7777/event', method: 'POST', data: { sessionId: 'wechat-phone-login', runId: 'pre-fix', hypothesisId: 'B', location: 'miniapp-rider/pages/profile/index.js:onWechatLogin:catch', msg: '[DEBUG] rider bind phone failed', data: { message: error && error.message ? error.message : '' }, ts: Date.now() } });
+      // #endregion
       wx.showToast({
         title: error.message || '微信登录失败',
         icon: 'none',

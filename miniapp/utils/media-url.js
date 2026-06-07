@@ -11,7 +11,8 @@ function resolveMediaUrl(value, baseUrl) {
     isAbsoluteUrl(normalized) ||
     normalized.startsWith('cloud://') ||
     normalized.startsWith('wxfile://') ||
-    normalized.startsWith('data:')
+    normalized.startsWith('data:') ||
+    normalized.startsWith('.')
   ) {
     return normalized;
   }

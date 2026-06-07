@@ -8,7 +8,7 @@
         <image class="hero-banner-img" src="{{item}}" mode="{{heroExpanded ? 'aspectFit' : 'aspectFill'}}"></image>
       </swiper-item>
     </swiper>
-    <image wx:else class="hero-banner-img" src="../../assets/hero-new.jpg" mode="{{heroExpanded ? 'aspectFit' : 'aspectFill'}}" bindtap="toggleHero"></image>
+    <image wx:else class="hero-banner-img" src="../../assets/green-intro.jpg" mode="{{heroExpanded ? 'aspectFit' : 'aspectFill'}}" bindtap="toggleHero"></image>
     <view class="hero-banner-mask {{heroExpanded ? 'hidden' : ''}}"></view>
   </view>
   <view class="menu-section">

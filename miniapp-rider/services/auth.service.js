@@ -14,13 +14,13 @@ async function riderRegister(phone, name, openid) {
 }
 
 /**
- * 骑手微信一键登录（解密手机号）
+ * 骑手微信一键登录（微信手机号动态令牌）
  */
-async function riderWechatLogin(openid, code, encryptedData, iv) {
+async function riderWechatLogin(code) {
   return await request({
     url: '/api/rider/wechat-login',
     method: 'POST',
-    data: { openid, code, encryptedData, iv },
+    data: { code },
     header: { 'content-type': 'application/json' },
     requireWorkbench: false
   });

@@ -1,4 +1,5 @@
 {
+  "__usePrivacyCheck__": true,
   "pages": [
     "pages/profile/index",
     "pages/queue/index",

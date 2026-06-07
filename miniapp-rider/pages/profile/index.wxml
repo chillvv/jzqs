@@ -89,10 +89,13 @@
 
       <button
         class="btn-wechat-alt auth-entry-btn"
+        bindtap="preparePhonePrivacyPermission"
         open-type="getPhoneNumber"
         bindgetphonenumber="onWechatLogin"
         loading="{{wechatLoading}}"
       >骑手微信登录</button>
+
+      <view class="phone-auth-hint">首次使用会先拉起微信隐私授权，再弹出默认手机号确认框</view>
 
     </view>
   </view>

@@ -50,8 +50,8 @@ public class MobileAuthController {
     }
 
     @PostMapping("/bind-phone")
-    public ApiResponse<Map<String, Object>> bindPhone(@Valid @RequestBody MobileBindPhoneRequest request) {
-        return ApiResponse.success(mobileAuthService.bindPhone(request.openid(), request.phone(), request.nickname()));
+    public ApiResponse<Map<String, Object>> bindPhone(@Valid @RequestBody MobilePhoneCodeRequest request) {
+        return ApiResponse.success(mobileAuthService.bindPhoneByCode(request.openid(), request.code()));
     }
 
     @PostMapping("/dev-phone")
