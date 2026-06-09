@@ -8,29 +8,29 @@
     <view class="card-title">认证状态</view>
     <view class="status-item">
       <text class="label">就绪状态:</text>
-      <text class="value {{authState?.ready ? 'success' : 'error'}}">
-        {{authState?.ready ? '已就绪' : '未就绪'}}
+      <text class="value {{authState && authState.ready ? 'success' : 'error'}}">
+        {{authState && authState.ready ? '已就绪' : '未就绪'}}
       </text>
     </view>
     <view class="status-item">
       <text class="label">登录状态:</text>
-      <text class="value {{authState?.loggedIn ? 'success' : 'error'}}">
-        {{authState?.loggedIn ? '已登录' : '未登录'}}
+      <text class="value {{authState && authState.loggedIn ? 'success' : 'error'}}">
+        {{authState && authState.loggedIn ? '已登录' : '未登录'}}
       </text>
     </view>
     <view class="status-item">
       <text class="label">注册状态:</text>
-      <text class="value {{authState?.registered ? 'success' : 'error'}}">
-        {{authState?.registered ? '已注册' : '未注册'}}
+      <text class="value {{authState && authState.registered ? 'success' : 'error'}}">
+        {{authState && authState.registered ? '已注册' : '未注册'}}
       </text>
     </view>
     <view class="status-item">
       <text class="label">用户类型:</text>
-      <text class="value">{{authState?.userType || '未知'}}</text>
+      <text class="value">{{authState && authState.userType ? authState.userType : '未知'}}</text>
     </view>
     <view class="status-item">
       <text class="label">用户ID:</text>
-      <text class="value">{{authState?.userId || '未登录'}}</text>
+      <text class="value">{{authState && authState.userId ? authState.userId : '未登录'}}</text>
     </view>
     <view class="status-item">
       <text class="label">状态信息:</text>
@@ -61,7 +61,7 @@
     <button 
       class="btn btn-secondary" 
       bindtap="testApi"
-      disabled="{{!authState?.loggedIn}}"
+      disabled="{{!(authState && authState.loggedIn)}}"
     >
       测试 API
     </button>
@@ -69,7 +69,7 @@
     <button 
       class="btn btn-danger" 
       bindtap="handleLogout"
-      disabled="{{!authState?.loggedIn}}"
+      disabled="{{!(authState && authState.loggedIn)}}"
     >
       退出登录
     </button>

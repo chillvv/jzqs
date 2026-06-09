@@ -25,18 +25,18 @@ Page({
   },
 
   getAuthMessage(authState) {
-    if (!authState.ready) return '璁よ瘉鍒濆鍖栦腑...';
-    if (!authState.loggedIn) return '鏈櫥褰?;
-    if (!authState.registered) return '宸茬櫥褰曪紝鏈粦瀹氭墜鏈哄彿';
-    return `宸茬櫥褰曪紝鐢ㄦ埛ID: ${authState.userId}`;
+    if (!authState.ready) return '认证初始化中...';
+    if (!authState.loggedIn) return '未登录';
+    if (!authState.registered) return '已登录，但未绑定手机号';
+    return `已登录，用户ID: ${authState.userId}`;
   },
 
   async handleSilentLogin() {
-    this.setData({ loading: true, message: '闈欓粯鐧诲綍涓?..' });
+    this.setData({ loading: true, message: '静默登录中...' });
     try {
       await auth.silentLogin();
       this.loadAuthState();
-      wx.showToast({ title: '闈欓粯鐧诲綍鎴愬姛', icon: 'success' });
+      wx.showToast({ title: '静默登录成功', icon: 'success' });
     } catch (error) {
       wx.showToast({ title: error.message, icon: 'none' });
     } finally {
@@ -46,10 +46,10 @@ Page({
 
   handleWechatLogin() {
     wx.showModal({
-      title: '寰俊涓€閿櫥褰?,
-      content: '璇风偣鍑讳笅鏂规寜閽繘琛屽井淇′竴閿櫥褰?,
+      title: '微信一键登录',
+      content: '请点击下方按钮进行微信一键登录',
       showCancel: false,
-      confirmText: '鐭ラ亾浜?
+      confirmText: '知道了'
     });
   },
 
@@ -64,15 +64,15 @@ Page({
   handleLogout() {
     auth.logout();
     this.loadAuthState();
-    wx.showToast({ title: '宸查€€鍑虹櫥褰?, icon: 'success' });
+    wx.showToast({ title: '已退出登录', icon: 'success' });
   },
 
-  // 寰俊涓€閿櫥褰曟寜閽簨浠?
+  // 微信一键登录按钮事件
   handleGetPhoneNumber(e) {
     if (e.detail.errMsg === 'getPhoneNumber:ok') {
       const code = String(e.detail.code || '').trim();
       if (!code) {
-        wx.showToast({ title: '寰俊鎺堟潈澶辫触锛岃閲嶈瘯', icon: 'none' });
+        wx.showToast({ title: '微信授权失败，请重试', icon: 'none' });
         return;
       }
       this.bindPhone(code);
@@ -82,11 +82,11 @@ Page({
   },
 
   async bindPhone(code) {
-    this.setData({ loading: true, message: '缁戝畾鎵嬫満鍙蜂腑...' });
+    this.setData({ loading: true, message: '绑定手机号中...' });
     try {
       await auth.bindPhone({ code });
       this.loadAuthState();
-      wx.showToast({ title: '缁戝畾鎴愬姛', icon: 'success' });
+      wx.showToast({ title: '绑定成功', icon: 'success' });
     } catch (error) {
       wx.showToast({ title: error.message, icon: 'none' });
     } finally {
@@ -98,8 +98,8 @@ Page({
     try {
       const token = auth.globalData.token || wx.getStorageSync('auth_token');
       const result = await auth.request('/api/mobile/auth/verify', 'GET', null, token);
-      wx.showToast({ title: 'API 娴嬭瘯鎴愬姛', icon: 'success' });
-      console.log('API 娴嬭瘯缁撴灉:', result);
+      wx.showToast({ title: 'API 测试成功', icon: 'success' });
+      console.log('API 测试结果:', result);
     } catch (error) {
       wx.showToast({ title: error.message, icon: 'none' });
     }
