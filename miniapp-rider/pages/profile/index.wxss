@@ -96,6 +96,7 @@ page {
 .list-item { padding: 32rpx; display: flex; justify-content: space-between; align-items: center; border-bottom: 2rpx solid var(--border); font-size: 30rpx; font-weight: 600; color: var(--text-main); }
 .list-item:last-child { border-bottom: none; }
 .list-icon-wrap { display: flex; align-items: center; gap: 24rpx; }
+.list-icon { font-size: 36rpx; line-height: 1; }
 .list-copy { flex: 1; min-width: 0; }
 .list-title { font-size: 30rpx; font-weight: 700; color: var(--text-main); word-break: break-all; }
 .list-desc { margin-top: 8rpx; font-size: 22rpx; line-height: 1.6; color: var(--text-sub); word-break: break-all; }
@@ -140,14 +141,20 @@ page {
 }
 
 .btn-logout {
+  width: 100% !important;
   background: #fff;
   color: #ff4d4f;
   border: 1rpx solid #ff4d4f;
   border-radius: 40rpx;
   font-size: 28rpx;
-  padding: 20rpx 0;
-  line-height: 1;
+  height: 88rpx;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   text-align: center;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
 }
 
 .btn-logout::after {

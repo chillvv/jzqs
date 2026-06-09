@@ -49,7 +49,7 @@ view, text, scroll-view, image, button, input {
 .highlight-card { border: 2rpx solid #92AA40 !important; box-shadow: 0 4rpx 20rpx rgba(184, 208, 96, 0.2) !important; }
 .edit-icon { font-size: 24rpx; margin-left: 8rpx; color: rgba(255,255,255,0.7); }
 .logout-section { padding: 40rpx; margin-top: 20rpx; }
-.btn-logout { background: #fff; color: #ff4d4f; border: 1rpx solid #ff4d4f; border-radius: 40rpx; font-size: 28rpx; padding: 20rpx 0; line-height: 1; text-align: center; }
+.btn-logout { width: 100% !important; box-sizing: border-box; background: #fff; color: #ff4d4f; border: 1rpx solid #ff4d4f; border-radius: 40rpx; font-size: 28rpx; height: 88rpx; display: flex; justify-content: center; align-items: center; text-align: center; padding: 0; margin: 0; }
 .related-order-hint { margin-top: 16rpx; font-size: 24rpx; color: #92AA40; font-weight: 600; display: flex; align-items: center; }
 .related-order-hint .arrow { margin-left: 4rpx; }
 .hero-banner-mask { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 100rpx; background: linear-gradient(to top, #FAFAF8, transparent); transition: opacity 0.3s; }
@@ -295,6 +295,7 @@ view, text, scroll-view, image, button, input {
   display: flex !important;
   justify-content: space-between !important;
   align-items: center !important;
+  box-sizing: border-box !important;
 }
 .list-item-btn::after {
   border: none;

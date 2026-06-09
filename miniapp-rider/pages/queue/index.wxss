@@ -112,11 +112,13 @@
   width: 280rpx;
   flex-shrink: 0;
   border: 1rpx solid rgba(226, 232, 240, 0.8);
+  box-sizing: border-box;
 }
 
 .edit-btn-inline {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6rpx;
   color: var(--primary, #2563EB);
   background-color: var(--surface-container, #F1F5F9);
@@ -136,6 +138,7 @@
 .batch-btn-inline {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 6rpx;
   color: #059669;
   background-color: #ecfdf5;

@@ -43,16 +43,22 @@
 
   <view class="menu-group">
     <view class="list-item" bindtap="handleMenuClick" data-action="history">
-      <view class="list-copy">
-        <view class="list-title">📝 历史订单</view>
-        <view class="list-desc">查看已完成配送记录与历史回执。</view>
+      <view class="list-icon-wrap">
+        <text class="list-icon">📝</text>
+        <view class="list-copy">
+          <view class="list-title">历史订单</view>
+          <view class="list-desc">查看已完成配送记录与历史回执。</view>
+        </view>
       </view>
       <text class="list-arrow">›</text>
     </view>
     <view class="list-item" bindtap="handleMenuClick" data-action="settings">
-      <view class="list-copy">
-        <view class="list-title">⚙️ 账号设置</view>
-        <view class="list-desc">管理登录状态、接单信息和基础偏好。</view>
+      <view class="list-icon-wrap">
+        <text class="list-icon">⚙️</text>
+        <view class="list-copy">
+          <view class="list-title">账号设置</view>
+          <view class="list-desc">管理登录状态、接单信息和基础偏好。</view>
+        </view>
       </view>
       <text class="list-arrow">›</text>
     </view>
