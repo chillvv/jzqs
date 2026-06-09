@@ -70,7 +70,17 @@ Page({
     agreementAccepted: false,
     agreementSheetChecked: false,
     showAgreementSheet: false,
-    pendingAgreementAction: ''
+    pendingAgreementAction: '',
+    statusBarHeight: 0,
+    navBarHeight: 44
+  },
+
+  onLoad() {
+    const app = getApp();
+    this.setData({
+      statusBarHeight: app.globalData.statusBarHeight,
+      navBarHeight: app.globalData.navBarHeight
+    });
   },
 
   goLoginPage() {

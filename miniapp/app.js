@@ -5,11 +5,28 @@ App({
   globalData: {
     apiBaseUrl: DEFAULT_API_BASE_URL,
     // 云开发环境ID（与骑手端使用同一个环境）
-    cloudEnvId: 'cloud1-4g88w3e2dedee471'
+    cloudEnvId: 'cloud1-4g88w3e2dedee471',
+    statusBarHeight: 0,
+    navBarHeight: 44
   },
   
   async onLaunch() {
     this.globalData.apiBaseUrl = resolveApiBaseUrl(wx.getStorageSync('apiBaseUrl'));
+    
+    // 获取设备信息以计算自定义导航栏高度
+    try {
+      const systemInfo = wx.getSystemInfoSync();
+      const menuButton = wx.getMenuButtonBoundingClientRect();
+      
+      this.globalData.statusBarHeight = systemInfo.statusBarHeight || 20;
+      
+      // 导航栏总高度 = 胶囊按钮底部位置 + 胶囊按钮下方的间距
+      // 胶囊按钮下方间距 = 胶囊按钮距离顶部 - 状态栏高度
+      const gap = menuButton.top - this.globalData.statusBarHeight;
+      this.globalData.navBarHeight = menuButton.top + menuButton.height + gap;
+    } catch (e) {
+      console.error('[App] 获取设备信息失败', e);
+    }
     
     // 初始化云开发（用于查看骑手上传的照片）
     if (wx.cloud && this.globalData.cloudEnvId) {

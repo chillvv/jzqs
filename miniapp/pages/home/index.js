@@ -7,7 +7,20 @@ Page({
     rangeText: '',
     weekCards: [],
     loading: false,
-    heroExpanded: false
+    heroExpanded: false,
+    showAnnouncementModal: false,
+    announcementTitle: '',
+    announcementLines: [],
+    statusBarHeight: 0,
+    navBarHeight: 44
+  },
+
+  onLoad() {
+    const app = getApp();
+    this.setData({
+      statusBarHeight: app.globalData.statusBarHeight,
+      navBarHeight: app.globalData.navBarHeight
+    });
   },
 
   onShow() {
@@ -51,15 +64,14 @@ Page({
         resolvedHome.popupAnnouncementContent &&
         !app.globalData.announcementShown
       ) {
-        wx.showModal({
-          title: '系统公告',
-          content: resolvedHome.popupAnnouncementContent,
-          showCancel: false,
-          confirmText: '我知道了',
-          confirmColor: '#92AA40',
-          success: () => {
-            app.globalData.announcementShown = true;
-          }
+        app.globalData.announcementShown = true;
+        this.setData({
+          showAnnouncementModal: true,
+          announcementTitle: resolvedHome.holidayNoticeTitle || '系统公告',
+          announcementLines: String(resolvedHome.popupAnnouncementContent)
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter(Boolean)
         });
       }
     } catch (error) {
@@ -76,5 +88,11 @@ Page({
 
   toggleHero() {
     this.setData({ heroExpanded: !this.data.heroExpanded });
+  },
+
+  closeAnnouncementModal() {
+    this.setData({
+      showAnnouncementModal: false
+    });
   }
 });

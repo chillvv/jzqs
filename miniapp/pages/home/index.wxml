@@ -1,7 +1,26 @@
 <!-- =====================================
       Tab 1：首页 (周一到周日全部列出，图片修复)
       ===================================== -->
+<view class="custom-nav-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+  <view class="custom-nav-left">
+    <image class="custom-nav-logo" src="/assets/logo.jpeg" mode="aspectFit"></image>
+    <text class="custom-nav-title">简知轻食</text>
+  </view>
+</view>
+<view class="custom-nav-spacer" style="height: {{navBarHeight}}px;"></view>
+
 <view id="tab-home" class="content">
+  <view wx:if="{{showAnnouncementModal}}" class="announcement-modal">
+    <view class="announcement-modal__mask" bindtap="closeAnnouncementModal"></view>
+    <view class="announcement-modal__panel">
+      <view class="announcement-modal__badge">营业公告</view>
+      <view class="announcement-modal__title">{{announcementTitle || '系统公告'}}</view>
+      <view class="announcement-modal__content">
+        <view wx:for="{{announcementLines}}" wx:key="index" class="announcement-modal__line">{{item}}</view>
+      </view>
+      <button class="announcement-modal__button" bindtap="closeAnnouncementModal">我知道了</button>
+    </view>
+  </view>
   <view class="hero-banner {{heroExpanded ? 'expanded' : ''}}">
     <swiper class="hero-swiper" circular autoplay interval="3000" indicator-dots="{{home.bannerImages.length > 1}}" wx:if="{{home && home.bannerImages && home.bannerImages.length > 0}}">
       <swiper-item wx:for="{{home.bannerImages}}" wx:key="*this" bindtap="toggleHero">
@@ -28,7 +47,7 @@
               <view class="meal-badge">{{subitem.mealPeriod === 'LUNCH' ? '午' : '晚'}}</view>
               <view class="meal-info">
                 <view class="meal-main">
-                  <view wx:for="{{subitem.dishItems}}" wx:key="*this" wx:for-item="dish">- {{dish}}</view>
+                  <view wx:for="{{subitem.dishItems}}" wx:key="*this" wx:for-item="dish" class="meal-main-item">{{dish}}</view>
                 </view>
                 <view class="meal-meta">
                   <text class="meal-note">{{subitem.merchantNote && subitem.merchantNote !== '-' ? '备注：' + subitem.merchantNote : ''}}</text>

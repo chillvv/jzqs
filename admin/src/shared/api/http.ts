@@ -22,6 +22,7 @@ import type {
   DispatchRiderAuthBindingResponse,
   PendingRiderResponse,
   AdminMenuWeekResponse,
+  BannerImageUploadResponse,
   MenuScheduleResponse,
   OperationSettingsResponse,
   OrderPrepItemResponse,
@@ -631,6 +632,34 @@ export async function updateBannerImages(bannerImages: string) {
   const response = await http.post<ApiResponse<OperationSettingsResponse>>("/api/admin/settings/banner-images", {
     bannerImages
   });
+  return response.data.data;
+}
+
+export async function uploadBannerImage(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await http.post<ApiResponse<BannerImageUploadResponse>>(
+    "/api/admin/settings/banner-images/upload",
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data"
+      }
+    }
+  );
+  return response.data.data;
+}
+
+export async function pauseOrderingWithNotice(payload: {
+  title: string;
+  description: string;
+  popupEnabled: boolean;
+  popupContent: string;
+}) {
+  const response = await http.post<ApiResponse<OperationSettingsResponse>>(
+    "/api/admin/settings/ordering/pause-with-notice",
+    payload
+  );
   return response.data.data;
 }
 

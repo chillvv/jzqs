@@ -19,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class MobileAuthServiceImpl implements MobileAuthService {
     private static final String AUTH_MODE_DEV = "DEV_SIMULATION";
+    private static final String AUTH_MODE_WECHAT = "MINIAPP_WX";
     private static final String SOURCE_DEV = "MINIAPP_DEV";
     private static final String SOURCE_WX_PHONE = "MINIAPP_WX_PHONE";
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
@@ -63,15 +64,17 @@ public class MobileAuthServiceImpl implements MobileAuthService {
 
     @Override
     public Map<String, Object> wxLogin(String code) {
-        String openid = buildDevOpenid(code);
+        WeChatService.WeChatSession session = weChatService.code2Session(code);
+        String openid = session.openid();
         Long customerId = findCustomerIdByOpenid(openid);
         if (customerId == null) {
-            return authState(openid, false, true, false, null);
+            return authState(openid, session.sessionKey(), false, true, false, null);
         }
+        syncCustomerWechatSession(customerId, openid, session.sessionKey());
         if (!hasBoundPhone(customerId)) {
-            return authState(openid, false, true, false, null);
+            return authState(openid, session.sessionKey(), false, true, false, null);
         }
-        return authState(openid, true, false, false, customerId);
+        return authState(openid, session.sessionKey(), true, false, false, customerId);
     }
 
     @Override
@@ -102,7 +105,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             Timestamp.valueOf(now),
             customerId
         );
-        return authState(finalOpenid, true, false, false, customerId);
+        return authState(finalOpenid, "session_" + finalOpenid, true, false, false, customerId);
     }
 
     @Override
@@ -155,7 +158,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             Timestamp.valueOf(now),
             customerId
         );
-        return authState(finalOpenid, true, false, false, customerId);
+        return authState(finalOpenid, "dev_session_" + finalOpenid, true, false, false, customerId);
     }
 
     @Override
@@ -330,7 +333,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             Timestamp.valueOf(LocalDateTime.now()),
             customerId
         );
-        return authState(finalOpenid, true, false, false, customerId);
+        return authState(finalOpenid, null, true, false, false, customerId);
     }
 
     @Override
@@ -412,7 +415,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "微信手机号登录失败");
         }
 
-        return authState(finalOpenid, true, false, false, customerId);
+        return authState(finalOpenid, finalOpenid.isEmpty() ? null : "session_" + finalOpenid, true, false, false, customerId);
     }
 
     @Override
@@ -481,7 +484,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             );
         }
 
-        return authState(finalOpenid, true, false, false, customerId);
+        return authState(finalOpenid, "session_" + finalOpenid, true, false, false, customerId);
     }
 
     private void verifyCustomerExists(Long customerId) {
@@ -579,16 +582,11 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         }
     }
 
-    private Map<String, Object> authState(
-        String openid,
-        boolean registered,
-        boolean needPhoneAuth,
-        boolean needName,
-        Long customerId
-    ) {
+    private Map<String, Object> authState(String openid, String sessionKey, boolean registered, boolean needPhoneAuth, boolean needName, Long customerId) {
         Map<String, Object> state = new LinkedHashMap<>();
-        state.put("authMode", AUTH_MODE_DEV);
+        state.put("authMode", AUTH_MODE_WECHAT);
         state.put("openid", openid);
+        state.put("sessionKey", sessionKey);
         state.put("registered", registered);
         state.put("needPhoneAuth", needPhoneAuth);
         state.put("needName", needName);
@@ -601,6 +599,29 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             state.put("customerId", customerId);
         }
         return state;
+    }
+
+    private void syncCustomerWechatSession(Long customerId, String openid, String sessionKey) {
+        if (customerId == null || openid == null || openid.isBlank()) {
+            return;
+        }
+        jdbcTemplate.update(
+            """
+                UPDATE customers
+                SET openid = ?,
+                    current_openid = ?,
+                    session_key = ?,
+                    openid_updated_at = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+            openid,
+            openid,
+            sessionKey,
+            Timestamp.valueOf(LocalDateTime.now()),
+            Timestamp.valueOf(LocalDateTime.now()),
+            customerId
+        );
     }
 
     private Map<String, Object> riderAuthState(

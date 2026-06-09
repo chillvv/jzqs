@@ -126,7 +126,17 @@ Page({
     canOrder: true,
     statusText: '',
     showInlineAuth: false,
-    pendingAction: ''
+    pendingAction: '',
+    statusBarHeight: 0,
+    navBarHeight: 44
+  },
+
+  onLoad() {
+    const app = getApp();
+    this.setData({
+      statusBarHeight: app.globalData.statusBarHeight,
+      navBarHeight: app.globalData.navBarHeight
+    });
   },
 
   onShow() {

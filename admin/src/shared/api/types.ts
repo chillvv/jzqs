@@ -463,6 +463,12 @@ export type OperationSettingsResponse = {
   popupAnnouncementContent: string;
 };
 
+export type BannerImageUploadResponse = {
+  url: string;
+  fileKey: string;
+  size: number;
+};
+
 export type SubscriptionRuleResponse = {
   id: number;
   customerId: number;

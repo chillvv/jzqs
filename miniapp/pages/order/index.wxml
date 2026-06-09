@@ -1,6 +1,14 @@
 <!-- =====================================
       Tab 2：点餐页
       ===================================== -->
+<view class="custom-nav-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px; display: {{showCheckout ? 'none' : 'flex'}};">
+  <view class="custom-nav-left">
+    <image class="custom-nav-logo" src="/assets/logo.jpeg" mode="aspectFit"></image>
+    <text class="custom-nav-title">简知轻食</text>
+  </view>
+</view>
+<view class="custom-nav-spacer" style="height: {{navBarHeight}}px; display: {{showCheckout ? 'none' : 'block'}};"></view>
+
 <view id="tab-order" class="content">
   <view id="view-menu" style="display: {{showCheckout ? 'none' : 'block'}};">
     <view class="menu-top">
