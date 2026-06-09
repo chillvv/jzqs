@@ -1,8 +1,14 @@
 const { request } = require('../../utils/request');
 const { maskPhone } = require('../../utils/mobile');
 const { getSubmitProfileError } = require('../../utils/profile-auth');
-const { ensurePhonePrivacyPermission, getPhonePrivacyErrorMessage } = require('../../utils/privacy-auth');
+const {
+  ensurePhonePrivacyPermission,
+  getPhonePrivacyErrorMessage,
+  openPrivacyContract
+} = require('../../utils/privacy-auth');
 const auth = require('../../utils/auth');
+
+const AGREEMENT_ACCEPTED_KEY = 'miniapp_customer_auth_agreement_accepted_v1';
 
 function displayName(name) {
   if (!name || name.startsWith('微信用户-') || name.startsWith('待完善-')) {
@@ -30,6 +36,20 @@ function applyCustomerAuthResult(result) {
   auth.syncAppGlobalData();
 }
 
+function readAgreementAccepted() {
+  try {
+    return !!wx.getStorageSync(AGREEMENT_ACCEPTED_KEY);
+  } catch (_) {
+    return false;
+  }
+}
+
+function persistAgreementAccepted() {
+  try {
+    wx.setStorageSync(AGREEMENT_ACCEPTED_KEY, true);
+  } catch (_) {}
+}
+
 Page({
   data: {
     home: null,
@@ -46,19 +66,19 @@ Page({
       phoneNumber: ''
     },
     phoneAuthHint: '',
-    showAuthPopup: false
+    showAuthPopup: false,
+    agreementAccepted: false,
+    agreementSheetChecked: false,
+    showAgreementSheet: false,
+    pendingAgreementAction: ''
+  },
+
+  goLoginPage() {
+    wx.navigateTo({ url: '/pages/login/index' });
   },
 
   openAuthPopup() {
-    this.setData({
-      showAuthPopup: true,
-      authFlowMode: 'login',
-      phoneAuthHint: '',
-      profileForm: {
-        nickname: '',
-        phoneNumber: ''
-      }
-    });
+    this.goLoginPage();
   },
 
   startRegisterFlow({ phoneNumber = '' } = {}) {
@@ -66,6 +86,10 @@ Page({
       showAuthPopup: true,
       authFlowMode: 'register',
       phoneAuthHint: phoneNumber ? maskPhone(phoneNumber) : '',
+      agreementAccepted: false,
+      agreementSheetChecked: false,
+      showAgreementSheet: false,
+      pendingAgreementAction: '',
       profileForm: {
         nickname: '',
         phoneNumber
@@ -78,13 +102,23 @@ Page({
       showAuthPopup: true,
       authFlowMode: 'complete-profile',
       phoneAuthHint: phoneNumber ? maskPhone(phoneNumber) : this.data.phoneAuthHint,
+      agreementAccepted: false,
+      agreementSheetChecked: false,
+      showAgreementSheet: false,
+      pendingAgreementAction: '',
       'profileForm.nickname': ''
     });
   },
 
   closeAuthPopup() {
-    this.setData({ showAuthPopup: false });
+    this.setData({
+      showAuthPopup: false,
+      showAgreementSheet: false,
+      pendingAgreementAction: ''
+    });
   },
+
+  stopPropagation() {},
 
   onShow() {
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
@@ -92,6 +126,7 @@ Page({
         selected: 2
       })
     }
+    
     this.refreshPage();
   },
 
@@ -144,11 +179,20 @@ Page({
   },
 
   openAgreement() {
-    wx.showModal({ title: '用户服务协议', content: '这里是用户服务协议的内容...', showCancel: false });
+    wx.showModal({
+      title: '用户服务协议',
+      content: '为完成登录、下单与配送通知服务，我们会在你使用过程中处理账号标识、手机号、订单与收货信息。继续使用前，请先阅读并同意用户服务协议。',
+      showCancel: false
+    });
   },
 
   openPrivacy() {
-    wx.showModal({ title: '隐私政策', content: '这里是隐私政策的内容...', showCancel: false });
+    openPrivacyContract().catch((error) => {
+      wx.showToast({
+        title: getPhonePrivacyErrorMessage(error),
+        icon: 'none'
+      });
+    });
   },
 
   onPhoneInput(e) {
@@ -166,38 +210,125 @@ Page({
     });
   },
 
-  async preparePhonePrivacyPermission() {
+  handleAgreementBarTap() {
+    this.openAgreementSheet('');
+  },
+
+  openAgreementSheet(action = '') {
+    this.setData({
+      showAgreementSheet: true,
+      pendingAgreementAction: action,
+      agreementSheetChecked: this.data.agreementAccepted || this.data.agreementSheetChecked
+    });
+  },
+
+  closeAgreementSheet() {
+    this.setData({
+      showAgreementSheet: false,
+      pendingAgreementAction: '',
+      agreementSheetChecked: this.data.agreementSheetChecked
+    });
+  },
+
+  toggleAgreementSheetChecked() {
+    this.setData({
+      agreementSheetChecked: !this.data.agreementSheetChecked
+    });
+  },
+
+  ensureAgreementAccepted() {
+    if (!this.data.agreementAccepted && !this.data.agreementSheetChecked) {
+      wx.showToast({ title: '请先勾选已阅读并同意', icon: 'none' });
+      return false;
+    }
+    if (!this.data.agreementAccepted) {
+      persistAgreementAccepted();
+    }
+    this.setData({
+      agreementAccepted: true,
+      agreementSheetChecked: true,
+      showAgreementSheet: false,
+      pendingAgreementAction: ''
+    });
+    return true;
+  },
+
+  handleAgreementPrimaryAction() {
+    if (!this.ensureAgreementAccepted()) {
+      return;
+    }
+    if (this.data.pendingAgreementAction === 'submitProfile') {
+      this.submitProfile();
+    }
+  },
+
+  openAgreementSheetForWechat() {
+    this.openAgreementSheet('wechat-login');
+  },
+
+  async prepareWechatLogin() {
     try {
       await ensurePhonePrivacyPermission();
+      return true;
     } catch (error) {
       wx.showToast({
         title: getPhonePrivacyErrorMessage(error),
         icon: 'none'
       });
+      return false;
     }
   },
 
-  async getPhoneNumber(e) {
-    // #region debug-point A:customer-phone-event
-    wx.request({ url: 'http://192.168.1.3:7777/event', method: 'POST', data: { sessionId: 'wechat-phone-login', runId: 'pre-fix', hypothesisId: 'A', location: 'miniapp/pages/profile/index.js:getPhoneNumber:entry', msg: '[DEBUG] customer getPhoneNumber event', data: { errMsg: e && e.detail ? e.detail.errMsg : '', hasCode: !!(e && e.detail && e.detail.code), codeLength: e && e.detail && e.detail.code ? String(e.detail.code).length : 0 }, ts: Date.now() } });
-    // #endregion
-    if (e.detail.errMsg !== 'getPhoneNumber:ok') {
+  async handleWechatPermissionFailure(detail) {
+    try {
+      await ensurePhonePrivacyPermission();
       wx.showToast({
-        title: getPhonePrivacyErrorMessage(e && e.detail),
+        title: '已完成微信隐私授权，请再次点击微信一键登录',
         icon: 'none'
       });
       return;
+    } catch (_) {
+      wx.showToast({
+        title: getPhonePrivacyErrorMessage(detail),
+        icon: 'none'
+      });
     }
+  },
 
+  async completeAgreementAndContinueWechat(e) {
+    if (!this.ensureAgreementAccepted()) {
+      return;
+    }
+    if (e.detail.errMsg !== 'getPhoneNumber:ok') {
+      await this.handleWechatPermissionFailure(e && e.detail);
+      return;
+    }
+    this.doLoginWithCode(e.detail.code);
+  },
+
+  handleSubmitEntry() {
+    if (this.data.agreementAccepted) {
+      this.submitProfile();
+      return;
+    }
+    this.openAgreementSheet('submitProfile');
+  },
+
+  async getPhoneNumber(e) {
+    if (e.detail.errMsg !== 'getPhoneNumber:ok') {
+      await this.handleWechatPermissionFailure(e && e.detail);
+      return;
+    }
+    this.doLoginWithCode(e.detail.code);
+  },
+
+  async doLoginWithCode(code) {
     if (this.data.savingProfile) return;
     this.setData({ savingProfile: true });
 
     try {
-      const code = String(e.detail.code || '').trim();
+      code = String(code || '').trim();
       if (!code) {
-        // #region debug-point A:customer-phone-missing-code
-        wx.request({ url: 'http://192.168.1.3:7777/event', method: 'POST', data: { sessionId: 'wechat-phone-login', runId: 'pre-fix', hypothesisId: 'A', location: 'miniapp/pages/profile/index.js:getPhoneNumber:missing-code', msg: '[DEBUG] customer missing phone code', data: { errMsg: e.detail.errMsg }, ts: Date.now() } });
-        // #endregion
         wx.showToast({ title: '微信手机号授权失败，请重试', icon: 'none' });
         return;
       }
@@ -223,9 +354,6 @@ Page({
       this.setData({ showAuthPopup: false, phoneAuthHint: '' });
       setTimeout(() => this.refreshPage(), 1200);
     } catch (error) {
-      // #region debug-point B:customer-phone-error
-      wx.request({ url: 'http://192.168.1.3:7777/event', method: 'POST', data: { sessionId: 'wechat-phone-login', runId: 'pre-fix', hypothesisId: 'B', location: 'miniapp/pages/profile/index.js:getPhoneNumber:catch', msg: '[DEBUG] customer bind phone failed', data: { message: error && error.message ? error.message : '' }, ts: Date.now() } });
-      // #endregion
       if (shouldStartRegister(error)) {
         this.startRegisterFlow();
         wx.showToast({ title: '请填写姓名完成注册', icon: 'none' });
@@ -238,6 +366,10 @@ Page({
   },
 
   async submitProfile() {
+    if (!this.data.agreementAccepted) {
+      wx.showToast({ title: '请先阅读并同意协议', icon: 'none' });
+      return;
+    }
     if (this.data.authFlowMode === 'register') {
       return this.submitRegister();
     }
@@ -398,10 +530,20 @@ Page({
     });
   },
 
-  guardMemberAction(targetUrl) {
-    if (this.data.onboarding) {
+  async guardMemberAction(targetUrl) {
+    const app = getApp();
+    await app.waitForAuth();
+    if (!app.globalData.token) {
       wx.showToast({ title: '先完成手机号验证，再查看会员服务', icon: 'none' });
+      this.goLoginPage();
       return;
+    }
+    if (this.data.onboarding) {
+      this.setData({
+        onboarding: false,
+        authMode: app.globalData.authMode,
+        needPhoneAuth: !!app.globalData.needPhoneAuth
+      });
     }
     wx.navigateTo({ url: targetUrl });
   },
@@ -422,9 +564,12 @@ Page({
     this.guardMemberAction('/pages/wallet/index');
   },
 
-  contactService() {
-    if (this.data.onboarding) {
+  async contactService() {
+    const app = getApp();
+    await app.waitForAuth();
+    if (!app.globalData.token) {
       wx.showToast({ title: '验证后可同步会员服务与订单支持', icon: 'none' });
+      this.goLoginPage();
       return;
     }
     wx.showModal({

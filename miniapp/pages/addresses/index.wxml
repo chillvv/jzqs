@@ -1,6 +1,7 @@
 <view class="subpage">
   <view class="subpage-card">
-    <view class="hero-inline-main">收餐地址管理</view>
+    <view class="hero-inline-main">{{selectOrderId ? '选择新的配送地址' : '收餐地址管理'}}</view>
+    <view wx:if="{{selectOrderId}}" class="subpage-subtitle">请选择一个已保存地址，用于替换当前订单的配送地址</view>
   </view>
 
   <view wx:if="{{items.length}}">
@@ -14,6 +15,7 @@
         <view wx:if="{{item.isDefault}}" class="status-pill-default" style="white-space: nowrap; writing-mode: horizontal-tb;">默认地址</view>
       </view>
       <view class="action-row">
+        <button wx:if="{{selectOrderId}}" class="sub-btn primary" data-id="{{item.id}}" bindtap="selectAddressForOrder">使用这个地址</button>
         <button wx:if="{{!item.isDefault}}" class="sub-btn ghost" data-id="{{item.id}}" bindtap="setDefault">设为默认</button>
         <button class="sub-btn ghost" data-id="{{item.id}}" bindtap="editAddress" style="margin-left: 16rpx;">编辑</button>
         <button class="sub-btn ghost" data-id="{{item.id}}" bindtap="deleteAddress" style="margin-left: 16rpx; color: #ff4d4f; border-color: #ff4d4f;">删除</button>
@@ -25,7 +27,7 @@
     <view class="empty-text">还没有保存任何地址</view>
   </view>
 
-  <button class="sub-btn primary full-btn" style="margin-top: 40rpx;" bindtap="showAddPopup">+ 新增地址</button>
+  <button class="sub-btn primary full-btn" style="margin-top: 40rpx;" bindtap="showAddPopup">{{selectOrderId ? '+ 新增后使用' : '+ 新增地址'}}</button>
 
   <!-- 新增/编辑地址半屏弹窗 -->
   <view class="address-popup-mask {{showPopup ? 'show' : ''}}" bindtap="hideAddPopup"></view>

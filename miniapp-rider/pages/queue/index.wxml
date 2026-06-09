@@ -20,13 +20,13 @@
 
   <!-- Review Banner (Pending Approval) -->
   <view wx:if="{{viewState === 'pending'}}" class="banner banner-warning">
-    <text class="material-symbols-outlined banner-icon">info</text>
-    <text class="banner-text">您的账号正处于"待审核"状态，暂时无法接单。请耐心等待审核完成。</text>
+    <text class="material-symbols-outlined banner-icon">i</text>
+    <text class="banner-text">账号待审核，暂无法接单。</text>
   </view>
 
   <!-- Blocked Banner -->
   <view wx:elif="{{viewState === 'blocked'}}" class="banner banner-error">
-    <text class="material-symbols-outlined banner-icon">block</text>
+    <text class="material-symbols-outlined banner-icon">!</text>
     <text class="banner-text">账号已停用，请联系站长。</text>
   </view>
 
@@ -48,9 +48,15 @@
             bindtap="switchMealPeriod"
           >晚餐</view>
         </view>
-        <view wx:if="{{currentStatusFilter === 'PENDING'}}" class="edit-btn-inline" bindtap="toggleEditMode">
-          <image class="edit-icon" src="{{isEditMode ? '/assets/icons/check.svg' : '/assets/icons/sort.svg'}}" mode="aspectFit"></image>
-          <text class="edit-text">{{isEditMode ? '完成' : '排序'}}</text>
+        <view class="header-action-group">
+          <view wx:if="{{currentStatusFilter !== 'DELIVERED'}}" class="edit-btn-inline {{batchReferenceMode ? 'header-action-disabled' : ''}}" bindtap="toggleEditMode">
+            <image class="edit-icon" src="{{isEditMode ? '/assets/icons/check.svg' : '/assets/icons/sort.svg'}}" mode="aspectFit"></image>
+            <text class="edit-text">{{isEditMode ? '完成' : '排序'}}</text>
+          </view>
+          <view class="batch-btn-inline {{isEditMode ? 'header-action-disabled' : ''}}" bindtap="toggleBatchReferenceMode">
+            <image class="action-icon" src="{{batchReferenceMode ? '/assets/icons/check.svg' : '/assets/icons/camera.svg'}}" mode="aspectFit"></image>
+            <text class="edit-text">{{batchReferenceMode ? '完成' : '批量传图'}}</text>
+          </view>
         </view>
       </view>
 
@@ -92,18 +98,23 @@
     </view>
 
     <!-- Orders List -->
-    <view class="orders-list {{isEditMode ? 'edit-mode' : ''}} {{dragging ? 'is-dragging' : ''}}">
+    <view class="orders-list {{isEditMode ? 'edit-mode' : ''}} {{dragging ? 'is-dragging' : ''}} {{batchReferenceMode ? 'batch-mode' : ''}}">
 
       <!-- 拖拽提示 -->
       <view wx:if="{{isEditMode && currentMealItems.length > 0}}" class="drag-hint">
-        <text class="material-symbols-outlined">touch_app</text>
-        <text>长按可调整配送顺序，已完成订单会自动沉底展示。</text>
+        <text class="material-symbols-outlined">↑</text>
+        <text>长按卡片调整顺序。</text>
+      </view>
+
+      <view wx:if="{{batchReferenceMode && currentMealItems.length > 0}}" class="batch-hint">
+        <image class="hint-icon" src="/assets/icons/info-circle.svg" mode="aspectFit"></image>
+        <text>请勾选需要设置同一张参考图的订单。</text>
       </view>
 
       <view
         wx:for="{{currentMealItems}}"
         wx:key="batchItemId"
-        class="order-card {{item.itemStatus === 'DELIVERED' && currentStatusFilter === '' ? 'order-card-completed' : ''}} {{dragging && dragIndex === index ? 'dragging' : ''}}"
+        class="order-card {{item.itemStatus === 'DELIVERED' ? 'order-card-completed' : ''}} {{dragging && dragIndex === index ? 'dragging' : ''}} {{item.batchSelected ? 'order-card-selected' : ''}}"
         style="transform: translateY({{dragging ? (index === dragIndex ? dragTranslateY : 0) : 0}}px); transition: {{dragging ? (index === dragIndex ? 'none' : 'transform 0.2s ease') : 'transform 0.2s ease'}}; z-index: {{dragging && index === dragIndex ? 999 : 1}}; position: relative;"
         data-index="{{index}}"
         data-item-id="{{item.batchItemId}}"
@@ -115,22 +126,31 @@
         bindtouchcancel="onTouchEnd"
       >
         <view class="order-left">
+          <view wx:if="{{batchReferenceMode}}" class="batch-checkbox {{item.batchSelected ? 'batch-checkbox-selected' : ''}}">
+            <text>{{item.batchSelected ? '✓' : ''}}</text>
+          </view>
           <view class="order-badge {{item.itemStatus === 'DELIVERED' && currentStatusFilter === '' ? 'order-badge-completed' : ''}}">
             <text class="badge-prefix">#</text>{{index + 1}}
           </view>
           <view class="order-info">
+            <view wx:if="{{item.specialOrder}}" class="special-tag-row">
+              <view class="special-tag special-tag-warning">特殊单</view>
+              <view wx:if="{{item.specialSummary}}" class="special-tag">{{item.specialSummary}}</view>
+            </view>
             <view class="order-name-row">
-              <view class="order-name {{item.itemStatus === 'DELIVERED' && currentStatusFilter === '' ? 'order-name-completed' : ''}}">
+              <view class="order-name {{item.itemStatus === 'DELIVERED' ? 'order-name-completed' : ''}}">
                 {{item.customerName}}
               </view>
               <view wx:if="{{item.quantity > 1}}" class="quantity-badge">
                 ×{{item.quantity}}
               </view>
             </view>
-            <view class="order-address {{item.itemStatus === 'DELIVERED' && currentStatusFilter === '' ? 'order-address-completed' : ''}}">
-              <text class="material-symbols-outlined icon-location">location_on</text>
+            <view class="order-address {{item.itemStatus === 'DELIVERED' ? 'order-address-completed' : ''}}">
+              <text class="address-icon">📍</text>
               <text class="address-text-content {{!item.deliveryAddress ? 'no-address' : ''}}">{{item.deliveryAddress || '地址未提供'}}</text>
             </view>
+            <view wx:if="{{item.note && item.note !== '-'}}" class="order-note-preview">用户备注：{{item.note}}</view>
+            <view wx:if="{{item.adminNote}}" class="order-note-preview">商家备注：{{item.adminNote}}</view>
           </view>
         </view>
 
@@ -139,7 +159,7 @@
             {{item.itemStatus === 'DELIVERED' ? '已完成' : '待配送'}}
           </view>
           <view class="drag-handle">
-            <text class="material-symbols-outlined">drag_indicator</text>
+            <text class="material-symbols-outlined">⋮⋮</text>
           </view>
         </view>
       </view>
@@ -148,14 +168,25 @@
     <!-- 空状态 -->
     <view wx:if="{{currentMealItems.length === 0 && !loading}}" class="empty-state">
       <view class="empty-icon">
-        <text class="material-symbols-outlined" style="font-size: 96rpx;">inbox</text>
+        <text class="material-symbols-outlined" style="font-size: 96rpx;">📭</text>
       </view>
       <view class="empty-text">
         {{currentStatusFilter === 'PENDING' ? '暂无待配送订单' : currentStatusFilter === 'DELIVERED' ? '暂无已完成订单' : '暂无订单'}}
       </view>
     </view>
+    <view wx:if="{{batchReferenceMode}}" class="batch-action-safe-spacer"></view>
   </view>
   </scroll-view>
+
+  <view wx:if="{{batchReferenceMode}}" class="batch-action-bar">
+    <view class="batch-action-summary">
+      <text class="batch-action-count">已选 {{selectedReferenceItemIds.length}} 单</text>
+      <text class="batch-action-copy">将为选中的地址统一上传同一张参考图</text>
+    </view>
+    <button class="batch-submit-btn" bindtap="handleBatchReferenceUpload" loading="{{batchSubmitting}}" disabled="{{batchSubmitting}}">
+      {{batchSubmitting ? '上传中...' : '选择图片并上传'}}
+    </button>
+  </view>
 
   <!-- Bottom Spacing for TabBar (handled by padding-bottom in CSS) -->
 </view>

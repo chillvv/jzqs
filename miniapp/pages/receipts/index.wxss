@@ -1,0 +1,99 @@
+.detail-page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.detail-hero-card {
+  background: linear-gradient(180deg, #f8fbef 0%, #ffffff 100%);
+}
+
+.detail-hero-top {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.detail-status-title {
+  margin-top: 20rpx;
+  font-size: 36rpx;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.detail-status-subtitle {
+  margin-top: 10rpx;
+  font-size: 24rpx;
+  color: #64748b;
+}
+
+.detail-section-card {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.detail-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.detail-section-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.detail-info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18rpx;
+}
+
+.detail-info-row {
+  display: flex;
+  gap: 18rpx;
+  align-items: flex-start;
+}
+
+.detail-info-label {
+  width: 132rpx;
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: #94a3b8;
+}
+
+.detail-info-value {
+  flex: 1;
+  font-size: 26rpx;
+  line-height: 1.6;
+  color: #334155;
+  word-break: break-all;
+}
+
+.detail-address-text,
+.rider-note-text {
+  color: #0f172a;
+  font-weight: 600;
+}
+
+.receipt-photo-panel {
+  border-radius: 24rpx;
+  background: #f8fafc;
+  padding: 20rpx;
+}
+
+.receipt-photo {
+  width: 100%;
+  border-radius: 20rpx;
+  overflow: hidden;
+}
+
+.receipt-photo-hint,
+.receipt-inline-hint,
+.detail-line {
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  color: #64748b;
+  line-height: 1.6;
+}

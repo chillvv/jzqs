@@ -51,3 +51,6 @@ wechat:
   secret: ${WECHAT_SECRET:}
   # 云开发环境 ID
   cloud-env-id: ${WECHAT_CLOUD_ENV_ID:cloud1-4g88w3e2dedee471}
+  subscribe:
+    delivery-template-id: ${WECHAT_DELIVERY_TEMPLATE_ID:LUxfZUE3i9iv2MyRpMmY-8jShHTAJhntznUFfEigZrA}
+    delivery-page: ${WECHAT_DELIVERY_PAGE:pages/orders/index}

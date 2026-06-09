@@ -87,7 +87,6 @@ public class DispatchController {
             request.riderName(),
             request.displayName(),
             request.phone(),
-            request.password(),
             request.areaCode(),
             request.employmentStatus(),
             request.updatedBy()
@@ -104,7 +103,6 @@ public class DispatchController {
             request.riderName(),
             request.displayName(),
             request.phone(),
-            request.password(),
             request.areaCode(),
             request.updatedBy()
         ));

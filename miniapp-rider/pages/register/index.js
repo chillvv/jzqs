@@ -15,11 +15,11 @@ Page({
   /**
    * 页面加载时读取上次登录的手机号
    */
-  onLoad() {
+  onLoad(options = {}) {
     try {
-      const lastPhone = wx.getStorageSync('lastLoginPhone');
-      if (lastPhone) {
-        this.setData({ phone: lastPhone });
+      const initialPhone = String(options.phoneNumber || wx.getStorageSync('lastLoginPhone') || '');
+      if (initialPhone) {
+        this.setData({ phone: initialPhone });
       }
     } catch (error) {
       console.error('[读取上次手机号失败]', error);
@@ -96,7 +96,9 @@ Page({
   },
 
   goToLogin() {
-    wx.redirectTo({ url: '/pages/profile/index' });
+    const phone = String(this.data.phone || '').trim();
+    const query = phone ? `?phoneNumber=${phone}` : '';
+    wx.redirectTo({ url: `/pages/login/index${query}` });
   },
 
   onViewAgreement() {

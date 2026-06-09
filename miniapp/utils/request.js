@@ -4,9 +4,6 @@ function request({ url, method = 'GET', data, header, requireAuth = true }) {
     const sendRequest = () => {
       const token = app.globalData.token;
       if (requireAuth && !token) {
-        if (app.globalData.requireProfile) {
-          wx.switchTab({ url: '/pages/profile/index' });
-        }
         reject(new Error('请先完成手机号验证'));
         return;
       }
@@ -46,9 +43,17 @@ function request({ url, method = 'GET', data, header, requireAuth = true }) {
       });
     };
 
-    if (requireAuth && !app.globalData.token && app.authPromise) {
-      app.authPromise
-        .then(sendRequest)
+    // 等待认证就绪
+    if (requireAuth && !app.globalData.token) {
+      app.waitForAuth()
+        .then(() => {
+          // 认证就绪后再次检查 token
+          if (app.globalData.token) {
+            sendRequest();
+          } else {
+            reject(new Error('请先完成手机号验证'));
+          }
+        })
         .catch(() => reject(new Error('登录失败，请稍后重试')));
       return;
     }

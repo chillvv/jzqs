@@ -132,27 +132,26 @@
       </view>
 
       <view class="checkout-row-card">
-        <view class="checkout-row" style="align-items: flex-start; position: relative;">
-          <text class="checkout-row-label" style="margin-top: 10rpx;">订单备注</text>
-          <view class="checkout-row-value remark-container" style="flex:1; margin-left:32rpx; position: relative;">
-            <view class="remark-dropdown" wx:if="{{showRemarkDropdown && historyRemarkSuggestions.length > 0}}">
-              <view class="remark-dropdown-item" wx:for="{{historyRemarkSuggestions}}" wx:key="*this" bindtap="selectHistoryRemark" data-note="{{item}}">
-                {{item}}
-              </view>
-            </view>
-            <input
-              type="text"
-              class="remark-input"
-              placeholder="口味、偏好要求"
-              placeholder-style="color: #CCC;"
-              value="{{customRemark}}"
-              bindinput="onRemarkInput"
-              bindfocus="onRemarkFocus"
-              bindblur="onRemarkBlur"
-              cursor-spacing="80"
-              adjust-position="true"
-            />
+        <view class="checkout-row" style="flex-direction: column; align-items: stretch; gap: 16rpx;">
+          <view style="display: flex; justify-content: space-between; align-items: center;">
+            <text class="checkout-row-label">订单备注</text>
+            <text wx:if="{{historyRemarkSuggestions.length > 0}}" style="font-size: 22rpx; color: #999;">最近使用</text>
           </view>
+          <view class="remark-preset-list" wx:if="{{historyRemarkSuggestions.length > 0}}" style="justify-content: flex-start; margin-bottom: 8rpx;">
+            <view class="remark-chip {{customRemark === item ? 'active' : ''}}" wx:for="{{historyRemarkSuggestions}}" wx:key="*this" bindtap="selectHistoryRemark" data-note="{{item}}">
+              {{item}}
+            </view>
+          </view>
+          <input
+            type="text"
+            class="remark-input"
+            style="text-align: left; background: #f8fafc; padding: 0 24rpx; border-radius: 16rpx; height: 72rpx; line-height: 72rpx;"
+            placeholder="口味、偏好要求 (选填)"
+            placeholder-style="color: #999;"
+            value="{{customRemark}}"
+            bindinput="onRemarkInput"
+            cursor-spacing="80"
+          />
         </view>
         <view class="checkout-row">
           <text class="checkout-row-label">餐具数量</text>

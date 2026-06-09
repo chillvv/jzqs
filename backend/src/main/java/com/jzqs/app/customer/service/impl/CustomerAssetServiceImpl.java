@@ -157,6 +157,45 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             },
             customerId
         );
+        Map<String, Object> orderPreferences = jdbcTemplate.query(
+            """
+                SELECT default_user_remark, default_merchant_remark, enabled
+                FROM customer_order_preferences
+                WHERE customer_id = ?
+                LIMIT 1
+                """,
+            ps -> ps.setLong(1, customerId),
+            rs -> {
+                if (!rs.next()) {
+                    return null;
+                }
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("defaultUserRemark", blankToNull(rs.getString("default_user_remark")));
+                row.put("defaultMerchantRemark", blankToNull(rs.getString("default_merchant_remark")));
+                row.put("enabled", rs.getBoolean("enabled"));
+                return row;
+            }
+        );
+        List<Map<String, Object>> orderTags = jdbcTemplate.query(
+            """
+                SELECT id, tag_code, tag_name, tag_source, expires_at, remaining_uses, active
+                FROM customer_order_tags
+                WHERE customer_id = ? AND is_default = TRUE
+                ORDER BY active DESC, id DESC
+                """,
+            (rs, rowNum) -> {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id", rs.getLong("id"));
+                row.put("tagCode", rs.getString("tag_code"));
+                row.put("tagName", rs.getString("tag_name"));
+                row.put("tagSource", rs.getString("tag_source"));
+                row.put("expiresAt", formatTimestamp(rs.getTimestamp("expires_at")));
+                row.put("remainingUses", rs.getObject("remaining_uses"));
+                row.put("active", rs.getBoolean("active"));
+                return row;
+            },
+            customerId
+        );
 
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("id", customer.getId());
@@ -177,6 +216,12 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         ));
         detail.put("addresses", addresses);
         detail.put("subscriptions", subscriptions);
+        detail.put("orderPreferences", orderPreferences == null ? Map.of(
+            "defaultUserRemark", null,
+            "defaultMerchantRemark", null,
+            "enabled", false
+        ) : orderPreferences);
+        detail.put("orderTags", orderTags);
         detail.put("transactions", walletTransactions(customerId).items());
         return detail;
     }
@@ -268,6 +313,44 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         }
         customer.setUpdatedAt(LocalDateTime.now());
         customerMapper.updateById(customer);
+
+        if (payload.containsKey("defaultUserRemark")
+            || payload.containsKey("defaultMerchantRemark")
+            || payload.containsKey("defaultTagsText")
+            || payload.containsKey("orderPreferenceEnabled")) {
+            jdbcTemplate.update("""
+                INSERT INTO customer_order_preferences (customer_id, default_user_remark, default_merchant_remark, enabled, updated_by)
+                VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                    default_user_remark = VALUES(default_user_remark),
+                    default_merchant_remark = VALUES(default_merchant_remark),
+                    enabled = VALUES(enabled),
+                    updated_by = VALUES(updated_by)
+                """,
+                customerId,
+                blankToNull(stringValue(payload.get("defaultUserRemark"))),
+                blankToNull(stringValue(payload.get("defaultMerchantRemark"))),
+                booleanValue(payload.get("orderPreferenceEnabled"), true),
+                "ADMIN"
+            );
+            jdbcTemplate.update("DELETE FROM customer_order_tags WHERE customer_id = ? AND is_default = TRUE", customerId);
+            for (String tagName : splitTags(stringValue(payload.get("defaultTagsText")))) {
+                jdbcTemplate.update("""
+                    INSERT INTO customer_order_tags (
+                        customer_id, tag_code, tag_name, tag_source, active, is_default, created_by, updated_by
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    customerId,
+                    buildTagCode(tagName),
+                    tagName,
+                    "ADMIN",
+                    true,
+                    true,
+                    "ADMIN",
+                    "ADMIN"
+                );
+            }
+        }
 
         return Map.of("customerId", customerId, "status", "UPDATED");
     }
@@ -421,6 +504,28 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         tx.setCreatedAt(LocalDateTime.now());
         tx.setSnapshotBalance(querySnapshotBalance(walletId));
         walletTransactionMapper.insert(tx);
+    }
+
+    private List<String> splitTags(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return List.of();
+        }
+        LinkedHashSet<String> tags = new LinkedHashSet<>();
+        for (String part : raw.split("[,，\\n]")) {
+            String normalized = blankToNull(part);
+            if (normalized != null) {
+                tags.add(normalized);
+            }
+        }
+        return new ArrayList<>(tags);
+    }
+
+    private String buildTagCode(String tagName) {
+        return tagName.trim().replaceAll("\\s+", "_").toUpperCase();
+    }
+
+    private String formatTimestamp(Timestamp value) {
+        return value == null ? null : value.toLocalDateTime().format(DATETIME_FORMATTER);
     }
 
     private List<String> querySuggestionValues(String sql) {

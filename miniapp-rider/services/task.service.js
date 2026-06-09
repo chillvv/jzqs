@@ -241,6 +241,35 @@ async function saveOrderSequence(riderName, mealPeriod, batchItemIds) {
   });
 }
 
+async function getAddressReferenceImage(riderName, addressId) {
+  return await request({
+    url: `/api/rider/address-reference?riderName=${encodeURIComponent(riderName)}&addressId=${addressId}`
+  });
+}
+
+async function saveBatchAddressReferenceImage(riderName, addressIds, referenceImageUrl) {
+  return await request({
+    url: `/api/rider/address-reference/batch?riderName=${encodeURIComponent(riderName)}`,
+    method: 'POST',
+    data: {
+      addressIds,
+      referenceImageUrl
+    },
+    header: { 'content-type': 'application/json' }
+  });
+}
+
+async function replaceAddressReferenceImage(riderName, addressId, referenceImageUrl) {
+  return await request({
+    url: `/api/rider/address-reference/${addressId}?riderName=${encodeURIComponent(riderName)}`,
+    method: 'POST',
+    data: {
+      referenceImageUrl
+    },
+    header: { 'content-type': 'application/json' }
+  });
+}
+
 module.exports = {
   getTodaySummary,
   getQueue,
@@ -256,5 +285,8 @@ module.exports = {
   reportException,
   revertOrderStatus,
   undoDelivery,
-  saveOrderSequence
+  saveOrderSequence,
+  getAddressReferenceImage,
+  saveBatchAddressReferenceImage,
+  replaceAddressReferenceImage
 };

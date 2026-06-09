@@ -5,7 +5,6 @@ import com.jzqs.app.common.api.BatchOperationResponse;
 import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
-import com.jzqs.app.common.util.PasswordUtils;
 import com.jzqs.app.dispatch.api.DispatchAreaBlockingOrderResponse;
 import com.jzqs.app.dispatch.api.DispatchAreaOrderItemResponse;
 import com.jzqs.app.dispatch.api.DispatchBatchResponse;
@@ -517,14 +516,11 @@ public class DispatchServiceImpl implements DispatchService {
         String riderName,
         String displayName,
         String phone,
-        String password,
         String areaCode,
         String employmentStatus,
         String updatedBy
     ) {
         String normalizedAreaCode = areaCode == null || areaCode.isBlank() ? null : areaCode.trim();
-        String finalPassword = password == null || password.isBlank() ? "888888" : password.trim();
-        String passwordHash = PasswordUtils.hash(finalPassword, phone);
         boolean active = "ACTIVE".equalsIgnoreCase(employmentStatus);
         LocalDateTime now = LocalDateTime.now().withNano(0);
         long riderId = insertAndReturnId(
@@ -533,7 +529,6 @@ public class DispatchServiceImpl implements DispatchService {
                     rider_name,
                     display_name,
                     phone,
-                    password_hash,
                     employment_status,
                     default_area_code,
                     display_order,
@@ -547,7 +542,6 @@ public class DispatchServiceImpl implements DispatchService {
             riderName,
             displayName,
             phone,
-            passwordHash,
             employmentStatus,
             normalizedAreaCode,
             0,
@@ -577,54 +571,28 @@ public class DispatchServiceImpl implements DispatchService {
         String riderName,
         String displayName,
         String phone,
-        String password,
         String areaCode,
         String updatedBy
     ) {
         String normalizedAreaCode = areaCode == null || areaCode.isBlank() ? null : areaCode.trim();
-        String finalPassword = password == null || password.isBlank() ? null : password.trim();
-        if (finalPassword != null && !finalPassword.isEmpty()) {
-            String passwordHash = PasswordUtils.hash(finalPassword, phone);
-            jdbcTemplate.update(
-                """
-                    UPDATE rider_profiles
-                    SET rider_name = ?,
-                        display_name = ?,
-                        phone = ?,
-                        password_hash = ?,
-                        default_area_code = ?,
-                        assigned_by = ?,
-                        assigned_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                    """,
-                riderName,
-                displayName,
-                phone,
-                passwordHash,
-                normalizedAreaCode,
-                updatedBy,
-                riderId
-            );
-        } else {
-            jdbcTemplate.update(
-                """
-                    UPDATE rider_profiles
-                    SET rider_name = ?,
-                        display_name = ?,
-                        phone = ?,
-                        default_area_code = ?,
-                        assigned_by = ?,
-                        assigned_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                    """,
-                riderName,
-                displayName,
-                phone,
-                normalizedAreaCode,
-                updatedBy,
-                riderId
-            );
-        }
+        jdbcTemplate.update(
+            """
+                UPDATE rider_profiles
+                SET rider_name = ?,
+                    display_name = ?,
+                    phone = ?,
+                    default_area_code = ?,
+                    assigned_by = ?,
+                    assigned_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+            riderName,
+            displayName,
+            phone,
+            normalizedAreaCode,
+            updatedBy,
+            riderId
+        );
         jdbcTemplate.update(
             "UPDATE dispatch_assignments SET rider_name = ? WHERE rider_profile_id = ?",
             riderName, riderId

@@ -7,6 +7,7 @@ import com.jzqs.app.aftersale.service.AftersaleService;
 import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
+import com.jzqs.app.common.wechat.WeChatService;
 import com.jzqs.app.customer.api.WalletTransactionResponse;
 import com.jzqs.app.delivery.service.DeliveryService;
 import com.jzqs.app.mobile.api.MobileAddressResponse;
@@ -19,6 +20,8 @@ import com.jzqs.app.mobile.api.MobileMenuItemResponse;
 import com.jzqs.app.mobile.api.MobileOrderItemResponse;
 import com.jzqs.app.mobile.api.MobileTomorrowMenuResponse;
 import com.jzqs.app.mobile.api.MobileWeekMenuDayResponse;
+import com.jzqs.app.mobile.api.RiderAddressReferenceResponse;
+import com.jzqs.app.mobile.api.RiderBatchAddressReferenceRequest;
 import com.jzqs.app.mobile.api.RiderBatchSummaryResponse;
 import com.jzqs.app.mobile.api.RiderDeliveryUploadResponse;
 import com.jzqs.app.mobile.api.RiderQueueItemResponse;
@@ -35,6 +38,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.nio.file.Files;
@@ -58,6 +62,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     private final ObjectMapper objectMapper;
     private final MobilePortalServiceExtension extension;
     private final AftersaleService aftersaleService;
+    private final WeChatService weChatService;
     private final Path uploadRootDir;
 
     public MobilePortalServiceImpl(
@@ -67,6 +72,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         ObjectMapper objectMapper,
         MobilePortalServiceExtension extension,
         AftersaleService aftersaleService,
+        WeChatService weChatService,
         @Value("${app.upload-dir:./uploads}") String uploadDir
     ) {
         this.jdbcTemplate = jdbcTemplate;
@@ -75,6 +81,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         this.objectMapper = objectMapper;
         this.extension = extension;
         this.aftersaleService = aftersaleService;
+        this.weChatService = weChatService;
         this.uploadRootDir = Path.of(uploadDir).toAbsolutePath().normalize();
     }
 
@@ -334,14 +341,22 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             rs.getString("delivery_address"),
             rs.getString("source"),
             rs.getString("status"),
+            resolveUserVisibleStatus(
+                rs.getString("status"),
+                rs.getString("meal_period"),
+                rs.getDate("serve_date").toLocalDate(),
+                timestampToLocalDateTime(rs.getTimestamp("delivered_at"))
+            ),
             rs.getString("receipt_url"),
             rs.getString("receipt_note"),
             formatTimestamp(rs.getTimestamp("delivered_at")),
-                rs.getBoolean("receipt_visible"),
-                rs.getBoolean("aftersale_open"),
-                rs.getString("aftersale_status"),
-                rs.getString("aftersale_type"),
-                rs.getString("aftersale_admin_remark")
+            rs.getBoolean("receipt_visible"),
+            canChangeAddress(rs.getDate("serve_date").toLocalDate()),
+            resolveChangeAddressMode(rs.getDate("serve_date").toLocalDate()),
+            rs.getBoolean("aftersale_open"),
+            rs.getString("aftersale_status"),
+            rs.getString("aftersale_type"),
+            rs.getString("aftersale_admin_remark")
         ), customerId, status, status, status);
         return PageResponse.of(items, 1, 20, items.size());
     }
@@ -412,6 +427,40 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             "orderId", mealSlotOrderId,
             "status", "PENDING_DISPATCH",
             "walletAction", "RESERVED"
+        );
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> authorizeDeliverySubscription(long customerId, long orderId, String templateId, String acceptResult) {
+        if (!"accept".equalsIgnoreCase(safeString(acceptResult).trim())) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "仅支持保存已同意的订阅授权");
+        }
+        Integer count = jdbcTemplate.queryForObject("""
+            SELECT COUNT(*)
+            FROM meal_slot_orders mso
+            JOIN daily_orders do ON do.id = mso.daily_order_id
+            WHERE mso.id = ? AND do.customer_id = ?
+            """, Integer.class, orderId, customerId);
+        if (count == null || count == 0) {
+            throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "未找到对应订单");
+        }
+        jdbcTemplate.update("""
+            INSERT INTO customer_delivery_subscriptions (
+                customer_id, meal_slot_order_id, template_id, status, source, authorized_at
+            ) VALUES (?, ?, ?, 'AUTHORIZED', 'MINIAPP_ORDER_SUCCESS', CURRENT_TIMESTAMP)
+            ON DUPLICATE KEY UPDATE
+                customer_id = VALUES(customer_id),
+                template_id = VALUES(template_id),
+                status = 'AUTHORIZED',
+                source = VALUES(source),
+                authorized_at = VALUES(authorized_at),
+                sent_at = NULL,
+                last_error_message = NULL
+            """, customerId, orderId, templateId);
+        return Map.of(
+            "orderId", orderId,
+            "status", "AUTHORIZED"
         );
     }
 
@@ -561,6 +610,49 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         return Map.of("addressId", addressId, "status", "DEFAULT_UPDATED");
     }
 
+    @Override
+    @Transactional
+    public Map<String, Object> changeCustomerOrderAddress(long customerId, long orderId, long addressId) {
+        Map<String, Object> order = jdbcTemplate.query("""
+            SELECT mso.address_id, do.serve_date
+            FROM meal_slot_orders mso
+            JOIN daily_orders do ON do.id = mso.daily_order_id
+            WHERE mso.id = ? AND do.customer_id = ?
+            """,
+            ps -> {
+                ps.setLong(1, orderId);
+                ps.setLong(2, customerId);
+            },
+            rs -> {
+                if (!rs.next()) {
+                    return null;
+                }
+                Map<String, Object> row = new HashMap<>();
+                row.put("addressId", rs.getLong("address_id"));
+                row.put("serveDate", rs.getObject("serve_date", LocalDate.class));
+                return row;
+            }
+        );
+        if (order == null) {
+            throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "未找到该订单");
+        }
+        LocalDate serveDate = (LocalDate) order.get("serveDate");
+        if (!canChangeAddress(serveDate)) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "送餐当天请联系客服修改地址");
+        }
+        Integer addressCount = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM customer_addresses WHERE id = ? AND customer_id = ?",
+            Integer.class,
+            addressId,
+            customerId
+        );
+        if (addressCount == null || addressCount == 0) {
+            throw new BusinessException(ErrorCode.ADDRESS_NOT_FOUND, "未找到该地址");
+        }
+        jdbcTemplate.update("UPDATE meal_slot_orders SET address_id = ? WHERE id = ?", addressId, orderId);
+        return Map.of("orderId", orderId, "addressId", addressId, "status", "ADDRESS_UPDATED");
+    }
+
     public PageResponse<WalletTransactionResponse> walletTransactions(String phone) {
         return walletTransactions(findCustomerIdByPhone(phone));
     }
@@ -605,6 +697,63 @@ public class MobilePortalServiceImpl implements MobilePortalService {
 
     private String formatTimestamp(Timestamp value) {
         return value == null ? "" : value.toLocalDateTime().format(DATE_TIME_FORMATTER);
+    }
+
+    private LocalDateTime timestampToLocalDateTime(Timestamp value) {
+        return value == null ? null : value.toLocalDateTime();
+    }
+
+    private String resolveUserVisibleStatus(String actualStatus, String mealPeriod, LocalDate serveDate, LocalDateTime deliveredAt) {
+        if (!"DELIVERED".equals(actualStatus) || serveDate == null || deliveredAt == null) {
+            return actualStatus;
+        }
+        LocalDateTime gate = "DINNER".equals(mealPeriod)
+            ? LocalDateTime.of(serveDate, LocalTime.of(17, 0))
+            : LocalDateTime.of(serveDate, LocalTime.of(11, 30));
+        return LocalDateTime.now().isBefore(gate) ? "PENDING_DISPATCH" : "DELIVERED";
+    }
+
+    private boolean canChangeAddress(LocalDate serveDate) {
+        return serveDate != null && serveDate.isAfter(LocalDate.now());
+    }
+
+    private String resolveChangeAddressMode(LocalDate serveDate) {
+        if (serveDate == null) {
+            return "LOCKED";
+        }
+        LocalDate today = LocalDate.now();
+        if (serveDate.isAfter(today)) {
+            return "SELF_SERVICE";
+        }
+        if (serveDate.isEqual(today)) {
+            return "CONTACT_SUPPORT";
+        }
+        return "LOCKED";
+    }
+
+    private String buildSpecialSummary(String userNote, String adminNote, String specialTag) {
+        List<String> parts = new ArrayList<>();
+        String normalizedTag = normalizeSpecialValue(specialTag);
+        String normalizedUserNote = normalizeSpecialValue(userNote);
+        String normalizedAdminNote = normalizeSpecialValue(adminNote);
+        if (!normalizedTag.isEmpty()) {
+            parts.add(normalizedTag);
+        }
+        if (!normalizedUserNote.isEmpty()) {
+            parts.add("用户备注");
+        }
+        if (!normalizedAdminNote.isEmpty()) {
+            parts.add("商家备注");
+        }
+        return String.join(" / ", parts);
+    }
+
+    private String normalizeSpecialValue(String value) {
+        if (value == null) {
+            return "";
+        }
+        String normalized = value.trim();
+        return "-".equals(normalized) ? "" : normalized;
     }
 
     public PageResponse<RiderTaskItemResponse> riderTasks(String riderName) {
@@ -711,6 +860,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 dbi.id AS batch_item_id,
                 db.id AS batch_id,
                 mso.id AS meal_slot_order_id,
+                mso.address_id AS address_id,
                 dbi.current_sequence,
                 c.name AS customer_name,
                 c.phone AS customer_phone,
@@ -719,6 +869,14 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 COALESCE(ms.meal_name, CASE WHEN mso.meal_period = 'LUNCH' THEN '待配置午餐' ELSE '待配置晚餐' END) AS meal_name,
                 mso.quantity,
                 COALESCE(mso.user_note, mso.note, '-') AS note,
+                COALESCE(mso.admin_note, '') AS admin_note,
+                COALESCE(mso.special_tag, '') AS special_tag,
+                CASE
+                    WHEN TRIM(COALESCE(mso.user_note, mso.note, '')) <> ''
+                      OR TRIM(COALESCE(mso.admin_note, '')) <> ''
+                      OR TRIM(COALESCE(mso.special_tag, '')) <> ''
+                    THEN TRUE ELSE FALSE
+                END AS is_special_order,
                 dbi.item_status,
                 CASE WHEN dr.id IS NULL THEN 'PENDING' ELSE 'UPLOADED' END AS receipt_status,
                 COALESCE(dr.receipt_url, '') AS receipt_url,
@@ -742,6 +900,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             rs.getLong("batch_item_id"),
             rs.getLong("batch_id"),
             rs.getLong("meal_slot_order_id"),
+            rs.getLong("address_id"),
             rs.getInt("current_sequence"),
             rs.getString("customer_name"),
             rs.getString("customer_phone"),
@@ -750,6 +909,10 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             rs.getString("meal_name"),
             rs.getInt("quantity"),
             rs.getString("note"),
+            rs.getString("admin_note"),
+            rs.getString("special_tag"),
+            rs.getBoolean("is_special_order"),
+            buildSpecialSummary(rs.getString("note"), rs.getString("admin_note"), rs.getString("special_tag")),
             rs.getString("item_status"),
             rs.getString("receipt_status"),
             rs.getString("receipt_url"),
@@ -764,6 +927,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 dbi.id AS batch_item_id,
                 db.id AS batch_id,
                 mso.id AS meal_slot_order_id,
+                mso.address_id AS address_id,
                 dbi.current_sequence,
                 c.name AS customer_name,
                 c.phone AS customer_phone,
@@ -772,6 +936,14 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 COALESCE(ms.meal_name, CASE WHEN mso.meal_period = 'LUNCH' THEN '待配置午餐' ELSE '待配置晚餐' END) AS meal_name,
                 mso.quantity,
                 COALESCE(mso.user_note, mso.note, '-') AS note,
+                COALESCE(mso.admin_note, '') AS admin_note,
+                COALESCE(mso.special_tag, '') AS special_tag,
+                CASE
+                    WHEN TRIM(COALESCE(mso.user_note, mso.note, '')) <> ''
+                      OR TRIM(COALESCE(mso.admin_note, '')) <> ''
+                      OR TRIM(COALESCE(mso.special_tag, '')) <> ''
+                    THEN TRUE ELSE FALSE
+                END AS is_special_order,
                 dbi.item_status,
                 CASE WHEN dr.id IS NULL THEN 'PENDING' ELSE 'UPLOADED' END AS receipt_status,
                 COALESCE(dr.receipt_url, '') AS receipt_url,
@@ -792,6 +964,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             rs.getLong("batch_item_id"),
             rs.getLong("batch_id"),
             rs.getLong("meal_slot_order_id"),
+            rs.getLong("address_id"),
             rs.getInt("current_sequence"),
             rs.getString("customer_name"),
             rs.getString("customer_phone"),
@@ -800,12 +973,90 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             rs.getString("meal_name"),
             rs.getInt("quantity"),
             rs.getString("note"),
+            rs.getString("admin_note"),
+            rs.getString("special_tag"),
+            rs.getBoolean("is_special_order"),
+            buildSpecialSummary(rs.getString("note"), rs.getString("admin_note"), rs.getString("special_tag")),
             rs.getString("item_status"),
             rs.getString("receipt_status"),
             rs.getString("receipt_url"),
             rs.getString("receipt_note")
         ), batchItemId);
         return results.isEmpty() ? null : results.get(0);
+    }
+
+    public RiderAddressReferenceResponse riderAddressReference(String riderName, long addressId) {
+        if (isBlank(riderName)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "骑手姓名不能为空");
+        }
+        if (addressId <= 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "地址不能为空");
+        }
+        List<RiderAddressReferenceResponse> results = jdbcTemplate.query("""
+            SELECT customer_address_id, reference_image_url
+            FROM address_reference_images
+            WHERE customer_address_id = ?
+            """, (rs, rowNum) -> new RiderAddressReferenceResponse(
+            rs.getLong("customer_address_id"),
+            rs.getString("reference_image_url")
+        ), addressId);
+        if (results.isEmpty()) {
+            return new RiderAddressReferenceResponse(addressId, "");
+        }
+        return results.get(0);
+    }
+
+    @Transactional
+    public Map<String, Object> saveBatchAddressReferenceImage(String riderName, RiderBatchAddressReferenceRequest request) {
+        if (isBlank(riderName)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "骑手姓名不能为空");
+        }
+        if (request == null || request.addressIds() == null || request.addressIds().isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请选择至少一个地址");
+        }
+        if (isBlank(request.referenceImageUrl())) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "参考图不能为空");
+        }
+
+        LinkedHashSet<Long> uniqueAddressIds = new LinkedHashSet<>();
+        for (Long addressId : request.addressIds()) {
+            if (addressId != null && addressId > 0) {
+                uniqueAddressIds.add(addressId);
+            }
+        }
+        if (uniqueAddressIds.isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请选择有效地址");
+        }
+
+        int updatedCount = 0;
+        for (Long addressId : uniqueAddressIds) {
+            upsertAddressReferenceImage(addressId, buildReceiptUrl(request.referenceImageUrl()), null, riderName);
+            updatedCount++;
+        }
+        return Map.of(
+            "updatedCount", updatedCount,
+            "addressIds", new ArrayList<>(uniqueAddressIds)
+        );
+    }
+
+    @Transactional
+    public Map<String, Object> replaceAddressReferenceImage(String riderName, long addressId, String referenceImageUrl) {
+        if (isBlank(riderName)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "骑手姓名不能为空");
+        }
+        if (addressId <= 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "地址不能为空");
+        }
+        if (isBlank(referenceImageUrl)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "参考图不能为空");
+        }
+        String normalizedReferenceImageUrl = buildReceiptUrl(referenceImageUrl);
+        upsertAddressReferenceImage(addressId, normalizedReferenceImageUrl, null, riderName);
+        return Map.of(
+            "addressId", addressId,
+            "referenceImageUrl", normalizedReferenceImageUrl,
+            "updated", true
+        );
     }
 
     @Override
@@ -877,6 +1128,17 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         );
         for (Long batchId : batchIds) {
             refreshRiderBatchState(batchId);
+        }
+        try {
+            Long addressId = findAddressIdByMealSlotOrderId(mealSlotOrderId);
+            saveAddressReferenceImageIfAbsent(addressId == null ? 0L : addressId, mealSlotOrderId, finalReceiptUrl, riderName);
+        } catch (Exception ex) {
+            // Keep receipt submission successful even if reference-image auto-save fails.
+        }
+        try {
+            sendDeliverySubscriptionIfAuthorized(mealSlotOrderId);
+        } catch (Exception ex) {
+            // Keep receipt submission successful even if notification delivery fails.
         }
         return result;
     }
@@ -1146,6 +1408,59 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             batchStatus,
             batchId
         );
+    }
+
+    private void sendDeliverySubscriptionIfAuthorized(long mealSlotOrderId) {
+        Map<String, Object> row = jdbcTemplate.query("""
+            SELECT
+                cds.id,
+                cds.template_id,
+                COALESCE(c.current_openid, c.openid, '') AS current_openid,
+                COALESCE(ca.address_line, '') AS address_line
+            FROM customer_delivery_subscriptions cds
+            JOIN meal_slot_orders mso ON mso.id = cds.meal_slot_order_id
+            JOIN daily_orders do ON do.id = mso.daily_order_id
+            JOIN customers c ON c.id = do.customer_id
+            JOIN customer_addresses ca ON ca.id = mso.address_id
+            WHERE cds.meal_slot_order_id = ?
+              AND cds.status = 'AUTHORIZED'
+            """,
+            ps -> ps.setLong(1, mealSlotOrderId),
+            rs -> {
+                if (!rs.next()) {
+                    return null;
+                }
+                Map<String, Object> result = new HashMap<>();
+                result.put("id", rs.getLong("id"));
+                result.put("templateId", rs.getString("template_id"));
+                result.put("openid", rs.getString("current_openid"));
+                result.put("addressLine", rs.getString("address_line"));
+                return result;
+            }
+        );
+        if (row == null || isBlank(String.valueOf(row.get("openid")))) {
+            return;
+        }
+        try {
+            weChatService.sendDeliverySubscribeMessage(
+                String.valueOf(row.get("openid")),
+                weChatService.buildDeliveryPage(mealSlotOrderId),
+                "简知轻食",
+                safeString(row.get("addressLine")),
+                "您的餐食已送达，可查看回执照片与备注"
+            );
+            jdbcTemplate.update(
+                "UPDATE customer_delivery_subscriptions SET status = 'SENT', sent_at = CURRENT_TIMESTAMP, last_error_message = NULL WHERE id = ?",
+                row.get("id")
+            );
+        } catch (Exception ex) {
+            jdbcTemplate.update(
+                "UPDATE customer_delivery_subscriptions SET status = 'FAILED', last_error_message = ? WHERE id = ?",
+                ex.getMessage(),
+                row.get("id")
+            );
+            throw ex;
+        }
     }
 
     private record RiderBatchItemContext(
@@ -1519,6 +1834,51 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         } catch (IOException ignored) {
             // Ignore stale file cleanup failures so receipt flow itself can continue.
         }
+    }
+
+    private Long findAddressIdByMealSlotOrderId(long mealSlotOrderId) {
+        List<Long> results = jdbcTemplate.query("""
+            SELECT address_id
+            FROM meal_slot_orders
+            WHERE id = ?
+            """, (rs, rowNum) -> rs.getLong("address_id"), mealSlotOrderId);
+        return results.isEmpty() ? null : results.get(0);
+    }
+
+    private void saveAddressReferenceImageIfAbsent(long addressId, long orderId, String receiptUrl, String riderName) {
+        if (addressId <= 0 || isBlank(receiptUrl)) {
+            return;
+        }
+        Integer count = jdbcTemplate.queryForObject("""
+            SELECT COUNT(*)
+            FROM address_reference_images
+            WHERE customer_address_id = ?
+            """, Integer.class, addressId);
+        if (count != null && count > 0) {
+            return;
+        }
+        upsertAddressReferenceImage(addressId, receiptUrl, orderId, riderName);
+    }
+
+    private void upsertAddressReferenceImage(long addressId, String referenceImageUrl, Long sourceOrderId, String riderName) {
+        jdbcTemplate.update("""
+            INSERT INTO address_reference_images (
+                customer_address_id,
+                reference_image_url,
+                source_order_id,
+                updated_by_rider_name
+            ) VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                reference_image_url = VALUES(reference_image_url),
+                source_order_id = VALUES(source_order_id),
+                updated_by_rider_name = VALUES(updated_by_rider_name),
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            addressId,
+            referenceImageUrl,
+            sourceOrderId,
+            riderName
+        );
     }
 
     private LocalDateTime resolveReceiptVisibleAt(long mealSlotOrderId, LocalDateTime deliveredDateTime) {

@@ -1,6 +1,4 @@
-const { resolvePhoneAuthResult, getSubmitProfileError } = require('../../utils/rider-profile-auth');
-const { ensurePhonePrivacyPermission, getPhonePrivacyErrorMessage } = require('../../utils/privacy-auth');
-const auth = require('../../utils/auth');
+const AGREEMENT_ACCEPTED_KEY = 'miniapp_rider_auth_agreement_accepted_v2';
 
 function maskPhone(phone) {
   const value = String(phone || '').trim();
@@ -33,56 +31,47 @@ Page({
     riderInfo: null,
     loading: false,
     viewState: 'checking',
-    savingProfile: false,
-    wechatLoading: false,
-    showAuthPopup: false,
-    profileForm: {
-      displayName: '',
-      phoneNumber: ''
-    },
     displayName: '骑手游客',
     maskedPhone: ''
   },
+
+  goLoginPage() {
+    wx.navigateTo({ url: '/pages/login/index' });
+  },
+
   onShow() {
     this.refreshPage();
-    
-    // 更新 tabBar 选中状态
+
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().setData({
         selected: 1
       });
     }
   },
-  openAuthPopup() {
-    this.setData({ showAuthPopup: true });
-  },
-  closeAuthPopup() {
-    this.setData({ showAuthPopup: false });
-  },
-  stopPropagation() {
-    // 阻止事件冒泡
-  },
+
   async refreshPage() {
     const app = getApp();
-    this.setData({ 
+    this.setData({
       statusBarHeight: app.globalData.statusBarHeight,
       navBarHeight: app.globalData.navBarHeight
     });
+
     await app.waitForRiderAuth();
     if (app.globalData.riderRegistered) {
       this.setData({ loading: true });
       try {
         await app.refreshRiderProfile();
-      } catch (error) {
-        // 保留缓存状态，避免网络抖动时把页面重置成空白。
+      } catch (_) {
+        // Keep cached state when the network briefly fails.
       } finally {
         this.setData({ loading: false });
       }
     }
+
     const viewState = app.getRiderViewState();
     const riderProfile = buildRiderProfile(app);
     const profileName = riderProfile.displayName || riderProfile.riderName || '骑手游客';
-    
+
     let workStatusText = '正常';
     if (riderProfile.riderStatus === 'DISABLED') workStatusText = '已停用';
     else if (riderProfile.riderStatus === 'PENDING') workStatusText = '审核中';
@@ -100,18 +89,31 @@ Page({
         todayDeliveredCount: riderProfile.completedCount || 0
       },
       displayName: viewState === 'guest' ? '骑手游客' : (viewState === 'not_found' ? '未开通骑手' : profileName),
-      maskedPhone: viewState === 'guest' ? '' : maskPhone(riderProfile.phone),
-      'profileForm.phoneNumber': app.globalData.riderProfile?.phone || ''
+      maskedPhone: viewState === 'guest' ? '' : maskPhone(riderProfile.phone)
     });
+
     wx.stopPullDownRefresh();
   },
-  handleMenuClick(e) {
-    if (this.data.viewState !== 'active') {
+
+  async handleMenuClick(e) {
+    const app = getApp();
+    await app.waitForRiderAuth();
+    const viewState = app.getRiderViewState();
+    if (viewState !== this.data.viewState) {
+      this.setData({ viewState });
+    }
+
+    if (!app.globalData.riderRegistered || viewState === 'guest') {
       wx.showToast({ title: '请先登录/注册', icon: 'none' });
-      this.openAuthPopup();
+      this.goLoginPage();
       return;
     }
-    
+
+    if (viewState !== 'active') {
+      wx.showToast({ title: app.getWorkbenchBlockMessage(), icon: 'none' });
+      return;
+    }
+
     const action = e.currentTarget.dataset.action;
     if (action === 'history') {
       wx.showToast({ title: '历史订单开发中', icon: 'none' });
@@ -119,126 +121,11 @@ Page({
       wx.showToast({ title: '设置功能开发中', icon: 'none' });
     }
   },
+
   onPullDownRefresh() {
     this.refreshPage();
   },
-  onPhoneInput(e) {
-    this.setData({
-      'profileForm.phoneNumber': e.detail.value
-    });
-  },
-  async preparePhonePrivacyPermission() {
-    try {
-      await ensurePhonePrivacyPermission();
-    } catch (error) {
-      wx.showToast({
-        title: getPhonePrivacyErrorMessage(error),
-        icon: 'none',
-        duration: 3000
-      });
-    }
-  },
-  async submitProfile() {
-    const phone = this.data.profileForm.phoneNumber.trim();
-    
-    if (!phone) {
-      wx.showToast({ title: '请输入手机号', icon: 'none' });
-      return;
-    }
-    
-    if (!/^1[3-9]\d{9}$/.test(phone)) {
-      wx.showToast({ title: '手机号格式不正确', icon: 'none' });
-      return;
-    }
-    
-    if (this.data.savingProfile) {
-      return;
-    }
-    
-    this.setData({ savingProfile: true });
-    
-    try {
-      const app = getApp();
-      
-      if (!app || typeof app.loginWithPhone !== 'function') {
-        throw new Error('应用未初始化，请重启小程序');
-      }
-      
-      console.log('[登录] 开始登录，手机号:', phone);
-      console.log('[登录] API地址:', app.globalData.apiBaseUrl);
-      
-      await app.loginWithPhone(phone);
-      
-      wx.showToast({ title: '登录成功', icon: 'success' });
-      
-      this.setData({
-        showAuthPopup: false
-      });
-      
-      this.refreshPage();
-    } catch (error) {
-      console.error('[登录] 失败:', error);
-      
-      let errorMsg = '登录失败，请检查手机号是否已开通';
-      if (error.message?.includes('无法连接') || error.message?.includes('请求失败')) {
-        errorMsg = '无法连接服务器，请检查网络或联系管理员';
-      } else if (error.message) {
-        errorMsg = error.message;
-      }
-      
-      wx.showToast({ 
-        title: errorMsg, 
-        icon: 'none',
-        duration: 3000
-      });
-    } finally {
-      this.setData({ savingProfile: false });
-    }
-  },
-  
-  /**
-   * 微信一键登录
-   */
-  async onWechatLogin(e) {
-    // #region debug-point A:rider-phone-event
-    wx.request({ url: 'http://192.168.1.3:7777/event', method: 'POST', data: { sessionId: 'wechat-phone-login', runId: 'pre-fix', hypothesisId: 'A', location: 'miniapp-rider/pages/profile/index.js:onWechatLogin:entry', msg: '[DEBUG] rider getPhoneNumber event', data: { errMsg: e && e.detail ? e.detail.errMsg : '', hasCode: !!(e && e.detail && e.detail.code), codeLength: e && e.detail && e.detail.code ? String(e.detail.code).length : 0 }, ts: Date.now() } });
-    // #endregion
-    if (e.detail.errMsg !== 'getPhoneNumber:ok') {
-      wx.showToast({
-        title: getPhonePrivacyErrorMessage(e && e.detail),
-        icon: 'none',
-        duration: 3000
-      });
-      return;
-    }
 
-    this.setData({ wechatLoading: true });
-
-    try {
-      const code = e.detail.code;
-      // #region debug-point B:rider-phone-code
-      wx.request({ url: 'http://192.168.1.3:7777/event', method: 'POST', data: { sessionId: 'wechat-phone-login', runId: 'pre-fix', hypothesisId: 'B', location: 'miniapp-rider/pages/profile/index.js:onWechatLogin:code', msg: '[DEBUG] rider submit phone code', data: { hasCode: !!code, codeLength: code ? String(code).length : 0 }, ts: Date.now() } });
-      // #endregion
-      const app = getApp();
-      await auth.bindPhone(code);
-      app.syncRiderGlobals();
-
-      wx.showToast({ title: '登录成功', icon: 'success' });
-      this.setData({ agreed: false });
-      setTimeout(() => this.refreshPage(), 1200);
-    } catch (error) {
-      // #region debug-point B:rider-phone-error
-      wx.request({ url: 'http://192.168.1.3:7777/event', method: 'POST', data: { sessionId: 'wechat-phone-login', runId: 'pre-fix', hypothesisId: 'B', location: 'miniapp-rider/pages/profile/index.js:onWechatLogin:catch', msg: '[DEBUG] rider bind phone failed', data: { message: error && error.message ? error.message : '' }, ts: Date.now() } });
-      // #endregion
-      wx.showToast({
-        title: error.message || '微信登录失败',
-        icon: 'none',
-        duration: 3000
-      });
-    } finally {
-      this.setData({ wechatLoading: false });
-    }
-  },
   logout() {
     wx.showModal({
       title: '退出登录',
@@ -247,8 +134,12 @@ Page({
         if (!res.confirm) {
           return;
         }
+        try {
+          wx.removeStorageSync(AGREEMENT_ACCEPTED_KEY);
+        } catch (_) {}
         await getApp().logoutRider();
         wx.showToast({ title: '已退出', icon: 'success' });
+        this.refreshPage();
       }
     });
   }

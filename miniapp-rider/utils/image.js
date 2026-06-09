@@ -2,33 +2,228 @@
  * 图片处理工具
  */
 
+function reportImageDebug(hypothesisId, location, msg, data, traceId) {
+  void hypothesisId;
+  void location;
+  void msg;
+  void data;
+  void traceId;
+}
+
+function isCancelError(error) {
+  return !!(error && /cancel/i.test(error.errMsg || ''));
+}
+
+function isPrivacyAgreementError(error) {
+  const message = ((error && error.errMsg) || error && error.message || '').toLowerCase();
+  return message.includes('privacy agreement') || message.includes('api scope is not declared');
+}
+
+function isPrivacyDeniedError(error) {
+  const message = ((error && error.errMsg) || error && error.message || '').toLowerCase();
+  return message.includes('deny') || message.includes('no permission') || message.includes('jsapi has no permission');
+}
+
+function getChooseImageErrorMessage(error) {
+  if (isPrivacyAgreementError(error)) {
+    return '请先在微信公众平台完善用户隐私保护指引中的照片/相册信息声明';
+  }
+
+  if (isPrivacyDeniedError(error)) {
+    return '请先完成微信隐私授权，再选择图片';
+  }
+
+  return '选择图片失败';
+}
+
+function canUseChooseMediaFallback(error) {
+  const message = (error && error.errMsg) || '';
+  return /not supported|not support|invalid|fail/i.test(message) && !isCancelError(error);
+}
+
+function normalizeSourceType(sourceType) {
+  if (!Array.isArray(sourceType)) {
+    return ['album', 'camera'];
+  }
+
+  const uniqueSourceType = sourceType.filter((item, index) => (
+    (item === 'album' || item === 'camera') && sourceType.indexOf(item) === index
+  ));
+
+  if (
+    uniqueSourceType.length === 2 &&
+    uniqueSourceType.includes('album') &&
+    uniqueSourceType.includes('camera')
+  ) {
+    return ['album', 'camera'];
+  }
+
+  return uniqueSourceType.length > 0 ? uniqueSourceType : ['album', 'camera'];
+}
+
+function callWxApi(apiName, options) {
+  return new Promise((resolve, reject) => {
+    const api = wx && wx[apiName];
+    const traceId = `image-${apiName}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    if (typeof api !== 'function') {
+      // #region debug-point C:api-missing
+      reportImageDebug('C', 'image.js:callWxApi', 'wx api unavailable', {
+        apiName
+      }, traceId);
+      // #endregion
+      reject(new Error(`${apiName} 不可用`));
+      return;
+    }
+
+    let settled = false;
+    const safeResolve = (value) => {
+      if (!settled) {
+        settled = true;
+        // #region debug-point C:api-success
+        reportImageDebug('C', 'image.js:callWxApi:success', 'wx api success', {
+          apiName,
+          tempFilePathsCount: value && Array.isArray(value.tempFilePaths) ? value.tempFilePaths.length : 0,
+          tempFilesCount: value && Array.isArray(value.tempFiles) ? value.tempFiles.length : 0
+        }, traceId);
+        // #endregion
+        resolve(value);
+      }
+    };
+    const safeReject = (error) => {
+      if (!settled) {
+        settled = true;
+        // #region debug-point D:api-fail
+        reportImageDebug('D', 'image.js:callWxApi:fail', 'wx api fail', {
+          apiName,
+          errMsg: error && error.errMsg ? error.errMsg : '',
+          message: error && error.message ? error.message : ''
+        }, traceId);
+        // #endregion
+        reject(error);
+      }
+    };
+
+    try {
+      // #region debug-point C:api-start
+      reportImageDebug('C', 'image.js:callWxApi:start', 'wx api start', {
+        apiName,
+        count: options && options.count,
+        sourceType: options && options.sourceType ? options.sourceType : [],
+        mediaType: options && options.mediaType ? options.mediaType : [],
+        sizeType: options && options.sizeType ? options.sizeType : []
+      }, traceId);
+      // #endregion
+      const result = api({
+        ...options,
+        success: safeResolve,
+        fail: safeReject
+      });
+
+      if (result && typeof result.then === 'function') {
+        result.then(safeResolve).catch(safeReject);
+      }
+    } catch (error) {
+      safeReject(error);
+    }
+  });
+}
+
+async function chooseImageWithChooseMedia({ count, sourceType }) {
+  const result = await callWxApi('chooseMedia', {
+    count,
+    mediaType: ['image'],
+    sourceType
+  });
+
+  if (Array.isArray(result.tempFiles) && result.tempFiles.length > 0) {
+    return result.tempFiles
+      .map(file => file && file.tempFilePath)
+      .filter(Boolean);
+  }
+
+  if (Array.isArray(result.tempFilePaths) && result.tempFilePaths.length > 0) {
+    return result.tempFilePaths.filter(Boolean);
+  }
+
+  return [];
+}
+
+async function chooseImageWithChooseImage({ count, sourceType }) {
+  const result = await callWxApi('chooseImage', {
+    count,
+    sizeType: ['compressed'],
+    sourceType
+  });
+
+  if (Array.isArray(result.tempFilePaths) && result.tempFilePaths.length > 0) {
+    return result.tempFilePaths.filter(Boolean);
+  }
+
+  return [];
+}
+
 /**
  * 选择图片（拍照或相册）
  * @param {Object} options - 选项
  * @param {number} options.count - 图片数量，默认1
- * @param {Array<string>} options.sourceType - 来源类型，默认['camera', 'album']
+ * @param {Array<string>} options.sourceType - 来源类型，默认['album', 'camera']
  * @returns {Promise<Array<string>>} 图片路径数组
  */
 async function chooseImage(options = {}) {
   const {
     count = 1,
-    sourceType = ['camera', 'album']
+    sourceType = ['album', 'camera']
   } = options;
+  const normalizedSourceType = normalizeSourceType(sourceType);
+
+  if (typeof wx.requirePrivacyAuthorize === 'function') {
+    try {
+      await new Promise((resolve, reject) => {
+        wx.requirePrivacyAuthorize({
+          success: resolve,
+          fail: reject
+        });
+      });
+    } catch (privacyError) {
+      throw new Error(getChooseImageErrorMessage(privacyError));
+    }
+  }
 
   try {
-    const result = await wx.chooseMedia({
-      count,
-      mediaType: ['image'],
-      sourceType
-    });
-
-    return result.tempFiles.map(file => file.tempFilePath);
+    return await chooseImageWithChooseMedia({ count, sourceType: normalizedSourceType });
   } catch (error) {
+    // #region debug-point D:choose-image-primary-fail
+    reportImageDebug('D', 'image.js:chooseImage:primaryFail', 'chooseMedia branch failed', {
+      sourceType: normalizedSourceType,
+      errMsg: error && error.errMsg ? error.errMsg : '',
+      message: error && error.message ? error.message : '',
+      canFallback: typeof wx.chooseImage === 'function' && canUseChooseMediaFallback(error)
+    });
+    // #endregion
     // 用户取消
-    if (error && /cancel/i.test(error.errMsg || '')) {
+    if (isCancelError(error)) {
       return [];
     }
-    throw new Error('选择图片失败');
+
+    if (typeof wx.chooseImage === 'function' && canUseChooseMediaFallback(error)) {
+      try {
+        return await chooseImageWithChooseImage({ count, sourceType: normalizedSourceType });
+      } catch (fallbackError) {
+        // #region debug-point E:choose-image-fallback-fail
+        reportImageDebug('E', 'image.js:chooseImage:fallbackFail', 'chooseImage fallback failed', {
+          sourceType: normalizedSourceType,
+          errMsg: fallbackError && fallbackError.errMsg ? fallbackError.errMsg : '',
+          message: fallbackError && fallbackError.message ? fallbackError.message : ''
+        });
+        // #endregion
+        if (isCancelError(fallbackError)) {
+          return [];
+        }
+        throw new Error(getChooseImageErrorMessage(fallbackError));
+      }
+    }
+
+    throw new Error(getChooseImageErrorMessage(error));
   }
 }
 
@@ -40,7 +235,7 @@ async function chooseImage(options = {}) {
  */
 async function compressImage(src, quality = 80) {
   try {
-    const result = await wx.compressImage({
+    const result = await callWxApi('compressImage', {
       src,
       quality
     });

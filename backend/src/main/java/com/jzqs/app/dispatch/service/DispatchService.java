@@ -40,9 +40,9 @@ public interface DispatchService {
 
     List<DispatchManagedRiderResponse> managedRiders(String authStatus, String keyword, String areaCode);
 
-    Map<String, Object> createRider(String riderName, String displayName, String phone, String password, String areaCode, String employmentStatus, String updatedBy);
+    Map<String, Object> createRider(String riderName, String displayName, String phone, String areaCode, String employmentStatus, String updatedBy);
 
-    Map<String, Object> updateRiderProfile(long riderId, String riderName, String displayName, String phone, String password, String areaCode, String updatedBy);
+    Map<String, Object> updateRiderProfile(long riderId, String riderName, String displayName, String phone, String areaCode, String updatedBy);
 
     DispatchRiderAuthBindingResponse riderAuthBinding(long riderId);
 

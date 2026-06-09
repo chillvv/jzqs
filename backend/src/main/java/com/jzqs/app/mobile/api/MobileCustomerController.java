@@ -87,12 +87,43 @@ public class MobileCustomerController {
         ));
     }
 
+    @PostMapping("/orders/{orderId}/delivery-subscription")
+    public ApiResponse<Map<String, Object>> authorizeDeliverySubscription(
+        @PathVariable long orderId,
+        @RequestHeader("Authorization") String authorization,
+        @Valid @RequestBody MobileDeliverySubscriptionRequest request
+    ) {
+        return ApiResponse.success(
+            mobilePortalService.authorizeDeliverySubscription(
+                extractCustomerId(authorization),
+                orderId,
+                request.templateId(),
+                request.acceptResult()
+            )
+        );
+    }
+
     @PostMapping("/orders/{orderId}/cancel")
     public ApiResponse<Map<String, Object>> cancelOrder(
         @PathVariable long orderId,
         @RequestHeader("Authorization") String authorization
     ) {
         return ApiResponse.success(mobilePortalService.cancelMiniappOrder(extractCustomerId(authorization), orderId));
+    }
+
+    @PostMapping("/orders/{orderId}/change-address")
+    public ApiResponse<Map<String, Object>> changeOrderAddress(
+        @PathVariable long orderId,
+        @RequestHeader("Authorization") String authorization,
+        @Valid @RequestBody MobileOrderAddressChangeRequest request
+    ) {
+        return ApiResponse.success(
+            mobilePortalService.changeCustomerOrderAddress(
+                extractCustomerId(authorization),
+                orderId,
+                request.addressId()
+            )
+        );
     }
 
     @PostMapping("/orders/{orderId}/delete")

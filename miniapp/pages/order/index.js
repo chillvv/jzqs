@@ -8,6 +8,9 @@ const {
   resolveInitialRemark
 } = require('../../utils/order-remark');
 
+const DELIVERY_TEMPLATE_ID = 'LUxfZUE3i9iv2MyRpMmY-8jShHTAJhntznUFfEigZrA';
+const DELIVERY_SUBSCRIPTION_HINT_KEY = 'deliverySubscriptionHintShown';
+
 function tomorrowDate() {
   const date = new Date();
   date.setHours(0, 0, 0, 0);
@@ -35,6 +38,61 @@ function openInlineAuth(page, source) {
     showInlineAuth: true,
     pendingAction: source
   });
+}
+
+function showDeliverySubscriptionHint() {
+  return new Promise((resolve) => {
+    wx.showModal({
+      title: '送达后提醒你',
+      content: '用于在骑手送达并上传回执后，第一时间通知你查看送达结果。',
+      confirmText: '继续',
+      cancelText: '跳过',
+      success(res) {
+        wx.setStorageSync(DELIVERY_SUBSCRIPTION_HINT_KEY, true);
+        resolve(Boolean(res.confirm));
+      },
+      fail() {
+        resolve(false);
+      }
+    });
+  });
+}
+
+async function requestDeliverySubscription(orderIds) {
+  if (!Array.isArray(orderIds) || !orderIds.length) {
+    return;
+  }
+  if (typeof wx.requestSubscribeMessage !== 'function') {
+    return;
+  }
+  const shouldExplain = !wx.getStorageSync(DELIVERY_SUBSCRIPTION_HINT_KEY);
+  if (shouldExplain) {
+    const confirmed = await showDeliverySubscriptionHint();
+    if (!confirmed) {
+      return;
+    }
+  }
+  const subscribeResult = await new Promise((resolve) => {
+    wx.requestSubscribeMessage({
+      tmplIds: [DELIVERY_TEMPLATE_ID],
+      success: resolve,
+      fail() {
+        resolve({});
+      }
+    });
+  });
+  if (subscribeResult[DELIVERY_TEMPLATE_ID] !== 'accept') {
+    return;
+  }
+  await Promise.all(orderIds.map((orderId) => request({
+    url: `/api/mobile/customer/orders/${orderId}/delivery-subscription`,
+    method: 'POST',
+    header: { 'content-type': 'application/json' },
+    data: {
+      templateId: DELIVERY_TEMPLATE_ID,
+      acceptResult: 'accept'
+    }
+  }).catch(() => null)));
 }
 
 Page({
@@ -318,7 +376,10 @@ Page({
     }
     this.setData({ submitting: true });
     try {
-      await Promise.all(requests);
+      const orderResults = await Promise.all(requests);
+      const orderIds = orderResults
+        .map((item) => item && item.orderId)
+        .filter(Boolean);
       
       // Save remark to history
       if (this.data.remark) {
@@ -333,7 +394,7 @@ Page({
         showCancel: false,
         confirmText: '查看预订',
         confirmColor: '#B8D060',
-        success: () => {
+        success: async () => {
           this.setData({
             showCheckout: false,
             qty1: 0,
@@ -341,7 +402,12 @@ Page({
           });
           this.syncCheckoutState();
           this.loadOrderData();
-          wx.navigateTo({ url: '/pages/orders/index' });
+          await requestDeliverySubscription(orderIds);
+          wx.navigateTo({
+            url: orderIds.length
+              ? `/pages/orders/index?orderId=${orderIds[0]}`
+              : '/pages/orders/index'
+          });
         }
       });
     } catch (error) {

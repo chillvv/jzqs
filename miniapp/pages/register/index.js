@@ -2,19 +2,21 @@ const auth = require('../../utils/auth');
 const { maskPhone } = require('../../utils/mobile');
 const { getSubmitProfileError } = require('../../utils/profile-auth');
 
-function updatePreviousProfilePage(phoneNumber) {
+function returnToLoginPage(phoneNumber) {
   const pages = getCurrentPages();
   const previousPage = pages[pages.length - 2];
 
-  if (!previousPage || previousPage.route !== 'pages/profile/index' || typeof previousPage.setData !== 'function') {
+  if (previousPage && previousPage.route === 'pages/login/index' && typeof previousPage.setData === 'function') {
+    previousPage.setData({
+      phoneAuthHint: phoneNumber ? maskPhone(phoneNumber) : '',
+      'profileForm.phoneNumber': phoneNumber || ''
+    });
+    wx.navigateBack();
     return;
   }
 
-  previousPage.setData({
-    showAuthPopup: true,
-    phoneAuthHint: phoneNumber ? maskPhone(phoneNumber) : '',
-    'profileForm.phoneNumber': phoneNumber || ''
-  });
+  const query = phoneNumber ? `?phoneNumber=${phoneNumber}` : '';
+  wx.redirectTo({ url: `/pages/login/index${query}` });
 }
 
 Page({
@@ -59,10 +61,9 @@ Page({
       await auth.register(this.data.form.phoneNumber, this.data.form.nickname.trim());
 
       const phoneNumber = this.data.form.phoneNumber;
-      updatePreviousProfilePage(phoneNumber);
       wx.showToast({ title: '注册成功，请登录', icon: 'success' });
       setTimeout(() => {
-        wx.navigateBack();
+        returnToLoginPage(phoneNumber);
       }, 1200);
     } catch (error) {
       wx.showToast({ title: error.message || '注册失败', icon: 'none' });
@@ -72,7 +73,6 @@ Page({
   },
 
   backToLogin() {
-    updatePreviousProfilePage(this.data.form.phoneNumber);
-    wx.navigateBack();
+    returnToLoginPage(this.data.form.phoneNumber);
   }
 });

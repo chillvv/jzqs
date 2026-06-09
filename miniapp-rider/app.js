@@ -146,12 +146,17 @@ App({
     this.globalData.riderOpenid = auth.globalData.openid || '';
     this.globalData.riderStatus = state.riderStatus;
     this.globalData.riderName = state.riderName;
-    this.globalData.riderProfile = {
-      ...(this.globalData.riderProfile || {}),
-      riderName: state.riderName,
-      phone: state.phone,
-      riderStatus: state.riderStatus
-    };
+    
+    if (!state.loggedIn) {
+      this.globalData.riderProfile = null;
+    } else {
+      this.globalData.riderProfile = {
+        ...(this.globalData.riderProfile || {}),
+        riderName: state.riderName,
+        phone: state.phone,
+        riderStatus: state.riderStatus
+      };
+    }
   },
 
   getJson(path) {

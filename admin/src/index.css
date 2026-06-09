@@ -2191,7 +2191,96 @@ th {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
+.row-danger-highlight {
+  background-color: rgba(254, 226, 226, 0.45) !important;
 }
+
+.row-danger-highlight:hover {
+  background-color: rgba(254, 226, 226, 0.65) !important;
+}
+
+.row-warning-highlight {
+  background-color: rgba(254, 243, 199, 0.45) !important;
+}
+
+.row-warning-highlight:hover {
+  background-color: rgba(254, 243, 199, 0.65) !important;
+}
+
+.action-cell-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dropdown-container {
+  position: relative;
+  display: inline-block;
+}
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 140px;
+  background: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md);
+  padding: 6px;
+  z-index: 50;
+}
+
+.dropdown-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-main);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.dropdown-item:hover {
+  background: var(--bg-page);
+}
+
+.dropdown-item-danger {
+  color: var(--error-color-dark);
+}
+
+.dropdown-item-danger:hover {
+  background: var(--error-bg);
+  color: var(--error-color-dark);
+}
+
+.btn-icon {
+  padding: 6px;
+  border-radius: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+  .pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.pill-orange { background: var(--warning-bg); color: var(--warning-color); }
+.pill-blue { background: var(--info-bg); color: var(--info-color); }
+.pill-green { background: var(--success-bg); color: var(--success-color); }
+.pill-red { background: var(--error-bg); color: var(--error-color-dark); }
+.pill-gray { background: #f1f5f9; color: #475569; }
 
 .status-dot {
   display: inline-block;

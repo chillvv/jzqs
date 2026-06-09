@@ -13,9 +13,6 @@ function resolveOrderSourceText(source) {
 }
 
 function buildOrderMetaText(item, sourceText) {
-  if (item.deliveredAt) {
-    return `${sourceText} · 送达时间 ${item.deliveredAt}`;
-  }
   return sourceText;
 }
 
@@ -28,7 +25,8 @@ function mapOrderForDisplay(item) {
     afterSaleOpen: item.afterSaleOpen
   });
 
-  let displayStatusClass = statusClass(item.status === 'REFUNDED' ? 'CANCELLED' : item.status);
+  const visibleStatus = item.userVisibleStatus || item.status;
+  let displayStatusClass = statusClass(visibleStatus === 'REFUNDED' ? 'CANCELLED' : visibleStatus);
   if (item.afterSaleStatus === 'REJECTED') {
     displayStatusClass = 'cancelled';
   }
@@ -42,7 +40,7 @@ function mapOrderForDisplay(item) {
     sourceText: resolveOrderSourceText(item.source),
     showReceiptImage: receiptState.canShowReceiptImage,
     receiptHint: receiptState.receiptHint,
-    canViewReceipt: item.status === 'DELIVERED',
+    canViewReceipt: visibleStatus === 'DELIVERED',
     canCancel: actionState.canCancel,
     canApplyAftersale: actionState.canApplyAftersale,
     actionText: actionState.actionText,

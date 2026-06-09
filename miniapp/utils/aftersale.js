@@ -2,20 +2,22 @@ const { canCancelMiniappOrder } = require("./order-guards");
 const { request } = require("./request");
 const { statusLabel, transactionLabel } = require("./mobile");
 
-function resolveOrderActions({ status, serveDate, now, afterSaleOpen }) {
+function resolveOrderActions({ status, userVisibleStatus, serveDate, now, afterSaleOpen }) {
+  const visibleStatus = userVisibleStatus || status;
   if (afterSaleOpen) {
     return { canCancel: false, canApplyAftersale: false, actionText: "处理中" };
   }
-  if (canCancelMiniappOrder({ status, serveDate, now })) {
+  if (canCancelMiniappOrder({ status: visibleStatus, serveDate, now })) {
     return { canCancel: true, canApplyAftersale: false, actionText: "取消订单" };
   }
-  if (status === "PENDING_DISPATCH" || status === "DELIVERED") {
+  if (visibleStatus === "PENDING_DISPATCH" || visibleStatus === "DELIVERED") {
     return { canCancel: false, canApplyAftersale: true, actionText: "申请售后" };
   }
   return { canCancel: false, canApplyAftersale: false, actionText: "" };
 }
 
-function resolveOrderStatusText({ status, afterSaleStatus }) {
+function resolveOrderStatusText({ status, userVisibleStatus, afterSaleStatus }) {
+  const visibleStatus = userVisibleStatus || status;
   if (status === "REFUNDED") {
     return "已退款";
   }
@@ -25,7 +27,7 @@ function resolveOrderStatusText({ status, afterSaleStatus }) {
   if (afterSaleStatus === "REJECTED") {
     return "售后未通过";
   }
-  return statusLabel(status);
+  return statusLabel(visibleStatus);
 }
 
 function buildRejectedAftersaleDetail(adminRemark) {

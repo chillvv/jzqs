@@ -6,12 +6,20 @@ Page({
     loading: false,
     saving: false,
     showPopup: false,
+    selectOrderId: null,
     form: {
       id: null,
       contactName: '',
       contactPhone: '',
       addressLine: '',
       isDefault: true
+    }
+  },
+
+  onLoad(options) {
+    if (options.selectOrderId) {
+      this.setData({ selectOrderId: Number(options.selectOrderId) });
+      wx.setNavigationBarTitle({ title: '选择配送地址' });
     }
   },
 
@@ -192,6 +200,26 @@ Page({
       this.loadAddresses();
     } catch (error) {
       wx.showToast({ title: error.message || '更新失败', icon: 'none' });
+    }
+  },
+
+  async selectAddressForOrder(e) {
+    const { id } = e.currentTarget.dataset;
+    const { selectOrderId } = this.data;
+    if (!selectOrderId) {
+      return;
+    }
+    try {
+      await request({
+        url: `/api/mobile/customer/orders/${selectOrderId}/change-address`,
+        method: 'POST',
+        header: { 'content-type': 'application/json' },
+        data: { addressId: id }
+      });
+      wx.showToast({ title: '地址已切换', icon: 'success' });
+      setTimeout(() => wx.navigateBack(), 500);
+    } catch (error) {
+      wx.showToast({ title: error.message || '切换失败', icon: 'none' });
     }
   }
 });

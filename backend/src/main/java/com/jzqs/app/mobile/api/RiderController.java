@@ -140,6 +140,41 @@ public class RiderController {
         return ApiResponse.success(mobilePortalService.riderQueueItem(orderId, riderName));
     }
 
+    @GetMapping("/address-reference")
+    @Operation(summary = "获取地址参考图", description = "按地址记录查询当前生效的参考图")
+    public ApiResponse<RiderAddressReferenceResponse> getAddressReference(
+        @Parameter(description = "骑手姓名", required = true)
+        @RequestParam String riderName,
+        @Parameter(description = "地址记录ID", required = true)
+        @RequestParam long addressId
+    ) {
+        return ApiResponse.success(mobilePortalService.riderAddressReference(riderName, addressId));
+    }
+
+    @PostMapping("/address-reference/batch")
+    @Operation(summary = "批量设置地址参考图", description = "为多个地址记录批量绑定同一张参考图")
+    public ApiResponse<Map<String, Object>> saveBatchAddressReferenceImage(
+        @Parameter(description = "骑手姓名", required = true)
+        @RequestParam String riderName,
+        @Valid @RequestBody RiderBatchAddressReferenceRequest request
+    ) {
+        return ApiResponse.success(mobilePortalService.saveBatchAddressReferenceImage(riderName, request));
+    }
+
+    @PostMapping("/address-reference/{addressId}")
+    @Operation(summary = "更新单个地址参考图", description = "将当前图片设置为指定地址的参考图")
+    public ApiResponse<Map<String, Object>> replaceAddressReferenceImage(
+        @Parameter(description = "地址记录ID", required = true)
+        @PathVariable long addressId,
+        @Parameter(description = "骑手姓名", required = true)
+        @RequestParam String riderName,
+        @Valid @RequestBody RiderAddressReferenceUpdateRequest request
+    ) {
+        return ApiResponse.success(
+            mobilePortalService.replaceAddressReferenceImage(riderName, addressId, request.referenceImageUrl())
+        );
+    }
+
     /**
      * 标记订单完成
      */

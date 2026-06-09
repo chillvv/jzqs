@@ -31,10 +31,10 @@ Page({
     this.setData({ loading: true });
     try {
       const response = await request({
-        url: '/api/mobile/customer/orders?status=DELIVERED'
+        url: '/api/mobile/customer/orders'
       });
       let items = (response.items || [])
-        .filter((item) => item.receiptUrl || item.receiptNote || item.deliveredAt)
+        .filter((item) => item.receiptUrl || item.receiptNote || item.userVisibleStatus === 'DELIVERED')
         .map((item) => mapReceiptRecord(item, app.globalData.apiBaseUrl));
       if (targetOrderId) {
         items = items.filter((item) => String(item.id) === targetOrderId);

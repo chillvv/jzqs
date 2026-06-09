@@ -10,6 +10,37 @@
   color: #111827;
 }
 
+.type-selector {
+  display: flex;
+  gap: 20rpx;
+}
+
+.type-card {
+  flex: 1;
+  border: 2rpx solid var(--border);
+  border-radius: 20rpx;
+  padding: 24rpx;
+  background: #fff;
+  transition: all 0.2s;
+}
+
+.type-card.active {
+  border-color: var(--brand-dark);
+  background: var(--brand-light);
+}
+
+.type-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 8rpx;
+}
+
+.type-desc {
+  font-size: 22rpx;
+  color: var(--text-sub);
+}
+
 .radio-line {
   display: flex;
   align-items: center;

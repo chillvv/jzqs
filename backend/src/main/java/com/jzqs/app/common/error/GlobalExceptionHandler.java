@@ -9,6 +9,10 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Object>> handleBusiness(BusinessException ex) {
+        if (ex.getErrorCode() == ErrorCode.UNAUTHORIZED) {
+            return ResponseEntity.status(401)
+                .body(ApiResponse.failure(ex.getErrorCode().name(), ex.getMessage(), ex.getData()));
+        }
         return ResponseEntity.badRequest()
             .body(ApiResponse.failure(ex.getErrorCode().name(), ex.getMessage(), ex.getData()));
     }

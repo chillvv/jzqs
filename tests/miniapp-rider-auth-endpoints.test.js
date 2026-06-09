@@ -21,10 +21,11 @@ const forbiddenEndpoints = [
 const filesForbiddenPhoneFields = [
   path.join(repoRoot, 'miniapp-rider', 'pages', 'profile', 'index.js'),
   path.join(repoRoot, 'miniapp-rider', 'utils', 'rider-profile-auth.js')
-];
+].filter((file) => fs.existsSync(file));
 
 const riderServiceFile = path.join(repoRoot, 'miniapp-rider', 'services', 'auth.service.js');
 const riderAuthFile = path.join(repoRoot, 'miniapp-rider', 'utils', 'auth.js');
+const riderProfileFile = path.join(repoRoot, 'miniapp-rider', 'pages', 'profile', 'index.js');
 
 for (const file of filesToCheck) {
   const content = fs.readFileSync(file, 'utf8');
@@ -56,10 +57,17 @@ for (const legacyField of ['encryptedData', 'iv']) {
 }
 
 const riderAuthContent = fs.readFileSync(riderAuthFile, 'utf8');
+const riderProfileContent = fs.readFileSync(riderProfileFile, 'utf8');
 assert.equal(
   riderAuthContent.includes('当前环境暂不支持微信一键登录，请使用手机号登录'),
   false,
   'miniapp-rider/utils/auth.js 仍在前端阻止微信手机号登录'
+);
+
+assert.match(
+  riderProfileContent,
+  /async handleMenuClick\(e\)\s*\{[\s\S]*await app\.waitForRiderAuth\(\);[\s\S]*if \(!app\.globalData\.riderRegistered[\s\S]*this\.goLoginPage\(\);[\s\S]*\}/,
+  'miniapp-rider/pages/profile/index.js 的菜单入口应等待骑手认证完成后再判断是否跳登录'
 );
 
 console.log('PASS: 骑手小程序已改为微信手机号 code -> 后端换号链路');

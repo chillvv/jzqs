@@ -1,0 +1,125 @@
+<view class="auth-page-shell">
+  <!-- Top Section: Logo and Welcome -->
+  <view class="auth-page-hero">
+    <image class="auth-logo" src="/assets/logo.jpeg" mode="aspectFill"></image>
+    <view class="auth-page-title">{{authFlowMode === 'complete-profile' ? '填写姓名完成注册' : '欢迎登录'}}</view>
+    <view class="auth-page-subtitle">{{authFlowMode === 'complete-profile' ? '补全姓名后即可进入会员服务' : '登录后享受更多会员专属服务'}}</view>
+  </view>
+
+  <!-- Middle Section: Forms and Buttons -->
+  <view class="auth-page-main">
+    <view class="auth-form-group" wx:if="{{authFlowMode !== 'complete-profile'}}">
+      <view class="auth-form-item">
+        <input class="auth-form-input" type="number" maxlength="11" placeholder="请输入手机号" value="{{profileForm.phoneNumber}}" bindinput="onPhoneInput" placeholder-class="auth-input-placeholder" />
+      </view>
+    </view>
+
+    <view class="phone-hint" wx:if="{{phoneAuthHint}}">
+      已填写：<text class="phone-hint-val">{{phoneAuthHint}}</text>
+    </view>
+
+    <view class="auth-form-group" wx:if="{{authFlowMode === 'complete-profile'}}">
+      <view class="auth-form-item">
+        <input class="auth-form-input" type="nickname" maxlength="20" placeholder="请输入姓名" value="{{profileForm.nickname}}" bindinput="onNicknameInput" placeholder-class="auth-input-placeholder" />
+      </view>
+    </view>
+
+    <block wx:if="{{authFlowMode === 'login'}}">
+      <button
+        wx:if="{{agreementAccepted}}"
+        class="auth-btn auth-btn-primary"
+        open-type="getPhoneNumber"
+        bindtap="prepareWechatLogin"
+        bindgetphonenumber="getPhoneNumber"
+        loading="{{wechatLoading}}"
+        disabled="{{savingProfile || wechatLoading}}"
+      >
+        微信一键登录
+      </button>
+      <button
+        wx:else
+        class="auth-btn auth-btn-primary"
+        bindtap="openAgreementSheetForWechat"
+        loading="{{wechatLoading}}"
+        disabled="{{savingProfile || wechatLoading}}"
+      >
+        微信一键登录
+      </button>
+
+      <button
+        class="auth-btn auth-btn-secondary"
+        loading="{{savingProfile}}"
+        disabled="{{savingProfile}}"
+        bindtap="handleSubmitEntry"
+      >手机号登录</button>
+
+      <view class="auth-links">
+        <view class="auth-link" bindtap="goRegisterPage">新用户注册</view>
+        <view class="auth-link-divider">|</view>
+        <view class="auth-link" bindtap="goBack">暂不登录</view>
+      </view>
+    </block>
+
+    <block wx:else>
+      <button
+        class="auth-btn auth-btn-primary"
+        loading="{{savingProfile}}"
+        disabled="{{savingProfile}}"
+        bindtap="handleSubmitEntry"
+      >完成注册</button>
+      <view class="auth-links">
+        <view class="auth-link" bindtap="goBack">返回</view>
+      </view>
+    </block>
+  </view>
+
+  <!-- Bottom Section: Agreement -->
+  <view class="auth-page-footer">
+    <view class="auth-agreement-bar" bindtap="handleAgreementBarTap">
+      <view class="auth-agreement-icon {{agreementAccepted ? 'checked' : ''}}">
+        <text wx:if="{{agreementAccepted}}" class="auth-agreement-icon-mark">✓</text>
+      </view>
+      <view class="auth-agreement-copy-line">
+        <text class="auth-agreement-text">我已阅读并同意</text>
+        <text class="auth-agreement-link" catchtap="openAgreement">《用户协议》</text>
+        <text class="auth-agreement-text">与</text>
+        <text class="auth-agreement-link" catchtap="openPrivacy">《隐私政策》</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- Agreement Modal -->
+  <view wx:if="{{showAgreementSheet}}" class="auth-agreement-modal-mask" bindtap="closeAgreementSheet">
+    <view class="auth-agreement-modal-panel" catchtap="stopPropagation">
+      <view class="auth-agreement-modal-title">服务协议与隐私政策</view>
+      <view class="auth-agreement-modal-copy">为完成登录、预订、配送提醒与售后服务，请先阅读并同意以下内容。</view>
+
+      <view class="auth-agreement-sheet-links">
+        <view class="auth-agreement-sheet-link-card" bindtap="openAgreement">
+          <view class="auth-agreement-sheet-link-title">《用户协议》</view>
+          <view class="auth-agreement-sheet-link-arrow">›</view>
+        </view>
+        <view class="auth-agreement-sheet-link-card" bindtap="openPrivacy">
+          <view class="auth-agreement-sheet-link-title">《隐私政策》</view>
+          <view class="auth-agreement-sheet-link-arrow">›</view>
+        </view>
+      </view>
+
+      <view class="auth-agreement-sheet-check" bindtap="toggleAgreementSheetChecked">
+        <view class="auth-agreement-icon {{agreementSheetChecked ? 'checked' : ''}}">
+          <text wx:if="{{agreementSheetChecked}}" class="auth-agreement-icon-mark">✓</text>
+        </view>
+        <view class="auth-agreement-sheet-check-text">我已阅读并同意上述协议</view>
+      </view>
+
+      <view class="auth-agreement-sheet-actions">
+        <button class="auth-agreement-sheet-btn auth-agreement-sheet-btn-secondary" bindtap="closeAgreementSheet">不同意</button>
+        <button
+          class="auth-agreement-sheet-btn auth-agreement-sheet-btn-primary"
+          bindtap="handleAgreementPrimaryAction"
+          disabled="{{savingProfile || wechatLoading}}"
+        >同意并继续</button>
+      </view>
+    </view>
+  </view>
+</view>

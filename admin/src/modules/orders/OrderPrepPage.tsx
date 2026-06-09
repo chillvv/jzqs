@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import {
   assignDispatch,
@@ -54,7 +54,7 @@ import {
   resolveManualCreateMenuOptions,
   shouldShowManualCustomerEmptyState
 } from "./manualCreateOrder.helpers";
-import { Printer, CheckCircle, Search, RotateCcw, UserPlus, X, Bot, MapPin, ChevronLeft, ChevronRight, AlertTriangle, Trash2, Settings } from "lucide-react";
+import { Printer, CheckCircle, Search, RotateCcw, UserPlus, X, Bot, MapPin, ChevronLeft, ChevronRight, AlertTriangle, Trash2, Settings, MoreHorizontal } from "lucide-react";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { AdminDialog } from "../../shared/components/AdminDialog";
 import { RemarkField } from "../../shared/components/RemarkField";
@@ -132,8 +132,20 @@ export function OrderPrepPage() {
   const [editForm, setEditForm] = useState({ mealPeriod: "LUNCH", quantity: "1", deliveryAddress: "", adminNote: "", specialTag: "", priorityCustomer: false, status: "PENDING_DISPATCH" });
   const [assignRiders, setAssignRiders] = useState<DispatchManagedRiderResponse[]>([]);
   const [assignAreaBindings, setAssignAreaBindings] = useState<DispatchAreaBindingResponse[]>([]);
+  
+  // Dropdown Menu state
+  const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
+  const dropdownRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenDropdownId(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
     reloadOrders(DEFAULT_FILTER_DATE).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)));
 
     fetchRemarkSuggestions("SUBSCRIPTION_NOTE")
@@ -519,12 +531,15 @@ export function OrderPrepPage() {
 
   async function handleEditSubmit() {
     if (!activeItem || !editForm.mealPeriod || !editForm.deliveryAddress) return;
+    const trimmedAddress = editForm.deliveryAddress.trim();
     await updateOrderProfile(activeItem.id, {
       mealPeriod: editForm.mealPeriod as "LUNCH" | "DINNER",
       quantity: Number(editForm.quantity) || 1,
-      deliveryAddress: editForm.deliveryAddress,
+      deliveryAddress: trimmedAddress,
       adminNote: editForm.adminNote,
-      specialTag: editForm.specialTag
+      specialTag: editForm.specialTag,
+      priorityCustomer: editForm.priorityCustomer,
+      status: editForm.status
     });
     setIsEditOpen(false);
     await reloadOrders();
@@ -568,49 +583,115 @@ export function OrderPrepPage() {
   const renderStatus = (item: OrderPrepItemResponse) => {
     const displayStatus = resolveOrderDisplayStatus(item);
     const tone = resolveOrderStatusTone(displayStatus);
-    return (
-      <>
-        <span className={`status-dot ${tone}`}></span>
-        {item.displayStatusLabel || resolveOrderDisplayStatusLabel(displayStatus)}
-      </>
-    );
+    const label = item.displayStatusLabel || resolveOrderDisplayStatusLabel(displayStatus);
+    return <span className={`pill pill-${tone}`}>{label}</span>;
   };
 
-  const renderActions = (item: OrderPrepItemResponse) => (
-    <div className="action-links">
-      <a onClick={() => {
-        setActiveItem(item);
-        setEditForm({
-          mealPeriod: resolveMealPeriod(item),
-          quantity: String(item.quantity),
-          deliveryAddress: item.deliveryAddress || "",
-          adminNote: item.adminNote || "",
-          specialTag: item.specialTag || "",
-          priorityCustomer: item.priorityCustomer || false,
-          status: item.status || "PENDING_DISPATCH"
-        });
-        setIsEditOpen(true);
-      }}>
-        编辑订单
-      </a>
-      {item.canAssign && (
-        <a onClick={() => { setActiveItem(item); setIsAssignOpen(true); }}>
-          分配骑手
-        </a>
-      )}
-      {item.canReceipt && (
-        <a onClick={() => { setActiveItem(item); setIsReceiptOpen(true); }}>上传回执</a>
-      )}
-      {item.status !== "REFUNDED" && (
-        <a className="danger" onClick={() => openOrderAftersaleModal(item)}>
-          售后处理
-        </a>
-      )}
-      {item.canCancel && (
-        <a className="danger" onClick={() => handleCancel(item).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>取消</a>
-      )}
-    </div>
-  );
+  function getRowHighlightClass(item: OrderPrepItemResponse) {
+    const displayStatus = resolveOrderDisplayStatus(item);
+    if (displayStatus === "AFTERSALE" || displayStatus === "REFUNDED") {
+      return "row-danger-highlight";
+    }
+    if (item.specialTag || item.userNote) {
+      return "row-warning-highlight";
+    }
+    return "";
+  }
+
+  const renderActions = (item: OrderPrepItemResponse) => {
+    const displayStatus = resolveOrderDisplayStatus(item);
+    const isDropdownOpen = openDropdownId === item.id;
+    
+    return (
+      <div className="action-cell-container">
+        {displayStatus === "PENDING_DISPATCH" && (
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => { setActiveItem(item); setIsAssignOpen(true); }}
+            style={{ marginRight: "8px" }}
+          >
+            分配骑手
+          </button>
+        )}
+        {displayStatus === "DISPATCHING" && (
+          <button
+            className="btn btn-success btn-sm"
+            onClick={() => { setActiveItem(item); setReceiptForm({ receiptUrl: "", receiptNote: "" }); setIsReceiptOpen(true); }}
+            style={{ marginRight: "8px" }}
+          >
+            核销回执
+          </button>
+        )}
+
+        <div className="dropdown-container" ref={isDropdownOpen ? dropdownRef : null}>
+          <button 
+            className="btn btn-secondary btn-sm btn-icon"
+            onClick={() => setOpenDropdownId(isDropdownOpen ? null : item.id)}
+          >
+            <MoreHorizontal size={16} />
+          </button>
+          
+          {isDropdownOpen && (
+            <div className="dropdown-menu">
+              <button 
+                className="dropdown-item"
+                onClick={() => {
+                  setActiveItem(item);
+                  setEditForm({
+                    mealPeriod: resolveMealPeriod(item),
+                    quantity: String(item.quantity || 1),
+                    deliveryAddress: item.deliveryAddress || "",
+                    adminNote: item.adminNote || "",
+                    specialTag: item.specialTag || "",
+                    priorityCustomer: !!item.priorityCustomer,
+                    status: item.status
+                  });
+                  setIsEditOpen(true);
+                  setOpenDropdownId(null);
+                }}
+              >
+                编辑订单
+              </button>
+              
+              {displayStatus !== "PENDING_DISPATCH" && item.canAssign && (
+                <button
+                  className="dropdown-item"
+                  onClick={() => { setActiveItem(item); setIsAssignOpen(true); setOpenDropdownId(null); }}
+                >
+                  分配骑手
+                </button>
+              )}
+              
+              {displayStatus !== "DISPATCHING" && item.canReceipt && (
+                <button
+                  className="dropdown-item"
+                  onClick={() => { setActiveItem(item); setReceiptForm({ receiptUrl: "", receiptNote: "" }); setIsReceiptOpen(true); setOpenDropdownId(null); }}
+                >
+                  上传回执
+                </button>
+              )}
+              
+              <button 
+                className="dropdown-item dropdown-item-danger"
+                onClick={() => { openOrderAftersaleModal(item); setOpenDropdownId(null); }}
+              >
+                售后处理
+              </button>
+              
+              {item.canCancel && (
+                <button 
+                  className="dropdown-item dropdown-item-danger"
+                  onClick={() => { handleCancel(item); setOpenDropdownId(null); }}
+                >
+                  取消订单
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
@@ -648,6 +729,7 @@ export function OrderPrepPage() {
       </div>
       <div className="admin-panel-note" style={{ marginBottom: "16px" }}>
         顾客端下单后会先进入待配送，取消和售后结果会同步回订单页与钱包页。
+        {summary.specialKeywordSummary.length > 0 ? ` 当前特殊摘要：${summary.specialKeywordSummary.slice(0, 4).join(" / ")}` : ""}
       </div>
 
       <div className="toolbar">
@@ -815,116 +897,128 @@ export function OrderPrepPage() {
         ) : (
           <>
             <div className="table-responsive">
-              <table style={{ background: "#FFFFFF", borderTop: "1px solid var(--border-color)", borderBottom: "1px solid var(--border-color)" }}>
-          <thead>
-            <tr>
-              <th style={{ width: "40px" }}><input type="checkbox" /></th>
-              <th>客户标识</th>
-              <th>联系电话</th>
-              <th>餐次</th>
-              <th>用户备注</th>
-              <th>后台备注 / 特殊标签</th>
-              <th>配送地址</th>
-              <th>订单来源</th>
-              <th>状态</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {view.pageItems.map((item) => {
-              const sourceLabel = resolveOrderSourceLabel(item);
-              const mealPeriod = resolveMealPeriod(item);
-              const isLunch = mealPeriod === "LUNCH";
-              return (
-                <tr key={item.id}>
-                  <td><input type="checkbox" /></td>
-                  <td>
-                    <div style={{ display: "grid", gap: "6px" }}>
-                      <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                        <span>{item.customerName}</span>
-                        {item.priorityCustomer && <span className="tag tag-orange">重点</span>}
-                        {item.fixedSubscription && <span className="tag tag-blue">固定订餐</span>}
+              <table className="admin-table" style={{ background: "#FFFFFF", borderTop: "1px solid var(--border-color)", borderBottom: "1px solid var(--border-color)", width: "100%" }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: "40px" }}><input type="checkbox" /></th>
+                    <th>客户标识</th>
+                    <th>联系电话</th>
+                    <th>餐次</th>
+                    <th>用户备注</th>
+                    <th>后台备注 / 特殊标签</th>
+                    <th>配送地址</th>
+                    <th>订单来源</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {view.filteredItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} style={{ textAlign: "center", padding: "32px", color: "var(--text-muted)" }}>
+                        当前条件下没有找到订单
+                      </td>
+                    </tr>
+                  ) : (
+                    view.pageItems.map((item) => {
+                      const sourceLabel = resolveOrderSourceLabel(item);
+                      const mealPeriod = resolveMealPeriod(item);
+                      const isLunch = mealPeriod === "LUNCH";
+                      const rowClass = getRowHighlightClass(item);
+                      return (
+                        <tr key={item.id} className={rowClass}>
+                          <td><input type="checkbox" /></td>
+                          <td>
+                            <div style={{ display: "grid", gap: "6px" }}>
+                              <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                <span>{item.customerName}</span>
+                                {item.priorityCustomer && <span className="tag tag-orange">重点</span>}
+                                {item.fixedSubscription && <span className="tag tag-blue">固定订餐</span>}
+                              </div>
+                            </div>
+                          </td>
+                          <td><span style={{ color: "var(--text-sub)" }}>{item.customerPhone}</span></td>
+                          <td>
+                            <span className={`tag ${isLunch ? "tag-orange" : "tag-green"}`}>{isLunch ? "午餐" : "晚餐"}</span>{item.quantity > 1 ? ` ×${item.quantity}` : ""}
+                          </td>
+                          <td style={{ color: formatOrderNote(item.userNote) === "-" ? undefined : "var(--error-color)", maxWidth: "160px" }}>{formatOrderNote(item.userNote)}</td>
+                          <td style={{ maxWidth: "160px" }}>{formatOrderNote(item.adminNote)} {formatOrderNote(item.specialTag) === "-" ? "" : `/ ${item.specialTag}`}</td>
+                          <td>
+                            <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", color: "var(--text-sub)", maxWidth: "200px" }}>
+                              <MapPin size={14} style={{ marginTop: "2px", flexShrink: 0 }} />
+                              <span style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{item.deliveryAddress}</span>
+                            </div>
+                          </td>
+                          <td><span className={`tag ${sourceLabel === "后台录入" ? "tag-gray" : "tag-blue"}`}>{sourceLabel}</span></td>
+                          <td>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                              {renderStatus(item)}
+                              <span style={{ color: "var(--text-sub)", fontSize: "12px", whiteSpace: "nowrap" }}>{item.walletStatusLabel}</span>
+                            </div>
+                          </td>
+                          <td>{renderActions(item)}</td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mobile-card-list">
+              {view.pageItems.map((item) => {
+                const sourceLabel = resolveOrderSourceLabel(item);
+                const mealPeriod = resolveMealPeriod(item);
+                const isLunch = mealPeriod === "LUNCH";
+                const rowClass = getRowHighlightClass(item);
+                return (
+                  <div className={`mobile-card ${rowClass}`} key={item.id}>
+                    <div className="mobile-card-header">
+                      <div>
+                        <span style={{ fontWeight: 700 }}>{item.customerName}</span>
+                        <span style={{ color: "var(--text-sub)", fontSize: "12px", marginLeft: "8px" }}>{item.customerPhone}</span>
+                        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "6px" }}>
+                          {item.priorityCustomer && <span className="tag tag-orange">重点客户</span>}
+                          {item.fixedSubscription && <span className="tag tag-blue">固定订餐</span>}
+                          {formatOrderNote(item.specialTag) !== "-" && <span className="tag tag-gray">{item.specialTag}</span>}
+                        </div>
+                      </div>
+                      <div>
+                        {renderStatus(item)}
                       </div>
                     </div>
-                  </td>
-                  <td><span style={{ color: "var(--text-sub)" }}>{item.customerPhone}</span></td>
-                  <td>
-                    <span className={`tag ${isLunch ? "tag-orange" : "tag-green"}`}>{isLunch ? "午餐" : "晚餐"}</span>{item.quantity > 1 ? ` ×${item.quantity}` : ""}
-                  </td>
-                  <td style={{ color: formatOrderNote(item.userNote) === "-" ? undefined : "var(--error-color)" }}>{formatOrderNote(item.userNote)}</td>
-                  <td>{formatOrderNote(item.adminNote)} {formatOrderNote(item.specialTag) === "-" ? "" : `/ ${item.specialTag}`}</td>
-                  <td>
-                    <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", color: "var(--text-sub)" }}>
-                      <MapPin size={14} style={{ marginTop: "2px", flexShrink: 0 }} />
-                      <span style={{ whiteSpace: "nowrap" }}>{item.deliveryAddress}</span>
+                    <div style={{ padding: "0 12px", color: "var(--text-sub)", fontSize: "12px" }}>
+                      {item.walletStatusLabel}
                     </div>
-                  </td>
-                  <td><span className={`tag ${sourceLabel === "后台录入" ? "tag-gray" : "tag-blue"}`}>{sourceLabel}</span></td>
-                  <td>
-                    {renderStatus(item)}
-                    <div style={{ color: "var(--text-sub)", fontSize: "12px", marginTop: "4px", whiteSpace: "nowrap" }}>{item.walletStatusLabel}</div>
-                  </td>
-                  <td>{renderActions(item)}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        </div>
-
-        <div className="mobile-card-list">
-          {view.pageItems.map((item) => {
-            const sourceLabel = resolveOrderSourceLabel(item);
-            const mealPeriod = resolveMealPeriod(item);
-            const isLunch = mealPeriod === "LUNCH";
-            return (
-              <div className="mobile-card" key={item.id}>
-                <div className="mobile-card-header">
-                  <div>
-                    <span style={{ fontWeight: 700 }}>{item.customerName}</span>
-                    <span style={{ color: "var(--text-sub)", fontSize: "12px", marginLeft: "8px" }}>{item.customerPhone}</span>
-                    <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "6px" }}>
-                      {item.priorityCustomer && <span className="tag tag-orange">重点客户</span>}
-                      {item.fixedSubscription && <span className="tag tag-blue">固定订餐</span>}
-                      {formatOrderNote(item.specialTag) !== "-" && <span className="tag tag-gray">{item.specialTag}</span>}
+                    <div className="mobile-card-row">
+                      <div className="mobile-card-label">餐次</div>
+                      <div className="mobile-card-value">
+                        <span className={`tag ${isLunch ? "tag-orange" : "tag-green"}`} style={{ marginRight: "4px" }}>{isLunch ? "午餐" : "晚餐"}</span>{item.quantity > 1 ? ` ×${item.quantity}` : ""}
+                      </div>
                     </div>
+                    <div className="mobile-card-row">
+                      <div className="mobile-card-label">用户备注</div>
+                      <div className="mobile-card-value" style={{ color: formatOrderNote(item.userNote) === "-" ? "inherit" : "var(--error-color)" }}>{formatOrderNote(item.userNote)}</div>
+                    </div>
+                    <div className="mobile-card-row">
+                      <div className="mobile-card-label">后台备注</div>
+                      <div className="mobile-card-value">{formatOrderNote(item.adminNote)} {formatOrderNote(item.specialTag) === "-" ? "" : `/ ${item.specialTag}`}</div>
+                    </div>
+                    <div className="mobile-card-row">
+                      <div className="mobile-card-label">来源</div>
+                      <div className="mobile-card-value">{sourceLabel}</div>
+                    </div>
+                    <div className="mobile-card-row">
+                      <div className="mobile-card-label">地址</div>
+                      <div className="mobile-card-value">{item.deliveryAddress}</div>
+                    </div>
+                    <div className="mobile-card-actions">
+                    {renderActions(item)}
                   </div>
-                  <div>
-                    {renderStatus(item)}
                   </div>
-                </div>
-                <div style={{ padding: "0 12px", color: "var(--text-sub)", fontSize: "12px" }}>
-                  {item.walletStatusLabel}
-                </div>
-                <div className="mobile-card-row">
-                  <div className="mobile-card-label">餐次</div>
-                  <div className="mobile-card-value">
-                    <span className={`tag ${isLunch ? "tag-orange" : "tag-green"}`} style={{ marginRight: "4px" }}>{isLunch ? "午餐" : "晚餐"}</span>{item.quantity > 1 ? ` ×${item.quantity}` : ""}
-                  </div>
-                </div>
-                <div className="mobile-card-row">
-                  <div className="mobile-card-label">用户备注</div>
-                  <div className="mobile-card-value" style={{ color: formatOrderNote(item.userNote) === "-" ? "inherit" : "var(--error-color)" }}>{formatOrderNote(item.userNote)}</div>
-                </div>
-                <div className="mobile-card-row">
-                  <div className="mobile-card-label">后台备注</div>
-                  <div className="mobile-card-value">{formatOrderNote(item.adminNote)} {formatOrderNote(item.specialTag) === "-" ? "" : `/ ${item.specialTag}`}</div>
-                </div>
-                <div className="mobile-card-row">
-                  <div className="mobile-card-label">来源</div>
-                  <div className="mobile-card-value">{sourceLabel}</div>
-                </div>
-                <div className="mobile-card-row">
-                  <div className="mobile-card-label">地址</div>
-                  <div className="mobile-card-value">{item.deliveryAddress}</div>
-                </div>
-                <div className="mobile-card-footer">
-                  {renderActions(item)}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                );
+              })}
+            </div>
 
         <div className="pagination">
           <div className="pagination-info">共 {view.totalItems} 条记录，第 {view.currentPage} / {view.totalPages} 页</div>

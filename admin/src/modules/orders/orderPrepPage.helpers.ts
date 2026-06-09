@@ -162,6 +162,25 @@ export function buildOrderPrepSummary(
     .filter(item => resolveMealPeriod(item) === "DINNER")
     .reduce((sum, item) => sum + item.quantity, 0);
 
+  const specialKeywordCounts = new Map<string, number>();
+  items.forEach((item) => {
+    [item.specialTag, item.userNote, item.adminNote].forEach((value) => {
+      const normalized = formatOrderNote(value);
+      if (normalized === "-") {
+        return;
+      }
+      specialKeywordCounts.set(normalized, (specialKeywordCounts.get(normalized) || 0) + 1);
+    });
+  });
+  const specialKeywordSummary = Array.from(specialKeywordCounts.entries())
+    .sort((a, b) => {
+      if (b[1] !== a[1]) {
+        return b[1] - a[1];
+      }
+      return a[0].localeCompare(b[0], "zh-CN");
+    })
+    .map(([keyword, count]) => `${keyword} +${count}`);
+
   return {
     totalOrders: items.length,
     totalMeals,
@@ -172,7 +191,8 @@ export function buildOrderPrepSummary(
     confirmationCount: confirmationItems.length,
     priorityConfirmationCount: confirmationItems.filter((item) => Boolean(item.priority)).length,
     specialOrderCount: specialOrders.length,
-    prioritySpecialCount: specialOrders.filter((item) => Boolean(item.priorityCustomer)).length
+    prioritySpecialCount: specialOrders.filter((item) => Boolean(item.priorityCustomer)).length,
+    specialKeywordSummary
   };
 }
 

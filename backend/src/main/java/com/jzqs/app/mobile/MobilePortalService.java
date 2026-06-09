@@ -12,7 +12,9 @@ import com.jzqs.app.mobile.api.MobileOrderItemResponse;
 import com.jzqs.app.mobile.api.MobileTomorrowMenuResponse;
 import com.jzqs.app.mobile.api.MobileWeekMenuDayResponse;
 import com.jzqs.app.mobile.api.RiderBatchSummaryResponse;
+import com.jzqs.app.mobile.api.RiderBatchAddressReferenceRequest;
 import com.jzqs.app.mobile.api.RiderDeliveryUploadResponse;
+import com.jzqs.app.mobile.api.RiderAddressReferenceResponse;
 import com.jzqs.app.mobile.api.RiderQueueItemResponse;
 import com.jzqs.app.mobile.api.RiderTaskItemResponse;
 import java.util.List;
@@ -42,6 +44,8 @@ public interface MobilePortalService {
 
     Map<String, Object> createMiniappOrder(long customerId, String serveDate, String mealPeriod, String deliveryAddress, String note);
 
+    Map<String, Object> authorizeDeliverySubscription(long customerId, long orderId, String templateId, String acceptResult);
+
     Map<String, Object> cancelMiniappOrder(String phone, long orderId);
 
     Map<String, Object> cancelMiniappOrder(long customerId, long orderId);
@@ -64,6 +68,8 @@ public interface MobilePortalService {
 
     Map<String, Object> setDefaultAddress(long customerId, long addressId);
 
+    Map<String, Object> changeCustomerOrderAddress(long customerId, long orderId, long addressId);
+
     PageResponse<WalletTransactionResponse> walletTransactions(String phone);
 
     PageResponse<WalletTransactionResponse> walletTransactions(long customerId);
@@ -75,6 +81,12 @@ public interface MobilePortalService {
     PageResponse<RiderQueueItemResponse> riderQueue(String riderName);
 
     RiderQueueItemResponse riderQueueItem(long batchItemId, String riderName);
+
+    RiderAddressReferenceResponse riderAddressReference(String riderName, long addressId);
+
+    Map<String, Object> saveBatchAddressReferenceImage(String riderName, RiderBatchAddressReferenceRequest request);
+
+    Map<String, Object> replaceAddressReferenceImage(String riderName, long addressId, String referenceImageUrl);
 
     RiderDeliveryUploadResponse uploadRiderReceipt(String riderName, MultipartFile file);
 

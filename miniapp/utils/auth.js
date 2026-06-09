@@ -251,10 +251,9 @@ class Auth {
         success(res) {
           const body = res.data || {};
           if (body.code === 'UNAUTHORIZED') {
-            // 401锛氭竻闄ょ姸鎬侊紝璺崇櫥褰?
+            // 401:清除状态，但不要在这里直接跳转，让调用方处理
             wx.removeStorageSync(AUTH_TOKEN_KEY);
-            wx.redirectTo({ url: '/pages/profile/index' });
-            reject(new Error(body.message));
+            reject(new Error(body.message || '登录状态已失效'));
             return;
           }
           if (res.statusCode >= 200 && res.statusCode < 300 && body.code === 'OK') {

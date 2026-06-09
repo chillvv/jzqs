@@ -1,35 +1,41 @@
 .task-card {
   background: #ffffff;
-  border-radius: 16rpx;
-  padding: 24rpx;
-  margin-bottom: 20rpx;
+  border-radius: 20rpx;
+  padding: 28rpx;
+  margin-bottom: 24rpx;
   border: 2rpx solid #e5e7eb;
   transition: all 0.3s ease;
+}
+
+.task-card.is-completed {
+  opacity: 0.6;
+  background: #f8fafc;
+  border-color: #f1f5f9;
 }
 
 .task-card-highlight {
   border-color: #3b82f6;
   background: linear-gradient(180deg, #ffffff 0%, #eff6ff 100%);
-  box-shadow: 0 4rpx 12rpx rgba(59, 130, 246, 0.1);
+  box-shadow: 0 6rpx 16rpx rgba(59, 130, 246, 0.12);
 }
 
 .task-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16rpx;
+  margin-bottom: 20rpx;
 }
 
 .task-sequence {
-  width: 48rpx;
-  height: 48rpx;
-  border-radius: 12rpx;
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: 16rpx;
   background: #eff6ff;
   color: #2563eb;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 24rpx;
+  font-size: 28rpx;
   font-weight: 800;
 }
 
@@ -38,62 +44,74 @@
   gap: 12rpx;
 }
 
+.task-address {
+  display: flex;
+  align-items: flex-start;
+  margin-bottom: 16rpx;
+  padding: 20rpx;
+  background: #f8fafc;
+  border-radius: 16rpx;
+}
+
+.task-card.is-completed .task-address {
+  background: #f1f5f9;
+}
+
+.address-icon {
+  font-size: 32rpx;
+  margin-right: 12rpx;
+  flex-shrink: 0;
+  margin-top: 4rpx;
+}
+
+.address-text {
+  font-size: 36rpx;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.5;
+  flex: 1;
+}
+
 .task-customer {
-  margin-bottom: 12rpx;
+  margin-bottom: 16rpx;
+  display: flex;
+  align-items: center;
+  padding: 0 8rpx;
 }
 
 .customer-name {
-  font-size: 32rpx;
-  font-weight: 700;
-  color: #0f172a;
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #475569;
   margin-right: 16rpx;
 }
 
 .customer-phone {
-  font-size: 26rpx;
-  color: #64748b;
-}
-
-.task-address {
-  display: flex;
-  align-items: flex-start;
-  margin-bottom: 12rpx;
-  padding: 16rpx;
-  background: #f8fafc;
-  border-radius: 12rpx;
-}
-
-.address-icon {
   font-size: 28rpx;
-  margin-right: 8rpx;
-  flex-shrink: 0;
-}
-
-.address-text {
-  font-size: 28rpx;
-  color: #0f172a;
-  line-height: 1.6;
-  flex: 1;
+  color: #475569;
 }
 
 .task-note {
-  padding: 12rpx 16rpx;
+  padding: 16rpx 20rpx;
   background: #fef3c7;
-  border-radius: 8rpx;
-  margin-bottom: 12rpx;
+  border-radius: 12rpx;
+  margin-bottom: 16rpx;
 }
 
 .note-label {
-  font-size: 24rpx;
+  font-size: 26rpx;
+  color: #92400e;
+  font-weight: 700;
+}
+
+.note-text {
+  font-size: 26rpx;
   color: #92400e;
   font-weight: 600;
 }
 
-.note-text {
-  font-size: 24rpx;
-  color: #92400e;
-}
-
 .task-actions {
-  margin-top: 16rpx;
+  margin-top: 24rpx;
+  padding-top: 20rpx;
+  border-top: 2rpx solid #f1f5f9;
 }

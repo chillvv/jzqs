@@ -34,6 +34,11 @@ Component({
       type: String,
       value: ''
     },
+    // 原始状态值
+    status: {
+      type: String,
+      value: ''
+    },
     // 状态样式类
     statusClass: {
       type: String,

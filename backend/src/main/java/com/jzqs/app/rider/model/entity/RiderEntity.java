@@ -20,9 +20,6 @@ public class RiderEntity {
 
     private String phone;
 
-    @TableField("password_hash")
-    private String passwordHash;
-
     @TableField("employment_status")
     private String employmentStatus;
 
@@ -66,9 +63,6 @@ public class RiderEntity {
 
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
-
-    public String getPasswordHash() { return passwordHash; }
-    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
 
     public String getEmploymentStatus() { return employmentStatus; }
     public void setEmploymentStatus(String employmentStatus) { this.employmentStatus = employmentStatus; }

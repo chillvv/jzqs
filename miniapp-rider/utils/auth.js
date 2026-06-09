@@ -1,6 +1,6 @@
 /**
  * 统一认证模块 - 骑手端
- * 基于微信小程序统一登录方案
+ * 基于骑手手机号登录方案
  * 
  * @author Kiro AI
  * @since 2026-05-23
@@ -8,9 +8,16 @@
 
 const AUTH_TOKEN_KEY = 'auth_token';
 const AUTH_STATE_KEY = 'auth_state';
-const RIDER_WX_LOGIN_URL = '/api/mobile/rider-auth/wx-login';
 const RIDER_VERIFY_TOKEN_URL = '/api/mobile/rider-auth/verify-token';
 const RIDER_PROFILE_URL = '/api/mobile/rider-auth/me';
+
+function reportAuthDebug(hypothesisId, location, msg, data, traceId) {
+  void hypothesisId;
+  void location;
+  void msg;
+  void data;
+  void traceId;
+}
 
 class Auth {
   constructor() {
@@ -37,6 +44,13 @@ class Auth {
   async init() {
     // 1. 检查本地 token
     const token = wx.getStorageSync(AUTH_TOKEN_KEY);
+    // #region debug-point A:init-token
+    reportAuthDebug('A', 'auth.js:init', 'Auth.init start', {
+      hasToken: !!token,
+      ready: this.globalData.ready,
+      loggedIn: this.globalData.loggedIn
+    });
+    // #endregion
     
     if (token) {
       // 2. 验证 token 是否有效
@@ -54,73 +68,7 @@ class Auth {
       wx.removeStorageSync(AUTH_TOKEN_KEY);
     }
 
-    // 3. 无有效 token，走微信静默登录
-    try {
-      await this.silentLogin();
-    } catch (error) {
-      console.error('[Auth] 静默登录失败，进入未登录状态:', error);
-    }
     this.globalData.ready = true;
-  }
-
-  /**
-   * 微信静默登录（wx.login → code → 后端换 openid）
-   */
-  async silentLogin() {
-    try {
-      const { code } = await wx.login();
-      const result = await this.request(RIDER_WX_LOGIN_URL, 'POST', {
-        code, 
-        userType: 'rider'
-      });
-      
-      this.applyAuthState(result);
-      return result;
-    } catch (error) {
-      console.error('[Auth] 静默登录失败:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * 微信一键登录（绑定手机号）- 新版 API
-   * @param {string} code getPhoneNumber 返回的动态令牌
-   */
-  async bindPhone(code) {
-    const finalCode = String(code || '').trim();
-    if (!finalCode) {
-      throw new Error('微信手机号授权失败，请重试');
-    }
-
-    try {
-      const result = await this.request('/api/rider/wechat-login', 'POST', {
-        code: finalCode,
-        openid: this.globalData.openid
-      });
-
-      if (!result.token) {
-        throw new Error(result.message || '微信登录失败');
-      }
-
-      this.applyAuth(result);
-      this.globalData.userId = result.userId || result.riderId || this.globalData.userId;
-      this.globalData.userType = 'rider';
-      this.globalData.loggedIn = true;
-      this.globalData.registered = true;
-      this.globalData.needPhoneAuth = false;
-      this.globalData.riderStatus = result.riderStatus || result.status || 'ACTIVE';
-      this.globalData.workbenchEnabled = typeof result.workbenchEnabled === 'boolean'
-        ? result.workbenchEnabled
-        : this.globalData.riderStatus === 'ACTIVE';
-      this.globalData.riderName = result.riderName || result.name || '';
-      this.globalData.phone = result.phone || this.globalData.phone;
-      this.globalData.ready = true;
-
-      return result;
-    } catch (error) {
-      console.error('[Auth] 微信手机号登录失败:', error);
-      throw error;
-    }
   }
 
   /**
@@ -198,25 +146,6 @@ class Auth {
     } catch (error) {
       console.error('[Auth] 骑手注册失败:', error);
       throw error;
-    }
-  }
-
-  /**
-   * 应用认证状态（静默登录结果）
-   */
-  applyAuthState(result) {
-    this.globalData.openid = result.openid || '';
-    this.globalData.registered = result.registered || false;
-    this.globalData.needPhoneAuth = !result.registered;
-    this.globalData.riderStatus = result.status || result.riderStatus || this.globalData.riderStatus;
-    this.globalData.workbenchEnabled = typeof result.workbenchEnabled === 'boolean'
-      ? result.workbenchEnabled
-      : this.globalData.workbenchEnabled;
-    this.globalData.riderName = result.name || result.riderName || this.globalData.riderName;
-    this.globalData.phone = result.phone || this.globalData.phone;
-    
-    if (result.token) {
-      this.applyAuth(result);
     }
   }
 
@@ -310,6 +239,9 @@ class Auth {
       this.globalData.ready = true;
       this.globalData.riderStatus = 'UNAUTHORIZED';
       this.globalData.workbenchEnabled = false;
+      this.globalData.riderName = '';
+      this.globalData.phone = '';
+      this.globalData.openid = '';
     }
   }
 
@@ -319,6 +251,7 @@ class Auth {
   async request(url, method, data, customToken) {
     const token = customToken || this.globalData.token;
     const fullUrl = getApp().globalData.apiBaseUrl + url;
+    const traceId = `auth-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
     
     console.log('[Auth Request] 开始请求');
     console.log('[Auth Request] URL:', fullUrl);
@@ -327,6 +260,17 @@ class Auth {
     console.log('[Auth Request] Token:', token ? '有' : '无');
     
     return new Promise((resolve, reject) => {
+      // #region debug-point C:request-start
+      reportAuthDebug('C', 'auth.js:request:start', 'Auth.request start', {
+        url,
+        fullUrl,
+        method,
+        hasToken: !!token,
+        dataKeys: data ? Object.keys(data) : [],
+        hasCode: !!(data && data.code),
+        userType: data && data.userType ? data.userType : ''
+      }, traceId);
+      // #endregion
       wx.request({
         url: fullUrl,
         method,
@@ -336,8 +280,17 @@ class Auth {
         success(res) {
           console.log('[Auth Request] 响应状态码:', res.statusCode);
           console.log('[Auth Request] 响应数据:', JSON.stringify(res.data));
-          
+          // #region debug-point D:request-success
           const body = res.data || {};
+          reportAuthDebug('D', 'auth.js:request:success', 'Auth.request success callback', {
+            statusCode: res.statusCode,
+            bodyCode: body.code || '',
+            bodyMessage: body.message || '',
+            hasData: !!body.data,
+            dataKeys: body.data ? Object.keys(body.data) : []
+          }, traceId);
+          // #endregion
+          
           if (body.code === 'UNAUTHORIZED') {
             // 401：清除状态
             wx.removeStorageSync(AUTH_TOKEN_KEY);
@@ -352,6 +305,13 @@ class Auth {
         },
         fail(err) {
           console.error('[Auth Request] 请求失败:', err);
+          // #region debug-point E:request-fail
+          reportAuthDebug('E', 'auth.js:request:fail', 'Auth.request fail callback', {
+            errMsg: err && err.errMsg ? err.errMsg : '',
+            errno: err && err.errno ? err.errno : '',
+            hasTimeout: !!(err && err.errMsg && err.errMsg.includes('timeout'))
+          }, traceId);
+          // #endregion
           if (err.errMsg && err.errMsg.includes('timeout')) {
             reject(new Error('请求超时，请检查网络'));
           } else {
@@ -466,7 +426,7 @@ class Auth {
    */
   getWorkbenchBlockMessage() {
     if (!this.globalData.registered) {
-      return '请先完成微信手机号验证';
+      return '请先登录骑手账号';
     }
     
     switch (this.globalData.riderStatus) {

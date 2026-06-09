@@ -308,7 +308,11 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         if (updated == 0) {
             throw new com.jzqs.app.common.error.BusinessException(com.jzqs.app.common.error.ErrorCode.ORDER_STATUS_INVALID, "订单不存在");
         }
-        return Map.of("orderId", orderId, "status", "UPDATED");
+        return Map.of(
+            "orderId", orderId,
+            "status", "UPDATED",
+            "addressId", addressId
+        );
     }
 
     @Override

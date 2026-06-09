@@ -2,6 +2,7 @@
   "__usePrivacyCheck__": true,
   "pages": [
     "pages/profile/index",
+    "pages/login/index",
     "pages/queue/index",
     "pages/order-detail/index",
     "pages/register/index",

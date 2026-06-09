@@ -25,11 +25,6 @@ public class MobileRiderAuthController {
         return ApiResponse.success(mobileAuthService.riderWxLogin(request.code()));
     }
 
-    @PostMapping("/login")
-    public ApiResponse<Map<String, Object>> passwordLogin(@Valid @RequestBody RiderPasswordLoginRequest request) {
-        return ApiResponse.success(mobileAuthService.riderPasswordLogin(request.phone(), request.password()));
-    }
-
     @PostMapping("/bind-phone")
     public ApiResponse<Map<String, Object>> bindPhone(@Valid @RequestBody RiderBindPhoneRequest request) {
         return ApiResponse.success(mobileAuthService.bindRiderPhone(request.openid(), request.phone(), request.nickname()));

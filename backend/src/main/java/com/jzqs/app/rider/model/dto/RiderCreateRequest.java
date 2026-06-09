@@ -17,8 +17,6 @@ public record RiderCreateRequest(
     @Pattern(regexp = "^[0-9]{11}$", message = "phone必须是11位数字")
     String phone,
 
-    String password,
-
     String areaCode,
 
     String employmentStatus,

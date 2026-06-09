@@ -6,7 +6,6 @@ public record DispatchCreateRiderRequest(
     @NotBlank String riderName,
     @NotBlank String displayName,
     @NotBlank String phone,
-    String password,
     String areaCode,
     String employmentStatus,
     String updatedBy

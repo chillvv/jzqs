@@ -27,6 +27,7 @@ public class WeChatService {
     private static final String CODE2SESSION_URL = "https://api.weixin.qq.com/sns/jscode2session";
     private static final String GET_PHONE_NUMBER_URL = "https://api.weixin.qq.com/wxa/business/getuserphonenumber";
     private static final String GET_ACCESS_TOKEN_URL = "https://api.weixin.qq.com/cgi-bin/token";
+    private static final String SEND_SUBSCRIBE_MESSAGE_URL = "https://api.weixin.qq.com/cgi-bin/message/subscribe/send";
 
     @Value("${wechat.dev-mode:true}")
     private boolean devMode;
@@ -36,6 +37,12 @@ public class WeChatService {
 
     @Value("${wechat.secret:}")
     private String secret;
+
+    @Value("${wechat.subscribe.delivery-template-id:}")
+    private String deliveryTemplateId;
+
+    @Value("${wechat.subscribe.delivery-page:pages/orders/index}")
+    private String deliveryPage;
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
@@ -139,6 +146,48 @@ public class WeChatService {
             log.error("调用微信 getPhoneNumber 接口异常", e);
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "获取手机号失败，请稍后重试");
         }
+    }
+
+    public void sendDeliverySubscribeMessage(String openid, String page, String merchantName, String address, String hint) {
+        if (openid == null || openid.trim().isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "缺少订阅消息接收人");
+        }
+        if (deliveryTemplateId == null || deliveryTemplateId.trim().isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "未配置送达提醒模板");
+        }
+        if (devMode) {
+            log.info("开发模式：跳过订阅消息发送 openid={}, page={}", openid, page);
+            return;
+        }
+        try {
+            String accessToken = getAccessToken();
+            String url = SEND_SUBSCRIBE_MESSAGE_URL + "?access_token=" + accessToken;
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("touser", openid);
+            payload.put("template_id", deliveryTemplateId);
+            payload.put("page", page);
+            payload.put("data", Map.of(
+                "thing18", Map.of("value", merchantName),
+                "thing7", Map.of("value", address),
+                "thing11", Map.of("value", hint)
+            ));
+            String response = restTemplate.postForObject(url, payload, String.class);
+            JsonNode json = objectMapper.readTree(response);
+            if (json.has("errcode") && json.get("errcode").asInt() != 0) {
+                String errmsg = json.path("errmsg").asText();
+                log.error("微信订阅消息发送失败：{}", errmsg);
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "发送订阅消息失败：" + errmsg);
+            }
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("发送微信订阅消息异常", e);
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "发送订阅消息失败，请稍后重试");
+        }
+    }
+
+    public String buildDeliveryPage(long orderId) {
+        return deliveryPage + "?orderId=" + orderId;
     }
 
     // #region debug-point C:wechat-debug-report-helper

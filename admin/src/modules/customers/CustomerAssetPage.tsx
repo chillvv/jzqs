@@ -24,16 +24,31 @@ import { formatDateTimeLabel } from "../../shared/utils/dateTime";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { RemarkField } from "../../shared/components/RemarkField";
 
-const emptyEditForm = { name: "", phone: "", remark: "", customerStatus: "INTENTION" };
+const emptyEditForm = {
+  name: "",
+  phone: "",
+  remark: "",
+  customerStatus: "INTENTION",
+  defaultUserRemark: "",
+  defaultMerchantRemark: "",
+  defaultTagsText: "",
+  orderPreferenceEnabled: true
+};
 const defaultGrantForm = { mealDelta: "5", remark: "补餐" };
 const defaultDeductForm = { mealDelta: "1", remark: "手工扣减" };
 
 function buildEditForm(detail: Record<string, unknown> | null, fallback: CustomerAssetResponse | null) {
+  const orderPreferences = (detail?.orderPreferences || {}) as Record<string, unknown>;
+  const orderTags = Array.isArray(detail?.orderTags) ? detail.orderTags as Array<Record<string, unknown>> : [];
   return {
     name: String(detail?.name || fallback?.name || ""),
     phone: String(detail?.phone || fallback?.phone || ""),
     remark: String(detail?.remark || fallback?.remark || ""),
-    customerStatus: String(detail?.customerStatus || fallback?.customerStatus || "INTENTION")
+    customerStatus: String(detail?.customerStatus || fallback?.customerStatus || "INTENTION"),
+    defaultUserRemark: String(orderPreferences.defaultUserRemark || ""),
+    defaultMerchantRemark: String(orderPreferences.defaultMerchantRemark || ""),
+    defaultTagsText: orderTags.map((item) => String(item.tagName || "")).filter(Boolean).join("，"),
+    orderPreferenceEnabled: orderPreferences.enabled === undefined ? true : Boolean(orderPreferences.enabled)
   };
 }
 
@@ -471,6 +486,20 @@ export function CustomerAssetPage() {
                           multiline
                         />
                       </div>
+                      <div className="customer-edit-form-grid">
+                        <div className="form-group">
+                          <label className="form-label">默认用户备注</label>
+                          <input className="form-control" value={editForm.defaultUserRemark} onChange={(e) => setEditForm({ ...editForm, defaultUserRemark: e.target.value })} />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">默认商家备注</label>
+                          <input className="form-control" value={editForm.defaultMerchantRemark} onChange={(e) => setEditForm({ ...editForm, defaultMerchantRemark: e.target.value })} />
+                        </div>
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">默认标签</label>
+                        <input className="form-control" value={editForm.defaultTagsText} onChange={(e) => setEditForm({ ...editForm, defaultTagsText: e.target.value })} placeholder="多个标签请用逗号分隔，例如：周卡，新开卡" />
+                      </div>
                     </div>
                   ) : (
                     <>
@@ -487,6 +516,18 @@ export function CustomerAssetPage() {
                       <div className="customer-detail-note-block">
                         <div className="customer-detail-note-block__label">客户备注</div>
                         <div className="customer-detail-note-block__value">{String(detail?.remark || activeItem.remark || "-")}</div>
+                      </div>
+                      <div className="customer-detail-note-block">
+                        <div className="customer-detail-note-block__label">订餐偏好与标签</div>
+                        <div className="customer-detail-note-block__value">
+                          默认用户备注：{String((detail?.orderPreferences as Record<string, unknown> | undefined)?.defaultUserRemark || "-")}
+                          <br />
+                          默认商家备注：{String((detail?.orderPreferences as Record<string, unknown> | undefined)?.defaultMerchantRemark || "-")}
+                          <br />
+                          默认标签：{Array.isArray(detail?.orderTags) && detail?.orderTags.length
+                            ? (detail.orderTags as Array<Record<string, unknown>>).map((item) => String(item.tagName || "")).filter(Boolean).join(" / ")
+                            : "-"}
+                        </div>
                       </div>
                     </>
                   )}

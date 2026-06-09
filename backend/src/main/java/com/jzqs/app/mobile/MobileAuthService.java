@@ -19,8 +19,6 @@ public interface MobileAuthService {
 
     Map<String, Object> bindRiderPhone(String openid, String phone, String nickname);
 
-    Map<String, Object> riderPasswordLogin(String phone, String password);
-
     RiderAuthProfileResponse riderProfile(String riderName);
 
     Map<String, Object> verifyRiderToken(String token);

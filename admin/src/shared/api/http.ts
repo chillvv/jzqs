@@ -180,6 +180,8 @@ export async function updateOrderProfile(orderId: number, payload: {
   deliveryAddress: string;
   adminNote: string;
   specialTag: string;
+  priorityCustomer?: boolean;
+  status?: string;
 }) {
   const response = await http.post<ApiResponse<{ orderId: number; status: string }>>(`/api/admin/orders/${orderId}/profile`, payload);
   return response.data.data;

@@ -5,14 +5,16 @@
 
   <view class="subpage-card form-card">
     <view class="form-label">申请类型</view>
-    <radio-group bindchange="onTypeChange">
-      <label class="radio-line">
-        <radio value="REFUND" checked="{{type === 'REFUND'}}" color="#92AA40" />
-        <text>退款</text>
+    <radio-group bindchange="onTypeChange" class="type-selector">
+      <label class="type-card {{type === 'REFUND' ? 'active' : ''}}">
+        <radio value="REFUND" checked="{{type === 'REFUND'}}" hidden="true" />
+        <view class="type-title">退款</view>
+        <view class="type-desc">未送达或不需要了</view>
       </label>
-      <label class="radio-line">
-        <radio value="COMPENSATION" checked="{{type === 'COMPENSATION'}}" color="#92AA40" />
-        <text>补偿/其他售后</text>
+      <label class="type-card {{type === 'COMPENSATION' ? 'active' : ''}}">
+        <radio value="COMPENSATION" checked="{{type === 'COMPENSATION'}}" hidden="true" />
+        <view class="type-title">补偿/其他</view>
+        <view class="type-desc">餐品少漏错、质量等</view>
       </label>
     </radio-group>
 

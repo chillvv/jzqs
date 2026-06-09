@@ -14,6 +14,10 @@ function isStoredReceiptReference(value) {
   return /^https?:\/\//i.test(value) || value.startsWith('cloud://') || value.startsWith('/uploads/');
 }
 
+function normalizeOptionalText(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 Page({
   data: {
     statusBarHeight: 0,
@@ -25,7 +29,12 @@ Page({
     submitting: false,
     deferring: false,
     isEditingReceipt: false, // 是否正在编辑已提交的回执
-    originalReceiptUrl: '' // 原始回执URL
+    originalReceiptUrl: '', // 原始回执URL
+    referenceImageLoading: false,
+    referenceUploading: false,
+    referenceImageUrl: '',
+    hasReferenceImage: false,
+    showReferenceSheet: false
   },
 
   /**
@@ -80,7 +89,12 @@ Page({
       const normalizedOrder = {
         ...order,
         receiptUrl: resolveMediaUrl(order.receiptUrl, app.globalData.apiBaseUrl),
-        mealLabel: getMealPeriodLabel(order.mealPeriod)
+        mealLabel: getMealPeriodLabel(order.mealPeriod),
+        customerNote: normalizeOptionalText(order.customerNote || order.note),
+        merchantNote: normalizeOptionalText(order.merchantNote || order.adminNote),
+        receiptNote: normalizeOptionalText(order.receiptNote),
+        specialTag: normalizeOptionalText(order.specialTag),
+        specialSummary: normalizeOptionalText(order.specialSummary)
       };
 
       let isEditingReceipt = false;
@@ -100,8 +114,14 @@ Page({
         isEditingReceipt,
         originalReceiptUrl,
         receiptTempFilePath,
-        receiptNote
+        receiptNote,
+        referenceImageLoading: false,
+        referenceUploading: false,
+        referenceImageUrl: '',
+        hasReferenceImage: false,
+        showReferenceSheet: false
       });
+      this.loadReferenceImage({ silent: true });
 
     } catch (error) {
       console.error('[订单详情] 加载失败', error);
@@ -208,6 +228,121 @@ Page({
     if (!imageUrl) return;
 
     imageUtil.previewImage([imageUrl], 0);
+  },
+
+  async loadReferenceImage(options = {}) {
+    const { order, referenceImageUrl, referenceImageLoading } = this.data;
+    if (!order || !order.addressId) {
+      this.setData({
+        referenceImageLoading: false,
+        referenceImageUrl: '',
+        hasReferenceImage: false
+      });
+      if (!options.silent) {
+        wx.showToast({ title: '当前地址不可用', icon: 'none' });
+      }
+      return '';
+    }
+    if (referenceImageLoading) return;
+
+    const app = getApp();
+    const riderName = app.getActiveRiderName();
+    if (!riderName) {
+      if (!options.silent) {
+        wx.showToast({ title: '骑手信息未就绪', icon: 'none' });
+      }
+      return '';
+    }
+
+    this.setData({ referenceImageLoading: true });
+    try {
+      const result = await taskService.getAddressReferenceImage(riderName, order.addressId);
+      const resolvedUrl = resolveMediaUrl(result && result.referenceImageUrl, app.globalData.apiBaseUrl);
+      this.setData({
+        referenceImageLoading: false,
+        referenceImageUrl: resolvedUrl || '',
+        hasReferenceImage: Boolean(resolvedUrl)
+      });
+      if (!resolvedUrl && options.showEmptyToast) {
+        wx.showToast({ title: '当前地址暂无参考图', icon: 'none' });
+      }
+      return resolvedUrl || '';
+    } catch (error) {
+      this.setData({ referenceImageLoading: false });
+      if (!options.silent) {
+        wx.showToast({ title: error.message || '查看失败', icon: 'none' });
+      }
+      return '';
+    }
+  },
+
+  async handleViewReferenceImage() {
+    const { order } = this.data;
+    if (!order || !order.addressId) {
+      wx.showToast({ title: '当前地址不可用', icon: 'none' });
+      return;
+    }
+    this.setData({ showReferenceSheet: true });
+    await this.loadReferenceImage({ silent: true });
+  },
+
+  closeReferenceSheet() {
+    this.setData({ showReferenceSheet: false });
+  },
+
+  previewReferenceImage() {
+    const { referenceImageUrl } = this.data;
+    if (!referenceImageUrl) {
+      wx.showToast({ title: '暂无参考图', icon: 'none' });
+      return;
+    }
+    imageUtil.previewImage([referenceImageUrl], 0);
+  },
+
+  async handleUploadReferenceImage() {
+    const { order, referenceImageLoading, referenceUploading } = this.data;
+    if (referenceImageLoading || referenceUploading) return;
+    if (!order || !order.addressId) {
+      wx.showToast({ title: '当前地址不可用', icon: 'none' });
+      return;
+    }
+
+    const app = getApp();
+    const riderName = app.getActiveRiderName();
+    if (!riderName) {
+      wx.showToast({ title: '骑手信息未就绪', icon: 'none' });
+      return;
+    }
+
+    this.setData({ referenceUploading: true });
+    try {
+      const paths = await imageUtil.chooseAndCompressImage({
+        count: 1,
+        sourceType: ['camera', 'album'],
+        quality: 80
+      });
+      if (!paths.length) {
+        this.setData({ referenceUploading: false });
+        return;
+      }
+      wx.showLoading({ title: '上传中...', mask: true });
+      const uploadResult = await taskService.uploadReceipt(riderName, paths[0]);
+      const referenceImageUrl = uploadResult.fileKey || uploadResult.previewUrl;
+      await taskService.replaceAddressReferenceImage(riderName, order.addressId, referenceImageUrl);
+      const resolvedUrl = resolveMediaUrl(referenceImageUrl, app.globalData.apiBaseUrl) || '';
+      const hadReferenceImage = this.data.hasReferenceImage;
+      wx.hideLoading();
+      this.setData({
+        referenceUploading: false,
+        referenceImageUrl: resolvedUrl,
+        hasReferenceImage: true
+      });
+      wx.showToast({ title: hadReferenceImage ? '参考图已更新' : '参考图已保存', icon: 'success' });
+    } catch (error) {
+      wx.hideLoading();
+      this.setData({ referenceUploading: false });
+      wx.showToast({ title: error.message || '更新失败', icon: 'none' });
+    }
   },
 
   /**

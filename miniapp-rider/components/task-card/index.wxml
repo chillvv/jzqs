@@ -1,4 +1,4 @@
-<view class="task-card {{highlight ? 'task-card-highlight' : ''}} {{className}}">
+<view class="task-card {{highlight ? 'task-card-highlight' : ''}} {{status === 'DELIVERED' ? 'is-completed' : ''}} {{className}}">
   <!-- 头部：序号和状态 -->
   <view class="task-header">
     <view class="task-sequence">{{sequence}}</view>
@@ -8,16 +8,16 @@
     </view>
   </view>
 
+  <!-- 地址信息 (提至客户信息之上，放大展示) -->
+  <view class="task-address">
+    <text class="address-icon">📍</text>
+    <text class="address-text">{{deliveryAddress}}</text>
+  </view>
+
   <!-- 客户信息 -->
   <view class="task-customer">
     <text class="customer-name">{{customerName}}</text>
     <text class="customer-phone" wx:if="{{showPhone}}">{{customerPhone}}</text>
-  </view>
-
-  <!-- 地址信息 -->
-  <view class="task-address">
-    <text class="address-icon">📍</text>
-    <text class="address-text">{{deliveryAddress}}</text>
   </view>
 
   <!-- 备注信息 -->

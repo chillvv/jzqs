@@ -36,18 +36,17 @@ Page({
     const { currentStatus, targetOrderId } = this.data;
     this.setData({ loading: true });
     try {
-      const query = [];
-      if (currentStatus) {
-        query.push(`status=${currentStatus}`);
-      }
-      const response = await request({ url: `/api/mobile/customer/orders${query.length ? `?${query.join('&')}` : ''}` });
+      const response = await request({ url: '/api/mobile/customer/orders' });
       let items = (response.items || []).map((item) => {
         const displayItem = mapOrderForDisplay(item);
         return {
           ...displayItem,
-          guidanceText: buildOrderStatusGuidance(displayItem.status)
+          guidanceText: buildOrderStatusGuidance(displayItem.userVisibleStatus || displayItem.status)
         };
       });
+      if (currentStatus) {
+        items = items.filter((item) => (item.userVisibleStatus || item.status) === currentStatus);
+      }
       items = resolveVisibleOrders(items, targetOrderId);
 
       this.setData({
@@ -118,6 +117,27 @@ Page({
     const { id } = e.currentTarget.dataset;
     wx.navigateTo({
       url: `/pages/receipts/index?orderId=${id}`
+    });
+  },
+
+  changeAddress(e) {
+    const { id, mode } = e.currentTarget.dataset;
+    if (mode === 'CONTACT_SUPPORT') {
+      wx.showModal({
+        title: '联系客服修改',
+        content: '送餐当天请联系客服微信，由商家后台手动修改地址。',
+        showCancel: false,
+        confirmText: '我知道了',
+        confirmColor: '#92AA40'
+      });
+      return;
+    }
+    if (mode !== 'SELF_SERVICE') {
+      wx.showToast({ title: '当前订单不可修改地址', icon: 'none' });
+      return;
+    }
+    wx.navigateTo({
+      url: `/pages/addresses/index?selectOrderId=${id}`
     });
   },
 

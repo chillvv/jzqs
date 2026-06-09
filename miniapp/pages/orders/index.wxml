@@ -27,49 +27,49 @@
       wx:key="id"
       class="subpage-card order-card {{targetOrderId && item.id == targetOrderId ? 'highlight-card' : ''}}"
     >
-      <view class="order-card-top">
-        <view class="order-title-wrap">
-          <view class="order-kicker-row">
-            <view class="section-label order-date-label">{{item.serveDateText}} {{item.periodText}}</view>
-            <view class="order-source-chip">{{item.sourceText}}</view>
+      <view class="order-card-header">
+        <view class="order-time-wrap">
+          <text class="order-time">{{item.serveDateText}} {{item.periodText}}</text>
+        </view>
+        <view class="order-status {{item.statusClass}}" bindtap="showStatusDetail" data-item="{{item}}">
+          {{item.statusText}}
+          <text wx:if="{{item.afterSaleStatus === 'REJECTED'}}" class="detail-icon">ⓘ</text>
+        </view>
+      </view>
+
+      <view class="order-card-body">
+        <view class="order-main-info">
+          <view class="order-meal-name">{{item.mealName}}</view>
+          <view class="order-guidance" wx:if="{{item.guidanceText}}">{{item.guidanceText}}</view>
+        </view>
+        
+        <view class="order-detail-list">
+          <view class="detail-row" wx:if="{{item.mealDetail && item.mealDetail !== item.mealName}}">
+            <text class="detail-label">内容</text>
+            <text class="detail-value">{{item.mealDetail}}</text>
           </view>
-          <view class="order-title">{{item.mealName}}</view>
-        </view>
-        <view class="order-head-side">
-          <view class="status-pill {{item.statusClass}}" bindtap="showStatusDetail" data-item="{{item}}">
-            {{item.statusText}}
-            <text wx:if="{{item.afterSaleStatus === 'REJECTED'}}" class="detail-icon">ⓘ</text>
+          <view class="detail-row">
+            <text class="detail-label">地址</text>
+            <text class="detail-value">{{item.deliveryAddress}}</text>
+          </view>
+          <view class="detail-row" wx:if="{{item.note && item.note !== '-'}}">
+            <text class="detail-label">备注</text>
+            <text class="detail-value highlight-note">{{item.note}}</text>
+          </view>
+          <view class="detail-row" wx:if="{{item.merchantNote && item.merchantNote !== '-'}}">
+            <text class="detail-label">商家回复</text>
+            <text class="detail-value">{{item.merchantNote}}</text>
           </view>
         </view>
       </view>
 
-      <view class="order-address-panel">
-        <view class="order-address-label">配送地址</view>
-        <view class="order-address-value">{{item.deliveryAddress}}</view>
-      </view>
-
-      <view class="order-meta-line">{{item.orderMetaText}}</view>
-      <view class="detail-line">{{item.guidanceText}}</view>
-
-      <view class="order-note-stack" wx:if="{{(item.mealDetail && item.mealDetail !== item.mealName) || (item.note && item.note !== '-') || (item.merchantNote && item.merchantNote !== '-')}}">
-        <view class="order-note-item" wx:if="{{item.mealDetail && item.mealDetail !== item.mealName}}">
-          <text class="order-note-key">餐品内容</text>
-          <text class="order-note-value">{{item.mealDetail}}</text>
+      <view class="order-card-footer" wx:if="{{item.canCancel || item.canApplyAftersale || item.canViewReceipt || item.changeAddressMode}}">
+        <view class="action-btn-group">
+          <button class="action-btn outline" wx:if="{{item.canCancel}}" data-id="{{item.id}}" bindtap="cancelOrder">取消预订</button>
+          <button class="action-btn outline" wx:if="{{item.canApplyAftersale}}" data-id="{{item.id}}" bindtap="openAftersale">申请售后</button>
+          <button class="action-btn outline" wx:if="{{item.changeAddressMode === 'SELF_SERVICE' || item.changeAddressMode === 'CONTACT_SUPPORT'}}" data-id="{{item.id}}" data-mode="{{item.changeAddressMode}}" bindtap="changeAddress">{{item.changeAddressMode === 'SELF_SERVICE' ? '更换地址' : '联系改址'}}</button>
+          <button class="action-btn primary" wx:if="{{item.canViewReceipt}}" data-id="{{item.id}}" bindtap="openReceipt">{{item.orderPrimaryActionText || '查看回执'}}</button>
         </view>
-        <view class="order-note-item" wx:if="{{item.note && item.note !== '-'}}">
-          <text class="order-note-key">订单备注</text>
-          <text class="order-note-value">{{item.note}}</text>
-        </view>
-        <view class="order-note-item" wx:if="{{item.merchantNote && item.merchantNote !== '-'}}">
-          <text class="order-note-key">商家备注</text>
-          <text class="order-note-value">{{item.merchantNote}}</text>
-        </view>
-      </view>
-
-      <view class="action-row action-row-wrap" wx:if="{{item.canCancel || item.canApplyAftersale || item.canViewReceipt}}">
-        <button class="sub-btn primary order-primary-btn" wx:if="{{item.canViewReceipt}}" data-id="{{item.id}}" bindtap="openReceipt">{{item.orderPrimaryActionText}}</button>
-        <button class="sub-btn ghost order-secondary-btn" wx:if="{{item.canCancel}}" data-id="{{item.id}}" bindtap="cancelOrder">取消订单</button>
-        <button class="sub-btn ghost order-secondary-btn" wx:if="{{item.canApplyAftersale}}" data-id="{{item.id}}" bindtap="openAftersale">申请售后</button>
       </view>
     </view>
   </view>

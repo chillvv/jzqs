@@ -242,62 +242,6 @@ public class MobileAuthServiceImpl implements MobileAuthService {
     }
 
     @Override
-    @Transactional
-    public Map<String, Object> riderPasswordLogin(String phone, String password) {
-        String finalPhone = requirePhone(phone);
-        
-        Map<String, Object> row = jdbcTemplate.query(
-            """
-                SELECT id, rider_name, phone, auth_status
-                FROM rider_profiles
-                WHERE phone = ?
-                """,
-            ps -> ps.setString(1, finalPhone),
-            rs -> {
-                if (!rs.next()) return null;
-                Map<String, Object> map = new LinkedHashMap<>();
-                map.put("id", rs.getLong("id"));
-                map.put("rider_name", rs.getString("rider_name"));
-                map.put("phone", rs.getString("phone"));
-                map.put("auth_status", rs.getString("auth_status"));
-                return map;
-            }
-        );
-        if (row == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "该手机号未开通骑手账号");
-        }
-        
-        String authStatus = (String) row.get("auth_status");
-        if (!"ACTIVE".equalsIgnoreCase(authStatus)) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "骑手账号已被停用，请联系老板");
-        }
-        
-        LocalDateTime now = LocalDateTime.now().withNano(0);
-        jdbcTemplate.update(
-            """
-                UPDATE rider_profiles
-                SET last_login_at = ?,
-                    first_login_at = COALESCE(first_login_at, ?)
-                WHERE id = ?
-                """,
-            Timestamp.valueOf(now),
-            Timestamp.valueOf(now),
-            (Long) row.get("id")
-        );
-        
-        // 生成 token
-        Map<String, Object> claims = new LinkedHashMap<>();
-        claims.put("riderId", row.get("id"));
-        claims.put("riderName", row.get("rider_name"));
-        claims.put("phone", row.get("phone"));
-        String token = JwtUtils.generateToken(claims);
-        
-        Map<String, Object> authState = riderAuthState("", true, false, riderProfile((Long) row.get("id")));
-        authState.put("token", token);
-        return authState;
-    }
-
-    @Override
     public RiderAuthProfileResponse riderProfile(String riderName) {
         String finalRiderName = requireNickname(riderName);
         Long riderId = jdbcTemplate.query(

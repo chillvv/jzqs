@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
-import com.jzqs.app.common.util.PasswordUtils;
 import com.jzqs.app.rider.mapper.RiderMapper;
 import com.jzqs.app.rider.model.dto.RiderCreateRequest;
 import com.jzqs.app.rider.model.dto.RiderQueryRequest;
@@ -72,14 +71,11 @@ public class RiderAdminServiceImpl implements RiderAdminService {
     public RiderDetailResponse create(RiderCreateRequest request) {
         assertRiderNameUnique(request.riderName(), null);
         LocalDateTime now = LocalDateTime.now();
-        String finalPassword = request.password() == null || request.password().isBlank() ? "888888" : request.password().trim();
-        String passwordHash = PasswordUtils.hash(finalPassword, request.phone().trim());
 
         RiderEntity entity = new RiderEntity();
         entity.setRiderName(request.riderName().trim());
         entity.setDisplayName(request.displayName().trim());
         entity.setPhone(request.phone().trim());
-        entity.setPasswordHash(passwordHash);
         entity.setEmploymentStatus(request.employmentStatus() != null ? request.employmentStatus().trim() : "ACTIVE");
         entity.setAuthStatus("ACTIVE");
         entity.setDefaultAreaCode(request.areaCode() != null ? request.areaCode().trim() : null);
@@ -112,11 +108,6 @@ public class RiderAdminServiceImpl implements RiderAdminService {
         existing.setAuthStatus(request.authStatus() != null ? request.authStatus().trim() : existing.getAuthStatus());
         existing.setDefaultAreaCode(request.areaCode() != null ? request.areaCode().trim() : null);
         existing.setRemark(request.remark() != null ? request.remark().trim() : null);
-
-        if (request.password() != null && !request.password().isBlank()) {
-            String passwordHash = PasswordUtils.hash(request.password().trim(), request.phone().trim());
-            existing.setPasswordHash(passwordHash);
-        }
 
         existing.setUpdatedAt(LocalDateTime.now());
         riderMapper.updateById(existing);

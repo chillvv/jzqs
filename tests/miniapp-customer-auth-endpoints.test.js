@@ -32,6 +32,11 @@ const forbiddenPhoneFieldFiles = [
   path.join(repoRoot, 'miniapp', 'utils', 'profile-auth.js')
 ];
 
+const customerProfile = fs.readFileSync(
+  path.join(repoRoot, 'miniapp', 'pages', 'profile', 'index.js'),
+  'utf8'
+);
+
 for (const file of filesToCheck) {
   const content = fs.readFileSync(file, 'utf8');
   for (const endpoint of forbiddenEndpoints) {
@@ -60,5 +65,17 @@ for (const file of forbiddenPhoneFieldFiles) {
     `${path.relative(repoRoot, file)} 仍在直接读取微信明文手机号`
   );
 }
+
+assert.match(
+  customerProfile,
+  /async guardMemberAction\(targetUrl\)\s*\{[\s\S]*await app\.waitForAuth\(\);[\s\S]*if \(!app\.globalData\.token\)[\s\S]*wx\.navigateTo\(\{ url: targetUrl \}\);[\s\S]*\}/,
+  'miniapp/pages/profile/index.js 的会员入口应等待认证完成后再根据全局 token 决定是否跳转'
+);
+
+assert.match(
+  customerProfile,
+  /async contactService\(\)\s*\{[\s\S]*await app\.waitForAuth\(\);[\s\S]*if \(!app\.globalData\.token\)[\s\S]*wx\.showModal\(\{/,
+  'miniapp/pages/profile/index.js 的客服入口应等待认证完成后再判断登录态'
+);
 
 console.log('PASS: 顾客小程序已改为微信手机号 code -> 后端换号链路');

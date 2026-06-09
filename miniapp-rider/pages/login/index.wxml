@@ -1,0 +1,80 @@
+<view class="auth-page-shell">
+  <!-- Top Section: Logo and Welcome -->
+  <view class="auth-page-hero">
+    <image class="auth-logo" src="/assets/logo.jpeg" mode="aspectFill"></image>
+    <view class="auth-page-title">骑手登录</view>
+    <view class="auth-page-subtitle">输入已开通的骑手手机号即可直接登录</view>
+  </view>
+
+  <!-- Middle Section: Forms and Buttons -->
+  <view class="auth-page-main">
+    <view class="auth-form-group">
+      <view class="auth-form-item">
+        <input class="auth-form-input" type="number" maxlength="11" placeholder="输入已开通的骑手手机号" value="{{profileForm.phoneNumber}}" bindinput="onPhoneInput" placeholder-class="auth-input-placeholder" />
+      </view>
+    </view>
+
+    <button
+      class="auth-btn auth-btn-primary"
+      loading="{{savingProfile}}"
+      disabled="{{savingProfile}}"
+      bindtap="handleSubmitEntry"
+    >手机号登录</button>
+
+    <view class="auth-links">
+      <view class="auth-link" bindtap="goRegisterPage">还没开通账号？去登记</view>
+      <view class="auth-link-divider">|</view>
+      <view class="auth-link" bindtap="goBack">暂不登录</view>
+    </view>
+  </view>
+
+  <!-- Bottom Section: Agreement -->
+  <view class="auth-page-footer">
+    <view class="auth-agreement-bar" bindtap="handleAgreementBarTap">
+      <view class="auth-agreement-icon {{agreementAccepted ? 'checked' : ''}}">
+        <text wx:if="{{agreementAccepted}}" class="auth-agreement-icon-mark">✓</text>
+      </view>
+      <view class="auth-agreement-copy-line">
+        <text class="auth-agreement-text">我已阅读并同意</text>
+        <text class="auth-agreement-link" catchtap="openAgreement">《骑手服务协议》</text>
+        <text class="auth-agreement-text">与</text>
+        <text class="auth-agreement-link" catchtap="openPrivacy">《隐私政策》</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- Agreement Modal -->
+  <view wx:if="{{showAgreementSheet}}" class="auth-agreement-modal-mask" bindtap="closeAgreementSheet">
+    <view class="auth-agreement-modal-panel" catchtap="stopPropagation">
+      <view class="auth-agreement-modal-title">服务协议与隐私政策</view>
+      <view class="auth-agreement-modal-copy">为完成骑手登录、接单、回执上传与配送服务，请先阅读并同意以下内容。</view>
+
+      <view class="auth-agreement-sheet-links">
+        <view class="auth-agreement-sheet-link-card" bindtap="openAgreement">
+          <view class="auth-agreement-sheet-link-title">《骑手服务协议》</view>
+          <view class="auth-agreement-sheet-link-arrow">›</view>
+        </view>
+        <view class="auth-agreement-sheet-link-card" bindtap="openPrivacy">
+          <view class="auth-agreement-sheet-link-title">《隐私政策》</view>
+          <view class="auth-agreement-sheet-link-arrow">›</view>
+        </view>
+      </view>
+
+      <view class="auth-agreement-sheet-check" bindtap="toggleAgreementSheetChecked">
+        <view class="auth-agreement-icon {{agreementSheetChecked ? 'checked' : ''}}">
+          <text wx:if="{{agreementSheetChecked}}" class="auth-agreement-icon-mark">✓</text>
+        </view>
+        <view class="auth-agreement-sheet-check-text">我已阅读并同意上述协议</view>
+      </view>
+
+      <view class="auth-agreement-sheet-actions">
+        <button class="auth-agreement-sheet-btn auth-agreement-sheet-btn-secondary" bindtap="closeAgreementSheet">不同意</button>
+        <button
+          class="auth-agreement-sheet-btn auth-agreement-sheet-btn-primary"
+          bindtap="handleAgreementPrimaryAction"
+          disabled="{{savingProfile}}"
+        >同意并继续</button>
+      </view>
+    </view>
+  </view>
+</view>
