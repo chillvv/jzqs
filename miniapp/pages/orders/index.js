@@ -113,6 +113,16 @@ Page({
     });
   },
 
+  viewAftersale(e) {
+    wx.showModal({
+      title: '售后处理中',
+      content: '您的售后申请商家正在处理中，请留意最新状态或直接联系客服。',
+      showCancel: false,
+      confirmText: '我知道了',
+      confirmColor: '#92AA40'
+    });
+  },
+
   openReceipt(e) {
     const { id } = e.currentTarget.dataset;
     wx.navigateTo({

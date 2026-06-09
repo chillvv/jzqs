@@ -63,10 +63,11 @@
         </view>
       </view>
 
-      <view class="order-card-footer" wx:if="{{item.canCancel || item.canApplyAftersale || item.canViewReceipt || item.changeAddressMode}}">
+      <view class="order-card-footer" wx:if="{{item.canCancel || item.canApplyAftersale || item.isAftersaleProcessing || item.canViewReceipt || item.changeAddressMode}}">
         <view class="action-btn-group">
           <button class="action-btn outline" wx:if="{{item.canCancel}}" data-id="{{item.id}}" bindtap="cancelOrder">取消预订</button>
           <button class="action-btn outline" wx:if="{{item.canApplyAftersale}}" data-id="{{item.id}}" bindtap="openAftersale">申请售后</button>
+          <button class="action-btn outline" wx:if="{{item.isAftersaleProcessing}}" data-id="{{item.id}}" bindtap="viewAftersale">售后中</button>
           <button class="action-btn outline" wx:if="{{item.changeAddressMode === 'SELF_SERVICE' || item.changeAddressMode === 'CONTACT_SUPPORT'}}" data-id="{{item.id}}" data-mode="{{item.changeAddressMode}}" bindtap="changeAddress">{{item.changeAddressMode === 'SELF_SERVICE' ? '更换地址' : '联系改址'}}</button>
           <button class="action-btn primary" wx:if="{{item.canViewReceipt}}" data-id="{{item.id}}" bindtap="openReceipt">{{item.orderPrimaryActionText || '查看回执'}}</button>
         </view>

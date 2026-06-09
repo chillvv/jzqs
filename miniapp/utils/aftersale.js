@@ -5,7 +5,7 @@ const { statusLabel, transactionLabel } = require("./mobile");
 function resolveOrderActions({ status, userVisibleStatus, serveDate, now, afterSaleOpen }) {
   const visibleStatus = userVisibleStatus || status;
   if (afterSaleOpen) {
-    return { canCancel: false, canApplyAftersale: false, actionText: "处理中" };
+    return { canCancel: false, canApplyAftersale: false, isAftersaleProcessing: true, actionText: "处理中" };
   }
   if (canCancelMiniappOrder({ status: visibleStatus, serveDate, now })) {
     return { canCancel: true, canApplyAftersale: false, actionText: "取消订单" };

@@ -119,10 +119,14 @@
   margin: 0;
   padding: 0 28rpx;
   height: 60rpx;
-  line-height: 58rpx;
   border-radius: 30rpx;
   font-size: 24rpx;
   font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-sizing: border-box;
 }
 
 .action-btn::after {

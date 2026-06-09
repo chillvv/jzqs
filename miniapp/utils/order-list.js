@@ -43,6 +43,7 @@ function mapOrderForDisplay(item) {
     canViewReceipt: visibleStatus === 'DELIVERED',
     canCancel: actionState.canCancel,
     canApplyAftersale: actionState.canApplyAftersale,
+    isAftersaleProcessing: actionState.isAftersaleProcessing,
     actionText: actionState.actionText,
     orderPrimaryActionText: '订单详情',
     orderMetaText: buildOrderMetaText(item, resolveOrderSourceText(item.source))
