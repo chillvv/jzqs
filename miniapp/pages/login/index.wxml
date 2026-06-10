@@ -3,7 +3,6 @@
   <view class="custom-nav-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
     <view class="custom-nav-left" bindtap="goBack">
       <view class="custom-nav-back" style="font-size: 44rpx; padding-right: 12rpx; color: #1a1a1a;">‹</view>
-      <text class="custom-nav-title">返回</text>
     </view>
   </view>
   <view class="custom-nav-spacer" style="height: {{navBarHeight}}px;"></view>
@@ -48,6 +47,10 @@
       >
         微信一键安全登录
       </button>
+
+      <view class="auth-links">
+        <view class="auth-link" bindtap="goBack">暂不登录</view>
+      </view>
     </block>
 
     <block wx:else>
