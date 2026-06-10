@@ -146,6 +146,8 @@ export function OrderPrepPage() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
     reloadOrders(DEFAULT_FILTER_DATE).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)));
 
     fetchRemarkSuggestions("SUBSCRIPTION_NOTE")
