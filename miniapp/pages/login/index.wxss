@@ -14,6 +14,7 @@ page {
   display: flex;
   flex-direction: column;
   padding: 0 60rpx calc(env(safe-area-inset-bottom) + 40rpx);
+  position: relative;
 }
 
 /* Top Section */
@@ -21,7 +22,6 @@ page {
   display: flex;
   flex-direction: column;
   align-items: center;
-  margin-top: 60rpx;
   margin-bottom: 80rpx;
 }
 

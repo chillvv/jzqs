@@ -1,14 +1,13 @@
 <view class="auth-page-shell">
   <!-- Custom Nav Bar -->
-  <view class="custom-nav-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+  <view class="custom-nav-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px; position: absolute; background: transparent; backdrop-filter: none; -webkit-backdrop-filter: none; border: none;">
     <view class="custom-nav-left" bindtap="goBack">
       <view class="custom-nav-back" style="font-size: 44rpx; padding-right: 12rpx; color: #1a1a1a;">‹</view>
     </view>
   </view>
-  <view class="custom-nav-spacer" style="height: {{navBarHeight}}px;"></view>
 
   <!-- Top Section: Logo and Welcome -->
-  <view class="auth-page-hero">
+  <view class="auth-page-hero" style="margin-top: calc({{navBarHeight}}px + 40rpx);">
     <image class="auth-logo" src="/assets/logo.jpeg" mode="aspectFill"></image>
     <view class="auth-page-title">{{authFlowMode === 'complete-profile' ? '填写姓名完成注册' : '欢迎登录'}}</view>
     <view class="auth-page-subtitle">{{authFlowMode === 'complete-profile' ? '该名称将作为您的默认收货人姓名' : '为了保障您的账号安全，请使用微信一键登录'}}</view>
