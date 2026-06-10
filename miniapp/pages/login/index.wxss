@@ -47,7 +47,6 @@ page {
 
 /* Middle Section */
 .auth-page-main {
-  flex: 1;
   width: 100%;
 }
 
@@ -132,30 +131,10 @@ page {
   color: #cccccc !important;
 }
 
-/* Links */
-.auth-links {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-top: 20rpx;
-}
-
-.auth-link {
-  font-size: 28rpx;
-  color: var(--text-link);
-  padding: 10rpx 20rpx;
-}
-
-.auth-link-divider {
-  font-size: 24rpx;
-  color: #e5e5e5;
-  margin: 0 10rpx;
-}
-
 /* Bottom Section */
 .auth-page-footer {
   width: 100%;
-  padding-top: 40rpx;
+  margin-top: 60rpx;
 }
 
 .auth-agreement-bar {

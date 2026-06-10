@@ -48,10 +48,6 @@
       >
         微信一键安全登录
       </button>
-
-      <view class="auth-links">
-        <view class="auth-link" bindtap="goBack">暂不登录</view>
-      </view>
     </block>
 
     <block wx:else>
@@ -61,9 +57,6 @@
         disabled="{{savingProfile}}"
         bindtap="handleSubmitEntry"
       >完成注册</button>
-      <view class="auth-links">
-        <view class="auth-link" bindtap="goBack">返回</view>
-      </view>
     </block>
   </view>
 
