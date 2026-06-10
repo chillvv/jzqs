@@ -51,7 +51,7 @@
         loading="{{savingProfile}}"
         disabled="{{savingProfile}}"
         bindtap="handleSubmitEntry"
-      >手机号登录</button>
+      >老用户手机号登回</button>
 
       <view class="auth-links">
         <view class="auth-link" bindtap="goRegisterPage">新用户注册</view>
