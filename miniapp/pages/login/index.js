@@ -62,13 +62,18 @@ Page({
     agreementAccepted: false,
     agreementSheetChecked: false,
     showAgreementSheet: false,
-    pendingAgreementAction: ''
+    pendingAgreementAction: '',
+    statusBarHeight: 0,
+    navBarHeight: 44
   },
 
   onLoad(options = {}) {
+    const app = getApp();
     const phoneNumber = String(options.phoneNumber || '').replace(/\D/g, '');
     const authFlowMode = options.mode === 'complete-profile' ? 'complete-profile' : 'login';
     this.setData({
+      statusBarHeight: app.globalData.statusBarHeight,
+      navBarHeight: app.globalData.navBarHeight,
       authFlowMode,
       agreementAccepted: false,
       agreementSheetChecked: false,
@@ -105,24 +110,10 @@ Page({
     });
   },
 
-  onPhoneInput(e) {
-    const phone = String(e.detail.value || '').replace(/\D/g, '');
-    this.setData({
-      'profileForm.phoneNumber': phone,
-      phoneAuthHint: phone ? maskPhone(phone) : ''
-    });
-  },
-
   onNicknameInput(e) {
     this.setData({
       'profileForm.nickname': e.detail.value
     });
-  },
-
-  goRegisterPage() {
-    const phoneNumber = String(this.data.profileForm.phoneNumber || '').replace(/\D/g, '');
-    const query = phoneNumber ? `?phoneNumber=${phoneNumber}` : '';
-    wx.navigateTo({ url: `/pages/register/index${query}` });
   },
 
   handleAgreementBarTap() {
@@ -286,8 +277,7 @@ Page({
       }, 800);
     } catch (error) {
       if (shouldStartRegister(error)) {
-        this.goRegisterPage();
-        wx.showToast({ title: '请填写姓名完成注册', icon: 'none' });
+        wx.showToast({ title: '新用户请点击微信一键登录', icon: 'none' });
       } else {
         wx.showToast({ title: error.message || '微信授权失败', icon: 'none' });
       }
@@ -303,41 +293,6 @@ Page({
     }
     if (this.data.authFlowMode === 'complete-profile') {
       return this.submitProfileCompletion();
-    }
-    return this.submitPhoneLogin();
-  },
-
-  async submitPhoneLogin() {
-    const errorMessage = getSubmitProfileError({
-      mode: 'login',
-      nickname: '',
-      phoneNumber: this.data.profileForm.phoneNumber
-    });
-
-    if (errorMessage) {
-      wx.showToast({ title: errorMessage, icon: 'none' });
-      return;
-    }
-
-    if (this.data.savingProfile) return;
-
-    this.setData({ savingProfile: true });
-    try {
-      const result = await auth.phoneLogin(this.data.profileForm.phoneNumber);
-      applyCustomerAuthResult(result);
-      wx.showToast({ title: '登录成功', icon: 'success' });
-      setTimeout(() => {
-        wx.switchTab({ url: '/pages/profile/index' });
-      }, 800);
-    } catch (error) {
-      if (shouldStartRegister(error)) {
-        this.goRegisterPage();
-        wx.showToast({ title: '请填写姓名完成注册', icon: 'none' });
-      } else {
-        wx.showToast({ title: error.message || '登录失败', icon: 'none' });
-      }
-    } finally {
-      this.setData({ savingProfile: false });
     }
   },
 

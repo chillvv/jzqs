@@ -209,7 +209,6 @@
       </view>
       <view class="inline-auth-sheet__close" bindtap="closeInlineAuth">×</view>
     </view>
-    <button class="inline-auth-sheet__primary" bindtap="goProfileAuth">微信一键确认</button>
-    <button class="inline-auth-sheet__secondary" bindtap="goProfileAuth">手动输入手机号</button>
+    <button class="inline-auth-sheet__primary" bindtap="goProfileAuth">微信一键登录</button>
   </view>
 </view>

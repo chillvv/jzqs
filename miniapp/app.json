@@ -5,7 +5,6 @@
     "pages/order/index",
     "pages/profile/index",
     "pages/login/index",
-    "pages/register/index",
     "pages/orders/index",
     "pages/aftersale-apply/index",
     "pages/receipts/index",

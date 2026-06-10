@@ -1,26 +1,29 @@
 <view class="auth-page-shell">
+  <!-- Custom Nav Bar -->
+  <view class="custom-nav-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+    <view class="custom-nav-left" bindtap="goBack">
+      <view class="custom-nav-back" style="font-size: 44rpx; padding-right: 12rpx; color: #1a1a1a;">‹</view>
+      <text class="custom-nav-title">返回</text>
+    </view>
+  </view>
+  <view class="custom-nav-spacer" style="height: {{navBarHeight}}px;"></view>
+
   <!-- Top Section: Logo and Welcome -->
   <view class="auth-page-hero">
     <image class="auth-logo" src="/assets/logo.jpeg" mode="aspectFill"></image>
     <view class="auth-page-title">{{authFlowMode === 'complete-profile' ? '填写姓名完成注册' : '欢迎登录'}}</view>
-    <view class="auth-page-subtitle">{{authFlowMode === 'complete-profile' ? '补全姓名后即可进入会员服务' : '登录后享受更多会员专属服务'}}</view>
+    <view class="auth-page-subtitle">{{authFlowMode === 'complete-profile' ? '该名称将作为您的默认收货人姓名' : '为了保障您的账号安全，请使用微信一键登录'}}</view>
   </view>
 
   <!-- Middle Section: Forms and Buttons -->
   <view class="auth-page-main">
-    <view class="auth-form-group" wx:if="{{authFlowMode !== 'complete-profile'}}">
-      <view class="auth-form-item">
-        <input class="auth-form-input" type="number" maxlength="11" placeholder="请输入手机号" value="{{profileForm.phoneNumber}}" bindinput="onPhoneInput" placeholder-class="auth-input-placeholder" />
-      </view>
-    </view>
-
     <view class="phone-hint" wx:if="{{phoneAuthHint}}">
-      已填写：<text class="phone-hint-val">{{phoneAuthHint}}</text>
+      已验证手机号：<text class="phone-hint-val">{{phoneAuthHint}}</text>
     </view>
 
     <view class="auth-form-group" wx:if="{{authFlowMode === 'complete-profile'}}">
       <view class="auth-form-item">
-        <input class="auth-form-input" type="nickname" maxlength="20" placeholder="请输入姓名" value="{{profileForm.nickname}}" bindinput="onNicknameInput" placeholder-class="auth-input-placeholder" />
+        <input class="auth-form-input" type="nickname" maxlength="20" placeholder="请输入您的真实姓名" value="{{profileForm.nickname}}" bindinput="onNicknameInput" placeholder-class="auth-input-placeholder" />
       </view>
     </view>
 
@@ -34,7 +37,7 @@
         loading="{{wechatLoading}}"
         disabled="{{savingProfile || wechatLoading}}"
       >
-        微信一键登录
+        微信一键安全登录
       </button>
       <button
         wx:else
@@ -43,19 +46,10 @@
         loading="{{wechatLoading}}"
         disabled="{{savingProfile || wechatLoading}}"
       >
-        微信一键登录
+        微信一键安全登录
       </button>
 
-      <button
-        class="auth-btn auth-btn-secondary"
-        loading="{{savingProfile}}"
-        disabled="{{savingProfile}}"
-        bindtap="handleSubmitEntry"
-      >老用户手机号登回</button>
-
       <view class="auth-links">
-        <view class="auth-link" bindtap="goRegisterPage">新用户注册</view>
-        <view class="auth-link-divider">|</view>
         <view class="auth-link" bindtap="goBack">暂不登录</view>
       </view>
     </block>
