@@ -9,8 +9,6 @@ const {
 const auth = require('../../utils/auth');
 
 const AGREEMENT_ACCEPTED_KEY = 'miniapp_customer_auth_agreement_accepted_v2';
-function reportDebug() {
-}
 
 function isPlaceholderCustomerName(name) {
   const value = String(name || '').trim();
@@ -132,13 +130,6 @@ Page({
   },
 
   openAgreementSheet(action = '') {
-    // #region debug-point A:customer-open-agreement
-    reportDebug('miniapp/pages/login/index.js:openAgreementSheet', '[DEBUG] customer open agreement sheet', {
-      action,
-      agreementAccepted: this.data.agreementAccepted,
-      agreementSheetChecked: this.data.agreementSheetChecked
-    });
-    // #endregion
     this.setData({
       showAgreementSheet: true,
       pendingAgreementAction: action,
@@ -158,13 +149,6 @@ Page({
 
   toggleAgreementSheetChecked() {
     const nextChecked = !this.data.agreementSheetChecked;
-    // #region debug-point A:customer-toggle-agreement
-    reportDebug('miniapp/pages/login/index.js:toggleAgreementSheetChecked', '[DEBUG] customer toggle agreement checked', {
-      nextChecked,
-      agreementAcceptedBefore: this.data.agreementAccepted,
-      agreementSheetCheckedBefore: this.data.agreementSheetChecked
-    });
-    // #endregion
     this.setData({
       agreementSheetChecked: nextChecked
     });
@@ -188,13 +172,6 @@ Page({
   },
 
   handleAgreementPrimaryAction() {
-    // #region debug-point A:customer-handle-agreement-primary
-    reportDebug('miniapp/pages/login/index.js:handleAgreementPrimaryAction', '[DEBUG] customer click agreement primary', {
-      pendingAgreementAction: this.data.pendingAgreementAction,
-      agreementAccepted: this.data.agreementAccepted,
-      agreementSheetChecked: this.data.agreementSheetChecked
-    });
-    // #endregion
     if (!this.ensureAgreementAccepted()) {
       return;
     }
@@ -211,36 +188,14 @@ Page({
   },
 
   openAgreementSheetForWechat() {
-    // #region debug-point A:customer-wechat-open-agreement
-    reportDebug('miniapp/pages/login/index.js:openAgreementSheetForWechat', '[DEBUG] customer click wechat login before agreement', {
-      agreementAccepted: this.data.agreementAccepted,
-      agreementSheetChecked: this.data.agreementSheetChecked
-    });
-    // #endregion
     this.openAgreementSheet('wechat-login');
   },
 
   async prepareWechatLogin() {
-    // #region debug-point B:customer-prepare-wechat
-    reportDebug('miniapp/pages/login/index.js:prepareWechatLogin:entry', '[DEBUG] customer prepare wechat login entry', {
-      agreementAccepted: this.data.agreementAccepted,
-      wechatLoading: this.data.wechatLoading,
-      savingProfile: this.data.savingProfile
-    });
-    // #endregion
     try {
       await ensurePhonePrivacyPermission();
-      // #region debug-point B:customer-prepare-wechat-success
-      reportDebug('miniapp/pages/login/index.js:prepareWechatLogin:success', '[DEBUG] customer prepare wechat login success', {});
-      // #endregion
       return true;
     } catch (error) {
-      // #region debug-point B:customer-prepare-wechat-fail
-      reportDebug('miniapp/pages/login/index.js:prepareWechatLogin:fail', '[DEBUG] customer prepare wechat login fail', {
-        errMsg: error && error.errMsg ? error.errMsg : '',
-        message: error && error.message ? error.message : ''
-      });
-      // #endregion
       wx.showToast({
         title: getPhonePrivacyErrorMessage(error),
         icon: 'none'
@@ -286,15 +241,6 @@ Page({
   },
 
   async startWechatLoginFlow(detail) {
-    // #region debug-point C:customer-start-wechat-flow
-    reportDebug('miniapp/pages/login/index.js:startWechatLoginFlow', '[DEBUG] customer start wechat login flow', {
-      hasDetail: !!detail,
-      errMsg: detail && detail.errMsg ? detail.errMsg : '',
-      hasCode: !!(detail && detail.code),
-      codeLength: detail && detail.code ? String(detail.code).length : 0,
-      isWechatBusy: this.isWechatBusy()
-    });
-    // #endregion
     if (this.isWechatBusy()) {
       return;
     }
@@ -306,25 +252,10 @@ Page({
   },
 
   async getPhoneNumber(e) {
-    // #region debug-point C:customer-get-phone
-    reportDebug('miniapp/pages/login/index.js:getPhoneNumber', '[DEBUG] customer getPhoneNumber callback', {
-      hasDetail: !!(e && e.detail),
-      errMsg: e && e.detail && e.detail.errMsg ? e.detail.errMsg : '',
-      hasCode: !!(e && e.detail && e.detail.code),
-      codeLength: e && e.detail && e.detail.code ? String(e.detail.code).length : 0
-    });
-    // #endregion
     return this.startWechatLoginFlow(e && e.detail);
   },
 
   async doLoginWithCode(code) {
-    // #region debug-point D:customer-do-login
-    reportDebug('miniapp/pages/login/index.js:doLoginWithCode', '[DEBUG] customer do login with code', {
-      hasCode: !!code,
-      codeLength: code ? String(code).length : 0,
-      isWechatBusy: this.isWechatBusy()
-    });
-    // #endregion
     if (this.isWechatBusy()) return;
     this.setData({ wechatLoading: true });
     try {

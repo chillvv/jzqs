@@ -82,13 +82,25 @@ class Auth {
     }
   }
 
+  async ensureOpenidReady() {
+    if (this.globalData.openid) {
+      return this.globalData.openid;
+    }
+    await this.silentLogin();
+    if (!this.globalData.openid) {
+      throw new Error('缺少微信身份标识，请重新进入小程序后重试');
+    }
+    return this.globalData.openid;
+  }
+
   /**
    * 鎵嬫満鍙风櫥褰?
    */
   async phoneLogin(phone) {
     try {
+      const openid = await this.ensureOpenidReady();
       const result = await this.request('/api/mobile/auth/phone-login', 'POST', {
-        openid: this.globalData.openid,
+        openid,
         phone
       });
       this.applyAuthState(result);
@@ -104,8 +116,9 @@ class Auth {
    */
   async register(phone, nickname) {
     try {
+      const openid = await this.ensureOpenidReady();
       const result = await this.request('/api/mobile/auth/register', 'POST', {
-        openid: this.globalData.openid,
+        openid,
         phone,
         nickname
       });
@@ -122,8 +135,9 @@ class Auth {
    */
   async completeProfile(nickname) {
     try {
+      const openid = await this.ensureOpenidReady();
       const result = await this.request('/api/mobile/auth/complete-profile', 'POST', {
-        openid: this.globalData.openid,
+        openid,
         nickname
       });
       this.applyAuthState(result);
