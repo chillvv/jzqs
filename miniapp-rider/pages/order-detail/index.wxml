@@ -37,6 +37,23 @@
         <text wx:if="{{order.buildingInfo}}" class="address-building">{{order.buildingInfo}}</text>
         {{order.deliveryAddress}}
       </view>
+
+      <!-- Remarks embedded in Order Info -->
+      <view class="inline-remarks" wx:if="{{order.customerNote || order.merchantNote || order.specialOrder || order.specialTag || order.specialSummary}}">
+        <view class="inline-remark-item" wx:if="{{order.specialOrder || order.specialTag || order.specialSummary}}">
+          <text class="inline-remark-label text-warning">特殊单：</text>
+          <text class="inline-remark-value text-warning">{{order.specialSummary || order.specialTag || '请特别关注本单备注与餐品要求'}}</text>
+        </view>
+        <view class="inline-remark-item" wx:if="{{order.customerNote}}">
+          <text class="inline-remark-label text-primary">用户备注：</text>
+          <text class="inline-remark-value">{{order.customerNote}}</text>
+        </view>
+        <view class="inline-remark-item" wx:if="{{order.merchantNote}}">
+          <text class="inline-remark-label text-warning">商家嘱咐：</text>
+          <text class="inline-remark-value">{{order.merchantNote}}</text>
+        </view>
+      </view>
+
       <view class="reference-summary-card" bindtap="handleViewReferenceImage">
         <view class="reference-summary-copy">
           <text class="reference-summary-label">参考图</text>
@@ -64,35 +81,6 @@
           </view>
         </view>
       </view>
-    </view>
-
-    <!-- Remarks Grid -->
-    <view class="remarks-container" wx:if="{{order.customerNote || order.merchantNote}}">
-      <!-- User Remarks -->
-      <view class="detail-card remark-card user-remark" wx:if="{{order.customerNote}}">
-        <view class="remark-header text-primary">
-          <text class="material-symbols-outlined">👤</text>
-          <text class="remark-title">用户备注</text>
-        </view>
-        <view class="remark-text">{{order.customerNote}}</view>
-      </view>
-      
-      <!-- Merchant Remarks -->
-      <view class="detail-card remark-card merchant-remark" wx:if="{{order.merchantNote}}">
-        <view class="remark-header text-warning">
-          <text class="material-symbols-outlined">店</text>
-          <text class="remark-title">商家嘱咐</text>
-        </view>
-        <view class="remark-text">{{order.merchantNote}}</view>
-      </view>
-    </view>
-
-    <view class="detail-card remark-card merchant-remark" wx:if="{{order.specialOrder || order.specialTag || order.specialSummary}}">
-      <view class="remark-header text-warning">
-        <text class="material-symbols-outlined">!</text>
-        <text class="remark-title">特殊单提醒</text>
-      </view>
-      <view class="remark-text">{{order.specialSummary || order.specialTag || '请特别关注本单备注与餐品要求'}}</view>
     </view>
 
     <!-- 送达信息 -->
