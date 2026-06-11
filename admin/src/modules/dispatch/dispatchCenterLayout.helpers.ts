@@ -34,7 +34,8 @@ export function createEmptyNewRiderDraft(): NewRiderDraft {
 
 export function buildDispatchWorkspaceNav() {
   return [
-    { label: "配送工作台", value: "" },
+    { label: "分单工作台", value: "" },
+    { label: "骑手进度", value: "progress" },
     { label: "区域管理", value: "areas" },
     { label: "骑手管理", value: "riders" }
   ];

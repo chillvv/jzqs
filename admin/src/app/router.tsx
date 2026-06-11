@@ -6,6 +6,7 @@ import { MenuSchedulePage } from "../modules/menu/MenuSchedulePage";
 import { OrderPrepPage } from "../modules/orders/OrderPrepPage";
 import { DispatchCenterLayout } from "../modules/dispatch/DispatchCenterLayout";
 import { DispatchHomePage } from "../modules/dispatch/DispatchHomePage";
+import { DispatchProgressPage } from "../modules/dispatch/DispatchProgressPage";
 import { DispatchAreasPage } from "../modules/dispatch/DispatchAreasPage";
 import { DispatchRidersPage } from "../modules/dispatch/DispatchRidersPage";
 import { SystemSettingsPage } from "../modules/settings/SystemSettingsPage";
@@ -50,6 +51,7 @@ export const router = createBrowserRouter([
         element: <DispatchCenterLayout />,
         children: [
           { index: true, element: <DispatchHomePage /> },
+          { path: "progress", element: <DispatchProgressPage /> },
           { path: "areas", element: <DispatchAreasPage /> },
           { path: "riders", element: <DispatchRidersPage /> }
         ]

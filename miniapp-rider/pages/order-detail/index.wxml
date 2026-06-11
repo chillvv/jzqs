@@ -27,7 +27,7 @@
 
   <!-- Main Content -->
   <view wx:else class="main-content">
-    <!-- Address & Contact Card -->
+    <!-- 订单信息 -->
     <view class="detail-card address-card">
       <view class="card-header">
         <text class="material-symbols-outlined text-primary">📍</text>
@@ -95,7 +95,7 @@
       <view class="remark-text">{{order.specialSummary || order.specialTag || '请特别关注本单备注与餐品要求'}}</view>
     </view>
 
-    <!-- Proof of Delivery Section -->
+    <!-- 送达信息 -->
     <view class="detail-card proof-section">
       <view class="card-header">
         <text class="material-symbols-outlined text-success">✓</text>

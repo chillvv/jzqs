@@ -36,7 +36,8 @@ const emptyEditForm = {
   name: "",
   phone: "",
   remark: "",
-  customerStatus: "INTENTION"
+  customerStatus: "INTENTION",
+  initialMeals: "0"
 };
 const defaultGrantForm = { mealDelta: "5", remark: "补餐" };
 const defaultDeductForm = { mealDelta: "1", remark: "手工扣减" };
@@ -148,7 +149,7 @@ export function CustomerAssetPage() {
   async function handleCreateSubmit() {
     if (!editForm.name || !editForm.phone) return;
     try {
-      await createCustomerProfile({
+      const newCustomer = await createCustomerProfile({
         name: editForm.name,
         phone: editForm.phone,
         remark: editForm.remark,
@@ -156,6 +157,12 @@ export function CustomerAssetPage() {
         priorityTag: "",
         priorityNote: ""
       });
+      
+      const meals = Number((editForm as any).initialMeals);
+      if (meals > 0 && newCustomer && newCustomer.id) {
+        await grantWalletMeals(newCustomer.id, meals, "后台客服", "建档初始加餐");
+      }
+
       setIsEditOpen(false);
       setIsCreating(false);
       setEditForm(emptyEditForm);
@@ -773,6 +780,17 @@ export function CustomerAssetPage() {
                       <label className="form-label"><span className="required">*</span>联系电话</label>
                       <input className="form-control" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
                     </div>
+                  </div>
+                  <div className="form-group" style={{ marginTop: "16px" }}>
+                    <label className="form-label">初始加餐数量（选填）</label>
+                    <input 
+                      className="form-control" 
+                      type="number" 
+                      min="0"
+                      value={(editForm as any).initialMeals || "0"} 
+                      onChange={(e) => setEditForm({ ...editForm, initialMeals: e.target.value } as any)} 
+                    />
+                    <div className="admin-panel-note" style={{ marginTop: "4px" }}>如果填写大于 0，将在建档后自动为用户加餐</div>
                   </div>
                   <div className="customer-create-remark-field">
                     <RemarkField
