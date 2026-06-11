@@ -25,6 +25,8 @@ import { AdminDialog } from "../../shared/components/AdminDialog";
 import {
   buildDispatchAreaStats,
   DEFAULT_OPERATOR,
+  hasDisplayValue,
+  hasOrderAttention,
   normalizeDispatchAreaBindings,
   mealPeriodLabel
 } from "./dispatchCenterLayout.helpers";
@@ -68,6 +70,7 @@ function DraggableOrderItem({
   
   const isMultiple = order.quantity && order.quantity > 1;
   const itemId = `order-${order.orderId}`;
+  const hasAttention = hasOrderAttention(order);
 
   return (
     <Draggable 
@@ -80,9 +83,9 @@ function DraggableOrderItem({
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          className={`dispatch-area-orders__item ${statusClass} ${snapshot.isDragging ? "dragging" : ""} ${!isReordering ? "no-drag" : ""} ${isMultiple ? "multiple-order" : ""} ${isReordering ? "reordering" : ""}`}
+          className={`dispatch-area-orders__item dispatch-order-tile ${statusClass} ${snapshot.isDragging ? "dragging" : ""} ${!isReordering ? "no-drag" : ""} ${isMultiple ? "multiple-order" : ""} ${isReordering ? "reordering" : ""}`}
         >
-          <div className="dispatch-area-orders__top">
+          <div className="dispatch-order-tile__top">
             <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
               <div
                 style={{
@@ -107,31 +110,35 @@ function DraggableOrderItem({
                 <span className="quantity-badge">×{order.quantity}</span>
               )}
             </div>
-            <span className={`tag ${order.deliveryStatus === "DELIVERED" ? "tag-green" : "tag-amber"}`}>
+            <span className={`tag ${order.deliveryStatus === "DELIVERED" ? "tag-green" : "tag-amber"}`} style={{ flexShrink: 0 }}>
               {order.deliveryStatus === "DELIVERED" ? "已送达" : "待配送"}
             </span>
           </div>
-          <div style={{ 
+          <div className="dispatch-inline-note" style={{ 
             overflow: "hidden", 
             textOverflow: "ellipsis", 
             whiteSpace: "nowrap",
             maxWidth: "100%"
           }}>
-            {order.deliveryAddress}
+            {order.deliveryAddress || "-"}
           </div>
           
-          <div style={{ display: "flex", gap: "8px", marginTop: "8px", flexWrap: "wrap" }}>
-            {order.userNote && (
+          <div className="dispatch-chip-list">
+            {hasAttention && <span className="tag tag-amber" style={{ fontSize: "11px" }}>需留意</span>}
+            {hasDisplayValue(order.userNote) && (
               <span className="tag tag-gray" style={{ fontSize: "11px" }}>用户备注</span>
             )}
-            {order.adminNote && (
+            {hasDisplayValue(order.adminNote) && (
               <span className="tag tag-gray" style={{ fontSize: "11px" }}>商家备注</span>
             )}
-            {order.receiptNote && (
+            {hasDisplayValue(order.receiptNote) && (
               <span className="tag tag-blue" style={{ fontSize: "11px" }}>骑手备注</span>
             )}
-            {order.receiptUrl && (
-              <span className="tag tag-green" style={{ fontSize: "11px" }}>📷 有图片</span>
+            {hasDisplayValue(order.referenceImageUrl) && (
+              <span className="tag tag-gray" style={{ fontSize: "11px" }}>参照图</span>
+            )}
+            {hasDisplayValue(order.receiptUrl) && (
+              <span className="tag tag-green" style={{ fontSize: "11px" }}>送达图</span>
             )}
           </div>
           
@@ -472,18 +479,18 @@ export function DispatchAreasPage() {
         </div>
       </div>
 
-      <div className="admin-grid-3">
-        <div className="admin-panel" style={{ padding: "16px", display: "grid", gap: "8px" }}>
+      <div className="dispatch-summary-grid">
+        <div className="dispatch-stat-card">
           <div className="admin-panel-note">区域总数</div>
-          <div className="admin-panel-title">{areaStats.totalCount} 个</div>
+          <div className="dispatch-stat-card__value">{areaStats.totalCount}</div>
         </div>
-        <div className="admin-panel" style={{ padding: "16px", display: "grid", gap: "8px" }}>
+        <div className="dispatch-stat-card">
           <div className="admin-panel-note">待配送订单</div>
-          <div className="admin-panel-title" style={{ color: "var(--primary-color)" }}>{areaStats.dispatchingCount} 单</div>
+          <div className="dispatch-stat-card__value is-primary">{areaStats.dispatchingCount}</div>
         </div>
-        <div className="admin-panel" style={{ padding: "16px", display: "grid", gap: "8px", borderLeft: "4px solid var(--error-color)" }}>
+        <div className="dispatch-stat-card">
           <div className="admin-panel-note">缺骑手区域</div>
-          <div className="admin-panel-title" style={{ color: "var(--error-color)" }}>{areaStats.missingRiderAreaCount} 个</div>
+          <div className="dispatch-stat-card__value" style={{ color: "var(--error-color)" }}>{areaStats.missingRiderAreaCount}</div>
         </div>
       </div>
 
@@ -592,7 +599,7 @@ export function DispatchAreasPage() {
       >
         {activeArea ? (
           <div className="dispatch-area-detail">
-            <div className="dispatch-area-detail__header">
+            <div className="dispatch-dialog-header">
               <div>
                 <div className="dispatch-card__title">{activeArea.areaCode}</div>
                 <div className="dispatch-inline-note">当前骑手：{activeArea.currentRiderName || activeArea.defaultRiderName || "暂无骑手"}</div>
@@ -835,98 +842,93 @@ export function DispatchAreasPage() {
       >
         {orderDetail ? (
           <div style={{ display: "grid", gap: "16px" }}>
-            <div>
-              <div style={{ fontSize: "12px", color: "#999", marginBottom: "4px" }}>配送地址</div>
-              <div style={{ fontSize: "14px", fontWeight: 500 }}>{orderDetail.deliveryAddress}</div>
-            </div>
-            
-            <div>
-              <div style={{ fontSize: "12px", color: "#999", marginBottom: "4px" }}>当前骑手</div>
+            <div className="dispatch-dialog-header">
+              <div>
+                <div className="dispatch-card__title">{activeArea?.areaCode || "-"}</div>
+                <div className="dispatch-inline-note">当前骑手：{activeArea?.currentRiderName || activeArea?.defaultRiderName || "暂无骑手"}</div>
+              </div>
               <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                <div style={{ fontSize: "14px", fontWeight: 500 }}>
-                  {activeArea?.currentRiderName || activeArea?.defaultRiderName || "暂无骑手"}
-                </div>
-                <button
-                  className="btn btn-outline btn-compact"
-                  onClick={() => setOrderRiderChangeState({ 
-                    orderId: orderDetail.orderId, 
-                    riderId: activeArea?.defaultRiderId ? String(activeArea.defaultRiderId) : "" 
-                  })}
-                >
-                  <UserPlus size={14} /> 切换骑手
-                </button>
+                <span className={`tag ${orderDetail.deliveryStatus === "DELIVERED" ? "tag-green" : "tag-amber"}`}>
+                  {orderDetail.deliveryStatus === "DELIVERED" ? "已送达" : "待配送"}
+                </span>
+                {orderDetail.quantity > 1 ? <span className="tag tag-gray">数量 ×{orderDetail.quantity}</span> : null}
               </div>
             </div>
-            
-            {orderDetail.userNote && (
-              <div>
-                <div style={{ fontSize: "12px", color: "#999", marginBottom: "4px" }}>用户备注</div>
-                <div style={{ fontSize: "14px", padding: "8px 12px", backgroundColor: "#f5f5f5", borderRadius: "4px" }}>
-                  {orderDetail.userNote}
+
+            <div className="dispatch-detail-grid">
+              <section className="dispatch-detail-panel">
+                <div className="dispatch-section__title" style={{ marginBottom: 0, fontSize: "15px" }}>订单信息</div>
+                <div className="dispatch-detail-row">
+                  <div className="admin-panel-note">配送地址</div>
+                  <div>{orderDetail.deliveryAddress || "-"}</div>
                 </div>
-              </div>
-            )}
-            
-            {orderDetail.adminNote && (
-              <div>
-                <div style={{ fontSize: "12px", color: "#999", marginBottom: "4px" }}>商家备注</div>
-                <div style={{ fontSize: "14px", padding: "8px 12px", backgroundColor: "#fff7ed", borderRadius: "4px" }}>
-                  {orderDetail.adminNote}
+                <div className="dispatch-detail-row">
+                  <div className="admin-panel-note">当前骑手</div>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                    <div>{activeArea?.currentRiderName || activeArea?.defaultRiderName || "暂无骑手"}</div>
+                    <button
+                      className="btn btn-outline btn-compact"
+                      onClick={() => setOrderRiderChangeState({ 
+                        orderId: orderDetail.orderId, 
+                        riderId: activeArea?.defaultRiderId ? String(activeArea.defaultRiderId) : "" 
+                      })}
+                    >
+                      <UserPlus size={14} /> 切换骑手
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
-            
-            {orderDetail.receiptNote && (
-              <div>
-                <div style={{ fontSize: "12px", color: "#999", marginBottom: "4px" }}>骑手备注</div>
-                <div style={{ fontSize: "14px", padding: "8px 12px", backgroundColor: "#eff6ff", borderRadius: "4px" }}>
-                  {orderDetail.receiptNote}
+                <div className="dispatch-detail-row">
+                  <div className="admin-panel-note">用户备注</div>
+                  <div>{hasDisplayValue(orderDetail.userNote) ? orderDetail.userNote : "-"}</div>
                 </div>
-              </div>
-            )}
-            
-            {orderDetail.receiptUrl && (
-              <div>
-                <div style={{ fontSize: "12px", color: "#999", marginBottom: "8px" }}>回执照片</div>
-                <img 
-                  src={orderDetail.receiptUrl}
-                  alt="回执照片" 
-                  style={{ 
-                    maxWidth: "100%", 
-                    maxHeight: "400px", 
-                    borderRadius: "6px", 
-                    cursor: "pointer", 
-                    border: "1px solid #e5e7eb",
-                    display: "block"
-                  }}
-                  onClick={() => window.open(orderDetail.receiptUrl, '_blank')}
-                  onError={(e) => {
-                    const target = e.target as HTMLImageElement;
-                    target.style.display = 'none';
-                    const errorDiv = document.createElement('div');
-                    errorDiv.style.cssText = 'padding: 16px; backgroundColor: #fef3c7; border: 2px solid #f59e0b; borderRadius: 8px; fontSize: 14px; color: #92400e;';
-                    errorDiv.innerHTML = `
-                      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                        <span style="font-size: 20px;">⚠️</span>
-                        <div style="font-weight: 600;">图片加载失败</div>
-                      </div>
-                      <div style="font-size: 12px; margin-bottom: 8px;">请检查图片链接是否有效</div>
-                      <div style="padding: 8px 12px; background-color: #fff; border-radius: 4px; font-size: 11px; font-family: monospace; word-break: break-all; color: #475569;">
-                        ${orderDetail.receiptUrl}
-                      </div>
-                    `;
-                    target.parentElement?.appendChild(errorDiv);
-                  }}
-                />
-              </div>
-            )}
-            
-            {orderDetail.deliveredAt && (
-              <div>
-                <div style={{ fontSize: "12px", color: "#999", marginBottom: "4px" }}>送达时间</div>
-                <div style={{ fontSize: "14px" }}>{orderDetail.deliveredAt}</div>
-              </div>
-            )}
+                <div className="dispatch-detail-row">
+                  <div className="admin-panel-note">商家备注</div>
+                  <div>{hasDisplayValue(orderDetail.adminNote) ? orderDetail.adminNote : "-"}</div>
+                </div>
+              </section>
+
+              <section className="dispatch-detail-panel">
+                <div className="dispatch-section__title" style={{ marginBottom: 0, fontSize: "15px" }}>送达信息</div>
+                <div className="dispatch-detail-row">
+                  <div className="admin-panel-note">骑手备注</div>
+                  <div>{hasDisplayValue(orderDetail.receiptNote) ? orderDetail.receiptNote : "-"}</div>
+                </div>
+                <div className="dispatch-detail-row">
+                  <div className="admin-panel-note">送达时间</div>
+                  <div>{orderDetail.deliveredAt || "-"}</div>
+                </div>
+              </section>
+            </div>
+
+            <div className="dispatch-image-grid">
+              <section className="dispatch-detail-panel">
+                <div className="admin-panel-note">地址参照图</div>
+                {hasDisplayValue(orderDetail.referenceImageUrl) ? (
+                  <img
+                    src={orderDetail.referenceImageUrl}
+                    alt="地址参照图"
+                    style={{ width: "100%", borderRadius: "12px", border: "1px solid var(--border-color)", objectFit: "cover", aspectRatio: "3 / 4" }}
+                    onClick={() => window.open(orderDetail.referenceImageUrl, "_blank")}
+                  />
+                ) : (
+                  <div className="dispatch-image-empty">暂无参照图</div>
+                )}
+              </section>
+
+              <section className="dispatch-detail-panel">
+                <div className="admin-panel-note">本次送达图</div>
+                {hasDisplayValue(orderDetail.receiptUrl) ? (
+                  <img 
+                    src={orderDetail.receiptUrl}
+                    alt="回执照片" 
+                    style={{ width: "100%", borderRadius: "12px", border: "1px solid var(--border-color)", objectFit: "cover", aspectRatio: "3 / 4", cursor: "pointer" }}
+                    onClick={() => window.open(orderDetail.receiptUrl, "_blank")}
+                  />
+                ) : (
+                  <div className="dispatch-image-empty">暂无送达图</div>
+                )}
+              </section>
+            </div>
           </div>
         ) : null}
       </AdminDialog>

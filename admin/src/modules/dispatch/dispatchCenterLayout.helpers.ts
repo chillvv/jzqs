@@ -69,6 +69,14 @@ export function normalizeDispatchAreaBindings(items: DispatchAreaBindingLike[]) 
   });
 }
 
+export function hasDisplayValue(value: string | null | undefined) {
+  return Boolean(value && value.trim() && value.trim() !== "-");
+}
+
+export function hasOrderAttention(order: { userNote?: string | null; adminNote?: string | null }) {
+  return hasDisplayValue(order.userNote) || hasDisplayValue(order.adminNote);
+}
+
 export function buildDispatchAreaStats(bindings: DispatchAreaBindingResponse[]) {
   return {
     totalCount: bindings.length,
