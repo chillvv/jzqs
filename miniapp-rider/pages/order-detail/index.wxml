@@ -39,16 +39,16 @@
       </view>
 
       <!-- Remarks embedded in Order Info -->
-      <view class="inline-remarks" wx:if="{{order.customerNote || order.merchantNote || order.specialOrder || order.specialTag || order.specialSummary}}">
+      <view class="inline-remarks" wx:if="{{(order.customerNote && order.customerNote !== '-') || (order.merchantNote && order.merchantNote !== '-') || order.specialOrder || order.specialTag || order.specialSummary}}">
         <view class="inline-remark-item" wx:if="{{order.specialOrder || order.specialTag || order.specialSummary}}">
           <text class="inline-remark-label text-warning">特殊单：</text>
           <text class="inline-remark-value text-warning">{{order.specialSummary || order.specialTag || '请特别关注本单备注与餐品要求'}}</text>
         </view>
-        <view class="inline-remark-item" wx:if="{{order.customerNote}}">
+        <view class="inline-remark-item" wx:if="{{order.customerNote && order.customerNote !== '-'}}">
           <text class="inline-remark-label text-primary">用户备注：</text>
           <text class="inline-remark-value">{{order.customerNote}}</text>
         </view>
-        <view class="inline-remark-item" wx:if="{{order.merchantNote}}">
+        <view class="inline-remark-item" wx:if="{{order.merchantNote && order.merchantNote !== '-'}}">
           <text class="inline-remark-label text-warning">商家嘱咐：</text>
           <text class="inline-remark-value">{{order.merchantNote}}</text>
         </view>

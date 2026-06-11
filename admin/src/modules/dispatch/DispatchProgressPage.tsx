@@ -38,6 +38,14 @@ export function DispatchProgressPage() {
     if (bindingsResult.status === "fulfilled") setAreaBindings(normalizeDispatchAreaBindings(bindingsResult.value));
   }
 
+  useEffect(() => {
+    // When riders list changes, check if the selected rider still exists
+    if (selectedRiderName && !riderProgress.some(r => r.riderName === selectedRiderName)) {
+      setSelectedRiderName(undefined);
+      setSelectedOrderId(undefined);
+    }
+  }, [riderProgress, selectedRiderName]);
+
   const boardView = useMemo(
     () => buildDispatchBoardViewModel(riderProgress, areaBindings, { selectedRiderName, selectedOrderId }),
     [riderProgress, areaBindings, selectedRiderName, selectedOrderId]
@@ -82,19 +90,23 @@ export function DispatchProgressPage() {
                       >
                         <div className="dispatch-card__header">
                           <div>
-                            <div className="dispatch-card__title">{item.riderName}</div>
-                            <div className="dispatch-card__subtitle">{item.areaCode || "未分区"}</div>
+                            <div className="dispatch-card__title" style={{ fontSize: "16px", fontWeight: "bold" }}>{item.riderName}</div>
+                            <div className="dispatch-card__subtitle" style={{ marginTop: "4px", color: "var(--text-light)" }}>{item.areaCode || "未分区"}</div>
                           </div>
-                          <span className={`tag ${item.exceptionCount > 0 ? "tag-red" : "tag-green"}`}>
-                            异常 {item.exceptionCount}
-                          </span>
+                          {item.exceptionCount > 0 && (
+                            <span className="tag tag-red">
+                              异常 {item.exceptionCount}
+                            </span>
+                          )}
                         </div>
                         <div className="dispatch-chip-list" style={{ marginTop: "16px" }}>
-                          <span className="tag tag-blue">已送 {item.completedCount} / {item.totalCount}</span>
+                          <span className="tag tag-green">已送 {item.completedCount}</span>
                           <span className="tag tag-amber">待送 {item.pendingCount}</span>
+                          <span className="tag tag-gray">共 {item.totalCount} 单</span>
                         </div>
-                        <div className="dispatch-inline-note" style={{ marginTop: "12px", paddingTop: "12px", borderTop: "1px solid var(--border-color)" }}>
-                          当前第 {item.currentSequenceNumber ?? "-"} 单，下一单 #{item.nextOrderId ?? "-"}
+                        <div className="dispatch-inline-note" style={{ marginTop: "16px", paddingTop: "12px", borderTop: "1px solid var(--border-color)", display: "flex", justifyContent: "space-between" }}>
+                          <span>当前：{item.currentSequenceNumber ? `#${item.currentSequenceNumber}` : "-"}</span>
+                          <span>下一单：{item.nextOrderId ? `#${item.nextOrderId}` : "-"}</span>
                         </div>
                       </button>
                     );
@@ -168,7 +180,7 @@ export function DispatchProgressPage() {
         </div>
       </div>
 
-      {boardView.activeOrder && (
+      {boardView.activeOrder && selectedOrderId && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ width: "600px", maxWidth: "90vw" }}>
             <div className="modal-header">
