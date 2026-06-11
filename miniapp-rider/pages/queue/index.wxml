@@ -133,9 +133,6 @@
             <text class="badge-prefix">#</text>{{index + 1}}
           </view>
           <view class="order-info">
-            <view wx:if="{{item.specialOrder}}" class="special-tag-row">
-              <view class="special-tag special-tag-warning">需留意</view>
-            </view>
             <view class="order-name-row">
               <view class="order-name {{item.itemStatus === 'DELIVERED' ? 'order-name-completed' : ''}}">
                 {{item.customerName}}
@@ -146,7 +143,10 @@
             </view>
             <view class="order-address {{item.itemStatus === 'DELIVERED' ? 'order-address-completed' : ''}}">
               <text class="address-icon">📍</text>
-              <text class="address-text-content {{!item.deliveryAddress ? 'no-address' : ''}}">{{item.deliveryAddress || '地址未提供'}}</text>
+              <text class="address-text-content {{!item.deliveryAddress ? 'no-address' : ''}}"><text wx:if="{{item.buildingInfo}}" style="color: #2563eb; font-weight: 900; margin-right: 8rpx;">{{item.buildingInfo}}</text>{{item.deliveryAddress || '地址未提供'}}</text>
+            </view>
+            <view wx:if="{{item.specialOrder}}" class="special-tag-row" style="margin-top: 10rpx;">
+              <view class="special-tag special-tag-warning">需留意</view>
             </view>
           </view>
         </view>

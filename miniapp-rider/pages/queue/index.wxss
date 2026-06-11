@@ -385,16 +385,16 @@
 
 .order-card {
   background-color: var(--surface, #FFFFFF);
-  border-radius: 24rpx;
-  padding: 22rpx 24rpx;
-  box-shadow: 0 2rpx 12rpx rgba(15, 23, 42, 0.04);
-  border: 1rpx solid rgba(226, 232, 240, 0.6);
+  border-radius: 20rpx;
+  padding: 24rpx;
+  box-shadow: 0 4rpx 16rpx rgba(15, 23, 42, 0.04);
+  border: 1rpx solid rgba(226, 232, 240, 0.8);
   display: flex;
   align-items: center;
   justify-content: space-between;
   position: relative;
   overflow: hidden;
-  margin-bottom: 16rpx;
+  margin-bottom: 20rpx;
   /* 优化过渡时间 */
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
   /* 不能用 transform，会影响小程序拖拽坐标 */
@@ -405,21 +405,21 @@
   box-shadow: 0 10rpx 26rpx rgba(16, 185, 129, 0.12);
 }
 
-/* 待配送状态 - 橙色背景 */
+/* 待配送状态 - 蓝色背景 */
 .order-card:not(.order-card-completed) {
-  background: linear-gradient(135deg, rgba(251, 146, 60, 0.08) 0%, rgba(251, 146, 60, 0.04) 100%);
-  border-color: rgba(251, 146, 60, 0.2);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.04) 0%, rgba(37, 99, 235, 0.02) 100%);
+  border-color: rgba(37, 99, 235, 0.15);
 }
 
 .order-card.dragging {
   opacity: 0.92;
-  box-shadow: 0 32rpx 64rpx rgba(251, 146, 60, 0.3),
-              0 16rpx 32rpx rgba(251, 146, 60, 0.2),
-              0 8rpx 16rpx rgba(251, 146, 60, 0.15);
-  border-color: rgba(251, 146, 60, 0.6);
-  border-width: 3rpx;
+  box-shadow: 0 32rpx 64rpx rgba(37, 99, 235, 0.15),
+              0 16rpx 32rpx rgba(37, 99, 235, 0.1),
+              0 8rpx 16rpx rgba(37, 99, 235, 0.05);
+  border-color: rgba(37, 99, 235, 0.4);
+  border-width: 2rpx;
   z-index: 999;
-  background: linear-gradient(135deg, rgba(251, 146, 60, 0.25) 0%, rgba(251, 146, 60, 0.15) 100%);
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(37, 99, 235, 0.04) 100%);
   /* transition 由 inline style 精确控制 */
 }
 
@@ -432,25 +432,24 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: linear-gradient(135deg, rgba(251, 146, 60, 0.08) 0%, rgba(251, 146, 60, 0.04) 100%);
-  border-radius: 32rpx;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.04) 0%, rgba(37, 99, 235, 0.02) 100%);
+  border-radius: 20rpx;
   pointer-events: none;
 }
 
 .order-card.dragging .order-badge {
-  border-color: rgba(251, 146, 60, 0.5);
-  color: #E65100;
-  background: linear-gradient(135deg, rgba(251, 146, 60, 0.2) 0%, rgba(251, 146, 60, 0.12) 100%);
-  box-shadow: 0 4rpx 12rpx rgba(251, 146, 60, 0.3);
+  border-color: rgba(37, 99, 235, 0.3);
+  color: #1E40AF;
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.1) 0%, rgba(37, 99, 235, 0.05) 100%);
+  box-shadow: 0 4rpx 12rpx rgba(37, 99, 235, 0.15);
 }
 
-/* 已完成状态 - 绿色背景 */
+/* 已完成状态 - 灰色背景 */
 .order-card-completed {
-  opacity: 0.7;
-  filter: grayscale(80%);
+  opacity: 0.85;
   box-shadow: none;
-  background: linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(34, 197, 94, 0.04) 100%);
-  border-color: rgba(34, 197, 94, 0.2);
+  background: #F8FAFC;
+  border-color: rgba(226, 232, 240, 0.8);
 }
 
 .order-left {
@@ -485,23 +484,21 @@
 .order-badge {
   position: relative;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
-  color: #1A365D;
-  padding: 6rpx 12rpx;
-  border-radius: 6rpx;
+  color: #1E293B;
+  padding: 10rpx 14rpx;
+  border-radius: 12rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: 'Courier New', 'SF Mono', Monaco, monospace;
-  font-size: 28rpx;
-  font-weight: 700;
+  font-size: 30rpx;
+  font-weight: 800;
   letter-spacing: -0.02em;
   flex-shrink: 0;
-  min-width: 60rpx;
+  min-width: 68rpx;
   box-sizing: border-box;
-  border: 1rpx solid rgba(226, 232, 240, 0.8);
-  box-shadow: 
-    inset 0 1rpx 2rpx rgba(255, 255, 255, 0.8),
-    0 1rpx 2rpx rgba(0, 0, 0, 0.02);
+  border: 1rpx solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 2rpx 4rpx rgba(15, 23, 42, 0.04);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
@@ -522,19 +519,19 @@
   right: 0;
   bottom: 0;
   background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.3) 0%, 
+    rgba(255, 255, 255, 0.4) 0%, 
     rgba(255, 255, 255, 0) 50%,
     rgba(0, 0, 0, 0.02) 100%);
-  border-radius: 6rpx;
+  border-radius: 12rpx;
   pointer-events: none;
 }
 
 .badge-prefix {
-  font-size: 20rpx;
+  font-size: 22rpx;
   margin-right: 2rpx;
-  opacity: 0.5;
-  font-weight: 400;
-  color: #718096;
+  opacity: 0.6;
+  font-weight: 500;
+  color: #64748B;
   font-family: 'Courier New', 'SF Mono', Monaco, monospace;
   letter-spacing: 0.02em;
 }
@@ -563,14 +560,14 @@
 .order-name-row {
   display: flex;
   align-items: center;
-  gap: 12rpx;
-  margin-bottom: 8rpx;
+  gap: 16rpx;
+  margin-bottom: 12rpx;
   min-width: 0;
 }
 
 .order-name {
-  font-size: 32rpx;
-  font-weight: 700;
+  font-size: 34rpx;
+  font-weight: 800;
   color: var(--on-surface, #0F172A);
   word-break: break-all;
   letter-spacing: -0.01em;
@@ -582,9 +579,9 @@
   background: linear-gradient(135deg, #FF6B35 0%, #FF8C42 100%);
   color: #FFFFFF;
   font-family: 'Courier New', 'SF Mono', Monaco, monospace;
-  font-size: 24rpx;
+  font-size: 26rpx;
   font-weight: 800;
-  padding: 6rpx 16rpx;
+  padding: 8rpx 18rpx;
   border-radius: 999rpx;
   flex-shrink: 0;
   box-shadow: 0 4rpx 12rpx rgba(255, 107, 53, 0.4),
@@ -621,10 +618,10 @@
   align-items: flex-start;
   gap: 8rpx;
   min-width: 0;
-  background: #f8fafc;
-  padding: 16rpx;
-  border-radius: 12rpx;
-  margin-top: 12rpx;
+  background: rgba(248, 250, 252, 0.7);
+  padding: 16rpx 20rpx;
+  border-radius: 16rpx;
+  margin-top: 16rpx;
 }
 
 .address-icon {
