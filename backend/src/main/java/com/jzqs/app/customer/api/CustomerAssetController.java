@@ -50,6 +50,11 @@ public class CustomerAssetController {
         return ApiResponse.success(customerAssetService.customerDetail(customerId));
     }
 
+    @GetMapping("/{customerId}/notes")
+    public ApiResponse<CustomerNotesResponse> customerNotes(@PathVariable long customerId) {
+        return ApiResponse.success(customerAssetService.customerNotes(customerId));
+    }
+
     @PostMapping
     public ApiResponse<Map<String, Object>> createProfile(@RequestBody Map<String, Object> body) {
         return ApiResponse.success(customerAssetService.createCustomerProfile(body));
@@ -58,6 +63,14 @@ public class CustomerAssetController {
     @PostMapping("/{customerId}/profile")
     public ApiResponse<Map<String, Object>> updateProfile(@PathVariable long customerId, @RequestBody Map<String, Object> body) {
         return ApiResponse.success(customerAssetService.updateCustomerProfile(customerId, body));
+    }
+
+    @PostMapping("/{customerId}/notes")
+    public ApiResponse<Map<String, Object>> saveCustomerNote(
+        @PathVariable long customerId,
+        @Valid @RequestBody CustomerNoteUpsertRequest request
+    ) {
+        return ApiResponse.success(customerAssetService.saveCustomerNote(customerId, request));
     }
 
     @PostMapping("/{customerId}/wallet/grant")

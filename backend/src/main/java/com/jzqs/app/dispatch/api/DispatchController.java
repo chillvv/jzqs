@@ -81,6 +81,14 @@ public class DispatchController {
         return ApiResponse.success(dispatchService.managedRiders(authStatus, keyword, areaCode));
     }
 
+    @GetMapping("/riders/progress")
+    public ApiResponse<List<DispatchRiderProgressResponse>> riderProgress(
+        @RequestParam(required = false) String mealPeriod,
+        @RequestParam(required = false) String serveDate
+    ) {
+        return ApiResponse.success(dispatchService.riderProgress(mealPeriod, serveDate));
+    }
+
     @PostMapping("/riders")
     public ApiResponse<Map<String, Object>> createRider(@Valid @RequestBody DispatchCreateRiderRequest request) {
         return ApiResponse.success(dispatchService.createRider(

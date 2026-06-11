@@ -6,15 +6,22 @@ import {
   fetchWalletTransactions,
   grantWalletMeals,
   deductWalletMeals,
+  saveCustomerNote,
   updateCustomerProfile
 } from "../../shared/api/http";
-import type { CustomerAssetResponse, WalletTransactionResponse } from "../../shared/api/types";
+import type {
+  CustomerAssetResponse,
+  CustomerDetailResponse,
+  WalletTransactionResponse
+} from "../../shared/api/types";
 import { MinusCircle, RotateCcw, Search, UserPlus, X } from "lucide-react";
 import {
   buildCustomerActionLabels,
   buildCustomerAssetStats,
   buildCustomerOverviewSummary,
+  extractCustomerNoteGroups,
   filterCustomerAssets,
+  formatCustomerNoteSchedule,
   resolveCustomerSpecialMark,
   resolveCustomerStatusLabel,
   type CustomerBalanceState,
@@ -23,32 +30,30 @@ import {
 import { formatDateTimeLabel } from "../../shared/utils/dateTime";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { RemarkField } from "../../shared/components/RemarkField";
+import { toast } from "../../shared/components/Toast";
 
 const emptyEditForm = {
   name: "",
   phone: "",
   remark: "",
-  customerStatus: "INTENTION",
-  defaultUserRemark: "",
-  defaultMerchantRemark: "",
-  defaultTagsText: "",
-  orderPreferenceEnabled: true
+  customerStatus: "INTENTION"
 };
 const defaultGrantForm = { mealDelta: "5", remark: "补餐" };
 const defaultDeductForm = { mealDelta: "1", remark: "手工扣减" };
+const defaultCustomerNoteForm = {
+  longTermUserNote: "",
+  longTermMerchantNote: "",
+  timeBoxedMerchantNote: "",
+  timeBoxedStartAt: "",
+  timeBoxedEndAt: ""
+};
 
-function buildEditForm(detail: Record<string, unknown> | null, fallback: CustomerAssetResponse | null) {
-  const orderPreferences = (detail?.orderPreferences || {}) as Record<string, unknown>;
-  const orderTags = Array.isArray(detail?.orderTags) ? detail.orderTags as Array<Record<string, unknown>> : [];
+function buildEditForm(detail: CustomerDetailResponse | null, fallback: CustomerAssetResponse | null) {
   return {
     name: String(detail?.name || fallback?.name || ""),
     phone: String(detail?.phone || fallback?.phone || ""),
     remark: String(detail?.remark || fallback?.remark || ""),
-    customerStatus: String(detail?.customerStatus || fallback?.customerStatus || "INTENTION"),
-    defaultUserRemark: String(orderPreferences.defaultUserRemark || ""),
-    defaultMerchantRemark: String(orderPreferences.defaultMerchantRemark || ""),
-    defaultTagsText: orderTags.map((item) => String(item.tagName || "")).filter(Boolean).join("，"),
-    orderPreferenceEnabled: orderPreferences.enabled === undefined ? true : Boolean(orderPreferences.enabled)
+    customerStatus: String(detail?.customerStatus || fallback?.customerStatus || "INTENTION")
   };
 }
 
@@ -63,12 +68,13 @@ export function CustomerAssetPage() {
   const [grantForm, setGrantForm] = useState(defaultGrantForm);
   const [deductForm, setDeductForm] = useState(defaultDeductForm);
   const [editForm, setEditForm] = useState(emptyEditForm);
+  const [customerNoteForm, setCustomerNoteForm] = useState(defaultCustomerNoteForm);
   const [keywordFilter, setKeywordFilter] = useState("");
   const [customerStatusFilter, setCustomerStatusFilter] = useState("ALL");
   const [balanceStateFilter, setBalanceStateFilter] = useState<CustomerBalanceState>("ALL");
   const [orderModeFilter, setOrderModeFilter] = useState<CustomerOrderModeFilter>("ALL");
   const [transactions, setTransactions] = useState<WalletTransactionResponse[]>([]);
-  const [detail, setDetail] = useState<Record<string, unknown> | null>(null);
+  const [detail, setDetail] = useState<CustomerDetailResponse | null>(null);
 
   const [detailActionLabel, deductActionLabel] = useMemo(() => buildCustomerActionLabels(), []);
 
@@ -91,6 +97,7 @@ export function CustomerAssetPage() {
     setDetail(detailResponse);
     setTransactions(txPage.items);
     setEditForm(buildEditForm(detailResponse, item));
+    setCustomerNoteForm(defaultCustomerNoteForm);
   }
 
   async function refreshCustomerWorkspace(item: CustomerAssetResponse) {
@@ -142,7 +149,9 @@ export function CustomerAssetPage() {
     if (!editForm.name || !editForm.phone) return;
     try {
       await createCustomerProfile({
-        ...editForm,
+        name: editForm.name,
+        phone: editForm.phone,
+        remark: editForm.remark,
         priorityCustomer: false,
         priorityTag: "",
         priorityNote: ""
@@ -159,7 +168,10 @@ export function CustomerAssetPage() {
   async function handleInlineEditSubmit() {
     if (!activeItem || !editForm.name || !editForm.phone) return;
     await updateCustomerProfile(activeItem.id, {
-      ...editForm,
+      name: editForm.name,
+      phone: editForm.phone,
+      remark: editForm.remark,
+      customerStatus: editForm.customerStatus,
       priorityCustomer: false,
       priorityTag: "",
       priorityNote: ""
@@ -180,6 +192,74 @@ export function CustomerAssetPage() {
     }),
     [items, keywordFilter, customerStatusFilter, balanceStateFilter, orderModeFilter]
   );
+  const noteGroups = useMemo(() => extractCustomerNoteGroups(detail), [detail]);
+
+  async function handleSaveCustomerNote(kind: "user" | "merchant" | "timeBoxedMerchant") {
+    if (!activeItem) return;
+
+    try {
+      if (kind === "user") {
+        const content = customerNoteForm.longTermUserNote.trim();
+        if (!content) {
+          toast("请填写长期用户备注", "error");
+          return;
+        }
+        await saveCustomerNote(activeItem.id, {
+          noteType: "USER",
+          scopeType: "LONG_TERM",
+          content,
+          displayOrder: noteGroups.userNotes.length
+        });
+        setCustomerNoteForm((prev) => ({ ...prev, longTermUserNote: "" }));
+      }
+
+      if (kind === "merchant") {
+        const content = customerNoteForm.longTermMerchantNote.trim();
+        if (!content) {
+          toast("请填写长期商家备注", "error");
+          return;
+        }
+        await saveCustomerNote(activeItem.id, {
+          noteType: "MERCHANT",
+          scopeType: "LONG_TERM",
+          content,
+          displayOrder: noteGroups.longTermMerchantNotes.length
+        });
+        setCustomerNoteForm((prev) => ({ ...prev, longTermMerchantNote: "" }));
+      }
+
+      if (kind === "timeBoxedMerchant") {
+        const content = customerNoteForm.timeBoxedMerchantNote.trim();
+        if (!content) {
+          toast("请填写限时商家备注", "error");
+          return;
+        }
+        if (!customerNoteForm.timeBoxedStartAt || !customerNoteForm.timeBoxedEndAt) {
+          toast("请填写限时备注开始和结束时间", "error");
+          return;
+        }
+        await saveCustomerNote(activeItem.id, {
+          noteType: "MERCHANT",
+          scopeType: "TIME_BOXED",
+          content,
+          startAt: customerNoteForm.timeBoxedStartAt,
+          endAt: customerNoteForm.timeBoxedEndAt,
+          displayOrder: noteGroups.timeBoxedMerchantNotes.length
+        });
+        setCustomerNoteForm((prev) => ({
+          ...prev,
+          timeBoxedMerchantNote: "",
+          timeBoxedStartAt: "",
+          timeBoxedEndAt: ""
+        }));
+      }
+
+      await refreshCustomerWorkspace(activeItem);
+      toast("客户备注已保存");
+    } catch (err: any) {
+      toast(err?.response?.data?.message || err?.message || "保存客户备注失败", "error");
+    }
+  }
 
   function resetCustomerFilters() {
     setKeywordFilter("");
@@ -486,20 +566,6 @@ export function CustomerAssetPage() {
                           multiline
                         />
                       </div>
-                      <div className="customer-edit-form-grid">
-                        <div className="form-group">
-                          <label className="form-label">默认用户备注</label>
-                          <input className="form-control" value={editForm.defaultUserRemark} onChange={(e) => setEditForm({ ...editForm, defaultUserRemark: e.target.value })} />
-                        </div>
-                        <div className="form-group">
-                          <label className="form-label">默认商家备注</label>
-                          <input className="form-control" value={editForm.defaultMerchantRemark} onChange={(e) => setEditForm({ ...editForm, defaultMerchantRemark: e.target.value })} />
-                        </div>
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">默认标签</label>
-                        <input className="form-control" value={editForm.defaultTagsText} onChange={(e) => setEditForm({ ...editForm, defaultTagsText: e.target.value })} placeholder="多个标签请用逗号分隔，例如：周卡，新开卡" />
-                      </div>
                     </div>
                   ) : (
                     <>
@@ -517,20 +583,102 @@ export function CustomerAssetPage() {
                         <div className="customer-detail-note-block__label">客户备注</div>
                         <div className="customer-detail-note-block__value">{String(detail?.remark || activeItem.remark || "-")}</div>
                       </div>
-                      <div className="customer-detail-note-block">
-                        <div className="customer-detail-note-block__label">订餐偏好与标签</div>
-                        <div className="customer-detail-note-block__value">
-                          默认用户备注：{String((detail?.orderPreferences as Record<string, unknown> | undefined)?.defaultUserRemark || "-")}
-                          <br />
-                          默认商家备注：{String((detail?.orderPreferences as Record<string, unknown> | undefined)?.defaultMerchantRemark || "-")}
-                          <br />
-                          默认标签：{Array.isArray(detail?.orderTags) && detail?.orderTags.length
-                            ? (detail.orderTags as Array<Record<string, unknown>>).map((item) => String(item.tagName || "")).filter(Boolean).join(" / ")
-                            : "-"}
-                        </div>
-                      </div>
                     </>
                   )}
+                </section>
+
+                <section className="customer-detail-card">
+                  <div className="customer-detail-card__header">
+                    <div className="customer-detail-card__title">客户级备注</div>
+                  </div>
+                  <div className="customer-detail-note-block">
+                    <div className="customer-detail-note-block__label">长期用户备注</div>
+                    <div className="customer-detail-note-block__value">
+                      {noteGroups.userNotes.length > 0
+                        ? noteGroups.userNotes.map((note) => note.content).join(" / ")
+                        : "-"}
+                    </div>
+                  </div>
+                  <div className="customer-detail-note-block">
+                    <div className="customer-detail-note-block__label">长期商家备注</div>
+                    <div className="customer-detail-note-block__value">
+                      {noteGroups.longTermMerchantNotes.length > 0
+                        ? noteGroups.longTermMerchantNotes.map((note) => note.content).join(" / ")
+                        : "-"}
+                    </div>
+                  </div>
+                  <div className="customer-detail-note-block">
+                    <div className="customer-detail-note-block__label">限时商家备注</div>
+                    <div className="customer-detail-note-block__value">
+                      {noteGroups.timeBoxedMerchantNotes.length > 0
+                        ? noteGroups.timeBoxedMerchantNotes.map((note) => `${note.content}（${formatCustomerNoteSchedule(note)}）`).join(" / ")
+                        : "-"}
+                    </div>
+                  </div>
+                  <div className="customer-detail-inline-form" style={{ marginTop: "12px" }}>
+                    <div className="customer-edit-form-grid">
+                      <div className="form-group">
+                        <label className="form-label">长期用户备注</label>
+                        <input
+                          className="form-control"
+                          value={customerNoteForm.longTermUserNote}
+                          onChange={(e) => setCustomerNoteForm((prev) => ({ ...prev, longTermUserNote: e.target.value }))}
+                          placeholder="例如：少饭"
+                        />
+                      </div>
+                      <div className="form-group" style={{ display: "flex", alignItems: "flex-end" }}>
+                        <button className="btn btn-outline" onClick={() => handleSaveCustomerNote("user")}>保存用户备注</button>
+                      </div>
+                    </div>
+                    <div className="customer-edit-form-grid">
+                      <div className="form-group">
+                        <label className="form-label">长期商家备注</label>
+                        <input
+                          className="form-control"
+                          value={customerNoteForm.longTermMerchantNote}
+                          onChange={(e) => setCustomerNoteForm((prev) => ({ ...prev, longTermMerchantNote: e.target.value }))}
+                          placeholder="例如：重点关注"
+                        />
+                      </div>
+                      <div className="form-group" style={{ display: "flex", alignItems: "flex-end" }}>
+                        <button className="btn btn-outline" onClick={() => handleSaveCustomerNote("merchant")}>保存商家备注</button>
+                      </div>
+                    </div>
+                    <div className="customer-edit-form-grid">
+                      <div className="form-group">
+                        <label className="form-label">限时商家备注</label>
+                        <input
+                          className="form-control"
+                          value={customerNoteForm.timeBoxedMerchantNote}
+                          onChange={(e) => setCustomerNoteForm((prev) => ({ ...prev, timeBoxedMerchantNote: e.target.value }))}
+                          placeholder="例如：周卡体验"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label">开始时间</label>
+                        <input
+                          className="form-control"
+                          type="datetime-local"
+                          value={customerNoteForm.timeBoxedStartAt}
+                          onChange={(e) => setCustomerNoteForm((prev) => ({ ...prev, timeBoxedStartAt: e.target.value }))}
+                        />
+                      </div>
+                    </div>
+                    <div className="customer-edit-form-grid">
+                      <div className="form-group">
+                        <label className="form-label">结束时间</label>
+                        <input
+                          className="form-control"
+                          type="datetime-local"
+                          value={customerNoteForm.timeBoxedEndAt}
+                          onChange={(e) => setCustomerNoteForm((prev) => ({ ...prev, timeBoxedEndAt: e.target.value }))}
+                        />
+                      </div>
+                      <div className="form-group" style={{ display: "flex", alignItems: "flex-end" }}>
+                        <button className="btn btn-outline" onClick={() => handleSaveCustomerNote("timeBoxedMerchant")}>保存限时备注</button>
+                      </div>
+                    </div>
+                  </div>
                 </section>
 
                 <section className="customer-detail-card">

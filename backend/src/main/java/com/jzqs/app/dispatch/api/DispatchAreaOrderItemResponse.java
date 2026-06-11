@@ -9,6 +9,7 @@ public record DispatchAreaOrderItemResponse(
     String riderName,
     String userNote,
     String adminNote,
+    String referenceImageUrl,
     String receiptUrl,
     String receiptNote,
     String deliveredAt,

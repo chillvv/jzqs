@@ -1,17 +1,20 @@
 package com.jzqs.app.order.service.impl;
 
-import com.jzqs.app.admin.persistence.AdminRowMappers;
 import com.jzqs.app.common.api.BatchOperationResponse;
 import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.order.api.ManualCreateCustomerAddressResponse;
 import com.jzqs.app.order.api.ManualCreateCustomerSearchResponse;
+import com.jzqs.app.order.api.OrderNoteCreateRequest;
+import com.jzqs.app.order.api.OrderNoteItemResponse;
+import com.jzqs.app.order.api.OrderNotesResponse;
 import com.jzqs.app.order.api.OrderPrepItemResponse;
 import com.jzqs.app.order.api.OrderPrepStatsResponse;
 import com.jzqs.app.order.api.SubscriptionConfirmationItem;
 import com.jzqs.app.order.api.SubscriptionPreviewItem;
 import com.jzqs.app.order.api.SpecialOrderItem;
+import com.jzqs.app.order.service.OrderNoteSnapshotService;
 import com.jzqs.app.order.service.OrderPrepService;
 import com.jzqs.app.subscription.api.SubscriptionPreviewCheckResponse;
 import java.sql.PreparedStatement;
@@ -19,6 +22,7 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -31,10 +35,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OrderPrepServiceImpl implements OrderPrepService {
+    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private final JdbcTemplate jdbcTemplate;
+    private final OrderNoteSnapshotService orderNoteSnapshotService;
 
-    public OrderPrepServiceImpl(JdbcTemplate jdbcTemplate) {
+    public OrderPrepServiceImpl(JdbcTemplate jdbcTemplate, OrderNoteSnapshotService orderNoteSnapshotService) {
         this.jdbcTemplate = jdbcTemplate;
+        this.orderNoteSnapshotService = orderNoteSnapshotService;
     }
 
     @Override
@@ -167,7 +174,31 @@ public class OrderPrepServiceImpl implements OrderPrepService {
               )
             ORDER BY mso.id
             """;
-        List<OrderPrepItemResponse> items = jdbcTemplate.query(sql, AdminRowMappers.ORDER_PREP_ITEM, targetDate);
+        List<PrepOrderRow> rows = jdbcTemplate.query(sql, (rs, rowNum) -> new PrepOrderRow(
+            rs.getLong("id"),
+            rs.getString("customer_name"),
+            rs.getString("customer_phone"),
+            rs.getString("meal_summary"),
+            rs.getInt("quantity"),
+            rs.getString("user_note"),
+            rs.getString("admin_note"),
+            rs.getString("special_tag"),
+            rs.getString("delivery_address"),
+            rs.getString("source"),
+            rs.getBoolean("priority_customer"),
+            rs.getBoolean("fixed_subscription"),
+            rs.getString("status"),
+            rs.getString("display_status"),
+            rs.getString("display_status_label"),
+            rs.getBoolean("can_assign"),
+            rs.getBoolean("can_cancel"),
+            rs.getBoolean("can_receipt"),
+            rs.getString("wallet_status_label")
+        ), targetDate);
+        Map<Long, OrderNoteProjection> noteProjections = loadOrderNoteProjections(rows.stream().map(PrepOrderRow::id).toList());
+        List<OrderPrepItemResponse> items = rows.stream()
+            .map(row -> toOrderPrepItem(row, noteProjections.get(row.id())))
+            .toList();
         return PageResponse.of(items, 1, 20, items.size());
     }
 
@@ -316,6 +347,60 @@ public class OrderPrepServiceImpl implements OrderPrepService {
     }
 
     @Override
+    public OrderNotesResponse orderNotes(long orderId) {
+        requireOrderContext(orderId);
+        List<OrderNoteItemResponse> notes = jdbcTemplate.query(
+            """
+                SELECT id, note_type, source_type, scope_type, content, effective_status, created_at
+                FROM order_notes
+                WHERE meal_slot_order_id = ?
+                ORDER BY note_type, created_at, id
+                """,
+            (rs, rowNum) -> new OrderNoteItemResponse(
+                rs.getLong("id"),
+                stringValue(rs.getString("note_type")),
+                stringValue(rs.getString("source_type")),
+                stringValue(rs.getString("scope_type")),
+                stringValue(rs.getString("content")),
+                stringValue(rs.getString("effective_status")),
+                formatTimestamp(rs.getTimestamp("created_at"))
+            ),
+            orderId
+        );
+        List<OrderNoteItemResponse> userNotes = notes.stream()
+            .filter(note -> "USER".equals(note.noteType()))
+            .toList();
+        List<OrderNoteItemResponse> merchantNotes = notes.stream()
+            .filter(note -> "MERCHANT".equals(note.noteType()))
+            .toList();
+        return new OrderNotesResponse(userNotes, merchantNotes);
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> addOrderNote(long orderId, OrderNoteCreateRequest request) {
+        OrderContext orderContext = requireOrderContext(orderId);
+        String noteType = normalizeOrderNoteType(request.noteType());
+        String scopeType = normalizeOrderNoteScope(request.scopeType());
+        String content = requireOrderNoteContent(request.content());
+
+        jdbcTemplate.update(
+            """
+                INSERT INTO order_notes (
+                    meal_slot_order_id, customer_id, note_type, source_type, scope_type, content, effective_status, created_by
+                ) VALUES (?, ?, ?, 'MERCHANT_ORDER_ONCE', ?, ?, 'ACTIVE', ?)
+                """,
+            orderId,
+            orderContext.customerId(),
+            noteType,
+            scopeType,
+            content,
+            "ADMIN"
+        );
+        return Map.of("orderId", orderId, "status", "CREATED");
+    }
+
+    @Override
     public List<SpecialOrderItem> specialOrders(String serveDate) {
         String sql = """
             SELECT
@@ -338,12 +423,18 @@ public class OrderPrepServiceImpl implements OrderPrepService {
                     mso.user_note IS NOT NULL
                  OR mso.admin_note IS NOT NULL
                  OR mso.special_tag IS NOT NULL
+                 OR EXISTS (
+                        SELECT 1
+                        FROM order_notes onote
+                        WHERE onote.meal_slot_order_id = mso.id
+                          AND onote.effective_status = 'ACTIVE'
+                    )
                  OR c.is_priority_customer = TRUE
                  OR mso.is_priority = TRUE
               )
             ORDER BY mso.id
             """;
-        return jdbcTemplate.query(sql, (rs, rowNum) -> new SpecialOrderItem(
+        List<SpecialOrderRow> rows = jdbcTemplate.query(sql, (rs, rowNum) -> new SpecialOrderRow(
             rs.getLong("id"),
             rs.getString("customer_name"),
             rs.getString("customer_phone"),
@@ -355,6 +446,10 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             rs.getString("special_tag"),
             rs.getBoolean("priority_customer")
         ), java.sql.Date.valueOf(serveDate));
+        Map<Long, OrderNoteProjection> noteProjections = loadOrderNoteProjections(rows.stream().map(SpecialOrderRow::id).toList());
+        return rows.stream()
+            .map(row -> toSpecialOrderItem(row, noteProjections.get(row.id())))
+            .toList();
     }
 
     @Override
@@ -677,6 +772,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             "INSERT INTO meal_slot_orders (daily_order_id, meal_period, quantity, address_id, note, user_note, status, source_type, confirmed_from_subscription) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             dailyOrderId, normalizedMealPeriod, quantity, addressId, note, note, "PENDING_DISPATCH", source, "SUBSCRIPTION".equals(source)
         );
+        LocalDateTime snapshotTime = LocalDateTime.now();
         jdbcTemplate.update("UPDATE meal_wallets SET reserved_meals = reserved_meals + ? WHERE id = ?", quantity, walletId);
         insertWalletTransaction(
             walletId,
@@ -685,6 +781,16 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             "系统",
             "SUBSCRIPTION".equals(source) ? "固定订餐自动扣餐" : "代客录单占用餐次",
             mealSlotOrderId
+        );
+        String normalizedSnapshotNote = normalizeSnapshotNote(note);
+        orderNoteSnapshotService.writeOrderSnapshot(
+            mealSlotOrderId,
+            customerId,
+            "SUBSCRIPTION".equals(source) ? "系统" : "后台客服",
+            "SUBSCRIPTION".equals(source) ? null : normalizedSnapshotNote,
+            "SUBSCRIPTION".equals(source) ? normalizedSnapshotNote : null,
+            List.of(),
+            snapshotTime
         );
         return Map.of("orderId", mealSlotOrderId, "status", "PENDING_DISPATCH");
     }
@@ -992,6 +1098,160 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         return current + " / " + incoming;
     }
 
+    private String normalizeSnapshotNote(String note) {
+        String normalized = stringValue(note);
+        return normalized.isBlank() || "-".equals(normalized) ? null : normalized;
+    }
+
+    private Map<Long, OrderNoteProjection> loadOrderNoteProjections(List<Long> orderIds) {
+        if (orderIds.isEmpty()) {
+            return Map.of();
+        }
+        String placeholders = String.join(",", orderIds.stream().map(id -> "?").toList());
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+            """
+                SELECT meal_slot_order_id, note_type, content
+                FROM order_notes
+                WHERE effective_status = 'ACTIVE'
+                  AND meal_slot_order_id IN (
+            """
+                + placeholders
+                + """
+                  )
+                ORDER BY meal_slot_order_id, created_at, id
+                """,
+            orderIds.toArray()
+        );
+        Map<Long, NoteAccumulator> accumulators = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            long orderId = ((Number) row.get("meal_slot_order_id")).longValue();
+            NoteAccumulator accumulator = accumulators.computeIfAbsent(orderId, ignored -> new NoteAccumulator());
+            accumulator.add(stringValue(row.get("note_type")), stringValue(row.get("content")));
+        }
+        Map<Long, OrderNoteProjection> projections = new LinkedHashMap<>();
+        for (Long orderId : orderIds) {
+            NoteAccumulator accumulator = accumulators.get(orderId);
+            if (accumulator != null) {
+                projections.put(orderId, accumulator.toProjection());
+            }
+        }
+        return projections;
+    }
+
+    private OrderPrepItemResponse toOrderPrepItem(PrepOrderRow row, OrderNoteProjection projection) {
+        return new OrderPrepItemResponse(
+            row.id(),
+            row.customerName(),
+            row.customerPhone(),
+            row.mealSummary(),
+            row.quantity(),
+            resolveProjectedUserNote(projection, row.userNote()),
+            resolveProjectedAdminNote(projection, row.adminNote()),
+            resolveProjectedSpecialTag(projection, row.specialTag()),
+            row.deliveryAddress(),
+            row.source(),
+            row.priorityCustomer(),
+            row.fixedSubscription(),
+            row.status(),
+            row.displayStatus(),
+            row.displayStatusLabel(),
+            row.canAssign(),
+            row.canCancel(),
+            row.canReceipt(),
+            row.walletStatusLabel()
+        );
+    }
+
+    private SpecialOrderItem toSpecialOrderItem(SpecialOrderRow row, OrderNoteProjection projection) {
+        return new SpecialOrderItem(
+            row.id(),
+            row.customerName(),
+            row.customerPhone(),
+            row.addressLine(),
+            row.mealPeriod(),
+            row.quantity(),
+            resolveProjectedUserNote(projection, row.userNote()),
+            resolveProjectedAdminNote(projection, row.adminNote()),
+            resolveProjectedSpecialTag(projection, row.specialTag()),
+            row.priorityCustomer()
+        );
+    }
+
+    private String resolveProjectedUserNote(OrderNoteProjection projection, String legacyValue) {
+        if (projection != null && projection.hasOrderNotes()) {
+            return projection.userNote().isBlank() ? "-" : projection.userNote();
+        }
+        String normalized = normalizeLegacyNote(legacyValue);
+        return normalized.isBlank() ? "-" : normalized;
+    }
+
+    private String resolveProjectedAdminNote(OrderNoteProjection projection, String legacyValue) {
+        if (projection != null && projection.hasOrderNotes()) {
+            return projection.adminNote();
+        }
+        return normalizeLegacyNote(legacyValue);
+    }
+
+    private String resolveProjectedSpecialTag(OrderNoteProjection projection, String legacyValue) {
+        if (projection != null && projection.hasOrderNotes()) {
+            return "";
+        }
+        return normalizeLegacyNote(legacyValue);
+    }
+
+    private String normalizeLegacyNote(String value) {
+        String normalized = stringValue(value);
+        return "-".equals(normalized) ? "" : normalized;
+    }
+
+    private OrderContext requireOrderContext(long orderId) {
+        List<OrderContext> rows = jdbcTemplate.query(
+            """
+                SELECT do.customer_id
+                FROM meal_slot_orders mso
+                JOIN daily_orders do ON do.id = mso.daily_order_id
+                WHERE mso.id = ?
+                """,
+            (rs, rowNum) -> new OrderContext(rs.getLong("customer_id")),
+            orderId
+        );
+        if (rows.isEmpty()) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "订单不存在");
+        }
+        return rows.get(0);
+    }
+
+    private String normalizeOrderNoteType(String noteType) {
+        String normalized = stringValue(noteType).toUpperCase();
+        if (!"MERCHANT".equals(normalized)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "订单备注仅支持商家备注");
+        }
+        return normalized;
+    }
+
+    private String normalizeOrderNoteScope(String scopeType) {
+        String normalized = stringValue(scopeType).toUpperCase();
+        if (!"ORDER_ONCE".equals(normalized)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "订单备注仅支持单餐备注");
+        }
+        return normalized;
+    }
+
+    private String requireOrderNoteContent(String content) {
+        String normalized = stringValue(content);
+        if (normalized.isBlank()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "备注内容不能为空");
+        }
+        if (normalized.length() > 255) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "备注内容不能超过255个字符");
+        }
+        return normalized;
+    }
+
+    private String formatTimestamp(Timestamp value) {
+        return value == null ? "" : value.toLocalDateTime().format(DATETIME_FORMATTER);
+    }
+
     private String stringValue(Object value) {
         return value == null ? "" : String.valueOf(value).trim();
     }
@@ -1011,5 +1271,72 @@ public class OrderPrepServiceImpl implements OrderPrepService {
 
     private int nvl(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private record PrepOrderRow(
+        long id,
+        String customerName,
+        String customerPhone,
+        String mealSummary,
+        int quantity,
+        String userNote,
+        String adminNote,
+        String specialTag,
+        String deliveryAddress,
+        String source,
+        boolean priorityCustomer,
+        boolean fixedSubscription,
+        String status,
+        String displayStatus,
+        String displayStatusLabel,
+        boolean canAssign,
+        boolean canCancel,
+        boolean canReceipt,
+        String walletStatusLabel
+    ) {
+    }
+
+    private record SpecialOrderRow(
+        long id,
+        String customerName,
+        String customerPhone,
+        String addressLine,
+        String mealPeriod,
+        int quantity,
+        String userNote,
+        String adminNote,
+        String specialTag,
+        boolean priorityCustomer
+    ) {
+    }
+
+    private record OrderNoteProjection(String userNote, String adminNote, boolean hasOrderNotes) {
+    }
+
+    private static final class NoteAccumulator {
+        private final List<String> userNotes = new ArrayList<>();
+        private final List<String> merchantNotes = new ArrayList<>();
+
+        private void add(String noteType, String content) {
+            String normalized = content == null ? "" : content.trim();
+            if (normalized.isBlank() || "-".equals(normalized)) {
+                return;
+            }
+            List<String> target = "MERCHANT".equals(noteType) ? merchantNotes : userNotes;
+            if (!target.contains(normalized)) {
+                target.add(normalized);
+            }
+        }
+
+        private OrderNoteProjection toProjection() {
+            return new OrderNoteProjection(
+                String.join(" / ", userNotes),
+                String.join(" / ", merchantNotes),
+                true
+            );
+        }
+    }
+
+    private record OrderContext(long customerId) {
     }
 }

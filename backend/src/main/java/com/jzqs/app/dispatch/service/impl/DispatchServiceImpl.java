@@ -17,6 +17,7 @@ import com.jzqs.app.dispatch.api.DispatchOrderReorderItemRequest;
 import com.jzqs.app.dispatch.api.DispatchPendingItemResponse;
 import com.jzqs.app.dispatch.api.DispatchReassignmentResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderAuthBindingResponse;
+import com.jzqs.app.dispatch.api.DispatchRiderProgressResponse;
 import com.jzqs.app.dispatch.api.PendingRiderResponse;
 import com.jzqs.app.dispatch.service.DispatchService;
 import java.sql.Timestamp;
@@ -188,6 +189,62 @@ public class DispatchServiceImpl implements DispatchService {
             rs.getString("current_customer_name"),
             rs.getString("next_customer_name")
         ), args.toArray());
+    }
+
+    @Override
+    public List<DispatchRiderProgressResponse> riderProgress(String mealPeriod, String serveDate) {
+        LocalDate targetDate = serveDate == null || serveDate.isEmpty()
+            ? LocalDate.now()
+            : LocalDate.parse(serveDate);
+        String finalMealPeriod = normalizedMealPeriod(mealPeriod);
+        List<RiderProgressRow> rows = jdbcTemplate.query(
+            """
+                SELECT
+                    da.rider_name,
+                    da.area_code,
+                    da.meal_slot_order_id AS order_id,
+                    da.sequence_number,
+                    da.status AS delivery_status
+                FROM dispatch_assignments da
+                JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
+                JOIN daily_orders doo ON doo.id = mso.daily_order_id
+                WHERE doo.serve_date = ?
+                  AND da.rider_name IS NOT NULL
+                  AND da.rider_name <> ''
+                  AND (? IS NULL OR mso.meal_period = ?)
+                ORDER BY da.rider_name, da.area_code, da.sequence_number, da.id
+                """,
+            (rs, rowNum) -> new RiderProgressRow(
+                rs.getString("rider_name"),
+                rs.getString("area_code"),
+                rs.getLong("order_id"),
+                rs.getInt("sequence_number"),
+                rs.getString("delivery_status")
+            ),
+            targetDate,
+            finalMealPeriod,
+            finalMealPeriod
+        );
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+        Map<String, Integer> exceptionCounts = loadRiderExceptionCounts(targetDate, finalMealPeriod);
+        List<DispatchRiderProgressResponse> responses = new ArrayList<>();
+        RiderProgressAccumulator current = null;
+        for (RiderProgressRow row : rows) {
+            String key = riderProgressKey(row.riderName(), row.areaCode());
+            if (current == null || !current.matches(key)) {
+                if (current != null) {
+                    responses.add(current.toResponse(exceptionCounts.getOrDefault(current.key(), 0)));
+                }
+                current = new RiderProgressAccumulator(key, row.riderName(), row.areaCode());
+            }
+            current.add(row);
+        }
+        if (current != null) {
+            responses.add(current.toResponse(exceptionCounts.getOrDefault(current.key(), 0)));
+        }
+        return responses;
     }
 
     @Override
@@ -722,7 +779,7 @@ public class DispatchServiceImpl implements DispatchService {
             : LocalDate.parse(serveDate);
         
         String finalMealPeriod = normalizedMealPeriod(mealPeriod);
-        return jdbcTemplate.query(
+        List<DispatchAreaBindingResponse> responses = jdbcTemplate.query(
             """
                 SELECT
                     dab.area_code,
@@ -758,6 +815,9 @@ public class DispatchServiceImpl implements DispatchService {
                 );
             }
         );
+        return responses.stream()
+            .filter(binding -> !binding.orders().isEmpty())
+            .toList();
     }
 
     @Override
@@ -1404,7 +1464,7 @@ public class DispatchServiceImpl implements DispatchService {
     }
 
     private List<DispatchAreaOrderItemResponse> findAreaOrders(String areaCode, String mealPeriod, LocalDate serveDate) {
-        return jdbcTemplate.query(
+        List<DispatchAreaOrderRow> rows = jdbcTemplate.query(
             """
                 SELECT
                     mso.id AS order_id,
@@ -1415,6 +1475,7 @@ public class DispatchServiceImpl implements DispatchService {
                     da.rider_name,
                     COALESCE(mso.user_note, mso.note, '') AS user_note,
                     COALESCE(mso.admin_note, '') AS admin_note,
+                    COALESCE(ari.reference_image_url, '') AS reference_image_url,
                     COALESCE(dr.receipt_url, '') AS receipt_url,
                     COALESCE(dr.receipt_note, '') AS receipt_note,
                     dr.delivered_at,
@@ -1424,6 +1485,7 @@ public class DispatchServiceImpl implements DispatchService {
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
                 JOIN customers c ON c.id = doo.customer_id
                 JOIN customer_addresses ca ON ca.id = mso.address_id
+                LEFT JOIN address_reference_images ari ON ari.customer_address_id = mso.address_id
                 LEFT JOIN (
                     SELECT meal_slot_order_id, receipt_url, receipt_note, delivered_at
                     FROM delivery_receipts dr_inner
@@ -1439,7 +1501,7 @@ public class DispatchServiceImpl implements DispatchService {
                     da.sequence_number, 
                     da.id
                 """,
-            (rs, rowNum) -> new DispatchAreaOrderItemResponse(
+            (rs, rowNum) -> new DispatchAreaOrderRow(
                 rs.getLong("order_id"),
                 rs.getInt("sequence_number"),
                 rs.getString("customer_name"),
@@ -1448,9 +1510,10 @@ public class DispatchServiceImpl implements DispatchService {
                 rs.getString("rider_name"),
                 rs.getString("user_note"),
                 rs.getString("admin_note"),
+                rs.getString("reference_image_url"),
                 rs.getString("receipt_url"),
                 rs.getString("receipt_note"),
-                formatTimestamp(rs.getTimestamp("delivered_at")),
+                rs.getTimestamp("delivered_at"),
                 rs.getInt("quantity")
             ),
             areaCode,
@@ -1458,6 +1521,119 @@ public class DispatchServiceImpl implements DispatchService {
             mealPeriod,
             mealPeriod
         );
+        Map<Long, OrderNoteProjection> projections = loadOrderNoteProjections(
+            rows.stream().map(DispatchAreaOrderRow::orderId).toList()
+        );
+        return rows.stream()
+            .map(row -> toDispatchAreaOrderItem(row, projections.get(row.orderId())))
+            .toList();
+    }
+
+    private DispatchAreaOrderItemResponse toDispatchAreaOrderItem(DispatchAreaOrderRow row, OrderNoteProjection projection) {
+        return new DispatchAreaOrderItemResponse(
+            row.orderId(),
+            row.sequenceNumber(),
+            row.customerName(),
+            row.deliveryAddress(),
+            row.deliveryStatus(),
+            row.riderName(),
+            resolveProjectedUserNote(projection, row.userNote()),
+            resolveProjectedAdminNote(projection, row.adminNote()),
+            row.referenceImageUrl(),
+            row.receiptUrl(),
+            row.receiptNote(),
+            formatTimestamp(row.deliveredAt()),
+            row.quantity()
+        );
+    }
+
+    private Map<String, Integer> loadRiderExceptionCounts(LocalDate serveDate, String mealPeriod) {
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+            """
+                SELECT
+                    de.rider_name,
+                    da.area_code,
+                    COUNT(DISTINCT de.meal_slot_order_id) AS exception_count
+                FROM delivery_exceptions de
+                JOIN dispatch_assignments da ON da.meal_slot_order_id = de.meal_slot_order_id
+                JOIN meal_slot_orders mso ON mso.id = de.meal_slot_order_id
+                JOIN daily_orders doo ON doo.id = mso.daily_order_id
+                WHERE de.resolved = FALSE
+                  AND doo.serve_date = ?
+                  AND (? IS NULL OR mso.meal_period = ?)
+                GROUP BY de.rider_name, da.area_code
+                """,
+            serveDate,
+            mealPeriod,
+            mealPeriod
+        );
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            counts.put(
+                riderProgressKey(stringValue(row.get("rider_name")), stringValue(row.get("area_code"))),
+                ((Number) row.get("exception_count")).intValue()
+            );
+        }
+        return counts;
+    }
+
+    private Map<Long, OrderNoteProjection> loadOrderNoteProjections(List<Long> orderIds) {
+        if (orderIds.isEmpty()) {
+            return Map.of();
+        }
+        String placeholders = String.join(",", orderIds.stream().map(id -> "?").toList());
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+            """
+                SELECT meal_slot_order_id, note_type, content
+                FROM order_notes
+                WHERE effective_status = 'ACTIVE'
+                  AND meal_slot_order_id IN (
+            """
+                + placeholders
+                + """
+                  )
+                ORDER BY meal_slot_order_id, created_at, id
+                """,
+            orderIds.toArray()
+        );
+        Map<Long, DispatchNoteAccumulator> accumulators = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            long orderId = ((Number) row.get("meal_slot_order_id")).longValue();
+            DispatchNoteAccumulator accumulator = accumulators.computeIfAbsent(orderId, ignored -> new DispatchNoteAccumulator());
+            accumulator.add(stringValue(row.get("note_type")), stringValue(row.get("content")));
+        }
+        Map<Long, OrderNoteProjection> projections = new LinkedHashMap<>();
+        for (Long orderId : orderIds) {
+            DispatchNoteAccumulator accumulator = accumulators.get(orderId);
+            if (accumulator != null) {
+                projections.put(orderId, accumulator.toProjection());
+            }
+        }
+        return projections;
+    }
+
+    private String resolveProjectedUserNote(OrderNoteProjection projection, String legacyValue) {
+        if (projection != null && projection.hasOrderNotes()) {
+            return projection.userNote().isBlank() ? "-" : projection.userNote();
+        }
+        String normalized = normalizeLegacyNote(legacyValue);
+        return normalized.isBlank() ? "-" : normalized;
+    }
+
+    private String resolveProjectedAdminNote(OrderNoteProjection projection, String legacyValue) {
+        if (projection != null && projection.hasOrderNotes()) {
+            return projection.adminNote();
+        }
+        return normalizeLegacyNote(legacyValue);
+    }
+
+    private String normalizeLegacyNote(String value) {
+        String normalized = stringValue(value);
+        return "-".equals(normalized) ? "" : normalized;
+    }
+
+    private String riderProgressKey(String riderName, String areaCode) {
+        return riderName + "@" + areaCode;
     }
 
     private Long findRiderProfileIdByName(String riderName) {
@@ -1813,11 +1989,125 @@ public class DispatchServiceImpl implements DispatchService {
         return value == null ? "" : value.toLocalDateTime().format(DATE_TIME_FORMATTER);
     }
 
+    private String stringValue(Object value) {
+        return value == null ? "" : String.valueOf(value).trim();
+    }
+
     private String normalizeAddressFingerprint(String addressLine) {
         if (addressLine == null) {
             return "";
         }
         return addressLine.replace(" ", "").replace("-", "").replace("，", "").replace(",", "");
+    }
+
+    private record RiderProgressRow(
+        String riderName,
+        String areaCode,
+        long orderId,
+        int sequenceNumber,
+        String deliveryStatus
+    ) {
+    }
+
+    private record DispatchAreaOrderRow(
+        long orderId,
+        int sequenceNumber,
+        String customerName,
+        String deliveryAddress,
+        String deliveryStatus,
+        String riderName,
+        String userNote,
+        String adminNote,
+        String referenceImageUrl,
+        String receiptUrl,
+        String receiptNote,
+        Timestamp deliveredAt,
+        int quantity
+    ) {
+    }
+
+    private record OrderNoteProjection(String userNote, String adminNote, boolean hasOrderNotes) {
+    }
+
+    private static final class DispatchNoteAccumulator {
+        private final List<String> userNotes = new ArrayList<>();
+        private final List<String> merchantNotes = new ArrayList<>();
+
+        private void add(String noteType, String content) {
+            String normalized = content == null ? "" : content.trim();
+            if (normalized.isBlank() || "-".equals(normalized)) {
+                return;
+            }
+            List<String> target = "MERCHANT".equals(noteType) ? merchantNotes : userNotes;
+            if (!target.contains(normalized)) {
+                target.add(normalized);
+            }
+        }
+
+        private OrderNoteProjection toProjection() {
+            return new OrderNoteProjection(
+                String.join(" / ", userNotes),
+                String.join(" / ", merchantNotes),
+                true
+            );
+        }
+    }
+
+    private static final class RiderProgressAccumulator {
+        private final String key;
+        private final String riderName;
+        private final String areaCode;
+        private int totalCount;
+        private int completedCount;
+        private long currentOrderId;
+        private int currentSequenceNumber;
+        private long nextOrderId;
+        private boolean currentCaptured;
+
+        private RiderProgressAccumulator(String key, String riderName, String areaCode) {
+            this.key = key;
+            this.riderName = riderName;
+            this.areaCode = areaCode;
+        }
+
+        private boolean matches(String otherKey) {
+            return key.equals(otherKey);
+        }
+
+        private String key() {
+            return key;
+        }
+
+        private void add(RiderProgressRow row) {
+            totalCount++;
+            if ("DELIVERED".equals(row.deliveryStatus())) {
+                completedCount++;
+                return;
+            }
+            if (!currentCaptured) {
+                currentOrderId = row.orderId();
+                currentSequenceNumber = row.sequenceNumber();
+                currentCaptured = true;
+                return;
+            }
+            if (nextOrderId == 0L) {
+                nextOrderId = row.orderId();
+            }
+        }
+
+        private DispatchRiderProgressResponse toResponse(int exceptionCount) {
+            return new DispatchRiderProgressResponse(
+                riderName,
+                areaCode,
+                completedCount,
+                totalCount,
+                currentOrderId,
+                currentSequenceNumber,
+                nextOrderId,
+                Math.max(totalCount - completedCount, 0),
+                exceptionCount
+            );
+        }
     }
 
     private record DispatchMatchResult(boolean matched, String riderName, String areaCode) {

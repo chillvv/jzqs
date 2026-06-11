@@ -2,6 +2,8 @@ package com.jzqs.app.order.service;
 
 import com.jzqs.app.common.api.BatchOperationResponse;
 import com.jzqs.app.common.api.PageResponse;
+import com.jzqs.app.order.api.OrderNoteCreateRequest;
+import com.jzqs.app.order.api.OrderNotesResponse;
 import com.jzqs.app.order.api.OrderPrepItemResponse;
 import com.jzqs.app.order.api.OrderPrepStatsResponse;
 import com.jzqs.app.order.api.ManualCreateCustomerSearchResponse;
@@ -33,6 +35,10 @@ public interface OrderPrepService {
     Map<String, Object> updateAdminNote(long orderId, String adminNote, String specialTag);
 
     Map<String, Object> updateOrderProfile(long orderId, Map<String, Object> payload);
+
+    OrderNotesResponse orderNotes(long orderId);
+
+    Map<String, Object> addOrderNote(long orderId, OrderNoteCreateRequest request);
 
     List<SpecialOrderItem> specialOrders(String serveDate);
 

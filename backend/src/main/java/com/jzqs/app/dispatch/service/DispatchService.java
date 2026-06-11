@@ -11,6 +11,7 @@ import com.jzqs.app.dispatch.api.DispatchOverviewResponse;
 import com.jzqs.app.dispatch.api.DispatchPendingItemResponse;
 import com.jzqs.app.dispatch.api.DispatchReassignmentResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderAuthBindingResponse;
+import com.jzqs.app.dispatch.api.DispatchRiderProgressResponse;
 import com.jzqs.app.dispatch.api.PendingRiderResponse;
 import java.util.List;
 import java.util.Map;
@@ -39,6 +40,8 @@ public interface DispatchService {
     List<PendingRiderResponse> pendingRiders();
 
     List<DispatchManagedRiderResponse> managedRiders(String authStatus, String keyword, String areaCode);
+
+    List<DispatchRiderProgressResponse> riderProgress(String mealPeriod, String serveDate);
 
     Map<String, Object> createRider(String riderName, String displayName, String phone, String areaCode, String employmentStatus, String updatedBy);
 

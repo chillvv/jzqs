@@ -29,6 +29,7 @@ import com.jzqs.app.mobile.api.RiderTaskItemResponse;
 import java.io.IOException;
 import java.net.URI;
 import com.jzqs.app.order.service.OrderPrepService;
+import com.jzqs.app.order.service.OrderNoteSnapshotService;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
@@ -58,6 +59,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     private static final long MAX_RECEIPT_UPLOAD_SIZE = 5L * 1024 * 1024;
     private final JdbcTemplate jdbcTemplate;
     private final OrderPrepService orderPrepService;
+    private final OrderNoteSnapshotService orderNoteSnapshotService;
     private final DeliveryService deliveryService;
     private final ObjectMapper objectMapper;
     private final MobilePortalServiceExtension extension;
@@ -68,6 +70,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     public MobilePortalServiceImpl(
         JdbcTemplate jdbcTemplate,
         OrderPrepService orderPrepService,
+        OrderNoteSnapshotService orderNoteSnapshotService,
         DeliveryService deliveryService,
         ObjectMapper objectMapper,
         MobilePortalServiceExtension extension,
@@ -77,6 +80,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.orderPrepService = orderPrepService;
+        this.orderNoteSnapshotService = orderNoteSnapshotService;
         this.deliveryService = deliveryService;
         this.objectMapper = objectMapper;
         this.extension = extension;
@@ -403,6 +407,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             )
             : existingDailyOrderId;
         String finalUserNote = normalizeNote(note);
+        LocalDateTime snapshotTime = LocalDateTime.now();
         long mealSlotOrderId = insertAndReturnId(
             """
                 INSERT INTO meal_slot_orders (
@@ -423,6 +428,15 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         );
         jdbcTemplate.update("UPDATE meal_wallets SET reserved_meals = reserved_meals + 1 WHERE id = ?", walletId);
         insertWalletTransaction(walletId, "RESERVE", -1, "小程序", "用户自主下单占用餐次", now, mealSlotOrderId);
+        orderNoteSnapshotService.writeOrderSnapshot(
+            mealSlotOrderId,
+            customerId,
+            "小程序",
+            finalUserNote,
+            null,
+            List.of(),
+            snapshotTime
+        );
         return Map.of(
             "orderId", mealSlotOrderId,
             "status", "PENDING_DISPATCH",

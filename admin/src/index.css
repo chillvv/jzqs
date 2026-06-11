@@ -2191,6 +2191,7 @@ th {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   white-space: nowrap;
+}
 .row-danger-highlight {
   background-color: rgba(254, 226, 226, 0.45) !important;
 }

@@ -7,6 +7,8 @@ import type {
   ApiResponse,
   BatchOperationResponse,
   CustomerAssetResponse,
+  CustomerDetailResponse,
+  CustomerNotesResponse,
   DashboardOverviewResponse,
   DispatchBatchResponse,
   DispatchAreaBindingResponse,
@@ -18,6 +20,7 @@ import type {
   DispatchManagedRiderResponse,
   DispatchOverviewResponse,
   DispatchPendingItemResponse,
+  DispatchRiderProgressResponse,
   DispatchReassignmentResponse,
   DispatchRiderAuthBindingResponse,
   PendingRiderResponse,
@@ -227,7 +230,27 @@ export async function fetchCustomerAssets() {
 }
 
 export async function fetchCustomerDetail(customerId: number) {
-  const response = await http.get<ApiResponse<Record<string, unknown>>>(`/api/admin/customers/${customerId}`);
+  const response = await http.get<ApiResponse<CustomerDetailResponse>>(`/api/admin/customers/${customerId}`);
+  return response.data.data;
+}
+
+export async function fetchCustomerNotes(customerId: number) {
+  const response = await http.get<ApiResponse<CustomerNotesResponse>>(`/api/admin/customers/${customerId}/notes`);
+  return response.data.data;
+}
+
+export async function saveCustomerNote(customerId: number, payload: {
+  noteType: "USER" | "MERCHANT";
+  scopeType: "LONG_TERM" | "TIME_BOXED";
+  content: string;
+  startAt?: string | null;
+  endAt?: string | null;
+  displayOrder?: number;
+}) {
+  const response = await http.post<ApiResponse<{ customerId: number; status: string }>>(
+    `/api/admin/customers/${customerId}/notes`,
+    payload
+  );
   return response.data.data;
 }
 
@@ -321,6 +344,17 @@ export async function fetchDispatchOverview(mealPeriod: "LUNCH" | "DINNER", serv
   if (serveDate) params.set('serveDate', serveDate);
   const response = await http.get<ApiResponse<DispatchOverviewResponse>>(
     `/api/admin/dispatch/overview?${params.toString()}`
+  );
+  return response.data.data;
+}
+
+export async function fetchDispatchRiderProgress(mealPeriod?: "LUNCH" | "DINNER", serveDate?: string) {
+  const params = new URLSearchParams();
+  if (mealPeriod) params.set("mealPeriod", mealPeriod);
+  if (serveDate) params.set("serveDate", serveDate);
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  const response = await http.get<ApiResponse<DispatchRiderProgressResponse[]>>(
+    `/api/admin/dispatch/riders/progress${suffix}`
   );
   return response.data.data;
 }

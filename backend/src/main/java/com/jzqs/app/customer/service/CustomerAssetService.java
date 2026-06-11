@@ -2,6 +2,8 @@ package com.jzqs.app.customer.service;
 
 import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.customer.api.CustomerAssetResponse;
+import com.jzqs.app.customer.api.CustomerNoteUpsertRequest;
+import com.jzqs.app.customer.api.CustomerNotesResponse;
 import com.jzqs.app.customer.api.RemarkSuggestionResponse;
 import com.jzqs.app.customer.api.WalletAdjustRequest;
 import com.jzqs.app.customer.api.WalletTransactionResponse;
@@ -17,6 +19,10 @@ public interface CustomerAssetService {
     );
 
     java.util.Map<String, Object> customerDetail(long customerId);
+
+    CustomerNotesResponse customerNotes(long customerId);
+
+    Map<String, Object> saveCustomerNote(long customerId, CustomerNoteUpsertRequest request);
 
     Map<String, Object> createCustomerProfile(Map<String, Object> payload);
 

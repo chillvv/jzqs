@@ -3,7 +3,8 @@ import type {
   DispatchBatchResponse,
   DispatchManagedRiderResponse,
   DispatchOverviewResponse,
-  DispatchPendingItemResponse
+  DispatchPendingItemResponse,
+  DispatchRiderProgressResponse
 } from "../../shared/api/types";
 
 type DispatchOverviewLike = Partial<DispatchOverviewResponse>;
@@ -75,6 +76,59 @@ export function buildDispatchAreaStats(bindings: DispatchAreaBindingResponse[]) 
       0
     ),
     missingRiderAreaCount: bindings.filter((area) => area.missingRider).length
+  };
+}
+
+export type DispatchBoardSelection = {
+  selectedRiderName?: string;
+  selectedOrderId?: number;
+};
+
+export type DispatchBoardRiderCard = DispatchRiderProgressResponse & {
+  key: string;
+};
+
+export type DispatchBoardViewModel = {
+  riderCards: DispatchBoardRiderCard[];
+  activeRider: DispatchBoardRiderCard | null;
+  activeBinding: DispatchAreaBindingResponse | null;
+  queueOrders: DispatchAreaBindingResponse["orders"];
+  activeOrder: DispatchAreaBindingResponse["orders"][number] | null;
+};
+
+export function buildDispatchBoardViewModel(
+  riderProgress: DispatchRiderProgressResponse[],
+  areaBindings: DispatchAreaBindingResponse[],
+  selection: DispatchBoardSelection = {}
+): DispatchBoardViewModel {
+  const riderCards = riderProgress.map((item) => ({
+    ...item,
+    key: `${item.riderName}@${item.areaCode}`
+  }));
+  const activeRider =
+    riderCards.find((item) => item.riderName === selection.selectedRiderName) ??
+    riderCards[0] ??
+    null;
+
+  const activeBinding =
+    areaBindings.find((item) => item.areaCode === activeRider?.areaCode) ??
+    areaBindings.find((item) => item.currentRiderName === activeRider?.riderName) ??
+    areaBindings.find((item) => item.defaultRiderName === activeRider?.riderName) ??
+    null;
+
+  const queueOrders = [...(activeBinding?.orders ?? [])].sort((left, right) => left.sequenceNumber - right.sequenceNumber);
+  const activeOrder =
+    queueOrders.find((item) => item.orderId === selection.selectedOrderId) ??
+    queueOrders.find((item) => item.orderId === activeRider?.currentOrderId) ??
+    queueOrders[0] ??
+    null;
+
+  return {
+    riderCards,
+    activeRider,
+    activeBinding,
+    queueOrders,
+    activeOrder
   };
 }
 

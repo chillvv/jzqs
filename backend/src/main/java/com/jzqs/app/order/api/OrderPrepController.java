@@ -95,6 +95,19 @@ public class OrderPrepController {
         return ApiResponse.success(orderPrepService.updateOrderProfile(orderId, body));
     }
 
+    @GetMapping("/{orderId}/notes")
+    public ApiResponse<OrderNotesResponse> orderNotes(@PathVariable long orderId) {
+        return ApiResponse.success(orderPrepService.orderNotes(orderId));
+    }
+
+    @PostMapping("/{orderId}/notes")
+    public ApiResponse<Map<String, Object>> addOrderNote(
+        @PathVariable long orderId,
+        @Valid @RequestBody OrderNoteCreateRequest request
+    ) {
+        return ApiResponse.success(orderPrepService.addOrderNote(orderId, request));
+    }
+
     @PostMapping("/manual-create")
     public ApiResponse<Map<String, Object>> manualCreate(@Valid @RequestBody ManualCreateOrderRequest request) {
         return ApiResponse.success(orderPrepService.manualCreate(

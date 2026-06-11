@@ -26,6 +26,34 @@ export type CustomerAssetResponse = {
   status: string;
 };
 
+export type CustomerNoteItem = {
+  id: number;
+  noteType: "USER" | "MERCHANT";
+  scopeType: "LONG_TERM" | "TIME_BOXED";
+  content: string;
+  startAt: string | null;
+  endAt: string | null;
+  active: boolean;
+};
+
+export type CustomerNotesResponse = {
+  userNotes: CustomerNoteItem[];
+  longTermMerchantNotes: CustomerNoteItem[];
+  timeBoxedMerchantNotes: CustomerNoteItem[];
+};
+
+export type CustomerDetailResponse = {
+  name?: string;
+  phone?: string;
+  remark?: string | null;
+  customerStatus?: string;
+  remainingMeals?: number;
+  userNotes?: CustomerNoteItem[];
+  longTermMerchantNotes?: CustomerNoteItem[];
+  timeBoxedMerchantNotes?: CustomerNoteItem[];
+  [key: string]: unknown;
+};
+
 export type RemarkSuggestionScene =
   | "CUSTOMER_REMARK"
   | "PRIORITY_NOTE"
@@ -317,6 +345,7 @@ export type DispatchAreaOrderItemResponse = {
   riderName: string | null;
   userNote: string;
   adminNote: string;
+  referenceImageUrl: string;
   receiptUrl: string;
   receiptNote: string;
   deliveredAt: string | null;
@@ -375,6 +404,17 @@ export type DispatchOverviewResponse = {
   pendingCount: number;
   dispatchingCount: number;
   missingRiderAreaCount: number;
+};
+export type DispatchRiderProgressResponse = {
+  riderName: string;
+  areaCode: string;
+  completedCount: number;
+  totalCount: number;
+  currentOrderId: number | null;
+  currentSequenceNumber: number | null;
+  nextOrderId: number | null;
+  pendingCount: number;
+  exceptionCount: number;
 };
 export type PendingRiderResponse = {
   riderId: number;

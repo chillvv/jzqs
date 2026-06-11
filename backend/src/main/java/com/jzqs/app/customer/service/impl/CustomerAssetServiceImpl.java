@@ -5,6 +5,9 @@ import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.customer.api.CustomerAssetResponse;
+import com.jzqs.app.customer.api.CustomerNoteItemResponse;
+import com.jzqs.app.customer.api.CustomerNoteUpsertRequest;
+import com.jzqs.app.customer.api.CustomerNotesResponse;
 import com.jzqs.app.customer.api.RemarkSuggestionResponse;
 import com.jzqs.app.customer.api.WalletAdjustRequest;
 import com.jzqs.app.customer.api.WalletTransactionResponse;
@@ -157,45 +160,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             },
             customerId
         );
-        Map<String, Object> orderPreferences = jdbcTemplate.query(
-            """
-                SELECT default_user_remark, default_merchant_remark, enabled
-                FROM customer_order_preferences
-                WHERE customer_id = ?
-                LIMIT 1
-                """,
-            ps -> ps.setLong(1, customerId),
-            rs -> {
-                if (!rs.next()) {
-                    return null;
-                }
-                Map<String, Object> row = new LinkedHashMap<>();
-                row.put("defaultUserRemark", blankToNull(rs.getString("default_user_remark")));
-                row.put("defaultMerchantRemark", blankToNull(rs.getString("default_merchant_remark")));
-                row.put("enabled", rs.getBoolean("enabled"));
-                return row;
-            }
-        );
-        List<Map<String, Object>> orderTags = jdbcTemplate.query(
-            """
-                SELECT id, tag_code, tag_name, tag_source, expires_at, remaining_uses, active
-                FROM customer_order_tags
-                WHERE customer_id = ? AND is_default = TRUE
-                ORDER BY active DESC, id DESC
-                """,
-            (rs, rowNum) -> {
-                Map<String, Object> row = new LinkedHashMap<>();
-                row.put("id", rs.getLong("id"));
-                row.put("tagCode", rs.getString("tag_code"));
-                row.put("tagName", rs.getString("tag_name"));
-                row.put("tagSource", rs.getString("tag_source"));
-                row.put("expiresAt", formatTimestamp(rs.getTimestamp("expires_at")));
-                row.put("remainingUses", rs.getObject("remaining_uses"));
-                row.put("active", rs.getBoolean("active"));
-                return row;
-            },
-            customerId
-        );
+        CustomerNotesResponse customerNotes = customerNotes(customerId);
 
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("id", customer.getId());
@@ -216,14 +181,46 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         ));
         detail.put("addresses", addresses);
         detail.put("subscriptions", subscriptions);
-        detail.put("orderPreferences", orderPreferences == null ? Map.of(
-            "defaultUserRemark", null,
-            "defaultMerchantRemark", null,
-            "enabled", false
-        ) : orderPreferences);
-        detail.put("orderTags", orderTags);
+        detail.put("userNotes", customerNotes.userNotes());
+        detail.put("longTermMerchantNotes", customerNotes.longTermMerchantNotes());
+        detail.put("timeBoxedMerchantNotes", customerNotes.timeBoxedMerchantNotes());
         detail.put("transactions", walletTransactions(customerId).items());
         return detail;
+    }
+
+    @Override
+    public CustomerNotesResponse customerNotes(long customerId) {
+        requireActiveCustomer(customerId);
+        List<CustomerNoteItemResponse> notes = jdbcTemplate.query(
+            """
+                SELECT id, note_type, scope_type, content, start_at, end_at, is_active
+                FROM customer_notes
+                WHERE customer_id = ? AND is_active = TRUE
+                ORDER BY note_type, scope_type, display_order, id
+                """,
+            (rs, rowNum) -> new CustomerNoteItemResponse(
+                rs.getLong("id"),
+                blankToDefault(rs.getString("note_type"), ""),
+                blankToDefault(rs.getString("scope_type"), ""),
+                blankToDefault(rs.getString("content"), ""),
+                formatTimestamp(rs.getTimestamp("start_at")),
+                formatTimestamp(rs.getTimestamp("end_at")),
+                rs.getBoolean("is_active")
+            ),
+            customerId
+        );
+
+        List<CustomerNoteItemResponse> userNotes = notes.stream()
+            .filter(note -> "USER".equals(note.noteType()))
+            .toList();
+        List<CustomerNoteItemResponse> longTermMerchantNotes = notes.stream()
+            .filter(note -> "MERCHANT".equals(note.noteType()) && "LONG_TERM".equals(note.scopeType()))
+            .toList();
+        List<CustomerNoteItemResponse> timeBoxedMerchantNotes = notes.stream()
+            .filter(note -> "MERCHANT".equals(note.noteType()) && "TIME_BOXED".equals(note.scopeType()))
+            .toList();
+
+        return new CustomerNotesResponse(userNotes, longTermMerchantNotes, timeBoxedMerchantNotes);
     }
 
     @Override
@@ -318,41 +315,52 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             || payload.containsKey("defaultMerchantRemark")
             || payload.containsKey("defaultTagsText")
             || payload.containsKey("orderPreferenceEnabled")) {
-            jdbcTemplate.update("""
-                INSERT INTO customer_order_preferences (customer_id, default_user_remark, default_merchant_remark, enabled, updated_by)
-                VALUES (?, ?, ?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                    default_user_remark = VALUES(default_user_remark),
-                    default_merchant_remark = VALUES(default_merchant_remark),
-                    enabled = VALUES(enabled),
-                    updated_by = VALUES(updated_by)
-                """,
-                customerId,
-                blankToNull(stringValue(payload.get("defaultUserRemark"))),
-                blankToNull(stringValue(payload.get("defaultMerchantRemark"))),
-                booleanValue(payload.get("orderPreferenceEnabled"), true),
-                "ADMIN"
-            );
-            jdbcTemplate.update("DELETE FROM customer_order_tags WHERE customer_id = ? AND is_default = TRUE", customerId);
-            for (String tagName : splitTags(stringValue(payload.get("defaultTagsText")))) {
-                jdbcTemplate.update("""
-                    INSERT INTO customer_order_tags (
-                        customer_id, tag_code, tag_name, tag_source, active, is_default, created_by, updated_by
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    customerId,
-                    buildTagCode(tagName),
-                    tagName,
-                    "ADMIN",
-                    true,
-                    true,
-                    "ADMIN",
-                    "ADMIN"
-                );
-            }
+            rewriteLegacyCustomerNotes(customerId, payload);
         }
 
         return Map.of("customerId", customerId, "status", "UPDATED");
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> saveCustomerNote(long customerId, CustomerNoteUpsertRequest request) {
+        requireActiveCustomer(customerId);
+        String noteType = normalizeCustomerNoteType(request.noteType());
+        String scopeType = normalizeCustomerNoteScope(noteType, request.scopeType());
+        String content = requireCustomerNoteContent(request.content());
+        LocalDateTime startAt = request.startAt();
+        LocalDateTime endAt = request.endAt();
+
+        if ("TIME_BOXED".equals(scopeType)) {
+            if (startAt == null || endAt == null) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "限时商家备注必须填写开始时间和结束时间");
+            }
+            if (startAt.isAfter(endAt)) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "开始时间不能晚于结束时间");
+            }
+        } else {
+            startAt = null;
+            endAt = null;
+        }
+
+        int displayOrder = request.displayOrder() == null ? 0 : request.displayOrder();
+        jdbcTemplate.update(
+            """
+                INSERT INTO customer_notes (
+                    customer_id, note_type, scope_type, content, start_at, end_at, is_active, display_order, created_by, updated_by
+                ) VALUES (?, ?, ?, ?, ?, ?, TRUE, ?, ?, ?)
+                """,
+            customerId,
+            noteType,
+            scopeType,
+            content,
+            startAt == null ? null : Timestamp.valueOf(startAt),
+            endAt == null ? null : Timestamp.valueOf(endAt),
+            displayOrder,
+            "ADMIN",
+            "ADMIN"
+        );
+        return Map.of("customerId", customerId, "status", "CREATED");
     }
 
     @Override
@@ -559,6 +567,106 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             return null;
         }
         return normalized;
+    }
+
+    private void requireActiveCustomer(long customerId) {
+        CustomerEntity customer = customerMapper.selectById(customerId);
+        if (customer == null || !Boolean.TRUE.equals(customer.getActive())) {
+            throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "客户不存在");
+        }
+    }
+
+    private String normalizeCustomerNoteType(String noteType) {
+        String normalized = blankToDefault(noteType, "").trim().toUpperCase();
+        if (!"USER".equals(normalized) && !"MERCHANT".equals(normalized)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "备注类型不支持");
+        }
+        return normalized;
+    }
+
+    private String normalizeCustomerNoteScope(String noteType, String scopeType) {
+        String normalized = blankToDefault(scopeType, "").trim().toUpperCase();
+        if ("USER".equals(noteType)) {
+            return "LONG_TERM";
+        }
+        if (!"LONG_TERM".equals(normalized) && !"TIME_BOXED".equals(normalized)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "备注范围不支持");
+        }
+        return normalized;
+    }
+
+    private String requireCustomerNoteContent(String content) {
+        String normalized = blankToNull(content == null ? null : content.trim());
+        if (normalized == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "备注内容不能为空");
+        }
+        if (normalized.length() > 255) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "备注内容不能超过255个字符");
+        }
+        return normalized;
+    }
+
+    private void rewriteLegacyCustomerNotes(long customerId, Map<String, Object> payload) {
+        requireActiveCustomer(customerId);
+        boolean enabled = booleanValue(payload.get("orderPreferenceEnabled"), true);
+
+        jdbcTemplate.update(
+            """
+                DELETE FROM customer_notes
+                WHERE customer_id = ?
+                  AND scope_type = 'LONG_TERM'
+                  AND note_type IN ('USER', 'MERCHANT')
+                """,
+            customerId
+        );
+
+        if (!enabled) {
+            return;
+        }
+
+        String defaultUserRemark = blankToNull(stringValue(payload.get("defaultUserRemark")));
+        if (defaultUserRemark != null) {
+            insertCustomerNote(customerId, "USER", "LONG_TERM", defaultUserRemark, null, null, 0);
+        }
+
+        LinkedHashSet<String> merchantNotes = new LinkedHashSet<>();
+        String defaultMerchantRemark = blankToNull(stringValue(payload.get("defaultMerchantRemark")));
+        if (defaultMerchantRemark != null) {
+            merchantNotes.add(defaultMerchantRemark);
+        }
+        merchantNotes.addAll(splitTags(stringValue(payload.get("defaultTagsText"))));
+
+        int displayOrder = 0;
+        for (String merchantNote : merchantNotes) {
+            insertCustomerNote(customerId, "MERCHANT", "LONG_TERM", merchantNote, null, null, displayOrder++);
+        }
+    }
+
+    private void insertCustomerNote(
+        long customerId,
+        String noteType,
+        String scopeType,
+        String content,
+        LocalDateTime startAt,
+        LocalDateTime endAt,
+        int displayOrder
+    ) {
+        jdbcTemplate.update(
+            """
+                INSERT INTO customer_notes (
+                    customer_id, note_type, scope_type, content, start_at, end_at, is_active, display_order, created_by, updated_by
+                ) VALUES (?, ?, ?, ?, ?, ?, TRUE, ?, ?, ?)
+                """,
+            customerId,
+            noteType,
+            scopeType,
+            content,
+            startAt == null ? null : Timestamp.valueOf(startAt),
+            endAt == null ? null : Timestamp.valueOf(endAt),
+            displayOrder,
+            "ADMIN",
+            "ADMIN"
+        );
     }
 
     private int remainingMeals(MealWalletEntity wallet) {

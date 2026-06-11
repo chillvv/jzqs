@@ -18,6 +18,10 @@ for (const file of files) {
 }
 
 const duplicates = Array.from(versions.entries()).filter(([, list]) => list.length > 1);
+const unifiedNotesMigration = path.join(
+  migrationDir,
+  'V41__unified_notes_and_dispatch_redesign.sql'
+);
 
 assert.equal(
   duplicates.length,
@@ -25,6 +29,23 @@ assert.equal(
   `Flyway migration 版本号不能重复，当前冲突: ${duplicates
     .map(([version, list]) => `V${version} -> ${list.join(', ')}`)
     .join('; ')}`
+);
+
+assert.ok(
+  fs.existsSync(unifiedNotesMigration),
+  '缺少统一备注重构迁移文件: V41__unified_notes_and_dispatch_redesign.sql'
+);
+
+const migrationContent = fs.readFileSync(unifiedNotesMigration, 'utf8');
+
+assert.ok(
+  migrationContent.includes('CREATE TABLE customer_notes'),
+  'V41 必须创建 customer_notes'
+);
+
+assert.ok(
+  migrationContent.includes('CREATE TABLE order_notes'),
+  'V41 必须创建 order_notes'
 );
 
 console.log('PASS: Flyway migration 版本号唯一');

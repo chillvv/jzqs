@@ -1,4 +1,8 @@
-import type { CustomerAssetResponse } from "../../shared/api/types";
+import type {
+  CustomerAssetResponse,
+  CustomerDetailResponse,
+  CustomerNoteItem
+} from "../../shared/api/types";
 
 export type CustomerBalanceState = "ALL" | "HAS_BALANCE" | "NO_BALANCE" | "LOW_BALANCE";
 export type CustomerOrderModeFilter = "ALL" | "NORMAL" | "SUBSCRIPTION";
@@ -93,4 +97,30 @@ export function resolveCustomerStatusLabel(status: string) {
 
 export function resolveCustomerOrderModeLabel(item: CustomerAssetResponse) {
   return item.fixedSubscriptionEnabled ? "固定订餐" : "普通下单";
+}
+
+export function extractCustomerNoteGroups(detail: CustomerDetailResponse | null | undefined) {
+  const userNotes = Array.isArray(detail?.userNotes) ? detail.userNotes as CustomerNoteItem[] : [];
+  const longTermMerchantNotes = Array.isArray(detail?.longTermMerchantNotes)
+    ? detail.longTermMerchantNotes as CustomerNoteItem[]
+    : [];
+  const timeBoxedMerchantNotes = Array.isArray(detail?.timeBoxedMerchantNotes)
+    ? detail.timeBoxedMerchantNotes as CustomerNoteItem[]
+    : [];
+
+  return {
+    userNotes,
+    longTermMerchantNotes,
+    timeBoxedMerchantNotes
+  };
+}
+
+export function formatCustomerNoteSchedule(note: CustomerNoteItem) {
+  if (note.scopeType !== "TIME_BOXED") {
+    return "长期生效";
+  }
+  if (!note.startAt && !note.endAt) {
+    return "限时生效";
+  }
+  return `${note.startAt || "-"} ~ ${note.endAt || "-"}`;
 }
