@@ -32,4 +32,10 @@ assert.match(
   'miniapp/utils/auth.js 的补全资料应先确保 openid 已就绪'
 );
 
+assert.match(
+  customerAuth,
+  /async bindPhone\(payload\)\s*\{[\s\S]*const openid = await this\.ensureOpenidReady\(\);[\s\S]*code,[\s\S]*openid[\s\S]*\}/,
+  'miniapp/utils/auth.js 的微信一键登录绑手机号应先确保 openid 已就绪'
+);
+
 console.log('PASS: 顾客端依赖 openid 的认证接口已补齐静默登录兜底');

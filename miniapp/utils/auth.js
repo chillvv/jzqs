@@ -160,9 +160,10 @@ class Auth {
       throw new Error('微信手机号授权失败，请重试');
     }
     try {
+      const openid = await this.ensureOpenidReady();
       const result = await this.request('/api/mobile/auth/bind-phone', 'POST', {
         code,
-        openid: this.globalData.openid
+        openid
       });
       this.applyAuthState(result);
       return result;
