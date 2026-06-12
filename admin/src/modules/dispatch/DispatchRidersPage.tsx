@@ -313,12 +313,12 @@ export function DispatchRidersPage() {
         title={editRiderId ? "编辑骑手" : "新增骑手"}
         description={editRiderId ? "修改骑手姓名、登录手机号或重置密码。" : "新增骑手账号后即可参与区域绑定和派单。"}
         width={460}
-        onClose={() => setShowAddModal(false)}
+        onClose={saving ? () => undefined : () => setShowAddModal(false)}
         footer={
           <>
-            <button className="btn btn-outline" onClick={() => setShowAddModal(false)}>取消</button>
+            <button className="btn btn-outline" disabled={saving} onClick={() => setShowAddModal(false)}>取消</button>
             <button className="btn btn-primary" disabled={saving} onClick={handleSave}>
-              {editRiderId ? "保存修改" : "创建骑手"}
+              {saving ? "保存中..." : editRiderId ? "保存修改" : "创建骑手"}
             </button>
           </>
         }
@@ -383,17 +383,17 @@ export function DispatchRidersPage() {
         title="确认删除骑手"
         description={deleteConfirmRider ? `确定要删除骑手"${deleteConfirmRider.riderName}"吗？此操作不可恢复。` : ""}
         width={400}
-        onClose={() => setDeleteConfirmRider(null)}
+        onClose={deleting ? () => undefined : () => setDeleteConfirmRider(null)}
         footer={
           <>
-            <button className="btn btn-outline" onClick={() => setDeleteConfirmRider(null)}>取消</button>
+            <button className="btn btn-outline" disabled={deleting} onClick={() => setDeleteConfirmRider(null)}>取消</button>
             <button
               className="btn-delete"
               disabled={deleting}
               onClick={handleDelete}
             >
               <Trash2 size={16} />
-              确认删除
+              {deleting ? "删除中..." : "确认删除"}
             </button>
           </>
         }

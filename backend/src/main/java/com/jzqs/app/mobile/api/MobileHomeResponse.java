@@ -14,8 +14,10 @@ public record MobileHomeResponse(
     String holidayNoticeTitle,
     String holidayNoticeDesc,
     String defaultAddress,
-    String remark,
-    List<String> bannerImages,
+    String defaultUserRemark,
+    String merchantRemark,
+    List<MobileBannerItemResponse> bannerImages,
+    int bannerIntervalMs,
     boolean popupAnnouncementEnabled,
     String popupAnnouncementContent
 ) {

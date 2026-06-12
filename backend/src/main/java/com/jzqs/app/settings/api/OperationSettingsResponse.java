@@ -6,6 +6,7 @@ public record OperationSettingsResponse(
     String holidayNoticeDesc,
     String emergencyActionLabel,
     String bannerImages,
+    int bannerIntervalSeconds,
     boolean popupAnnouncementEnabled,
     String popupAnnouncementContent
 ) {

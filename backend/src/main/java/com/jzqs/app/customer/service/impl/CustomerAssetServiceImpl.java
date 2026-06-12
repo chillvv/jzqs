@@ -5,9 +5,6 @@ import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.customer.api.CustomerAssetResponse;
-import com.jzqs.app.customer.api.CustomerNoteItemResponse;
-import com.jzqs.app.customer.api.CustomerNoteUpsertRequest;
-import com.jzqs.app.customer.api.CustomerNotesResponse;
 import com.jzqs.app.customer.api.RemarkSuggestionResponse;
 import com.jzqs.app.customer.api.WalletAdjustRequest;
 import com.jzqs.app.customer.api.WalletTransactionResponse;
@@ -18,6 +15,7 @@ import com.jzqs.app.customer.model.entity.CustomerEntity;
 import com.jzqs.app.customer.model.entity.MealWalletEntity;
 import com.jzqs.app.customer.model.entity.WalletTransactionEntity;
 import com.jzqs.app.customer.service.CustomerAssetService;
+import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -33,6 +31,8 @@ import java.util.stream.Collectors;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
+import org.springframework.jdbc.support.KeyHolder;
 
 @Service
 public class CustomerAssetServiceImpl implements CustomerAssetService {
@@ -98,7 +98,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
                 fixedEnabled,
                 Boolean.TRUE.equals(customer.getPriorityCustomer()),
                 blankToNull(customer.getPriorityTag()),
-                blankToNull(customer.getRemark()),
+                blankToNull(customer.getMerchantRemark()),
                 formatDateTime(customer.getLastOrderAt()),
                 formatDateTime(customer.getRegisteredAt() != null ? customer.getRegisteredAt() : customer.getCreatedAt()),
                 remainingMeals > 0 ? "ACTIVE" : "EXHAUSTED"
@@ -145,7 +145,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             customerId
         );
         List<Map<String, Object>> subscriptions = jdbcTemplate.query(
-            "SELECT id, lunch_enabled, dinner_enabled, start_date, end_date, default_note, is_priority_follow, paused FROM subscription_rules WHERE customer_id = ? ORDER BY id DESC",
+            "SELECT id, lunch_enabled, dinner_enabled, start_date, end_date, merchant_remark, is_priority_follow, paused FROM subscription_rules WHERE customer_id = ? ORDER BY id DESC",
             (rs, rowNum) -> {
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("id", rs.getLong("id"));
@@ -153,24 +153,21 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
                 row.put("dinnerEnabled", rs.getBoolean("dinner_enabled"));
                 row.put("startDate", rs.getDate("start_date") == null ? null : rs.getDate("start_date").toLocalDate().toString());
                 row.put("endDate", rs.getDate("end_date") == null ? null : rs.getDate("end_date").toLocalDate().toString());
-                row.put("defaultNote", rs.getString("default_note"));
+                row.put("merchantRemark", rs.getString("merchant_remark"));
                 row.put("priorityFollow", rs.getBoolean("is_priority_follow"));
                 row.put("paused", rs.getBoolean("paused"));
                 return row;
             },
             customerId
         );
-        CustomerNotesResponse customerNotes = customerNotes(customerId);
 
         Map<String, Object> detail = new LinkedHashMap<>();
         detail.put("id", customer.getId());
         detail.put("name", customer.getName());
         detail.put("phone", customer.getPhone());
         detail.put("customerStatus", blankToDefault(customer.getCustomerStatus(), "INTENTION"));
-        detail.put("remark", blankToNull(customer.getRemark()));
-        detail.put("priorityCustomer", Boolean.TRUE.equals(customer.getPriorityCustomer()));
-        detail.put("priorityTag", blankToNull(customer.getPriorityTag()));
-        detail.put("priorityNote", blankToNull(customer.getPriorityNote()));
+        detail.put("merchantRemark", blankToNull(customer.getMerchantRemark()));
+        detail.put("priorityCustomer", false);
         detail.put("registeredAt", formatDateTime(customer.getRegisteredAt() != null ? customer.getRegisteredAt() : customer.getCreatedAt()));
         detail.put("lastOrderAt", formatDateTime(customer.getLastOrderAt()));
         detail.put("wallet", wallet == null ? null : Map.of(
@@ -181,46 +178,8 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         ));
         detail.put("addresses", addresses);
         detail.put("subscriptions", subscriptions);
-        detail.put("userNotes", customerNotes.userNotes());
-        detail.put("longTermMerchantNotes", customerNotes.longTermMerchantNotes());
-        detail.put("timeBoxedMerchantNotes", customerNotes.timeBoxedMerchantNotes());
         detail.put("transactions", walletTransactions(customerId).items());
         return detail;
-    }
-
-    @Override
-    public CustomerNotesResponse customerNotes(long customerId) {
-        requireActiveCustomer(customerId);
-        List<CustomerNoteItemResponse> notes = jdbcTemplate.query(
-            """
-                SELECT id, note_type, scope_type, content, start_at, end_at, is_active
-                FROM customer_notes
-                WHERE customer_id = ? AND is_active = TRUE
-                ORDER BY note_type, scope_type, display_order, id
-                """,
-            (rs, rowNum) -> new CustomerNoteItemResponse(
-                rs.getLong("id"),
-                blankToDefault(rs.getString("note_type"), ""),
-                blankToDefault(rs.getString("scope_type"), ""),
-                blankToDefault(rs.getString("content"), ""),
-                formatTimestamp(rs.getTimestamp("start_at")),
-                formatTimestamp(rs.getTimestamp("end_at")),
-                rs.getBoolean("is_active")
-            ),
-            customerId
-        );
-
-        List<CustomerNoteItemResponse> userNotes = notes.stream()
-            .filter(note -> "USER".equals(note.noteType()))
-            .toList();
-        List<CustomerNoteItemResponse> longTermMerchantNotes = notes.stream()
-            .filter(note -> "MERCHANT".equals(note.noteType()) && "LONG_TERM".equals(note.scopeType()))
-            .toList();
-        List<CustomerNoteItemResponse> timeBoxedMerchantNotes = notes.stream()
-            .filter(note -> "MERCHANT".equals(note.noteType()) && "TIME_BOXED".equals(note.scopeType()))
-            .toList();
-
-        return new CustomerNotesResponse(userNotes, longTermMerchantNotes, timeBoxedMerchantNotes);
     }
 
     @Override
@@ -228,12 +187,25 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
     public Map<String, Object> createCustomerProfile(Map<String, Object> payload) {
         String phone = blankToDefault(stringValue(payload.get("phone")), "");
         String name = blankToDefault(stringValue(payload.get("name")), "未命名客户");
+        int initialMealDelta = intValue(payload.get("initialMealDelta"), 0);
+        String initialMealRemark = blankToNull(stringValue(payload.get("initialMealRemark")));
+        String customerStatus = blankToDefault(stringValue(payload.get("customerStatus")), "INTENTION");
+        
+        String addressLine = blankToNull(stringValue(payload.get("addressLine")));
+        String contactName = blankToNull(stringValue(payload.get("contactName")));
+        String contactPhone = blankToNull(stringValue(payload.get("contactPhone")));
 
         if (!phone.isBlank()) {
             boolean phoneExists = customerMapper.selectCount(new LambdaQueryWrapper<CustomerEntity>().eq(CustomerEntity::getPhone, phone)) > 0;
             if (phoneExists) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "手机号已存在，请检查是否重复建档");
             }
+        }
+        if (initialMealDelta < 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "初始加餐数量不能小于 0");
+        }
+        if (addressLine == null || contactName == null || contactPhone == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "收货地址、联系人、联系电话必填");
         }
         
         boolean nameExists = customerMapper.selectCount(new LambdaQueryWrapper<CustomerEntity>()
@@ -247,11 +219,11 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         CustomerEntity customer = new CustomerEntity();
         customer.setName(name);
         customer.setPhone(phone);
-        customer.setCustomerStatus("INTENTION");
-        customer.setRemark(blankToNull(stringValue(payload.get("remark"))));
-        customer.setPriorityCustomer(booleanValue(payload.get("priorityCustomer"), false));
-        customer.setPriorityTag(blankToNull(stringValue(payload.get("priorityTag"))));
-        customer.setPriorityNote(blankToNull(stringValue(payload.get("priorityNote"))));
+        customer.setCustomerStatus(customerStatus);
+        customer.setMerchantRemark(blankToNull(stringValue(payload.get("merchantRemark"))));
+        customer.setPriorityCustomer(false);
+        customer.setPriorityTag(null);
+        customer.setPriorityNote(null);
         customer.setSource("BACKEND");
         customer.setSourceChannel("ADMIN");
         customer.setRegisteredAt(now);
@@ -259,6 +231,20 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         customer.setCreatedAt(now);
         customer.setUpdatedAt(now);
         customerMapper.insert(customer);
+
+        Timestamp tsNow = Timestamp.valueOf(now);
+        jdbcTemplate.update("""
+            INSERT INTO customer_addresses (
+                customer_id, contact_name, contact_phone, address_line, area_code, is_default, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, TRUE, ?, ?)
+            """, customer.getId(), contactName, contactPhone, addressLine, "", tsNow, tsNow);
+
+        if (initialMealDelta > 0) {
+            MealWalletEntity wallet = findOrCreateWallet(customer.getId());
+            wallet.setTotalMeals(nvl(wallet.getTotalMeals()) + initialMealDelta);
+            mealWalletMapper.updateById(wallet);
+            insertWalletTransaction(wallet.getId(), "GRANT", initialMealDelta, "ADMIN", initialMealRemark);
+        }
 
         return Map.of("customerId", customer.getId(), "status", "CREATED");
     }
@@ -293,74 +279,122 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             }
             customer.setPhone(newPhone);
         }
-        if (payload.containsKey("remark")) {
-            customer.setRemark(blankToNull(stringValue(payload.get("remark"))));
+        if (payload.containsKey("merchantRemark")) {
+            customer.setMerchantRemark(blankToNull(stringValue(payload.get("merchantRemark"))));
         }
         if (payload.containsKey("customerStatus")) {
             customer.setCustomerStatus(blankToDefault(stringValue(payload.get("customerStatus")), customer.getCustomerStatus()));
         }
-        if (payload.containsKey("priorityCustomer")) {
-            customer.setPriorityCustomer(booleanValue(payload.get("priorityCustomer"), Boolean.TRUE.equals(customer.getPriorityCustomer())));
+        
+        // 处理 defaultUserRemark 更新
+        if (payload.containsKey("defaultUserRemark")) {
+            String defaultUserRemark = blankToNull(stringValue(payload.get("defaultUserRemark")));
+            // 删除旧的用户长期备注
+            jdbcTemplate.update("""
+                DELETE FROM customer_notes
+                WHERE customer_id = ? AND note_type = 'USER' AND scope_type = 'LONG_TERM'
+                """, customerId);
+            
+            if (defaultUserRemark != null && !defaultUserRemark.isBlank()) {
+                // 插入新的用户长期备注
+                jdbcTemplate.update("""
+                    INSERT INTO customer_notes (
+                        customer_id, note_type, scope_type, content, is_active, display_order, created_by, updated_by, created_at, updated_at
+                    ) VALUES (?, 'USER', 'LONG_TERM', ?, TRUE, 0, 'USER', 'USER', ?, ?)
+                    """, customerId, defaultUserRemark, Timestamp.valueOf(LocalDateTime.now()), Timestamp.valueOf(LocalDateTime.now()));
+            }
         }
-        if (payload.containsKey("priorityTag")) {
-            customer.setPriorityTag(blankToNull(stringValue(payload.get("priorityTag"))));
-        }
-        if (payload.containsKey("priorityNote")) {
-            customer.setPriorityNote(blankToNull(stringValue(payload.get("priorityNote"))));
-        }
+        
         customer.setUpdatedAt(LocalDateTime.now());
         customerMapper.updateById(customer);
-
-        if (payload.containsKey("defaultUserRemark")
-            || payload.containsKey("defaultMerchantRemark")
-            || payload.containsKey("defaultTagsText")
-            || payload.containsKey("orderPreferenceEnabled")) {
-            rewriteLegacyCustomerNotes(customerId, payload);
-        }
 
         return Map.of("customerId", customerId, "status", "UPDATED");
     }
 
     @Override
     @Transactional
-    public Map<String, Object> saveCustomerNote(long customerId, CustomerNoteUpsertRequest request) {
+    public Map<String, Object> createCustomerAddress(long customerId, Map<String, Object> payload) {
         requireActiveCustomer(customerId);
-        String noteType = normalizeCustomerNoteType(request.noteType());
-        String scopeType = normalizeCustomerNoteScope(noteType, request.scopeType());
-        String content = requireCustomerNoteContent(request.content());
-        LocalDateTime startAt = request.startAt();
-        LocalDateTime endAt = request.endAt();
-
-        if ("TIME_BOXED".equals(scopeType)) {
-            if (startAt == null || endAt == null) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "限时商家备注必须填写开始时间和结束时间");
-            }
-            if (startAt.isAfter(endAt)) {
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "开始时间不能晚于结束时间");
-            }
-        } else {
-            startAt = null;
-            endAt = null;
+        AddressPayload address = normalizeAddressPayload(payload);
+        if (address.isDefault()) {
+            jdbcTemplate.update("UPDATE customer_addresses SET is_default = FALSE WHERE customer_id = ?", customerId);
         }
-
-        int displayOrder = request.displayOrder() == null ? 0 : request.displayOrder();
-        jdbcTemplate.update(
+        long addressId = insertAndReturnId(
             """
-                INSERT INTO customer_notes (
-                    customer_id, note_type, scope_type, content, start_at, end_at, is_active, display_order, created_by, updated_by
-                ) VALUES (?, ?, ?, ?, ?, ?, TRUE, ?, ?, ?)
+                INSERT INTO customer_addresses (
+                    customer_id, contact_name, contact_phone, address_line, area_code, is_default, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
             customerId,
-            noteType,
-            scopeType,
-            content,
-            startAt == null ? null : Timestamp.valueOf(startAt),
-            endAt == null ? null : Timestamp.valueOf(endAt),
-            displayOrder,
-            "ADMIN",
-            "ADMIN"
+            address.contactName(),
+            address.contactPhone(),
+            address.addressLine(),
+            address.areaCode(),
+            address.isDefault(),
+            Timestamp.valueOf(LocalDateTime.now()),
+            Timestamp.valueOf(LocalDateTime.now())
         );
-        return Map.of("customerId", customerId, "status", "CREATED");
+        return Map.of("customerId", customerId, "addressId", addressId, "status", "CREATED");
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> updateCustomerAddress(long customerId, long addressId, Map<String, Object> payload) {
+        requireActiveCustomer(customerId);
+        requireExistingCustomerAddress(customerId, addressId);
+        AddressPayload address = normalizeAddressPayload(payload);
+        if (address.isDefault()) {
+            jdbcTemplate.update("UPDATE customer_addresses SET is_default = FALSE WHERE customer_id = ?", customerId);
+        }
+        jdbcTemplate.update(
+            """
+                UPDATE customer_addresses
+                SET contact_name = ?, contact_phone = ?, address_line = ?, area_code = ?, is_default = ?, updated_at = ?
+                WHERE id = ? AND customer_id = ?
+                """,
+            address.contactName(),
+            address.contactPhone(),
+            address.addressLine(),
+            address.areaCode(),
+            address.isDefault(),
+            Timestamp.valueOf(LocalDateTime.now()),
+            addressId,
+            customerId
+        );
+        return Map.of("customerId", customerId, "addressId", addressId, "status", "UPDATED");
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> deleteCustomerAddress(long customerId, long addressId) {
+        requireActiveCustomer(customerId);
+        requireExistingCustomerAddress(customerId, addressId);
+        Integer addressCount = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM customer_addresses WHERE customer_id = ?",
+            Integer.class,
+            customerId
+        );
+        if (addressCount != null && addressCount <= 1) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "至少保留一个地址");
+        }
+        Boolean wasDefault = jdbcTemplate.queryForObject(
+            "SELECT is_default FROM customer_addresses WHERE id = ? AND customer_id = ?",
+            Boolean.class,
+            addressId,
+            customerId
+        );
+        jdbcTemplate.update("DELETE FROM customer_addresses WHERE id = ? AND customer_id = ?", addressId, customerId);
+        if (Boolean.TRUE.equals(wasDefault)) {
+            List<Long> remainingIds = jdbcTemplate.query(
+                "SELECT id FROM customer_addresses WHERE customer_id = ? ORDER BY id ASC",
+                (rs, rowNum) -> rs.getLong("id"),
+                customerId
+            );
+            if (!remainingIds.isEmpty()) {
+                jdbcTemplate.update("UPDATE customer_addresses SET is_default = TRUE WHERE id = ?", remainingIds.get(0));
+            }
+        }
+        return Map.of("customerId", customerId, "addressId", addressId, "status", "DELETED");
     }
 
     @Override
@@ -419,7 +453,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         String normalizedScene = blankToDefault(stringValue(scene), "ORDER_REMARK").toUpperCase();
         List<String> items = switch (normalizedScene) {
             case "CUSTOMER_REMARK" -> recentDistinct(querySuggestionValues(
-                "SELECT remark FROM customers WHERE remark IS NOT NULL ORDER BY updated_at DESC, id DESC"
+                "SELECT merchant_remark FROM customers WHERE merchant_remark IS NOT NULL ORDER BY updated_at DESC, id DESC"
             ));
             case "PRIORITY_NOTE" -> recentDistinct(querySuggestionValues(
                 "SELECT priority_note FROM customers WHERE priority_note IS NOT NULL ORDER BY updated_at DESC, id DESC"
@@ -431,9 +465,9 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
                 "SELECT receipt_note FROM delivery_receipts WHERE receipt_note IS NOT NULL ORDER BY delivered_at DESC, id DESC"
             ));
             case "SUBSCRIPTION_NOTE" -> recentDistinct(querySuggestionValues(
-                customerId != null ? 
-                "SELECT default_note FROM subscription_rules WHERE customer_id = " + customerId + " AND default_note IS NOT NULL ORDER BY id DESC" :
-                "SELECT default_note FROM subscription_rules WHERE default_note IS NOT NULL ORDER BY id DESC"
+                customerId != null ?
+                "SELECT merchant_remark FROM subscription_rules WHERE customer_id = " + customerId + " AND merchant_remark IS NOT NULL ORDER BY id DESC" :
+                "SELECT merchant_remark FROM subscription_rules WHERE merchant_remark IS NOT NULL ORDER BY id DESC"
             ));
             case "MENU_NOTE" -> recentDistinct(querySuggestionValues(
                 "SELECT merchant_note FROM menu_week_items WHERE merchant_note IS NOT NULL ORDER BY serve_date DESC, id DESC"
@@ -454,8 +488,8 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
                 ),
                 querySuggestionValues(
                     customerId != null ?
-                    "SELECT default_note FROM subscription_rules WHERE customer_id = " + customerId + " AND default_note IS NOT NULL ORDER BY id DESC" :
-                    "SELECT default_note FROM subscription_rules WHERE default_note IS NOT NULL ORDER BY id DESC"
+                    "SELECT merchant_remark FROM subscription_rules WHERE customer_id = " + customerId + " AND merchant_remark IS NOT NULL ORDER BY id DESC" :
+                    "SELECT merchant_remark FROM subscription_rules WHERE merchant_remark IS NOT NULL ORDER BY id DESC"
                 )
             );
             default -> List.of();
@@ -576,6 +610,30 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         }
     }
 
+    private void requireExistingCustomerAddress(long customerId, long addressId) {
+        Integer count = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM customer_addresses WHERE id = ? AND customer_id = ?",
+            Integer.class,
+            addressId,
+            customerId
+        );
+        if (count == null || count <= 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "客户地址不存在");
+        }
+    }
+
+    private AddressPayload normalizeAddressPayload(Map<String, Object> payload) {
+        String contactName = blankToNull(stringValue(payload.get("contactName")));
+        String contactPhone = blankToNull(stringValue(payload.get("contactPhone")));
+        String addressLine = blankToNull(stringValue(payload.get("addressLine")));
+        String areaCode = blankToDefault(stringValue(payload.get("areaCode")), "");
+        boolean isDefault = booleanValue(payload.get("isDefault"), false);
+        if (contactName == null || contactPhone == null || addressLine == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "联系人、联系电话、收货地址必填");
+        }
+        return new AddressPayload(contactName, contactPhone, addressLine, areaCode, isDefault);
+    }
+
     private String normalizeCustomerNoteType(String noteType) {
         String normalized = blankToDefault(noteType, "").trim().toUpperCase();
         if (!"USER".equals(normalized) && !"MERCHANT".equals(normalized)) {
@@ -689,7 +747,22 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             return true;
         }
         String normalized = keyword.trim();
-        return item.name().contains(normalized) || item.phone().contains(normalized);
+        return item.name().contains(normalized)
+            || item.phone().contains(normalized)
+            || (item.merchantRemark() != null && item.merchantRemark().contains(normalized));
+    }
+
+    private long insertAndReturnId(String sql, Object... args) {
+        KeyHolder keyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(connection -> {
+            PreparedStatement ps = connection.prepareStatement(sql, PreparedStatement.RETURN_GENERATED_KEYS);
+            for (int i = 0; i < args.length; i++) {
+                ps.setObject(i + 1, args[i]);
+            }
+            return ps;
+        }, keyHolder);
+        Number key = keyHolder.getKey();
+        return key == null ? 0L : key.longValue();
     }
 
     private boolean matchesText(String source, String target) {
@@ -742,6 +815,33 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         }
         return fallback;
     }
+
+    private int intValue(Object value, int fallback) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value instanceof String text) {
+            String normalized = text.trim();
+            if (!normalized.isEmpty()) {
+                try {
+                    return Integer.parseInt(normalized);
+                } catch (NumberFormatException ex) {
+                    throw new BusinessException(ErrorCode.VALIDATION_ERROR, "餐次数量格式不正确");
+                }
+            }
+        }
+        return fallback;
+    }
+
+    private record AddressPayload(
+        String contactName,
+        String contactPhone,
+        String addressLine,
+        String areaCode,
+        boolean isDefault
+    ) {
+    }
+
 
     private Map<String, Object> buildAdjustResult(long customerId, int remainingMeals) {
         Map<String, Object> result = new HashMap<>();

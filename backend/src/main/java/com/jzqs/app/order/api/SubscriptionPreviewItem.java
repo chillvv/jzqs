@@ -7,7 +7,7 @@ public record SubscriptionPreviewItem(
     String mealPeriod,
     long addressId,
     String deliveryAddress,
-    String defaultNote,
+    String merchantRemark,
     int remainingMeals,
     boolean hasBalance
 ) {

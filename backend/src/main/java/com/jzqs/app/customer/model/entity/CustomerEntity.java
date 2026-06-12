@@ -40,7 +40,8 @@ public class CustomerEntity {
     @TableField("source_channel")
     private String sourceChannel;
 
-    private String remark;
+    @TableField("merchant_remark")
+    private String merchantRemark;
 
     @TableField("current_openid")
     private String currentOpenid;
@@ -161,12 +162,12 @@ public class CustomerEntity {
         this.sourceChannel = sourceChannel;
     }
 
-    public String getRemark() {
-        return remark;
+    public String getMerchantRemark() {
+        return merchantRemark;
     }
 
-    public void setRemark(String remark) {
-        this.remark = remark;
+    public void setMerchantRemark(String merchantRemark) {
+        this.merchantRemark = merchantRemark;
     }
 
     public String getCurrentOpenid() {

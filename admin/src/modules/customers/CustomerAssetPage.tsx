@@ -1,16 +1,20 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  createCustomerAddress,
   createCustomerProfile,
+  deleteCustomerAddress,
   fetchCustomerAssets,
   fetchCustomerDetail,
   fetchWalletTransactions,
   grantWalletMeals,
   deductWalletMeals,
-  saveCustomerNote,
+  updateCustomerAddress,
   updateCustomerProfile
 } from "../../shared/api/http";
 import type {
   CustomerAssetResponse,
+  CustomerAddressItem,
+  CustomerAddressMutationPayload,
   CustomerDetailResponse,
   WalletTransactionResponse
 } from "../../shared/api/types";
@@ -18,11 +22,11 @@ import { MinusCircle, RotateCcw, Search, UserPlus, X } from "lucide-react";
 import {
   buildCustomerActionLabels,
   buildCustomerAssetStats,
+  buildVisibleCustomerAddresses,
   buildCustomerOverviewSummary,
-  extractCustomerNoteGroups,
   filterCustomerAssets,
-  formatCustomerNoteSchedule,
-  resolveCustomerSpecialMark,
+  normalizeInitialMealsValue,
+  shouldShowAddressExpandToggle,
   resolveCustomerStatusLabel,
   type CustomerBalanceState,
   type CustomerOrderModeFilter
@@ -37,24 +41,44 @@ const emptyEditForm = {
   phone: "",
   remark: "",
   customerStatus: "INTENTION",
-  initialMeals: "0"
+  initialMeals: "0",
+  addressLine: "",
+  contactName: "",
+  contactPhone: ""
 };
 const defaultGrantForm = { mealDelta: "5", remark: "补餐" };
 const defaultDeductForm = { mealDelta: "1", remark: "手工扣减" };
-const defaultCustomerNoteForm = {
-  longTermUserNote: "",
-  longTermMerchantNote: "",
-  timeBoxedMerchantNote: "",
-  timeBoxedStartAt: "",
-  timeBoxedEndAt: ""
+const emptyAddressForm = {
+  contactName: "",
+  contactPhone: "",
+  addressLine: "",
+  areaCode: "",
+  isDefault: false
 };
 
 function buildEditForm(detail: CustomerDetailResponse | null, fallback: CustomerAssetResponse | null) {
   return {
     name: String(detail?.name || fallback?.name || ""),
     phone: String(detail?.phone || fallback?.phone || ""),
-    remark: String(detail?.remark || fallback?.remark || ""),
+    remark: String(detail?.merchantRemark || fallback?.merchantRemark || ""),
     customerStatus: String(detail?.customerStatus || fallback?.customerStatus || "INTENTION")
+  };
+}
+
+function resolveCustomerAddresses(detail: CustomerDetailResponse | null) {
+  return Array.isArray(detail?.addresses) ? detail.addresses as CustomerAddressItem[] : [];
+}
+
+function buildAddressForm(address?: CustomerAddressItem | null) {
+  if (!address) {
+    return emptyAddressForm;
+  }
+  return {
+    contactName: address.contactName,
+    contactPhone: address.contactPhone,
+    addressLine: address.addressLine,
+    areaCode: address.areaCode ?? "",
+    isDefault: address.isDefault
   };
 }
 
@@ -69,15 +93,34 @@ export function CustomerAssetPage() {
   const [grantForm, setGrantForm] = useState(defaultGrantForm);
   const [deductForm, setDeductForm] = useState(defaultDeductForm);
   const [editForm, setEditForm] = useState(emptyEditForm);
-  const [customerNoteForm, setCustomerNoteForm] = useState(defaultCustomerNoteForm);
   const [keywordFilter, setKeywordFilter] = useState("");
   const [customerStatusFilter, setCustomerStatusFilter] = useState("ALL");
   const [balanceStateFilter, setBalanceStateFilter] = useState<CustomerBalanceState>("ALL");
   const [orderModeFilter, setOrderModeFilter] = useState<CustomerOrderModeFilter>("ALL");
   const [transactions, setTransactions] = useState<WalletTransactionResponse[]>([]);
   const [detail, setDetail] = useState<CustomerDetailResponse | null>(null);
+  const [isAddressExpanded, setIsAddressExpanded] = useState(false);
+  const [isAddressEditorOpen, setIsAddressEditorOpen] = useState(false);
+  const [editingAddressId, setEditingAddressId] = useState<number | null>(null);
+  const [addressForm, setAddressForm] = useState(emptyAddressForm);
+  const [submittingProfile, setSubmittingProfile] = useState(false);
+  const [submittingAddress, setSubmittingAddress] = useState(false);
+  const [submittingAddressActionId, setSubmittingAddressActionId] = useState<number | null>(null);
+  const [submittingGrant, setSubmittingGrant] = useState(false);
+  const [submittingCreate, setSubmittingCreate] = useState(false);
+  const [submittingDeduct, setSubmittingDeduct] = useState(false);
 
   const [detailActionLabel, deductActionLabel] = useMemo(() => buildCustomerActionLabels(), []);
+
+  const detailAddresses = useMemo(() => resolveCustomerAddresses(detail), [detail]);
+  const visibleAddresses = useMemo(
+    () => buildVisibleCustomerAddresses(detailAddresses, isAddressExpanded),
+    [detailAddresses, isAddressExpanded]
+  );
+  const showAddressExpandToggle = useMemo(
+    () => shouldShowAddressExpandToggle(detailAddresses),
+    [detailAddresses]
+  );
 
   useEffect(() => {
     reloadCustomers().catch((error) => window.alert(error?.response?.data?.message || error.message || String(error)));
@@ -98,7 +141,8 @@ export function CustomerAssetPage() {
     setDetail(detailResponse);
     setTransactions(txPage.items);
     setEditForm(buildEditForm(detailResponse, item));
-    setCustomerNoteForm(defaultCustomerNoteForm);
+    setIsAddressExpanded(false);
+    resetAddressEditor();
   }
 
   async function refreshCustomerWorkspace(item: CustomerAssetResponse) {
@@ -107,19 +151,135 @@ export function CustomerAssetPage() {
     await loadCustomerWorkspace(nextItem);
   }
 
+  function resetAddressEditor() {
+    setEditingAddressId(null);
+    setAddressForm(emptyAddressForm);
+    setIsAddressEditorOpen(false);
+  }
+
+  function handleStartCreateAddress() {
+    setEditingAddressId(null);
+    setAddressForm({
+      ...emptyAddressForm,
+      isDefault: detailAddresses.length === 0
+    });
+    setIsAddressEditorOpen(true);
+  }
+
+  function handleStartEditAddress(address: CustomerAddressItem) {
+    setEditingAddressId(address.id);
+    setAddressForm(buildAddressForm(address));
+    setIsAddressEditorOpen(true);
+  }
+
+  function buildAddressPayload(form: typeof emptyAddressForm): CustomerAddressMutationPayload {
+    return {
+      contactName: form.contactName.trim(),
+      contactPhone: form.contactPhone.trim(),
+      addressLine: form.addressLine.trim(),
+      areaCode: form.areaCode.trim(),
+      isDefault: form.isDefault
+    };
+  }
+
+  async function handleAddressSubmit() {
+    if (!activeItem) return;
+    const payload = buildAddressPayload(addressForm);
+    if (!payload.contactName || !payload.contactPhone || !payload.addressLine) {
+      toast("请填写联系人、联系电话和收货地址", "error");
+      return;
+    }
+    if (submittingAddress) {
+      return;
+    }
+    setSubmittingAddress(true);
+    try {
+      if (editingAddressId == null) {
+        await createCustomerAddress(activeItem.id, payload);
+      } else {
+        await updateCustomerAddress(activeItem.id, editingAddressId, payload);
+      }
+      await refreshCustomerWorkspace(activeItem);
+      setIsAddressExpanded(true);
+      resetAddressEditor();
+    } finally {
+      setSubmittingAddress(false);
+    }
+  }
+
+  async function handleSetDefaultAddress(address: CustomerAddressItem) {
+    if (!activeItem) return;
+    if (submittingAddress) {
+      return;
+    }
+    setSubmittingAddress(true);
+    setSubmittingAddressActionId(address.id);
+    try {
+      await updateCustomerAddress(activeItem.id, address.id, {
+        contactName: address.contactName,
+        contactPhone: address.contactPhone,
+        addressLine: address.addressLine,
+        areaCode: address.areaCode ?? "",
+        isDefault: true
+      });
+      await refreshCustomerWorkspace(activeItem);
+      setIsAddressExpanded(true);
+    } finally {
+      setSubmittingAddress(false);
+      setSubmittingAddressActionId(null);
+    }
+  }
+
+  async function handleDeleteAddress(address: CustomerAddressItem) {
+    if (!activeItem) return;
+    if (!window.confirm(`确认删除地址“${address.addressLine}”吗？`)) {
+      return;
+    }
+    if (submittingAddress) {
+      return;
+    }
+    setSubmittingAddress(true);
+    setSubmittingAddressActionId(address.id);
+    try {
+      await deleteCustomerAddress(activeItem.id, address.id);
+      await refreshCustomerWorkspace(activeItem);
+      setIsAddressExpanded(true);
+      resetAddressEditor();
+    } finally {
+      setSubmittingAddress(false);
+      setSubmittingAddressActionId(null);
+    }
+  }
+
   async function handleGrantSubmit() {
     if (!activeItem || !grantForm.mealDelta) return;
-    await grantWalletMeals(activeItem.id, Number(grantForm.mealDelta), "后台客服", grantForm.remark || "充值/补餐");
-    setGrantForm(defaultGrantForm);
-    await refreshCustomerWorkspace(activeItem);
+    if (submittingGrant) {
+      return;
+    }
+    setSubmittingGrant(true);
+    try {
+      await grantWalletMeals(activeItem.id, Number(grantForm.mealDelta), "后台客服", grantForm.remark || "充值/补餐");
+      setGrantForm(defaultGrantForm);
+      await refreshCustomerWorkspace(activeItem);
+    } finally {
+      setSubmittingGrant(false);
+    }
   }
 
   async function handleDeductSubmit() {
     if (!activeItem || !deductForm.mealDelta) return;
-    await deductWalletMeals(activeItem.id, Number(deductForm.mealDelta), "后台客服", deductForm.remark || "手工扣减");
-    setIsDeductOpen(false);
-    setDeductForm(defaultDeductForm);
-    await reloadCustomers();
+    if (submittingDeduct) {
+      return;
+    }
+    setSubmittingDeduct(true);
+    try {
+      await deductWalletMeals(activeItem.id, Number(deductForm.mealDelta), "后台客服", deductForm.remark || "手工扣减");
+      setIsDeductOpen(false);
+      setDeductForm(defaultDeductForm);
+      await reloadCustomers();
+    } finally {
+      setSubmittingDeduct(false);
+    }
   }
 
   async function handleOpenDetail(item: CustomerAssetResponse) {
@@ -148,19 +308,27 @@ export function CustomerAssetPage() {
 
   async function handleCreateSubmit() {
     if (!editForm.name || !editForm.phone) return;
+    if (!(editForm as any).addressLine || !(editForm as any).contactName || !(editForm as any).contactPhone) {
+      toast("请填写收货地址、联系人和联系电话", "error");
+      return;
+    }
+    if (submittingCreate) {
+      return;
+    }
+    setSubmittingCreate(true);
     try {
       const newCustomer = await createCustomerProfile({
         name: editForm.name,
         phone: editForm.phone,
-        remark: editForm.remark,
-        priorityCustomer: false,
-        priorityTag: "",
-        priorityNote: ""
+        merchantRemark: editForm.remark,
+        addressLine: (editForm as any).addressLine,
+        contactName: (editForm as any).contactName,
+        contactPhone: (editForm as any).contactPhone
       });
       
       const meals = Number((editForm as any).initialMeals);
-      if (meals > 0 && newCustomer && newCustomer.id) {
-        await grantWalletMeals(newCustomer.id, meals, "后台客服", "建档初始加餐");
+      if (meals > 0 && newCustomer && newCustomer.customerId) {
+        await grantWalletMeals(newCustomer.customerId, meals, "后台客服", "建档初始加餐");
       }
 
       setIsEditOpen(false);
@@ -169,22 +337,29 @@ export function CustomerAssetPage() {
       await reloadCustomers();
     } catch (err: any) {
       window.alert(err?.response?.data?.message || err?.message || "创建用户失败，请检查输入或重试");
+    } finally {
+      setSubmittingCreate(false);
     }
   }
 
   async function handleInlineEditSubmit() {
     if (!activeItem || !editForm.name || !editForm.phone) return;
-    await updateCustomerProfile(activeItem.id, {
-      name: editForm.name,
-      phone: editForm.phone,
-      remark: editForm.remark,
-      customerStatus: editForm.customerStatus,
-      priorityCustomer: false,
-      priorityTag: "",
-      priorityNote: ""
-    });
-    await refreshCustomerWorkspace(activeItem);
-    setDetailMode("view");
+    if (submittingProfile) {
+      return;
+    }
+    setSubmittingProfile(true);
+    try {
+      await updateCustomerProfile(activeItem.id, {
+        name: editForm.name,
+        phone: editForm.phone,
+        merchantRemark: editForm.remark,
+        customerStatus: editForm.customerStatus
+      });
+      await refreshCustomerWorkspace(activeItem);
+      setDetailMode("view");
+    } finally {
+      setSubmittingProfile(false);
+    }
   }
 
   const stats = useMemo(() => buildCustomerAssetStats(items), [items]);
@@ -199,75 +374,6 @@ export function CustomerAssetPage() {
     }),
     [items, keywordFilter, customerStatusFilter, balanceStateFilter, orderModeFilter]
   );
-  const noteGroups = useMemo(() => extractCustomerNoteGroups(detail), [detail]);
-
-  async function handleSaveCustomerNote(kind: "user" | "merchant" | "timeBoxedMerchant") {
-    if (!activeItem) return;
-
-    try {
-      if (kind === "user") {
-        const content = customerNoteForm.longTermUserNote.trim();
-        if (!content) {
-          toast("请填写长期用户备注", "error");
-          return;
-        }
-        await saveCustomerNote(activeItem.id, {
-          noteType: "USER",
-          scopeType: "LONG_TERM",
-          content,
-          displayOrder: noteGroups.userNotes.length
-        });
-        setCustomerNoteForm((prev) => ({ ...prev, longTermUserNote: "" }));
-      }
-
-      if (kind === "merchant") {
-        const content = customerNoteForm.longTermMerchantNote.trim();
-        if (!content) {
-          toast("请填写长期商家备注", "error");
-          return;
-        }
-        await saveCustomerNote(activeItem.id, {
-          noteType: "MERCHANT",
-          scopeType: "LONG_TERM",
-          content,
-          displayOrder: noteGroups.longTermMerchantNotes.length
-        });
-        setCustomerNoteForm((prev) => ({ ...prev, longTermMerchantNote: "" }));
-      }
-
-      if (kind === "timeBoxedMerchant") {
-        const content = customerNoteForm.timeBoxedMerchantNote.trim();
-        if (!content) {
-          toast("请填写限时商家备注", "error");
-          return;
-        }
-        if (!customerNoteForm.timeBoxedStartAt || !customerNoteForm.timeBoxedEndAt) {
-          toast("请填写限时备注开始和结束时间", "error");
-          return;
-        }
-        await saveCustomerNote(activeItem.id, {
-          noteType: "MERCHANT",
-          scopeType: "TIME_BOXED",
-          content,
-          startAt: customerNoteForm.timeBoxedStartAt,
-          endAt: customerNoteForm.timeBoxedEndAt,
-          displayOrder: noteGroups.timeBoxedMerchantNotes.length
-        });
-        setCustomerNoteForm((prev) => ({
-          ...prev,
-          timeBoxedMerchantNote: "",
-          timeBoxedStartAt: "",
-          timeBoxedEndAt: ""
-        }));
-      }
-
-      await refreshCustomerWorkspace(activeItem);
-      toast("客户备注已保存");
-    } catch (err: any) {
-      toast(err?.response?.data?.message || err?.message || "保存客户备注失败", "error");
-    }
-  }
-
   function resetCustomerFilters() {
     setKeywordFilter("");
     setCustomerStatusFilter("ALL");
@@ -333,7 +439,7 @@ export function CustomerAssetPage() {
           <input
             type="text"
             className="input-box customer-filter-input"
-            placeholder="搜索客户手机号/姓名/备注"
+            placeholder="搜索客户手机号/姓名/商家备注"
             value={keywordFilter}
             onChange={(e) => setKeywordFilter(e.target.value)}
           />
@@ -400,7 +506,7 @@ export function CustomerAssetPage() {
               <th>客户姓名</th>
               <th>联系电话</th>
               <th>客户状态</th>
-              <th>客户备注</th>
+              <th>商家备注</th>
               <th>餐次余额</th>
               <th>操作</th>
             </tr>
@@ -409,14 +515,12 @@ export function CustomerAssetPage() {
             {filteredItems.map((item) => {
               const exhausted = item.status === "EXHAUSTED";
               const statusLabel = resolveCustomerStatusLabel(item.customerStatus);
-              const specialMark = resolveCustomerSpecialMark(item.remark);
               return (
                 <tr key={item.id}>
                   <td>
                     <div className="customer-table-name">
                       <div className="customer-table-name__main">
                         <span style={{ whiteSpace: "nowrap" }}>{item.name}</span>
-                        {specialMark && <span className="customer-special-mark" title={specialMark}>特殊备注</span>}
                       </div>
                     </div>
                   </td>
@@ -427,7 +531,7 @@ export function CustomerAssetPage() {
                   </td>
                   <td><span className="customer-status-text" style={{ whiteSpace: "nowrap" }}>{statusLabel}</span></td>
                   <td>
-                    <div className="customer-table-note">{item.remark || "暂无备注"}</div>
+                    <div className="customer-table-note">{item.merchantRemark || "暂无备注"}</div>
                   </td>
                   <td>
                     <div className="customer-balance-cell">
@@ -454,14 +558,12 @@ export function CustomerAssetPage() {
           {filteredItems.map((item) => {
             const exhausted = item.status === "EXHAUSTED";
             const statusLabel = resolveCustomerStatusLabel(item.customerStatus);
-            const specialMark = resolveCustomerSpecialMark(item.remark);
             return (
               <div className="mobile-card" key={item.id}>
                 <div className="mobile-card-header">
                   <div>
                     <div className="customer-mobile-name-row">
                       <span className="customer-mobile-name-row__name">{item.name}</span>
-                      {specialMark && <span className="customer-special-mark" title={specialMark}>特殊备注</span>}
                       <span className="customer-mobile-name-row__phone">{item.phone}</span>
                     </div>
                   </div>
@@ -474,8 +576,8 @@ export function CustomerAssetPage() {
                   </div>
                 </div>
                 <div className="mobile-card-row">
-                  <div className="mobile-card-label">备注</div>
-                  <div className="mobile-card-value">{item.remark || "-"}</div>
+                  <div className="mobile-card-label">商家备注</div>
+                  <div className="mobile-card-value">{item.merchantRemark || "-"}</div>
                 </div>
                 <div className="mobile-card-footer">
                   {renderActions(item)}
@@ -509,8 +611,8 @@ export function CustomerAssetPage() {
                 <div className="customer-detail-hero__actions">
                   {detailMode === "edit" ? (
                     <>
-                      <button className="btn btn-outline" onClick={handleCancelInlineEdit}>取消编辑</button>
-                      <button className="btn btn-primary" onClick={() => handleInlineEditSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>保存资料</button>
+                      <button className="btn btn-outline" disabled={submittingProfile} onClick={handleCancelInlineEdit}>取消编辑</button>
+                      <button className="btn btn-primary" disabled={submittingProfile} onClick={() => handleInlineEditSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>{submittingProfile ? "保存中..." : "保存资料"}</button>
                     </>
                   ) : (
                     <button className="btn btn-outline" onClick={handleStartInlineEdit}>编辑资料</button>
@@ -565,10 +667,10 @@ export function CustomerAssetPage() {
                       </div>
                       <div className="customer-detail-inline-form__remark">
                         <RemarkField
-                          label="客户备注"
+                          label="商家备注"
                           value={editForm.remark}
                           onChange={(value) => setEditForm({ ...editForm, remark: value })}
-                          placeholder="记录客户习惯、地址说明、常见沟通点"
+                          placeholder="记录商家侧需要注意的事项"
                           scene="CUSTOMER_REMARK"
                           multiline
                         />
@@ -587,104 +689,198 @@ export function CustomerAssetPage() {
                         </div>
                       </div>
                       <div className="customer-detail-note-block">
-                        <div className="customer-detail-note-block__label">客户备注</div>
-                        <div className="customer-detail-note-block__value">{String(detail?.remark || activeItem.remark || "-")}</div>
+                        <div className="customer-detail-note-block__label">商家备注</div>
+                        <div className="customer-detail-note-block__value">{String(detail?.merchantRemark || activeItem.merchantRemark || "-")}</div>
                       </div>
                     </>
                   )}
-                </section>
 
-                <section className="customer-detail-card">
-                  <div className="customer-detail-card__header">
-                    <div className="customer-detail-card__title">客户级备注</div>
-                  </div>
-                  <div className="customer-detail-note-block">
-                    <div className="customer-detail-note-block__label">长期用户备注</div>
-                    <div className="customer-detail-note-block__value">
-                      {noteGroups.userNotes.length > 0
-                        ? noteGroups.userNotes.map((note) => note.content).join(" / ")
-                        : "-"}
-                    </div>
-                  </div>
-                  <div className="customer-detail-note-block">
-                    <div className="customer-detail-note-block__label">长期商家备注</div>
-                    <div className="customer-detail-note-block__value">
-                      {noteGroups.longTermMerchantNotes.length > 0
-                        ? noteGroups.longTermMerchantNotes.map((note) => note.content).join(" / ")
-                        : "-"}
-                    </div>
-                  </div>
-                  <div className="customer-detail-note-block">
-                    <div className="customer-detail-note-block__label">限时商家备注</div>
-                    <div className="customer-detail-note-block__value">
-                      {noteGroups.timeBoxedMerchantNotes.length > 0
-                        ? noteGroups.timeBoxedMerchantNotes.map((note) => `${note.content}（${formatCustomerNoteSchedule(note)}）`).join(" / ")
-                        : "-"}
-                    </div>
-                  </div>
-                  <div className="customer-detail-inline-form" style={{ marginTop: "12px" }}>
-                    <div className="customer-edit-form-grid">
-                      <div className="form-group">
-                        <label className="form-label">长期用户备注</label>
-                        <input
-                          className="form-control"
-                          value={customerNoteForm.longTermUserNote}
-                          onChange={(e) => setCustomerNoteForm((prev) => ({ ...prev, longTermUserNote: e.target.value }))}
-                          placeholder="例如：少饭"
-                        />
-                      </div>
-                      <div className="form-group" style={{ display: "flex", alignItems: "flex-end" }}>
-                        <button className="btn btn-outline" onClick={() => handleSaveCustomerNote("user")}>保存用户备注</button>
+                  <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
+                    <div className="customer-detail-card__header">
+                      <div className="customer-detail-card__title">收货地址</div>
+                      <div className="customer-detail-card__actions" style={{ gap: 8, flexWrap: "wrap" }}>
+                        {showAddressExpandToggle && (
+                          <button
+                            type="button"
+                            className="btn btn-outline"
+                            disabled={submittingAddress}
+                            onClick={() => setIsAddressExpanded((current) => !current)}
+                          >
+                            {isAddressExpanded ? "收起地址" : "展开全部"}
+                          </button>
+                        )}
+                        <button type="button" className="btn btn-outline" disabled={submittingAddress} onClick={handleStartCreateAddress}>
+                          {submittingAddress && editingAddressId == null ? "处理中..." : "新增地址"}
+                        </button>
                       </div>
                     </div>
-                    <div className="customer-edit-form-grid">
-                      <div className="form-group">
-                        <label className="form-label">长期商家备注</label>
-                        <input
-                          className="form-control"
-                          value={customerNoteForm.longTermMerchantNote}
-                          onChange={(e) => setCustomerNoteForm((prev) => ({ ...prev, longTermMerchantNote: e.target.value }))}
-                          placeholder="例如：重点关注"
-                        />
+
+                    {visibleAddresses.length === 0 ? (
+                      <div className="empty-state customer-detail-empty-state">暂无收货地址</div>
+                    ) : (
+                      <div style={{ display: "grid", gap: 12 }}>
+                        {visibleAddresses.map((address) => (
+                          <div key={address.id} className="customer-detail-note-block">
+                            <div
+                              style={{
+                                display: "flex",
+                                justifyContent: "space-between",
+                                gap: 12,
+                                alignItems: "center",
+                                flexWrap: "wrap"
+                              }}
+                            >
+                              <div
+                                style={{
+                                  display: "flex",
+                                  gap: 8,
+                                  alignItems: "center",
+                                  flexWrap: "wrap",
+                                  color: "var(--text-main)",
+                                  fontWeight: 700
+                                }}
+                              >
+                                <span>{address.contactName}</span>
+                                <span>{address.contactPhone}</span>
+                                {address.isDefault && (
+                                  <span
+                                    style={{
+                                      display: "inline-flex",
+                                      alignItems: "center",
+                                      padding: "2px 8px",
+                                      borderRadius: 999,
+                                      background: "rgba(37, 99, 235, 0.1)",
+                                      color: "var(--primary-color)",
+                                      fontSize: 12,
+                                      fontWeight: 800
+                                    }}
+                                  >
+                                    默认地址
+                                  </span>
+                                )}
+                              </div>
+                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                                {!address.isDefault && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-outline"
+                                    disabled={submittingAddress}
+                                    onClick={() => handleSetDefaultAddress(address).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}
+                                  >
+                                    {submittingAddress && submittingAddressActionId === address.id ? "处理中..." : "设为默认"}
+                                  </button>
+                                )}
+                                <button
+                                  type="button"
+                                  className="btn btn-outline"
+                                  disabled={submittingAddress}
+                                  onClick={() => handleStartEditAddress(address)}
+                                >
+                                  编辑
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btn btn-danger"
+                                  disabled={detailAddresses.length <= 1 || submittingAddress}
+                                  onClick={() => handleDeleteAddress(address).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}
+                                >
+                                  {submittingAddress && submittingAddressActionId === address.id ? "处理中..." : "删除"}
+                                </button>
+                              </div>
+                            </div>
+                            <div className="customer-detail-note-block__value">
+                              {address.addressLine}
+                              {address.areaCode ? ` (${address.areaCode})` : ""}
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                      <div className="form-group" style={{ display: "flex", alignItems: "flex-end" }}>
-                        <button className="btn btn-outline" onClick={() => handleSaveCustomerNote("merchant")}>保存商家备注</button>
+                    )}
+
+                    {isAddressEditorOpen && (
+                      <div
+                        style={{
+                          padding: 16,
+                          borderRadius: 16,
+                          border: "1px solid rgba(203, 213, 225, 0.9)",
+                          background: "#fff"
+                        }}
+                      >
+                        <div className="customer-detail-card__header" style={{ marginBottom: 12 }}>
+                          <div className="customer-detail-card__title">{editingAddressId == null ? "新增地址" : "编辑地址"}</div>
+                          <div className="customer-detail-card__actions">
+                            <button type="button" className="btn btn-outline" disabled={submittingAddress} onClick={resetAddressEditor}>取消</button>
+                          </div>
+                        </div>
+                        <div className="customer-edit-form-grid">
+                          <div className="form-group">
+                            <label className="form-label"><span className="required">*</span>联系人</label>
+                            <input
+                              className="form-control"
+                              value={addressForm.contactName}
+                              onChange={(e) => setAddressForm({ ...addressForm, contactName: e.target.value })}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label className="form-label"><span className="required">*</span>联系电话</label>
+                            <input
+                              className="form-control"
+                              value={addressForm.contactPhone}
+                              onChange={(e) => setAddressForm({ ...addressForm, contactPhone: e.target.value })}
+                            />
+                          </div>
+                        </div>
+                        <div className="form-group" style={{ marginTop: 14 }}>
+                          <label className="form-label"><span className="required">*</span>收货地址</label>
+                          <input
+                            className="form-control"
+                            value={addressForm.addressLine}
+                            onChange={(e) => setAddressForm({ ...addressForm, addressLine: e.target.value })}
+                          />
+                        </div>
+                        <div className="customer-edit-form-grid" style={{ marginTop: 14 }}>
+                          <div className="form-group">
+                            <label className="form-label">片区</label>
+                            <input
+                              className="form-control"
+                              value={addressForm.areaCode}
+                              onChange={(e) => setAddressForm({ ...addressForm, areaCode: e.target.value })}
+                              placeholder="可选，例如高新区"
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label className="form-label">默认地址</label>
+                            <label
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: 8,
+                                minHeight: 44,
+                                color: "var(--text-main)",
+                                fontWeight: 600
+                              }}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={addressForm.isDefault}
+                                onChange={(e) => setAddressForm({ ...addressForm, isDefault: e.target.checked })}
+                              />
+                              设为该客户默认地址
+                            </label>
+                          </div>
+                        </div>
+                        <div className="customer-detail-card__actions" style={{ marginTop: 16 }}>
+                          <button
+                            type="button"
+                            className="btn btn-primary"
+                            disabled={submittingAddress}
+                            onClick={() => handleAddressSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}
+                          >
+                            {submittingAddress ? "保存中..." : "保存地址"}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                    <div className="customer-edit-form-grid">
-                      <div className="form-group">
-                        <label className="form-label">限时商家备注</label>
-                        <input
-                          className="form-control"
-                          value={customerNoteForm.timeBoxedMerchantNote}
-                          onChange={(e) => setCustomerNoteForm((prev) => ({ ...prev, timeBoxedMerchantNote: e.target.value }))}
-                          placeholder="例如：周卡体验"
-                        />
-                      </div>
-                      <div className="form-group">
-                        <label className="form-label">开始时间</label>
-                        <input
-                          className="form-control"
-                          type="datetime-local"
-                          value={customerNoteForm.timeBoxedStartAt}
-                          onChange={(e) => setCustomerNoteForm((prev) => ({ ...prev, timeBoxedStartAt: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-                    <div className="customer-edit-form-grid">
-                      <div className="form-group">
-                        <label className="form-label">结束时间</label>
-                        <input
-                          className="form-control"
-                          type="datetime-local"
-                          value={customerNoteForm.timeBoxedEndAt}
-                          onChange={(e) => setCustomerNoteForm((prev) => ({ ...prev, timeBoxedEndAt: e.target.value }))}
-                        />
-                      </div>
-                      <div className="form-group" style={{ display: "flex", alignItems: "flex-end" }}>
-                        <button className="btn btn-outline" onClick={() => handleSaveCustomerNote("timeBoxedMerchant")}>保存限时备注</button>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 </section>
 
@@ -704,7 +900,7 @@ export function CustomerAssetPage() {
                     />
                   </div>
                   <div className="customer-detail-card__actions">
-                    <button className="btn btn-primary" onClick={() => handleGrantSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>确认充值</button>
+                    <button className="btn btn-primary" disabled={submittingGrant} onClick={() => handleGrantSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>{submittingGrant ? "充值中..." : "确认充值"}</button>
                   </div>
                 </section>
               </div>
@@ -773,41 +969,57 @@ export function CustomerAssetPage() {
                   <div className="customer-edit-section__title">基础资料</div>
                   <div className="customer-edit-form-grid">
                     <div className="form-group">
-                      <label className="form-label"><span className="required">*</span>客户姓名</label>
-                      <input className="form-control" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+                        <label className="form-label"><span className="required">*</span>客户姓名</label>
+                        <input className="form-control" value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
                     </div>
                     <div className="form-group">
-                      <label className="form-label"><span className="required">*</span>联系电话</label>
-                      <input className="form-control" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+                        <label className="form-label"><span className="required">*</span>联系电话</label>
+                        <input className="form-control" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
                     </div>
-                  </div>
-                  <div className="form-group" style={{ marginTop: "16px" }}>
+                </div>
+                <div className="form-group" style={{ marginTop: "16px" }}>
                     <label className="form-label">初始加餐数量（选填）</label>
                     <input 
                       className="form-control" 
                       type="number" 
                       min="0"
-                      value={(editForm as any).initialMeals || "0"} 
+                      value={normalizeInitialMealsValue((editForm as any).initialMeals)} 
                       onChange={(e) => setEditForm({ ...editForm, initialMeals: e.target.value } as any)} 
                     />
                     <div className="admin-panel-note" style={{ marginTop: "4px" }}>如果填写大于 0，将在建档后自动为用户加餐</div>
-                  </div>
-                  <div className="customer-create-remark-field">
+                </div>
+                <div className="customer-edit-form-grid">
+                    <div className="form-group">
+                        <label className="form-label"><span className="required">*</span>收货地址</label>
+                        <input className="form-control" value={(editForm as any).addressLine} onChange={(e) => setEditForm({ ...editForm, addressLine: e.target.value } as any)} placeholder="请输入详细收货地址" />
+                    </div>
+                </div>
+                <div className="customer-edit-form-grid">
+                    <div className="form-group">
+                        <label className="form-label"><span className="required">*</span>联系人</label>
+                        <input className="form-control" value={(editForm as any).contactName} onChange={(e) => setEditForm({ ...editForm, contactName: e.target.value } as any)} placeholder="请输入联系人姓名" />
+                    </div>
+                    <div className="form-group">
+                        <label className="form-label"><span className="required">*</span>联系电话</label>
+                        <input className="form-control" value={(editForm as any).contactPhone} onChange={(e) => setEditForm({ ...editForm, contactPhone: e.target.value } as any)} placeholder="请输入联系电话" />
+                    </div>
+                </div>
+                <div className="customer-create-remark-field">
                     <RemarkField
-                      label="客户备注"
+                      label="商家备注"
                       value={editForm.remark}
                       onChange={(value) => setEditForm({ ...editForm, remark: value })}
-                      placeholder="记录客户习惯、地址说明、常见沟通点"
+                      placeholder="记录商家侧需要注意的事项"
                       scene="CUSTOMER_REMARK"
                       multiline
                     />
-                  </div>
+                </div>
                 </section>
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => { setIsEditOpen(false); setIsCreating(false); }}>取消</button>
-              <button className="btn btn-primary" onClick={() => handleCreateSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>确认创建</button>
+              <button className="btn btn-outline" disabled={submittingCreate} onClick={() => { setIsEditOpen(false); setIsCreating(false); }}>取消</button>
+              <button className="btn btn-primary" disabled={submittingCreate} onClick={() => handleCreateSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>{submittingCreate ? "创建中..." : "确认创建"}</button>
             </div>
           </div>
         </div>
@@ -849,8 +1061,8 @@ export function CustomerAssetPage() {
               </section>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setIsDeductOpen(false)}>取消</button>
-              <button className="btn btn-danger" onClick={() => handleDeductSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>确认扣减</button>
+              <button className="btn btn-outline" disabled={submittingDeduct} onClick={() => setIsDeductOpen(false)}>取消</button>
+              <button className="btn btn-danger" disabled={submittingDeduct} onClick={() => handleDeductSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>{submittingDeduct ? "扣减中..." : "确认扣减"}</button>
             </div>
           </div>
         </div>

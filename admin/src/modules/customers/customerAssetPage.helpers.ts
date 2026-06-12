@@ -1,5 +1,6 @@
 import type {
   CustomerAssetResponse,
+  CustomerAddressItem,
   CustomerDetailResponse,
   CustomerNoteItem
 } from "../../shared/api/types";
@@ -36,7 +37,7 @@ export function filterCustomerAssets(items: CustomerAssetResponse[], filters: Cu
     const matchesKeyword = keyword.length === 0
       || item.name.includes(keyword)
       || item.phone.includes(keyword)
-      || (item.remark ?? "").includes(keyword);
+      || (item.merchantRemark ?? "").includes(keyword);
 
     const matchesStatus = filters.customerStatus === "ALL" || item.customerStatus === filters.customerStatus;
 
@@ -88,6 +89,10 @@ export function resolveCustomerSpecialMark(remark: string | null | undefined) {
   return text.length > 0 ? text : null;
 }
 
+export function normalizeInitialMealsValue(value: string | null | undefined) {
+  return value == null ? "0" : value;
+}
+
 export function resolveCustomerStatusLabel(status: string) {
   if (status === "INTENTION") return "意向客户";
   if (status === "FORMAL") return "正式客户";
@@ -100,18 +105,13 @@ export function resolveCustomerOrderModeLabel(item: CustomerAssetResponse) {
 }
 
 export function extractCustomerNoteGroups(detail: CustomerDetailResponse | null | undefined) {
-  const userNotes = Array.isArray(detail?.userNotes) ? detail.userNotes as CustomerNoteItem[] : [];
-  const longTermMerchantNotes = Array.isArray(detail?.longTermMerchantNotes)
-    ? detail.longTermMerchantNotes as CustomerNoteItem[]
-    : [];
-  const timeBoxedMerchantNotes = Array.isArray(detail?.timeBoxedMerchantNotes)
-    ? detail.timeBoxedMerchantNotes as CustomerNoteItem[]
-    : [];
+  const merchantNotes = Array.isArray(detail?.merchantNotes) ? detail.merchantNotes as CustomerNoteItem[] : [];
 
   return {
-    userNotes,
-    longTermMerchantNotes,
-    timeBoxedMerchantNotes
+    merchantNotes,
+    longTermMerchantNotes: merchantNotes,
+    userNotes: [],
+    timeBoxedMerchantNotes: []
   };
 }
 
@@ -123,4 +123,29 @@ export function formatCustomerNoteSchedule(note: CustomerNoteItem) {
     return "限时生效";
   }
   return `${note.startAt || "-"} ~ ${note.endAt || "-"}`;
+}
+
+export function resolvePrimaryCustomerAddress(addresses: CustomerAddressItem[] | null | undefined) {
+  if (!Array.isArray(addresses) || addresses.length === 0) {
+    return null;
+  }
+  return addresses.find((address) => address.isDefault) ?? addresses[0] ?? null;
+}
+
+export function shouldShowAddressExpandToggle(addresses: CustomerAddressItem[] | null | undefined) {
+  return Array.isArray(addresses) && addresses.length > 1;
+}
+
+export function buildVisibleCustomerAddresses(
+  addresses: CustomerAddressItem[] | null | undefined,
+  expanded: boolean
+) {
+  if (!Array.isArray(addresses) || addresses.length === 0) {
+    return [];
+  }
+  if (expanded) {
+    return addresses;
+  }
+  const primaryAddress = resolvePrimaryCustomerAddress(addresses);
+  return primaryAddress ? [primaryAddress] : [];
 }

@@ -128,7 +128,7 @@ function DraggableOrderItem({
             {hasDisplayValue(order.userNote) && (
               <span className="tag tag-gray" style={{ fontSize: "11px" }}>用户备注</span>
             )}
-            {hasDisplayValue(order.adminNote) && (
+            {hasDisplayValue(order.merchantRemark) && (
               <span className="tag tag-gray" style={{ fontSize: "11px" }}>商家备注</span>
             )}
             {hasDisplayValue(order.receiptNote) && (
@@ -188,6 +188,7 @@ export function DispatchAreasPage() {
   const [orderDetailId, setOrderDetailId] = useState<number | null>(null);
   const [orderRiderChangeState, setOrderRiderChangeState] = useState<{ orderId: number; riderId: string } | null>(null);
   const [deleteConfirmState, setDeleteConfirmState] = useState<{ orderId: number; customerName: string } | null>(null);
+  const [submittingDeleteOrder, setSubmittingDeleteOrder] = useState(false);
 
   useEffect(() => {
     reload().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)));
@@ -303,7 +304,9 @@ export function DispatchAreasPage() {
 
   async function confirmDeleteOrder() {
     if (!deleteConfirmState) return;
-    
+
+    if (submittingDeleteOrder) return;
+    setSubmittingDeleteOrder(true);
     try {
       await deleteOrder(deleteConfirmState.orderId);
       setDeleteConfirmState(null);
@@ -311,6 +314,8 @@ export function DispatchAreasPage() {
       window.alert('订单已删除');
     } catch (err: any) {
       window.alert(err?.response?.data?.message || err.message || String(err));
+    } finally {
+      setSubmittingDeleteOrder(false);
     }
   }
 
@@ -883,7 +888,7 @@ export function DispatchAreasPage() {
                 </div>
                 <div className="dispatch-detail-row">
                   <div className="admin-panel-note">商家备注</div>
-                  <div>{hasDisplayValue(orderDetail.adminNote) ? orderDetail.adminNote : "-"}</div>
+                  <div>{hasDisplayValue(orderDetail.merchantRemark) ? orderDetail.merchantRemark : "-"}</div>
                 </div>
               </section>
 
@@ -971,16 +976,17 @@ export function DispatchAreasPage() {
         title="⚠️ 删除订单"
         width={500}
         zOffset={20}
-        onClose={() => setDeleteConfirmState(null)}
+        onClose={submittingDeleteOrder ? () => undefined : () => setDeleteConfirmState(null)}
         footer={
           <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-            <button className="btn btn-outline" onClick={() => setDeleteConfirmState(null)}>取消</button>
+            <button className="btn btn-outline" disabled={submittingDeleteOrder} onClick={() => setDeleteConfirmState(null)}>取消</button>
             <button 
               className="btn-delete"
+              disabled={submittingDeleteOrder}
               onClick={() => confirmDeleteOrder().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}
             >
               <Trash2 size={16} />
-              确认删除
+              {submittingDeleteOrder ? "确认删除中..." : "确认删除"}
             </button>
           </div>
         }

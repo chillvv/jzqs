@@ -7,10 +7,7 @@ Page({
     rangeText: '',
     weekCards: [],
     loading: false,
-    heroExpanded: false,
-    showAnnouncementModal: false,
-    announcementTitle: '',
-    announcementLines: [],
+    fullscreenAnnouncementLines: [],
     statusBarHeight: 0,
     navBarHeight: 44
   },
@@ -43,9 +40,18 @@ Page({
       ]);
       const resolvedHome = {
         ...home,
-        bannerImages: (home.bannerImages || []).map((item) =>
-          resolveMediaUrl(item, app.globalData.apiBaseUrl)
-        )
+        bannerImages: (home.bannerImages || []).map((item) => {
+          if (typeof item === 'string') {
+            return {
+              imageUrl: resolveMediaUrl(item, app.globalData.apiBaseUrl),
+              enabled: true
+            };
+          }
+          return {
+            imageUrl: resolveMediaUrl(item.imageUrl || item.url || '', app.globalData.apiBaseUrl),
+            enabled: item.enabled !== false
+          };
+        })
       };
       this.setData({
         home: resolvedHome,
@@ -59,20 +65,19 @@ Page({
       });
 
       if (
-        app.globalData.token &&
         resolvedHome.popupAnnouncementEnabled &&
-        resolvedHome.popupAnnouncementContent &&
-        !app.globalData.announcementShown
+        resolvedHome.popupAnnouncementContent
       ) {
-        app.globalData.announcementShown = true;
         this.setData({
-          showAnnouncementModal: true,
-          announcementTitle: resolvedHome.holidayNoticeTitle || '系统公告',
-          announcementLines: String(resolvedHome.popupAnnouncementContent)
+          fullscreenAnnouncementLines: String(resolvedHome.popupAnnouncementContent)
             .split(/\r?\n/)
             .map((line) => line.trim())
             .filter(Boolean)
         });
+        this.startAnnouncementPolling();
+      } else {
+        this.stopAnnouncementPolling();
+        this.setData({ fullscreenAnnouncementLines: [] });
       }
     } catch (error) {
       wx.showToast({ title: error.message || '加载失败', icon: 'none' });
@@ -86,13 +91,48 @@ Page({
     this.loadPageData();
   },
 
-  toggleHero() {
-    this.setData({ heroExpanded: !this.data.heroExpanded });
+  onHide() {
+    this.stopAnnouncementPolling();
   },
 
-  closeAnnouncementModal() {
-    this.setData({
-      showAnnouncementModal: false
+  onUnload() {
+    this.stopAnnouncementPolling();
+  },
+
+  _pollAnnouncementTimer: null,
+
+  startAnnouncementPolling() {
+    this.stopAnnouncementPolling();
+    this._pollAnnouncementTimer = setInterval(() => {
+      request({ url: '/api/mobile/customer/home', requireAuth: false })
+        .then((home) => {
+          if (!home.popupAnnouncementEnabled) {
+            this.stopAnnouncementPolling();
+            this.loadPageData();
+          }
+        })
+        .catch(() => {});
+    }, 30000);
+  },
+
+  stopAnnouncementPolling() {
+    if (this._pollAnnouncementTimer) {
+      clearInterval(this._pollAnnouncementTimer);
+      this._pollAnnouncementTimer = null;
+    }
+  },
+
+  handleBannerTap(e) {
+    const { index } = e.currentTarget.dataset;
+    const images = ((this.data.home && this.data.home.bannerImages) || [])
+      .map((item) => item.imageUrl)
+      .filter(Boolean);
+    if (!images.length) {
+      return;
+    }
+    wx.previewImage({
+      current: images[index] || images[0],
+      urls: images
     });
   }
 });

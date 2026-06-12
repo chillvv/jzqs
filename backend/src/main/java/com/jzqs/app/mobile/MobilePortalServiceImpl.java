@@ -2,6 +2,7 @@ package com.jzqs.app.mobile;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jzqs.app.aftersale.service.AftersaleService;
 import com.jzqs.app.common.api.PageResponse;
@@ -9,9 +10,11 @@ import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.common.wechat.WeChatService;
 import com.jzqs.app.customer.api.WalletTransactionResponse;
+import com.jzqs.app.dispatch.service.DispatchService;
 import com.jzqs.app.delivery.service.DeliveryService;
 import com.jzqs.app.mobile.api.MobileAddressResponse;
 import com.jzqs.app.mobile.api.MobileAfterSaleItemResponse;
+import com.jzqs.app.mobile.api.MobileBannerItemResponse;
 import com.jzqs.app.mobile.api.MobileCreateAfterSaleRequest;
 import com.jzqs.app.mobile.api.MobileCurrentWeekDayResponse;
 import com.jzqs.app.mobile.api.MobileCurrentWeekResponse;
@@ -61,6 +64,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     private final OrderPrepService orderPrepService;
     private final OrderNoteSnapshotService orderNoteSnapshotService;
     private final DeliveryService deliveryService;
+    private final DispatchService dispatchService;
     private final ObjectMapper objectMapper;
     private final MobilePortalServiceExtension extension;
     private final AftersaleService aftersaleService;
@@ -72,6 +76,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         OrderPrepService orderPrepService,
         OrderNoteSnapshotService orderNoteSnapshotService,
         DeliveryService deliveryService,
+        DispatchService dispatchService,
         ObjectMapper objectMapper,
         MobilePortalServiceExtension extension,
         AftersaleService aftersaleService,
@@ -82,6 +87,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         this.orderPrepService = orderPrepService;
         this.orderNoteSnapshotService = orderNoteSnapshotService;
         this.deliveryService = deliveryService;
+        this.dispatchService = dispatchService;
         this.objectMapper = objectMapper;
         this.extension = extension;
         this.aftersaleService = aftersaleService;
@@ -99,7 +105,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
 
     public MobileHomeResponse guestHome() {
         Map<String, Object> settings = jdbcTemplate.queryForMap(
-            "SELECT ordering_enabled, holiday_notice_title, holiday_notice_desc, banner_images, popup_announcement_enabled, popup_announcement_content FROM admin_settings WHERE id = 1"
+            "SELECT ordering_enabled, holiday_notice_title, holiday_notice_desc, banner_images, banner_interval_seconds, popup_announcement_enabled, popup_announcement_content FROM admin_settings WHERE id = 1"
         );
         boolean orderingEnabled = Boolean.TRUE.equals(settings.get("ordering_enabled"));
         return new MobileHomeResponse(
@@ -115,7 +121,9 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             safeString(settings.get("holiday_notice_desc")),
             "",
             "",
+            "",
             parseBannerImages(settings.get("banner_images")),
+            resolveBannerIntervalMs(settings.get("banner_interval_seconds")),
             Boolean.TRUE.equals(settings.get("popup_announcement_enabled")),
             safeString(settings.get("popup_announcement_content"))
         );
@@ -130,14 +138,24 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 COALESCE(pp.package_name, '未开通套餐') AS package_name,
                 COALESCE(mw.total_meals, 0) AS total_meals,
                 COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) AS remaining_meals,
-                c.remark,
+                c.merchant_remark,
                 (
                     SELECT ca.address_line
                     FROM customer_addresses ca
                     WHERE ca.customer_id = c.id
                     ORDER BY ca.is_default DESC, ca.id ASC
                     LIMIT 1
-                ) AS default_address
+                ) AS default_address,
+                (
+                    SELECT cn.content
+                    FROM customer_notes cn
+                    WHERE cn.customer_id = c.id
+                    AND cn.note_type = 'USER'
+                    AND cn.scope_type = 'LONG_TERM'
+                    AND cn.is_active = TRUE
+                    ORDER BY cn.display_order, cn.id
+                    LIMIT 1
+                ) AS default_user_remark
             FROM customers c
             LEFT JOIN meal_wallets mw ON mw.customer_id = c.id AND mw.active = TRUE
             LEFT JOIN package_plans pp ON pp.id = mw.package_plan_id
@@ -153,15 +171,16 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             row.put("package_name", rs.getString("package_name"));
             row.put("total_meals", rs.getInt("total_meals"));
             row.put("remaining_meals", rs.getInt("remaining_meals"));
-            row.put("remark", rs.getString("remark"));
+            row.put("merchant_remark", rs.getString("merchant_remark"));
             row.put("default_address", rs.getString("default_address"));
+            row.put("default_user_remark", rs.getString("default_user_remark"));
             return row;
         });
         if (customer == null) {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "未找到对应客户");
         }
         Map<String, Object> settings = jdbcTemplate.queryForMap(
-            "SELECT ordering_enabled, holiday_notice_title, holiday_notice_desc, banner_images, popup_announcement_enabled, popup_announcement_content FROM admin_settings WHERE id = 1"
+            "SELECT ordering_enabled, holiday_notice_title, holiday_notice_desc, banner_images, banner_interval_seconds, popup_announcement_enabled, popup_announcement_content FROM admin_settings WHERE id = 1"
         );
         boolean orderingEnabled = Boolean.TRUE.equals(settings.get("ordering_enabled"));
         return new MobileHomeResponse(
@@ -176,8 +195,10 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             safeString(settings.get("holiday_notice_title")),
             safeString(settings.get("holiday_notice_desc")),
             customer.get("default_address") == null ? "" : String.valueOf(customer.get("default_address")),
-            customer.get("remark") == null ? "" : String.valueOf(customer.get("remark")),
+            customer.get("default_user_remark") == null ? "" : String.valueOf(customer.get("default_user_remark")),
+            customer.get("merchant_remark") == null ? "" : String.valueOf(customer.get("merchant_remark")),
             parseBannerImages(settings.get("banner_images")),
+            resolveBannerIntervalMs(settings.get("banner_interval_seconds")),
             Boolean.TRUE.equals(settings.get("popup_announcement_enabled")),
             safeString(settings.get("popup_announcement_content"))
         );
@@ -407,23 +428,23 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             )
             : existingDailyOrderId;
         String finalUserNote = normalizeNote(note);
+        String merchantRemark = normalizeCustomerMerchantRemark(customerId);
         LocalDateTime snapshotTime = LocalDateTime.now();
         long mealSlotOrderId = insertAndReturnId(
             """
                 INSERT INTO meal_slot_orders (
-                    daily_order_id, meal_period, quantity, address_id, note, user_note, status, source_type
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    daily_order_id, meal_period, quantity, address_id, note, user_note, merchant_remark, status, source_type
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-            dailyOrderId, mealPeriod, 1, addressId, finalUserNote, finalUserNote, "PENDING_DISPATCH", "MINIAPP"
+            dailyOrderId, mealPeriod, 1, addressId, finalUserNote, finalUserNote, merchantRemark, "PENDING_DISPATCH", "MINIAPP"
         );
         jdbcTemplate.update(
             "UPDATE daily_orders SET status = 'PENDING_DISPATCH', source = 'MINIAPP' WHERE id = ?",
             dailyOrderId
         );
         jdbcTemplate.update(
-            "UPDATE customers SET last_order_at = ?, remark = ? WHERE id = ?",
+            "UPDATE customers SET last_order_at = ? WHERE id = ?",
             Timestamp.valueOf(now),
-            normalizeCustomerRemark(note),
             customerId
         );
         jdbcTemplate.update("UPDATE meal_wallets SET reserved_meals = reserved_meals + 1 WHERE id = ?", walletId);
@@ -437,9 +458,22 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             List.of(),
             snapshotTime
         );
+        
+        // 尝试自动派单（如果有记忆地址绑定）
+        // 在同一个事务中，JdbcTemplate 应该能看到刚插入的订单
+        jdbcTemplate.execute("/* force flush */ SELECT 1");
+        dispatchService.autoAssignPendingOrders(mealPeriod);
+        
+        // 重新查询状态以返回准确结果
+        String currentStatus = jdbcTemplate.queryForObject(
+            "SELECT status FROM meal_slot_orders WHERE id = ?",
+            String.class,
+            mealSlotOrderId
+        );
+        
         return Map.of(
             "orderId", mealSlotOrderId,
-            "status", "PENDING_DISPATCH",
+            "status", currentStatus != null ? currentStatus : "PENDING_DISPATCH",
             "walletAction", "RESERVED"
         );
     }
@@ -745,14 +779,10 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         return "LOCKED";
     }
 
-    private String buildSpecialSummary(String userNote, String adminNote, String specialTag) {
+    private String buildSpecialSummary(String userNote, String adminNote) {
         List<String> parts = new ArrayList<>();
-        String normalizedTag = normalizeSpecialValue(specialTag);
         String normalizedUserNote = normalizeSpecialValue(userNote);
         String normalizedAdminNote = normalizeSpecialValue(adminNote);
-        if (!normalizedTag.isEmpty()) {
-            parts.add(normalizedTag);
-        }
         if (!normalizedUserNote.isEmpty()) {
             parts.add("用户备注");
         }
@@ -760,6 +790,21 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             parts.add("商家备注");
         }
         return String.join(" / ", parts);
+    }
+
+    private List<String> buildAttentionSources(String userNote, String adminNote) {
+        List<String> sources = new ArrayList<>();
+        if (!normalizeSpecialValue(userNote).isEmpty()) {
+            sources.add("USER_NOTE");
+        }
+        if (!normalizeSpecialValue(adminNote).isEmpty()) {
+            sources.add("MERCHANT_NOTE");
+        }
+        return List.copyOf(sources);
+    }
+
+    private String buildAttentionLabel(List<String> attentionSources) {
+        return attentionSources.isEmpty() ? "" : "需留意";
     }
 
     private String normalizeSpecialValue(String value) {
@@ -883,12 +928,10 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 COALESCE(ms.meal_name, CASE WHEN mso.meal_period = 'LUNCH' THEN '待配置午餐' ELSE '待配置晚餐' END) AS meal_name,
                 mso.quantity,
                 COALESCE(mso.user_note, mso.note, '-') AS note,
-                COALESCE(mso.admin_note, '') AS admin_note,
-                COALESCE(mso.special_tag, '') AS special_tag,
+                COALESCE(mso.merchant_remark, '') AS merchant_remark,
                 CASE
                     WHEN TRIM(COALESCE(mso.user_note, mso.note, '')) <> ''
-                      OR TRIM(COALESCE(mso.admin_note, '')) <> ''
-                      OR TRIM(COALESCE(mso.special_tag, '')) <> ''
+                      OR TRIM(COALESCE(mso.merchant_remark, '')) <> ''
                     THEN TRUE ELSE FALSE
                 END AS is_special_order,
                 dbi.item_status,
@@ -910,28 +953,36 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             WHERE rp.rider_name = ?
               AND db.serve_date = CURRENT_DATE
             ORDER BY CASE WHEN db.meal_period = 'LUNCH' THEN 1 ELSE 2 END, dbi.current_sequence ASC
-            """, (rs, rowNum) -> new RiderQueueItemResponse(
-            rs.getLong("batch_item_id"),
-            rs.getLong("batch_id"),
-            rs.getLong("meal_slot_order_id"),
-            rs.getLong("address_id"),
-            rs.getInt("current_sequence"),
-            rs.getString("customer_name"),
-            rs.getString("customer_phone"),
-            rs.getString("delivery_address"),
-            rs.getString("meal_period"),
-            rs.getString("meal_name"),
-            rs.getInt("quantity"),
-            rs.getString("note"),
-            rs.getString("admin_note"),
-            rs.getString("special_tag"),
-            rs.getBoolean("is_special_order"),
-            buildSpecialSummary(rs.getString("note"), rs.getString("admin_note"), rs.getString("special_tag")),
-            rs.getString("item_status"),
-            rs.getString("receipt_status"),
-            rs.getString("receipt_url"),
-            rs.getString("receipt_note")
-        ), riderName);
+            """, (rs, rowNum) -> {
+            String note = rs.getString("note");
+            String merchantRemark = rs.getString("merchant_remark");
+            List<String> attentionSources = buildAttentionSources(note, merchantRemark);
+            boolean hasAttentionMark = !attentionSources.isEmpty();
+            return new RiderQueueItemResponse(
+                rs.getLong("batch_item_id"),
+                rs.getLong("batch_id"),
+                rs.getLong("meal_slot_order_id"),
+                rs.getLong("address_id"),
+                rs.getInt("current_sequence"),
+                rs.getString("customer_name"),
+                rs.getString("customer_phone"),
+                rs.getString("delivery_address"),
+                rs.getString("meal_period"),
+                rs.getString("meal_name"),
+                rs.getInt("quantity"),
+                note,
+                merchantRemark,
+                hasAttentionMark,
+                attentionSources,
+                buildAttentionLabel(attentionSources),
+                hasAttentionMark,
+                buildSpecialSummary(note, merchantRemark),
+                rs.getString("item_status"),
+                rs.getString("receipt_status"),
+                rs.getString("receipt_url"),
+                rs.getString("receipt_note")
+            );
+        }, riderName);
         return PageResponse.of(items, 1, 50, items.size());
     }
 
@@ -950,12 +1001,10 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 COALESCE(ms.meal_name, CASE WHEN mso.meal_period = 'LUNCH' THEN '待配置午餐' ELSE '待配置晚餐' END) AS meal_name,
                 mso.quantity,
                 COALESCE(mso.user_note, mso.note, '-') AS note,
-                COALESCE(mso.admin_note, '') AS admin_note,
-                COALESCE(mso.special_tag, '') AS special_tag,
+                COALESCE(mso.merchant_remark, '') AS merchant_remark,
                 CASE
                     WHEN TRIM(COALESCE(mso.user_note, mso.note, '')) <> ''
-                      OR TRIM(COALESCE(mso.admin_note, '')) <> ''
-                      OR TRIM(COALESCE(mso.special_tag, '')) <> ''
+                      OR TRIM(COALESCE(mso.merchant_remark, '')) <> ''
                     THEN TRUE ELSE FALSE
                 END AS is_special_order,
                 dbi.item_status,
@@ -974,28 +1023,36 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 AND EXISTS (SELECT 1 FROM menu_weeks mw2 WHERE mw2.id = ms.week_id AND mw2.status = 'PUBLISHED')
             LEFT JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
             WHERE dbi.id = ?
-            """, (rs, rowNum) -> new RiderQueueItemResponse(
-            rs.getLong("batch_item_id"),
-            rs.getLong("batch_id"),
-            rs.getLong("meal_slot_order_id"),
-            rs.getLong("address_id"),
-            rs.getInt("current_sequence"),
-            rs.getString("customer_name"),
-            rs.getString("customer_phone"),
-            rs.getString("delivery_address"),
-            rs.getString("meal_period"),
-            rs.getString("meal_name"),
-            rs.getInt("quantity"),
-            rs.getString("note"),
-            rs.getString("admin_note"),
-            rs.getString("special_tag"),
-            rs.getBoolean("is_special_order"),
-            buildSpecialSummary(rs.getString("note"), rs.getString("admin_note"), rs.getString("special_tag")),
-            rs.getString("item_status"),
-            rs.getString("receipt_status"),
-            rs.getString("receipt_url"),
-            rs.getString("receipt_note")
-        ), batchItemId);
+            """, (rs, rowNum) -> {
+            String note = rs.getString("note");
+            String merchantRemark = rs.getString("merchant_remark");
+            List<String> attentionSources = buildAttentionSources(note, merchantRemark);
+            boolean hasAttentionMark = !attentionSources.isEmpty();
+            return new RiderQueueItemResponse(
+                rs.getLong("batch_item_id"),
+                rs.getLong("batch_id"),
+                rs.getLong("meal_slot_order_id"),
+                rs.getLong("address_id"),
+                rs.getInt("current_sequence"),
+                rs.getString("customer_name"),
+                rs.getString("customer_phone"),
+                rs.getString("delivery_address"),
+                rs.getString("meal_period"),
+                rs.getString("meal_name"),
+                rs.getInt("quantity"),
+                note,
+                merchantRemark,
+                hasAttentionMark,
+                attentionSources,
+                buildAttentionLabel(attentionSources),
+                hasAttentionMark,
+                buildSpecialSummary(note, merchantRemark),
+                rs.getString("item_status"),
+                rs.getString("receipt_status"),
+                rs.getString("receipt_url"),
+                rs.getString("receipt_note")
+            );
+        }, batchItemId);
         return results.isEmpty() ? null : results.get(0);
     }
 
@@ -1302,6 +1359,9 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             Integer.class,
             context.batchId()
         );
+        // 先移出范围避免唯一约束冲突
+        jdbcTemplate.update("UPDATE dispatch_batch_items SET current_sequence = -1 WHERE id = ?", batchItemId);
+        
         jdbcTemplate.update("""
             UPDATE dispatch_batch_items
             SET current_sequence = current_sequence - 1,
@@ -1309,7 +1369,9 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 reordered_by = ?,
                 reordered_at = CURRENT_TIMESTAMP
             WHERE batch_id = ? AND current_sequence > ?
+            ORDER BY current_sequence ASC
             """, riderName, context.batchId(), context.currentSequence());
+            
         jdbcTemplate.update("""
             UPDATE dispatch_batch_items
             SET current_sequence = ?,
@@ -1349,9 +1411,16 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             WHERE id = ?
             """, riderName, batchItemId);
         refreshRiderBatchState(context.batchId());
+        
+        String finalStatus = jdbcTemplate.queryForObject(
+            "SELECT item_status FROM dispatch_batch_items WHERE id = ?",
+            String.class,
+            batchItemId
+        );
+        
         return Map.of(
             "batchItemId", batchItemId,
-            "itemStatus", "PENDING",
+            "itemStatus", finalStatus != null ? finalStatus : "PENDING",
             "status", "RESUMED"
         );
     }
@@ -1756,8 +1825,17 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         return isBlank(note) ? "-" : note.trim();
     }
 
-    private String normalizeCustomerRemark(String note) {
-        return isBlank(note) ? null : note.trim();
+    private String normalizeCustomerMerchantRemark(long customerId) {
+        List<String> remarks = jdbcTemplate.queryForList(
+            "SELECT COALESCE(merchant_remark, '') FROM customers WHERE id = ?",
+            String.class,
+            customerId
+        );
+        if (remarks.isEmpty()) {
+            return "";
+        }
+        String normalized = remarks.get(0) == null ? "" : remarks.get(0).trim();
+        return "-".equals(normalized) ? "" : normalized;
     }
 
     private boolean isBlank(String value) {
@@ -2070,14 +2148,60 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         return extension.saveOrderSequence(riderName, mealPeriod, batchItemIds);
     }
 
-    private List<String> parseBannerImages(Object bannerImages) {
+    private List<MobileBannerItemResponse> parseBannerImages(Object bannerImages) {
         if (bannerImages == null || String.valueOf(bannerImages).isBlank() || "null".equals(String.valueOf(bannerImages))) {
-            return List.of("../../assets/green-intro.jpg");
+            return List.of(new MobileBannerItemResponse("../../assets/green-intro.jpg", true));
         }
         try {
-            return objectMapper.readValue(String.valueOf(bannerImages), new TypeReference<List<String>>() {});
+            JsonNode root = objectMapper.readTree(String.valueOf(bannerImages));
+            if (!root.isArray() || root.isEmpty()) {
+                return List.of(new MobileBannerItemResponse("../../assets/green-intro.jpg", true));
+            }
+            List<MobileBannerItemResponse> items = new ArrayList<>();
+            for (JsonNode node : root) {
+                if (node == null || node.isNull()) {
+                    continue;
+                }
+                if (node.isTextual()) {
+                    String imageUrl = node.asText("").trim();
+                    if (!imageUrl.isEmpty()) {
+                        items.add(new MobileBannerItemResponse(imageUrl, true));
+                    }
+                    continue;
+                }
+                if (!node.isObject()) {
+                    continue;
+                }
+                String imageUrl = node.path("imageUrl").asText("").trim();
+                if (imageUrl.isEmpty()) {
+                    imageUrl = node.path("url").asText("").trim();
+                }
+                if (imageUrl.isEmpty()) {
+                    continue;
+                }
+                boolean enabled = !node.has("enabled") || node.path("enabled").asBoolean(true);
+                if (!enabled) {
+                    continue;
+                }
+                items.add(new MobileBannerItemResponse(imageUrl, true));
+            }
+            return items.isEmpty() ? List.of(new MobileBannerItemResponse("../../assets/green-intro.jpg", true)) : items;
         } catch (JsonProcessingException e) {
-            return List.of("../../assets/green-intro.jpg");
+            return List.of(new MobileBannerItemResponse("../../assets/green-intro.jpg", true));
         }
+    }
+
+    private int resolveBannerIntervalMs(Object value) {
+        int seconds;
+        if (value instanceof Number number) {
+            seconds = number.intValue();
+        } else {
+            try {
+                seconds = Integer.parseInt(safeString(value).trim());
+            } catch (NumberFormatException ignored) {
+                seconds = 3;
+            }
+        }
+        return Math.max(1, seconds) * 1000;
     }
 }

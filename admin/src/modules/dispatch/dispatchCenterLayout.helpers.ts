@@ -73,8 +73,8 @@ export function hasDisplayValue(value: string | null | undefined) {
   return Boolean(value && value.trim() && value.trim() !== "-");
 }
 
-export function hasOrderAttention(order: { userNote?: string | null; adminNote?: string | null }) {
-  return hasDisplayValue(order.userNote) || hasDisplayValue(order.adminNote);
+export function hasOrderAttention(order: { userNote?: string | null; merchantRemark?: string | null }) {
+  return hasDisplayValue(order.userNote) || hasDisplayValue(order.merchantRemark);
 }
 
 export function buildDispatchAreaStats(bindings: DispatchAreaBindingResponse[]) {

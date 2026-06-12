@@ -14,6 +14,7 @@ export function LowBalanceAlertModal({ visible, onClose }: LowBalanceAlertModalP
   const [items, setItems] = useState<LowBalanceSubscriptionItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [submittingDormantCustomerId, setSubmittingDormantCustomerId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!visible) {
@@ -52,6 +53,10 @@ export function LowBalanceAlertModal({ visible, onClose }: LowBalanceAlertModalP
     if (!window.confirm("确认将该客户标记为沉睡状态？标记后将不再出现在预警列表中。")) {
       return;
     }
+    if (submittingDormantCustomerId === customerId) {
+      return;
+    }
+    setSubmittingDormantCustomerId(customerId);
 
     try {
       await http.put(`/api/admin/customers/${customerId}/status`, {
@@ -62,6 +67,8 @@ export function LowBalanceAlertModal({ visible, onClose }: LowBalanceAlertModalP
       setItems(updatedItems);
     } catch (err: any) {
       alert(err?.response?.data?.message || err?.message || "标记失败");
+    } finally {
+      setSubmittingDormantCustomerId(null);
     }
   };
 
@@ -143,9 +150,10 @@ export function LowBalanceAlertModal({ visible, onClose }: LowBalanceAlertModalP
                           </button>
                           <button
                             className="btn btn-sm btn-outline"
+                            disabled={submittingDormantCustomerId === item.customerId}
                             onClick={() => handleMarkDormant(item.customerId)}
                           >
-                            标记沉睡
+                            {submittingDormantCustomerId === item.customerId ? "标记中..." : "标记沉睡"}
                           </button>
                         </div>
                       </td>

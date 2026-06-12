@@ -38,8 +38,8 @@ public class SubscriptionRuleEntity {
     @TableField("default_address_id")
     private Long defaultAddressId;
 
-    @TableField("default_note")
-    private String defaultNote;
+    @TableField("merchant_remark")
+    private String merchantRemark;
 
     @TableField("is_priority_follow")
     private Boolean isPriorityFollow;
@@ -134,12 +134,12 @@ public class SubscriptionRuleEntity {
         this.defaultAddressId = defaultAddressId;
     }
 
-    public String getDefaultNote() {
-        return defaultNote;
+    public String getMerchantRemark() {
+        return merchantRemark;
     }
 
-    public void setDefaultNote(String defaultNote) {
-        this.defaultNote = defaultNote;
+    public void setMerchantRemark(String merchantRemark) {
+        this.merchantRemark = merchantRemark;
     }
 
     public Boolean getIsPriorityFollow() {

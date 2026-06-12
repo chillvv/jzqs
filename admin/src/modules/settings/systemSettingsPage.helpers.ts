@@ -1,53 +1,123 @@
 import type { OperationSettingsResponse } from "../../shared/api/types";
 
-const DEFAULT_BANNER_IMAGES = ["../../assets/hero-new.jpg"];
+export type BannerConfigItem = {
+  imageUrl: string;
+  enabled: boolean;
+};
 
-export function resolveOrderingTone(enabled: boolean) {
-  return enabled ? "green" : "gray";
+const DEFAULT_BANNER_CONFIGS: BannerConfigItem[] = [
+  {
+    imageUrl: "../../assets/hero-new.jpg",
+    enabled: true
+  }
+];
+
+function cloneDefaultBannerConfigs() {
+  return DEFAULT_BANNER_CONFIGS.map((item) => ({ ...item }));
 }
 
-export function buildOperationRiskSummary(settings: OperationSettingsResponse) {
-  return {
-    primaryHint: settings.orderingEnabled
-      ? "接单通道已开启，停业前请先关停。"
-      : "接单通道已关闭，恢复营业前记得重新开启。",
-    secondaryHint: settings.holidayNoticeTitle && settings.holidayNoticeDesc
-      ? "前台公告已配置，恢复前核对展示时间和文案。"
-      : "当前未配置前台公告，临时停单时用户侧不会收到说明。",
-    tone: settings.orderingEnabled ? "warning" : "info"
-  };
-}
-
-export function normalizeBannerImages(rawBannerImages: string) {
+export function normalizeBannerConfigs(rawBannerImages: string) {
   if (!rawBannerImages.trim()) {
-    return DEFAULT_BANNER_IMAGES;
+    return cloneDefaultBannerConfigs();
   }
 
   try {
     const parsed = JSON.parse(rawBannerImages);
     if (!Array.isArray(parsed)) {
-      return DEFAULT_BANNER_IMAGES;
+      return cloneDefaultBannerConfigs();
     }
 
-    const images = parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
-    return images.length > 0 ? images : DEFAULT_BANNER_IMAGES;
+    const banners = parsed
+      .map((item): BannerConfigItem | null => {
+        if (typeof item === "string") {
+          const imageUrl = item.trim();
+          return imageUrl
+            ? {
+              imageUrl,
+              enabled: true
+            }
+            : null;
+        }
+        if (!item || typeof item !== "object") {
+          return null;
+        }
+        const imageUrl = typeof item.imageUrl === "string"
+          ? item.imageUrl.trim()
+          : typeof item.url === "string"
+            ? item.url.trim()
+            : "";
+        if (!imageUrl) {
+          return null;
+        }
+        return {
+          imageUrl,
+          enabled: item.enabled !== false
+        };
+      })
+      .filter((item): item is BannerConfigItem => Boolean(item));
+
+    return banners.length > 0 ? banners : cloneDefaultBannerConfigs();
   } catch {
-    return DEFAULT_BANNER_IMAGES;
+    return cloneDefaultBannerConfigs();
   }
 }
 
 export function countBannerImages(rawBannerImages: string) {
-  return normalizeBannerImages(rawBannerImages).length;
+  return normalizeBannerConfigs(rawBannerImages).length;
+}
+
+export function countEnabledBannerImages(rawBannerImages: string) {
+  return normalizeBannerConfigs(rawBannerImages).filter((item) => item.enabled).length;
+}
+
+export function serializeBannerConfigs(items: BannerConfigItem[]) {
+  const normalized = items
+    .map((item) => ({
+      imageUrl: item.imageUrl.trim(),
+      enabled: item.enabled
+    }))
+    .filter((item) => item.imageUrl.length > 0);
+
+  return JSON.stringify(normalized.length > 0 ? normalized : cloneDefaultBannerConfigs());
+}
+
+export function countPageLinkedBannerImages(rawBannerImages: string) {
+  return 0;
+}
+
+export function resolveBannerActionSummary(item: BannerConfigItem) {
+  return "点击查看大图";
+}
+
+export function resolveAdminMediaUrl(value: string) {
+  const normalized = value.trim();
+  if (!normalized) {
+    return "";
+  }
+  if (normalized.startsWith("/uploads/")) {
+    return normalized;
+  }
+  if (
+    /^https?:\/\//i.test(normalized)
+    || normalized.startsWith("data:")
+    || normalized.startsWith("blob:")
+    || normalized.startsWith(".")
+  ) {
+    return normalized;
+  }
+  if (typeof window === "undefined") {
+    return normalized;
+  }
+  const root = window.location.origin.replace(/\/+$/, "");
+  const path = normalized.startsWith("/") ? normalized : `/${normalized}`;
+  return `${root}${path}`;
 }
 
 export function buildCustomerFacingSettingHints(settings: OperationSettingsResponse) {
   return {
-    orderHint: settings.orderingEnabled
-      ? "顾客端会显示正常预订入口。"
-      : "顾客端会显示暂停接单说明。",
-    bannerHint: `顾客首页将展示 ${countBannerImages(settings.bannerImages || "")} 张轮播图。`,
+    bannerHint: `顾客首页将展示 ${countEnabledBannerImages(settings.bannerImages || "")} 张启用中的轮播图，并按 ${Math.max(1, settings.bannerIntervalSeconds || 3)} 秒轮播。`,
     popupHint: settings.popupAnnouncementEnabled
-      ? "仅已登录顾客会看到登录后弹窗公告。"
-      : "顾客端不会出现登录后弹窗公告。"
+      ? "已开启锁定公告，用户进入小程序后只能查看公告。"
+      : "锁定公告已关闭，用户可正常使用小程序。"
   };
 }

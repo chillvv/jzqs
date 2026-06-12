@@ -12,7 +12,9 @@ public interface SettingsService {
 
     OperationSettingsResponse updateBannerImages(String bannerImages);
 
-    OperationSettingsResponse updatePopupAnnouncement(boolean enabled, String content);
+    OperationSettingsResponse updateBannerImages(String bannerImages, int bannerIntervalSeconds);
+
+    OperationSettingsResponse updatePopupAnnouncement(String title, String desc, boolean enabled, String content);
 
     BannerImageUploadResponse uploadBannerImage(MultipartFile file);
 

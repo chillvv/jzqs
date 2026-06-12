@@ -44,7 +44,7 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
                 sr.dinner_quantity,
                 sr.default_address_id,
                 COALESCE(ca.address_line, '') AS default_address,
-                COALESCE(sr.default_note, '') AS default_note,
+                COALESCE(sr.merchant_remark, '') AS merchant_remark,
                 sr.is_priority_follow,
                 sr.paused,
                 sr.active,
@@ -105,7 +105,7 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
                 rs.getInt("dinner_quantity"),
                 rs.getLong("default_address_id") == 0 ? null : rs.getLong("default_address_id"),
                 rs.getString("default_address"),
-                rs.getString("default_note"),
+                rs.getString("merchant_remark"),
                 rs.getBoolean("is_priority_follow"),
                 paused,
                 active,
@@ -131,7 +131,7 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
         entity.setDinnerEnabled(request.dinnerEnabled());
         entity.setDinnerQuantity(request.dinnerQuantity());
         entity.setDefaultAddressId(request.defaultAddressId());
-        entity.setDefaultNote(request.defaultNote());
+        entity.setMerchantRemark(request.merchantRemark());
         entity.setIsPriorityFollow(request.isPriorityFollow());
         entity.setActive(true);
         entity.setPaused(false);
@@ -161,7 +161,7 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
         entity.setDinnerEnabled(request.dinnerEnabled());
         entity.setDinnerQuantity(request.dinnerQuantity());
         entity.setDefaultAddressId(request.defaultAddressId());
-        entity.setDefaultNote(request.defaultNote());
+        entity.setMerchantRemark(request.merchantRemark());
         entity.setIsPriorityFollow(request.isPriorityFollow());
         entity.setUpdatedAt(LocalDateTime.now());
 

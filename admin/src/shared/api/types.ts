@@ -20,37 +20,42 @@ export type CustomerAssetResponse = {
   fixedSubscriptionEnabled: boolean;
   priorityCustomer: boolean;
   priorityTag: string | null;
-  remark: string | null;
+  merchantRemark: string | null;
   lastOrderAt: string | null;
   registeredAt: string | null;
   status: string;
 };
 
-export type CustomerNoteItem = {
+export type CustomerAddressItem = {
   id: number;
-  noteType: "USER" | "MERCHANT";
-  scopeType: "LONG_TERM" | "TIME_BOXED";
-  content: string;
-  startAt: string | null;
-  endAt: string | null;
-  active: boolean;
+  contactName: string;
+  contactPhone: string;
+  addressLine: string;
+  areaCode?: string | null;
+  isDefault: boolean;
 };
 
-export type CustomerNotesResponse = {
-  userNotes: CustomerNoteItem[];
-  longTermMerchantNotes: CustomerNoteItem[];
-  timeBoxedMerchantNotes: CustomerNoteItem[];
+export type CustomerAddressMutationPayload = {
+  contactName: string;
+  contactPhone: string;
+  addressLine: string;
+  areaCode?: string | null;
+  isDefault: boolean;
+};
+
+export type CustomerAddressMutationResponse = {
+  customerId: number;
+  addressId: number;
+  status: string;
 };
 
 export type CustomerDetailResponse = {
   name?: string;
   phone?: string;
-  remark?: string | null;
+  merchantRemark?: string | null;
   customerStatus?: string;
   remainingMeals?: number;
-  userNotes?: CustomerNoteItem[];
-  longTermMerchantNotes?: CustomerNoteItem[];
-  timeBoxedMerchantNotes?: CustomerNoteItem[];
+  addresses?: CustomerAddressItem[];
   [key: string]: unknown;
 };
 
@@ -119,7 +124,7 @@ export type SubscriptionConfirmationItem = {
   quantity: number;
   addressLine: string;
   userNote: string;
-  adminNote: string;
+  merchantRemark: string;
   priority: boolean;
   status: string;
 };
@@ -160,7 +165,7 @@ export type SubscriptionPreviewItem = {
   mealPeriod: string;
   addressId: number;
   deliveryAddress: string;
-  defaultNote: string;
+  merchantRemark: string;
   remainingMeals: number;
   hasBalance: boolean;
   selected?: boolean; // Frontend state
@@ -170,7 +175,7 @@ export type SubscriptionImportItem = {
   customerId: number;
   mealPeriod: string;
   addressId: number;
-  note: string;
+  merchantRemark: string;
 };
 
 export type ManualCreateCustomerAddressResponse = {
@@ -210,8 +215,7 @@ export type OrderPrepItemResponse = {
   mealSummary: string;
   quantity: number;
   userNote: string;
-  adminNote: string;
-  specialTag: string;
+  merchantRemark: string;
   deliveryAddress: string;
   source: string;
   priorityCustomer: boolean;
@@ -258,8 +262,7 @@ export type SpecialOrderItem = {
   mealPeriod: string;
   quantity: number;
   userNote: string;
-  adminNote: string;
-  specialTag: string;
+  merchantRemark: string;
   priorityCustomer: boolean;
 };
 
@@ -344,7 +347,7 @@ export type DispatchAreaOrderItemResponse = {
   deliveryStatus: string;
   riderName: string | null;
   userNote: string;
-  adminNote: string;
+  merchantRemark: string;
   referenceImageUrl: string;
   receiptUrl: string;
   receiptNote: string;
@@ -499,6 +502,7 @@ export type OperationSettingsResponse = {
   holidayNoticeDesc: string;
   emergencyActionLabel: string;
   bannerImages: string;
+  bannerIntervalSeconds: number;
   popupAnnouncementEnabled: boolean;
   popupAnnouncementContent: string;
 };
@@ -522,7 +526,7 @@ export type SubscriptionRuleResponse = {
   dinnerQuantity: number;
   defaultAddressId: number | null;
   defaultAddress: string;
-  defaultNote: string;
+  merchantRemark: string;
   isPriorityFollow: boolean;
   paused: boolean;
   active: boolean;
@@ -541,7 +545,7 @@ export type SubscriptionRuleFormData = {
   dinnerEnabled: boolean;
   dinnerQuantity: number;
   defaultAddressId: number | null;
-  defaultNote: string;
+  merchantRemark: string;
   isPriorityFollow: boolean;
 };
 

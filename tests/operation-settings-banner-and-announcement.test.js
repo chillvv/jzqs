@@ -41,41 +41,78 @@ assert.equal(
   'SettingsController 应暴露轮播图上传接口'
 );
 
+for (const banned of ['接单通道', '暂停接单', '恢复接单', '接单状态']) {
+  assert.equal(
+    settingsPage.includes(banned),
+    false,
+    `SystemSettingsPage 不应再保留 ${banned} 相关入口`
+  );
+}
+
 assert.equal(
-  settingsPage.includes('/api/admin/settings/ordering/pause-with-notice') ||
-    adminHttp.includes('/api/admin/settings/ordering/pause-with-notice'),
+  settingsPage.includes('轮播秒数'),
   true,
-  '停单流程应改为公告编辑后再执行暂停'
+  'SystemSettingsPage 应支持配置轮播秒数'
 );
 
 assert.equal(
-  settingsService.includes('pauseOrderingWithNotice('),
-  true,
-  'SettingsService 应提供保存公告并暂停接单的原子方法'
-);
-
-assert.equal(
-  settingsServiceImpl.includes('ordering_enabled = FALSE'),
-  true,
-  'SettingsServiceImpl 应在保存公告时一并关闭接单通道'
-);
-
-assert.equal(
-  homeJs.includes('wx.showModal({'),
+  settingsPage.includes('点击动作') || settingsPage.includes('页面路径') || settingsPage.includes('标题') || settingsPage.includes('说明'),
   false,
-  '小程序首页不应继续使用系统原生 showModal 展示特殊情况公告'
+  'SystemSettingsPage 不应继续保留轮播图标题说明跳转配置'
 );
 
 assert.equal(
-  homeWxml.includes('announcement-modal'),
+  settingsPage.includes('关闭公告'),
+  true,
+  'SystemSettingsPage 应提供关闭公告按钮'
+);
+
+assert.equal(
+  homeWxml.includes('fullscreen-announcement'),
   true,
   '小程序首页应存在自定义公告弹层结构'
 );
 
 assert.equal(
-  homeWxss.includes('.announcement-modal'),
+  homeJs.includes('wx.navigateTo({') || homeJs.includes('wx.switchTab({'),
+  false,
+  '小程序首页轮播图点击后不应再跳转页面'
+);
+
+assert.equal(
+  homeWxml.includes('item.actionType') || homeWxml.includes('点击跳转') || homeWxml.includes('item.title') || homeWxml.includes('item.description'),
+  false,
+  '小程序首页轮播图不应继续显示标题说明和跳转提示'
+);
+
+assert.equal(
+  /interval="\{\{home\.bannerIntervalMs \|\| 3000\}\}"/.test(homeWxml),
+  true,
+  '小程序首页轮播图应读取后台下发的轮播间隔'
+);
+
+assert.equal(
+  settingsServiceImpl.includes('actionType') || settingsServiceImpl.includes('actionTarget'),
+  false,
+  'SettingsServiceImpl 不应继续保留轮播图动作字段'
+);
+
+assert.equal(
+  settingsService.includes('pauseOrderingWithNotice('),
+  true,
+  'SettingsService 仍应保留公告控制能力'
+);
+
+assert.equal(
+  settingsController.includes('popup-announcement'),
+  true,
+  'SettingsController 应继续暴露公告接口'
+);
+
+assert.equal(
+  homeWxss.includes('.fullscreen-announcement'),
   true,
   '小程序首页应存在公告弹层样式'
 );
 
-console.log('PASS: 运营设置轮播图上传与停单公告链路已闭环');
+console.log('PASS: 系统公告与轮播图极简链路已闭环');

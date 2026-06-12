@@ -98,8 +98,7 @@ export function buildMealPrepExportRows(items: OrderPrepItemResponse[]) {
       "配送地址": item.deliveryAddress,
       "订单来源": resolveOrderSourceLabel(item),
       "用户备注": formatOrderNote(item.userNote),
-      "后台备注": formatOrderNote(item.adminNote),
-      "特殊标签": formatOrderNote(item.specialTag),
+      "商家备注": formatOrderNote(item.merchantRemark),
       "订单状态": item.displayStatusLabel || resolveOrderDisplayStatusLabel(displayStatus)
     };
   });
@@ -118,8 +117,7 @@ export function buildOrderPrepView(
       || item.customerPhone.includes(keyword)
       || item.mealSummary.includes(keyword)
       || formatOrderNote(item.userNote).includes(keyword)
-      || formatOrderNote(item.adminNote).includes(keyword)
-      || formatOrderNote(item.specialTag).includes(keyword);
+      || formatOrderNote(item.merchantRemark).includes(keyword);
 
     const matchesMealPeriod = filters.mealPeriod === "ALL" || resolveMealPeriod(item) === filters.mealPeriod;
 
@@ -164,7 +162,7 @@ export function buildOrderPrepSummary(
 
   const specialKeywordCounts = new Map<string, number>();
   items.forEach((item) => {
-    [item.specialTag, item.userNote, item.adminNote].forEach((value) => {
+    [item.userNote, item.merchantRemark].forEach((value) => {
       const normalized = formatOrderNote(value);
       if (normalized === "-") {
         return;
@@ -187,7 +185,7 @@ export function buildOrderPrepSummary(
     lunchCount,
     dinnerCount,
     pendingDispatchCount: items.filter((item) => item.status === "PENDING_DISPATCH").length,
-    priorityOrderCount: items.filter((item) => item.priorityCustomer || formatOrderNote(item.specialTag) !== "-").length,
+    priorityOrderCount: items.filter((item) => item.priorityCustomer).length,
     confirmationCount: confirmationItems.length,
     priorityConfirmationCount: confirmationItems.filter((item) => Boolean(item.priority)).length,
     specialOrderCount: specialOrders.length,

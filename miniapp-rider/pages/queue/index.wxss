@@ -386,18 +386,50 @@
 .order-card {
   background-color: var(--surface, #FFFFFF);
   border-radius: 20rpx;
-  padding: 24rpx;
+  padding: 36rpx 24rpx 24rpx; /* Increased top padding for absolute tag */
   box-shadow: 0 4rpx 16rpx rgba(15, 23, 42, 0.04);
   border: 1rpx solid rgba(226, 232, 240, 0.8);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: block; /* Changed to block */
   position: relative;
   overflow: hidden;
   margin-bottom: 20rpx;
-  /* 优化过渡时间 */
   transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  /* 不能用 transform，会影响小程序拖拽坐标 */
+}
+
+.order-card-status-tag {
+  position: absolute;
+  top: 0;
+  right: 0;
+  font-size: 22rpx;
+  font-weight: 700;
+  padding: 8rpx 20rpx;
+  border-bottom-left-radius: 16rpx;
+  border-top-right-radius: 20rpx;
+  letter-spacing: 0.02em;
+  z-index: 10;
+}
+
+.tag-pending {
+  background-color: #FFF3E0;
+  color: #FF9800;
+}
+
+.tag-completed {
+  background-color: #E8F5E9;
+  color: #4CAF50;
+}
+
+.order-card-content {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.order-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 20rpx;
+  width: 100%;
 }
 
 .order-card-selected {
@@ -453,11 +485,28 @@
 }
 
 .order-left {
+  display: none;
+}
+
+.order-badge-wrapper {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 20rpx;
-  flex: 1;
-  min-width: 0;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.special-tag-inline {
+  font-size: 22rpx;
+  font-weight: 800;
+  color: #DC2626;
+  background: #FFE4E6;
+  padding: 6rpx 12rpx;
+  border-radius: 8rpx;
+  line-height: 1.2;
+  white-space: nowrap;
+  align-self: center;
+  flex-shrink: 0;
 }
 
 .batch-checkbox {
@@ -485,17 +534,17 @@
   position: relative;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
   color: #1E293B;
-  padding: 10rpx 14rpx;
-  border-radius: 12rpx;
+  padding: 12rpx 18rpx;
+  border-radius: 16rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   font-family: 'Courier New', 'SF Mono', Monaco, monospace;
-  font-size: 30rpx;
-  font-weight: 800;
+  font-size: 40rpx;
+  font-weight: 900;
   letter-spacing: -0.02em;
   flex-shrink: 0;
-  min-width: 68rpx;
+  min-width: 80rpx;
   box-sizing: border-box;
   border: 1rpx solid rgba(226, 232, 240, 0.9);
   box-shadow: 0 2rpx 4rpx rgba(15, 23, 42, 0.04);
@@ -522,15 +571,15 @@
     rgba(255, 255, 255, 0.4) 0%, 
     rgba(255, 255, 255, 0) 50%,
     rgba(0, 0, 0, 0.02) 100%);
-  border-radius: 12rpx;
+  border-radius: 16rpx;
   pointer-events: none;
 }
 
 .badge-prefix {
-  font-size: 22rpx;
-  margin-right: 2rpx;
+  font-size: 26rpx;
+  margin-right: 4rpx;
   opacity: 0.6;
-  font-weight: 500;
+  font-weight: 600;
   color: #64748B;
   font-family: 'Courier New', 'SF Mono', Monaco, monospace;
   letter-spacing: 0.02em;
@@ -555,14 +604,16 @@
   flex-direction: column;
   flex: 1;
   min-width: 0;
+  padding-right: 90rpx; /* Prevent overlapping with the absolute top-right tag */
 }
 
 .order-name-row {
   display: flex;
   align-items: center;
   gap: 16rpx;
-  margin-bottom: 12rpx;
   min-width: 0;
+  min-height: 60rpx;
+  flex-wrap: wrap;
 }
 
 .order-name {
@@ -571,7 +622,6 @@
   color: var(--on-surface, #0F172A);
   word-break: break-all;
   letter-spacing: -0.01em;
-  flex: 1;
   min-width: 0;
 }
 
@@ -635,10 +685,15 @@
   flex: 1;
   min-width: 0;
   white-space: normal;
-  overflow: hidden;
   color: var(--on-surface, #0F172A);
   word-break: break-all;
-  line-height: 1.4;
+  line-height: 1.5;
+}
+
+.building-info-text {
+  color: #2563eb;
+  font-weight: 900;
+  margin-right: 8rpx;
 }
 
 .no-address {
@@ -657,9 +712,10 @@
 .order-right {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 16rpx;
   flex-shrink: 0;
-  margin-left: 12rpx;
+  margin-left: auto;
 }
 
 .status-tag {

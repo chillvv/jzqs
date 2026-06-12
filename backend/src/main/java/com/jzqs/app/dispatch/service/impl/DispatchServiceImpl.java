@@ -334,7 +334,13 @@ public class DispatchServiceImpl implements DispatchService {
     @Override
     @Transactional
     public Map<String, Object> autoAssignPendingOrders() {
-        int assignedCount = autoAssignRememberedPendingOrders(null);
+        return autoAssignPendingOrders(null);
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> autoAssignPendingOrders(String mealPeriod) {
+        int assignedCount = autoAssignRememberedPendingOrders(mealPeriod);
         return Map.of("assignedCount", assignedCount, "exceptionCount", 0);
     }
 
@@ -1305,6 +1311,7 @@ public class DispatchServiceImpl implements DispatchService {
                 FROM meal_slot_orders mso
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
                 JOIN rider_address_bindings rab ON rab.customer_id = doo.customer_id AND rab.address_id = mso.address_id
+                JOIN dispatch_area_bindings dab ON dab.area_code = rab.area_code
                 LEFT JOIN dispatch_assignments da ON da.meal_slot_order_id = mso.id
                 WHERE mso.status = 'PENDING_DISPATCH'
                   AND (? IS NULL OR mso.meal_period = ?)
@@ -1470,11 +1477,12 @@ public class DispatchServiceImpl implements DispatchService {
                     mso.id AS order_id,
                     da.sequence_number,
                     c.name AS customer_name,
+                    c.phone AS customer_phone,
                     ca.address_line AS delivery_address,
                     da.status AS delivery_status,
                     da.rider_name,
                     COALESCE(mso.user_note, mso.note, '') AS user_note,
-                    COALESCE(mso.admin_note, '') AS admin_note,
+                    COALESCE(mso.merchant_remark, '') AS merchant_remark,
                     COALESCE(ari.reference_image_url, '') AS reference_image_url,
                     COALESCE(dr.receipt_url, '') AS receipt_url,
                     COALESCE(dr.receipt_note, '') AS receipt_note,
@@ -1505,11 +1513,12 @@ public class DispatchServiceImpl implements DispatchService {
                 rs.getLong("order_id"),
                 rs.getInt("sequence_number"),
                 rs.getString("customer_name"),
+                rs.getString("customer_phone"),
                 rs.getString("delivery_address"),
                 rs.getString("delivery_status"),
                 rs.getString("rider_name"),
                 rs.getString("user_note"),
-                rs.getString("admin_note"),
+                rs.getString("merchant_remark"),
                 rs.getString("reference_image_url"),
                 rs.getString("receipt_url"),
                 rs.getString("receipt_note"),
@@ -1530,15 +1539,22 @@ public class DispatchServiceImpl implements DispatchService {
     }
 
     private DispatchAreaOrderItemResponse toDispatchAreaOrderItem(DispatchAreaOrderRow row, OrderNoteProjection projection) {
+        String userNote = resolveProjectedUserNote(projection, row.userNote());
+        String merchantRemark = resolveProjectedAdminNote(projection, row.merchantRemark());
+        List<String> attentionSources = buildAttentionSources(userNote, merchantRemark);
         return new DispatchAreaOrderItemResponse(
             row.orderId(),
             row.sequenceNumber(),
             row.customerName(),
+            row.customerPhone(),
             row.deliveryAddress(),
             row.deliveryStatus(),
             row.riderName(),
-            resolveProjectedUserNote(projection, row.userNote()),
-            resolveProjectedAdminNote(projection, row.adminNote()),
+            userNote,
+            merchantRemark,
+            !attentionSources.isEmpty(),
+            attentionSources,
+            buildAttentionLabel(attentionSources),
             row.referenceImageUrl(),
             row.receiptUrl(),
             row.receiptNote(),
@@ -1630,6 +1646,21 @@ public class DispatchServiceImpl implements DispatchService {
     private String normalizeLegacyNote(String value) {
         String normalized = stringValue(value);
         return "-".equals(normalized) ? "" : normalized;
+    }
+
+    private List<String> buildAttentionSources(String userNote, String adminNote) {
+        List<String> sources = new ArrayList<>();
+        if (!normalizeLegacyNote(userNote).isBlank()) {
+            sources.add("USER_NOTE");
+        }
+        if (!normalizeLegacyNote(adminNote).isBlank()) {
+            sources.add("MERCHANT_NOTE");
+        }
+        return List.copyOf(sources);
+    }
+
+    private String buildAttentionLabel(List<String> attentionSources) {
+        return attentionSources.isEmpty() ? "" : "需留意";
     }
 
     private String riderProgressKey(String riderName, String areaCode) {
@@ -2013,11 +2044,12 @@ public class DispatchServiceImpl implements DispatchService {
         long orderId,
         int sequenceNumber,
         String customerName,
+        String customerPhone,
         String deliveryAddress,
         String deliveryStatus,
         String riderName,
         String userNote,
-        String adminNote,
+        String merchantRemark,
         String referenceImageUrl,
         String receiptUrl,
         String receiptNote,

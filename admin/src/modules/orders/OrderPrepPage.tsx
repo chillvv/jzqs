@@ -19,7 +19,6 @@ import {
   fetchSubscriptionPreview,
   bulkImportSubscription,
   fetchRemarkSuggestions,
-  updateOrderAdminNote,
   updateOrderProfile,
   checkSubscriptionPreview,
   createOrderAftersale,
@@ -127,9 +126,17 @@ export function OrderPrepPage() {
   const [manualSearchLoading, setManualSearchLoading] = useState(false);
   const [manualMenuWeek, setManualMenuWeek] = useState<AdminMenuWeekResponse | null>(null);
   const [manualMenuLoading, setManualMenuLoading] = useState(false);
+  const [submittingManualCreate, setSubmittingManualCreate] = useState(false);
+  const [submittingAssign, setSubmittingAssign] = useState(false);
+  const [submittingReceipt, setSubmittingReceipt] = useState(false);
+  const [submittingEdit, setSubmittingEdit] = useState(false);
+  const [submittingDelete, setSubmittingDelete] = useState(false);
+  const [submittingConsumeDelivered, setSubmittingConsumeDelivered] = useState(false);
+  const [processingConfirmationId, setProcessingConfirmationId] = useState<number | null>(null);
+  const [processingConfirmationAction, setProcessingConfirmationAction] = useState<"confirm" | "cancel" | null>(null);
   const [assignForm, setAssignForm] = useState({ riderName: "", areaCode: "" });
   const [receiptForm, setReceiptForm] = useState({ receiptUrl: "", receiptNote: "" });
-  const [editForm, setEditForm] = useState({ mealPeriod: "LUNCH", quantity: "1", deliveryAddress: "", adminNote: "", specialTag: "", priorityCustomer: false, status: "PENDING_DISPATCH" });
+  const [editForm, setEditForm] = useState({ mealPeriod: "LUNCH", quantity: "1", deliveryAddress: "", merchantRemark: "", priorityCustomer: false, status: "PENDING_DISPATCH" });
   const [assignRiders, setAssignRiders] = useState<DispatchManagedRiderResponse[]>([]);
   const [assignAreaBindings, setAssignAreaBindings] = useState<DispatchAreaBindingResponse[]>([]);
   
@@ -376,7 +383,7 @@ export function OrderPrepPage() {
         customerId: item.customerId,
         mealPeriod: item.mealPeriod,
         addressId: item.addressId,
-        note: item.defaultNote || "-"
+        merchantRemark: item.merchantRemark || ""
       }));
       const result = await bulkImportSubscription(filterDate, payload);
       window.alert(`成功生成包月订单 ${result.successCount} 份`);
@@ -399,21 +406,33 @@ export function OrderPrepPage() {
 
   const handleUpdatePreviewNote = (index: number, val: string) => {
     const newItems = [...previewItems];
-    newItems[index].defaultNote = val;
+    newItems[index].merchantRemark = val;
     setPreviewItems(newItems);
   };
 
   async function handleAssignSubmit() {
     if (!activeItem || !assignForm.riderName || !assignForm.areaCode) return;
-    await assignDispatch(activeItem.id, assignForm.riderName, assignForm.areaCode);
-    setIsAssignOpen(false);
-    await reloadOrders();
+    if (submittingAssign) return;
+    setSubmittingAssign(true);
+    try {
+      await assignDispatch(activeItem.id, assignForm.riderName, assignForm.areaCode);
+      setIsAssignOpen(false);
+      await reloadOrders();
+    } finally {
+      setSubmittingAssign(false);
+    }
   }
 
   async function handleManualCreateSubmit() {
-    await createManualOrder(buildManualCreatePayload(manualForm, filterDate));
-    closeManualCreateModal();
-    await reloadOrders();
+    if (submittingManualCreate) return;
+    setSubmittingManualCreate(true);
+    try {
+      await createManualOrder(buildManualCreatePayload(manualForm, filterDate));
+      closeManualCreateModal();
+      await reloadOrders();
+    } finally {
+      setSubmittingManualCreate(false);
+    }
   }
 
   function openManualCreateModal() {
@@ -513,38 +532,55 @@ export function OrderPrepPage() {
   }
 
   async function handleDelete(item: OrderPrepItemResponse) {
-    await deleteOrder(item.id);
-    setIsDeleteConfirmOpen(false);
-    setActiveItem(null);
-    await reloadOrders();
+    if (submittingDelete) return;
+    setSubmittingDelete(true);
+    try {
+      await deleteOrder(item.id);
+      setIsDeleteConfirmOpen(false);
+      setActiveItem(null);
+      await reloadOrders();
+    } finally {
+      setSubmittingDelete(false);
+    }
   }
 
   async function handleReceiptSubmit() {
     if (!activeItem || !receiptForm.receiptUrl) return;
-    await recordDeliveryReceipt({
-      mealSlotOrderId: activeItem.id,
-      receiptUrl: receiptForm.receiptUrl,
-      receiptNote: receiptForm.receiptNote,
-      deliveredAt: new Date().toISOString()
-    });
-    setIsReceiptOpen(false);
-    await reloadOrders();
+    if (submittingReceipt) return;
+    setSubmittingReceipt(true);
+    try {
+      await recordDeliveryReceipt({
+        mealSlotOrderId: activeItem.id,
+        receiptUrl: receiptForm.receiptUrl,
+        receiptNote: receiptForm.receiptNote,
+        deliveredAt: new Date().toISOString()
+      });
+      setIsReceiptOpen(false);
+      await reloadOrders();
+    } finally {
+      setSubmittingReceipt(false);
+    }
   }
 
   async function handleEditSubmit() {
     if (!activeItem || !editForm.mealPeriod || !editForm.deliveryAddress) return;
+    if (submittingEdit) return;
     const trimmedAddress = editForm.deliveryAddress.trim();
-    await updateOrderProfile(activeItem.id, {
-      mealPeriod: editForm.mealPeriod as "LUNCH" | "DINNER",
-      quantity: Number(editForm.quantity) || 1,
-      deliveryAddress: trimmedAddress,
-      adminNote: editForm.adminNote,
-      specialTag: editForm.specialTag,
-      priorityCustomer: editForm.priorityCustomer,
-      status: editForm.status
-    });
-    setIsEditOpen(false);
-    await reloadOrders();
+    setSubmittingEdit(true);
+    try {
+      await updateOrderProfile(activeItem.id, {
+        mealPeriod: editForm.mealPeriod as "LUNCH" | "DINNER",
+        quantity: Number(editForm.quantity) || 1,
+        deliveryAddress: trimmedAddress,
+        merchantRemark: editForm.merchantRemark,
+        priorityCustomer: editForm.priorityCustomer,
+        status: editForm.status
+      });
+      setIsEditOpen(false);
+      await reloadOrders();
+    } finally {
+      setSubmittingEdit(false);
+    }
   }
 
   async function handleConsumeDelivered() {
@@ -554,19 +590,41 @@ export function OrderPrepPage() {
       return;
     }
     if (!window.confirm(`确认核销 ${deliveredIds.length} 笔订单吗？`)) return;
-    const result = await consumeOrders(deliveredIds);
-    window.alert(`核销完成：成功 ${result.successCount} 条，失败 ${result.failureCount} 条`);
-    await reloadOrders();
+    if (submittingConsumeDelivered) return;
+    setSubmittingConsumeDelivered(true);
+    try {
+      const result = await consumeOrders(deliveredIds);
+      window.alert(`核销完成：成功 ${result.successCount} 条，失败 ${result.failureCount} 条`);
+      await reloadOrders();
+    } finally {
+      setSubmittingConsumeDelivered(false);
+    }
   }
 
   async function handleConfirmConfirmation(id: number) {
-    await confirmSubscription(id);
-    await reloadOrders();
+    if (processingConfirmationId === id) return;
+    setProcessingConfirmationId(id);
+    setProcessingConfirmationAction("confirm");
+    try {
+      await confirmSubscription(id);
+      await reloadOrders();
+    } finally {
+      setProcessingConfirmationId(null);
+      setProcessingConfirmationAction(null);
+    }
   }
 
   async function handleCancelConfirmation(id: number) {
-    await cancelSubscriptionConfirmation(id, "后台取消");
-    await reloadOrders();
+    if (processingConfirmationId === id) return;
+    setProcessingConfirmationId(id);
+    setProcessingConfirmationAction("cancel");
+    try {
+      await cancelSubscriptionConfirmation(id, "后台取消");
+      await reloadOrders();
+    } finally {
+      setProcessingConfirmationId(null);
+      setProcessingConfirmationAction(null);
+    }
   }
 
   function handleTabChange(nextTab: OrderPrepTab) {
@@ -594,7 +652,7 @@ export function OrderPrepPage() {
     if (displayStatus === "AFTERSALE" || displayStatus === "REFUNDED") {
       return "row-danger-highlight";
     }
-    if (item.specialTag || item.userNote) {
+    if (item.userNote) {
       return "row-warning-highlight";
     }
     return "";
@@ -643,8 +701,7 @@ export function OrderPrepPage() {
                     mealPeriod: resolveMealPeriod(item),
                     quantity: String(item.quantity || 1),
                     deliveryAddress: item.deliveryAddress || "",
-                    adminNote: item.adminNote || "",
-                    specialTag: item.specialTag || "",
+                    merchantRemark: item.merchantRemark || "",
                     priorityCustomer: !!item.priorityCustomer,
                     status: item.status
                   });
@@ -866,7 +923,9 @@ export function OrderPrepPage() {
             <div style={{ display: "flex", gap: "8px" }}>
               <button className="btn btn-outline" onClick={openManualCreateModal}><UserPlus size={16} /> 录入代客订单</button>
               <button className="btn btn-outline" onClick={handleExportMealPrep}><Printer size={16} /> 导出备餐单</button>
-              <button className="btn btn-primary" onClick={() => handleConsumeDelivered().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}><CheckCircle size={16} /> 批量核销扣餐</button>
+              <button className="btn btn-primary" disabled={submittingConsumeDelivered} onClick={() => handleConsumeDelivered().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+                <CheckCircle size={16} /> {submittingConsumeDelivered ? "核销中..." : "批量核销扣餐"}
+              </button>
             </div>
           ) : (
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -887,11 +946,15 @@ export function OrderPrepPage() {
                     {item.customerName} / {item.customerPhone} / {item.mealPeriod === "LUNCH" ? "午餐" : "晚餐"}
                   </div>
                   <div className="address-detail">{item.addressLine || "未设置地址"}</div>
-                  <div className="address-detail">用户备注：{item.userNote || "-"} / 后台备注：{item.adminNote || "-"}</div>
+                  <div className="address-detail">用户备注：{item.userNote || "-"} / 商家备注：{item.merchantRemark || "-"}</div>
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
-                  <button className="btn btn-outline" onClick={() => handleCancelConfirmation(item.id).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>取消</button>
-                  <button className="btn btn-primary" onClick={() => handleConfirmConfirmation(item.id).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>确认生成</button>
+                  <button className="btn btn-outline" disabled={processingConfirmationId === item.id} onClick={() => handleCancelConfirmation(item.id).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+                    {processingConfirmationId === item.id && processingConfirmationAction === "cancel" ? "取消中..." : "取消"}
+                  </button>
+                  <button className="btn btn-primary" disabled={processingConfirmationId === item.id} onClick={() => handleConfirmConfirmation(item.id).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+                    {processingConfirmationId === item.id && processingConfirmationAction === "confirm" ? "生成中..." : "确认生成"}
+                  </button>
                 </div>
               </div>
             ))}
@@ -907,7 +970,7 @@ export function OrderPrepPage() {
                     <th>联系电话</th>
                     <th>餐次</th>
                     <th>用户备注</th>
-                    <th>后台备注 / 特殊标签</th>
+                    <th>商家备注</th>
                     <th>配送地址</th>
                     <th>订单来源</th>
                     <th>状态</th>
@@ -944,7 +1007,7 @@ export function OrderPrepPage() {
                             <span className={`tag ${isLunch ? "tag-orange" : "tag-green"}`}>{isLunch ? "午餐" : "晚餐"}</span>{item.quantity > 1 ? ` ×${item.quantity}` : ""}
                           </td>
                           <td style={{ color: formatOrderNote(item.userNote) === "-" ? undefined : "var(--error-color)", maxWidth: "160px" }}>{formatOrderNote(item.userNote)}</td>
-                          <td style={{ maxWidth: "160px" }}>{formatOrderNote(item.adminNote)} {formatOrderNote(item.specialTag) === "-" ? "" : `/ ${item.specialTag}`}</td>
+                          <td style={{ maxWidth: "160px" }}>{formatOrderNote(item.merchantRemark)}</td>
                           <td>
                             <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", color: "var(--text-sub)", maxWidth: "200px" }}>
                               <MapPin size={14} style={{ marginTop: "2px", flexShrink: 0 }} />
@@ -982,7 +1045,6 @@ export function OrderPrepPage() {
                         <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "6px" }}>
                           {item.priorityCustomer && <span className="tag tag-orange">重点客户</span>}
                           {item.fixedSubscription && <span className="tag tag-blue">固定订餐</span>}
-                          {formatOrderNote(item.specialTag) !== "-" && <span className="tag tag-gray">{item.specialTag}</span>}
                         </div>
                       </div>
                       <div>
@@ -1003,8 +1065,8 @@ export function OrderPrepPage() {
                       <div className="mobile-card-value" style={{ color: formatOrderNote(item.userNote) === "-" ? "inherit" : "var(--error-color)" }}>{formatOrderNote(item.userNote)}</div>
                     </div>
                     <div className="mobile-card-row">
-                      <div className="mobile-card-label">后台备注</div>
-                      <div className="mobile-card-value">{formatOrderNote(item.adminNote)} {formatOrderNote(item.specialTag) === "-" ? "" : `/ ${item.specialTag}`}</div>
+                      <div className="mobile-card-label">商家备注</div>
+                      <div className="mobile-card-value">{formatOrderNote(item.merchantRemark)}</div>
                     </div>
                     <div className="mobile-card-row">
                       <div className="mobile-card-label">来源</div>
@@ -1048,7 +1110,7 @@ export function OrderPrepPage() {
           <div className="modal-content" style={{ maxWidth: "800px" }}>
             <div className="modal-header">
               <span>自动导入包月订单 ({filterDate})</span>
-              <span className="modal-close" onClick={() => setIsSubscriptionPreviewOpen(false)}><X size={20} /></span>
+              <button type="button" className="modal-close" disabled={isSubmittingImport} onClick={isSubmittingImport ? undefined : () => setIsSubscriptionPreviewOpen(false)}><X size={20} /></button>
             </div>
             <div className="modal-body" style={{ padding: "0", background: "#F8FAFC" }}>
               <div style={{ padding: "16px 24px", color: "var(--text-sub)", fontSize: "14px" }}>
@@ -1108,7 +1170,7 @@ export function OrderPrepPage() {
                               type="text" 
                               className="input-box" 
                               style={{ width: "160px", height: "30px", padding: "4px 8px" }} 
-                              value={item.defaultNote} 
+                              value={item.merchantRemark} 
                               onChange={(e) => handleUpdatePreviewNote(index, e.target.value)} 
                               list="subscription-note-suggestions"
                               disabled={!isSelected}
@@ -1133,7 +1195,7 @@ export function OrderPrepPage() {
                 跳过: <span style={{ color: "var(--text-main)", fontWeight: 600 }}>{previewItems.filter(i => !i.selected || !i.hasBalance).length}</span> 人
               </div>
               <div style={{ display: "flex", gap: "12px" }}>
-                <button className="btn btn-outline" onClick={() => setIsSubscriptionPreviewOpen(false)}>取消</button>
+                <button className="btn btn-outline" disabled={isSubmittingImport} onClick={() => setIsSubscriptionPreviewOpen(false)}>取消</button>
                 <button className="btn btn-primary" onClick={() => handleConfirmBulkImport().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))} disabled={isSubmittingImport}>
                   {isSubmittingImport ? "生成中..." : "确认生成订单"}
                 </button>
@@ -1163,8 +1225,7 @@ export function OrderPrepPage() {
                         <th>餐次</th>
                         <th>地址</th>
                         <th>用户备注</th>
-                        <th>老板备注</th>
-                        <th>特殊标签</th>
+                        <th>商家备注</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1174,8 +1235,7 @@ export function OrderPrepPage() {
                           <td>{item.mealPeriod === "LUNCH" ? "午餐" : "晚餐"}</td>
                           <td>{item.addressLine}</td>
                           <td>{item.userNote || "-"}</td>
-                          <td>{item.adminNote || "-"}</td>
-                          <td>{item.specialTag || (item.priorityCustomer ? "特殊客户" : "-")}</td>
+                          <td>{item.merchantRemark || "-"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -1192,7 +1252,7 @@ export function OrderPrepPage() {
           <div className="modal-content">
             <div className="modal-header">
               <span>录入代客订单</span>
-              <span className="modal-close" onClick={closeManualCreateModal}><X size={20} /></span>
+              <button type="button" className="modal-close" disabled={submittingManualCreate} onClick={submittingManualCreate ? undefined : closeManualCreateModal}><X size={20} /></button>
             </div>
             <div className="modal-body">
               <div className="form-group">
@@ -1343,17 +1403,19 @@ export function OrderPrepPage() {
                 />
               </div>
               <RemarkField
-                label="订单备注"
-                value={manualForm.note}
-                onChange={(value) => setManualForm({ ...manualForm, note: value })}
-                placeholder="例如：少饭"
+                label="商家备注"
+                value={manualForm.merchantRemark}
+                onChange={(value) => setManualForm({ ...manualForm, merchantRemark: value })}
+                placeholder="只对当前这一单生效"
                 scene="ORDER_REMARK"
                 customerId={manualSelectedCustomer?.customerId ?? null}
               />
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={closeManualCreateModal}>取消</button>
-              <button className="btn btn-primary" onClick={() => handleManualCreateSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>确认录入</button>
+              <button className="btn btn-outline" onClick={closeManualCreateModal} disabled={submittingManualCreate}>取消</button>
+              <button className="btn btn-primary" disabled={submittingManualCreate} onClick={() => handleManualCreateSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+                {submittingManualCreate ? "提交中..." : "确认录入"}
+              </button>
             </div>
           </div>
         </div>
@@ -1364,7 +1426,7 @@ export function OrderPrepPage() {
           <div className="modal-content" style={{ maxWidth: "680px" }}>
             <div className="modal-header">
               <span>售后处理 - {orderAftersaleItem.customerName}</span>
-              <span className="modal-close" onClick={closeOrderAftersaleModal}><X size={20} /></span>
+              <button type="button" className="modal-close" disabled={submittingOrderAftersale} onClick={submittingOrderAftersale ? undefined : closeOrderAftersaleModal}><X size={20} /></button>
             </div>
             <div className="modal-body" style={{ display: "grid", gap: "18px" }}>
               <div className="auth-panel">
@@ -1409,7 +1471,7 @@ export function OrderPrepPage() {
               </div>
 
               <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">后台备注</label>
+                <label className="form-label">商家备注</label>
                 <textarea
                   className="form-control"
                   value={orderAftersaleForm.remark}
@@ -1420,7 +1482,7 @@ export function OrderPrepPage() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={closeOrderAftersaleModal}>取消</button>
+              <button className="btn btn-outline" onClick={closeOrderAftersaleModal} disabled={submittingOrderAftersale}>取消</button>
               <button
                 className="btn btn-primary"
                 onClick={() => handleOrderAftersaleSubmit().catch(() => undefined)}
@@ -1438,7 +1500,7 @@ export function OrderPrepPage() {
           <div className="modal-content">
             <div className="modal-header">
               <span>分配骑手 - {activeItem.customerName}</span>
-              <span className="modal-close" onClick={() => setIsAssignOpen(false)}><X size={20} /></span>
+              <button type="button" className="modal-close" disabled={submittingAssign} onClick={submittingAssign ? undefined : () => setIsAssignOpen(false)}><X size={20} /></button>
             </div>
             <div className="modal-body">
               <div className="form-group">
@@ -1451,8 +1513,10 @@ export function OrderPrepPage() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setIsAssignOpen(false)}>取消</button>
-              <button className="btn btn-primary" onClick={() => handleAssignSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>确认分配</button>
+              <button className="btn btn-outline" onClick={() => setIsAssignOpen(false)} disabled={submittingAssign}>取消</button>
+              <button className="btn btn-primary" disabled={submittingAssign} onClick={() => handleAssignSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+                {submittingAssign ? "提交中..." : "确认分配"}
+              </button>
             </div>
           </div>
         </div>
@@ -1463,7 +1527,7 @@ export function OrderPrepPage() {
           <div className="modal-content">
             <div className="modal-header">
               <span>上传送达回执 - {activeItem.customerName}</span>
-              <span className="modal-close" onClick={() => setIsReceiptOpen(false)}><X size={20} /></span>
+              <button type="button" className="modal-close" disabled={submittingReceipt} onClick={submittingReceipt ? undefined : () => setIsReceiptOpen(false)}><X size={20} /></button>
             </div>
             <div className="modal-body">
               <div className="form-group">
@@ -1480,8 +1544,10 @@ export function OrderPrepPage() {
               />
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setIsReceiptOpen(false)}>取消</button>
-              <button className="btn btn-primary" onClick={() => handleReceiptSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>提交回执</button>
+              <button className="btn btn-outline" onClick={() => setIsReceiptOpen(false)} disabled={submittingReceipt}>取消</button>
+              <button className="btn btn-primary" disabled={submittingReceipt} onClick={() => handleReceiptSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+                {submittingReceipt ? "提交中..." : "提交回执"}
+              </button>
             </div>
           </div>
         </div>
@@ -1492,7 +1558,7 @@ export function OrderPrepPage() {
           <div className="modal-content">
             <div className="modal-header">
               <span>编辑订单 - {activeItem.customerName}</span>
-              <span className="modal-close" onClick={() => setIsEditOpen(false)}><X size={20} /></span>
+              <button type="button" className="modal-close" disabled={submittingEdit} onClick={submittingEdit ? undefined : () => setIsEditOpen(false)}><X size={20} /></button>
             </div>
             <div className="modal-body">
               <div className="form-group">
@@ -1529,17 +1595,13 @@ export function OrderPrepPage() {
                 <textarea className="form-control" value={editForm.deliveryAddress} onChange={e => setEditForm({ ...editForm, deliveryAddress: e.target.value })} placeholder="填写详细配送地址" />
               </div>
               <RemarkField
-                label="老板备注"
-                value={editForm.adminNote}
-                onChange={(value) => setEditForm({ ...editForm, adminNote: value })}
+                label="商家备注"
+                value={editForm.merchantRemark}
+                onChange={(value) => setEditForm({ ...editForm, merchantRemark: value })}
                 placeholder="例如：少饭、多菜、先送"
                 scene="ORDER_REMARK"
                 multiline
               />
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label className="form-label">特殊标签</label>
-                <input className="form-control" value={editForm.specialTag} onChange={e => setEditForm({ ...editForm, specialTag: e.target.value })} placeholder="例如: VIP袋签" />
-              </div>
               <div className="form-group" style={{ marginBottom: 0 }}>
                 <label className="form-label" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <input 
@@ -1553,8 +1615,10 @@ export function OrderPrepPage() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setIsEditOpen(false)}>取消</button>
-              <button className="btn btn-primary" onClick={() => handleEditSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>保存订单</button>
+              <button className="btn btn-outline" onClick={() => setIsEditOpen(false)} disabled={submittingEdit}>取消</button>
+              <button className="btn btn-primary" disabled={submittingEdit} onClick={() => handleEditSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+                {submittingEdit ? "提交中..." : "保存订单"}
+              </button>
             </div>
           </div>
         </div>
@@ -1565,16 +1629,17 @@ export function OrderPrepPage() {
         open={isDeleteConfirmOpen}
         title="⚠️ 删除订单"
         width={500}
-        onClose={() => { setIsDeleteConfirmOpen(false); setActiveItem(null); }}
+        onClose={submittingDelete ? () => undefined : () => { setIsDeleteConfirmOpen(false); setActiveItem(null); }}
         footer={
           <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-            <button className="btn btn-outline" onClick={() => { setIsDeleteConfirmOpen(false); setActiveItem(null); }}>取消</button>
+            <button className="btn btn-outline" onClick={() => { setIsDeleteConfirmOpen(false); setActiveItem(null); }} disabled={submittingDelete}>取消</button>
             <button 
               className="btn-delete"
+              disabled={submittingDelete}
               onClick={() => activeItem && handleDelete(activeItem).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}
             >
               <Trash2 size={16} />
-              确认删除
+              {submittingDelete ? "提交中..." : "确认删除"}
             </button>
           </div>
         }

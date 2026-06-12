@@ -21,7 +21,7 @@ export type ManualCreateFormState = {
   customerId: string;
   addressId: number | null;
   mealPeriod: ManualCreateMealPeriod | "";
-  note: string;
+  merchantRemark: string;
   deliveryAddress: string;
   quantity: number;
 };
@@ -60,7 +60,7 @@ export function createInitialManualCreateForm(): ManualCreateFormState {
     customerId: "",
     addressId: null,
     mealPeriod: "",
-    note: "-",
+    merchantRemark: "",
     deliveryAddress: "",
     quantity: 1
   };
@@ -173,7 +173,7 @@ export function shouldShowManualCustomerEmptyState({
 
 export function buildManualCreatePayload(form: ManualCreateFormState, serveDate: string) {
   const customerId = Number(form.customerId);
-  const note = form.note.trim();
+  const merchantRemark = form.merchantRemark.trim();
   const deliveryAddress = form.deliveryAddress.trim();
 
   if (!customerId) {
@@ -190,7 +190,7 @@ export function buildManualCreatePayload(form: ManualCreateFormState, serveDate:
     customerId,
     addressId: form.addressId,
     mealPeriod: form.mealPeriod,
-    note: note || "-",
+    merchantRemark,
     deliveryAddress,
     source: "BACKEND",
     quantity: form.quantity,

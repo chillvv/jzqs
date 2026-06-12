@@ -507,7 +507,6 @@ Page({
       success: async (res) => {
         if (res.confirm) {
           await auth.logout();
-          getApp().globalData.announcementShown = false;
           this.refreshPage();
           wx.showToast({ title: '已退出', icon: 'success' });
         }
@@ -529,6 +528,30 @@ Page({
               url: '/api/mobile/customer/profile',
               method: 'POST',
               data: { name: res.content }
+            });
+            wx.showToast({ title: '修改成功', icon: 'success' });
+            this.loadProfile();
+          } catch (error) {
+            wx.showToast({ title: error.message || '修改失败', icon: 'none' });
+          }
+        }
+      }
+    });
+  },
+  goEditDefaultRemark() {
+    if (this.data.onboarding) return;
+    wx.showModal({
+      title: '设置默认备注',
+      editable: true,
+      placeholderText: '请输入常用的备注内容',
+      content: this.data.home ? this.data.home.defaultUserRemark : '',
+      success: async (res) => {
+        if (res.confirm) {
+          try {
+            await request({
+              url: '/api/mobile/customer/profile',
+              method: 'POST',
+              data: { defaultUserRemark: res.content }
             });
             wx.showToast({ title: '修改成功', icon: 'success' });
             this.loadProfile();

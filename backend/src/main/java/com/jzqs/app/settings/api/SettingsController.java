@@ -38,7 +38,7 @@ public class SettingsController {
 
     @PostMapping("/banner-images")
     public ApiResponse<OperationSettingsResponse> updateBannerImages(@Valid @RequestBody BannerImagesUpdateRequest request) {
-        return ApiResponse.success(settingsService.updateBannerImages(request.bannerImages()));
+        return ApiResponse.success(settingsService.updateBannerImages(request.bannerImages(), request.bannerIntervalSeconds()));
     }
 
     @PostMapping(value = "/banner-images/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -60,6 +60,13 @@ public class SettingsController {
 
     @PostMapping("/popup-announcement")
     public ApiResponse<OperationSettingsResponse> updatePopupAnnouncement(@Valid @RequestBody PopupAnnouncementUpdateRequest request) {
-        return ApiResponse.success(settingsService.updatePopupAnnouncement(request.enabled(), request.content()));
+        return ApiResponse.success(
+            settingsService.updatePopupAnnouncement(
+                request.title(),
+                request.description(),
+                request.enabled(),
+                request.content()
+            )
+        );
     }
 }

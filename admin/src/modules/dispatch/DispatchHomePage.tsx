@@ -71,6 +71,7 @@ export function DispatchHomePage() {
   const [batchAssigning, setBatchAssigning] = useState(false);
   const [batchResult, setBatchResult] = useState<BatchOperationResponse | null>(null);
   const [deleteConfirmState, setDeleteConfirmState] = useState<{ orderId: number; customerName: string } | null>(null);
+  const [submittingDelete, setSubmittingDelete] = useState(false);
 
   useEffect(() => {
     reloadAll().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)));
@@ -187,7 +188,9 @@ export function DispatchHomePage() {
 
   async function confirmDelete() {
     if (!deleteConfirmState) return;
-    
+
+    if (submittingDelete) return;
+    setSubmittingDelete(true);
     try {
       await deleteOrder(deleteConfirmState.orderId);
       setDeleteConfirmState(null);
@@ -195,6 +198,8 @@ export function DispatchHomePage() {
       window.alert('订单已删除');
     } catch (err: any) {
       window.alert(err?.response?.data?.message || err.message || String(err));
+    } finally {
+      setSubmittingDelete(false);
     }
   }
 
@@ -215,15 +220,15 @@ export function DispatchHomePage() {
       </div>
 
       <div className="admin-grid-3" style={{ marginBottom: '16px' }}>
-        <div className="admin-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', borderLeft: '4px solid var(--warning-color)' }}>
+        <div className="admin-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', borderLeft: '4px solid var(--warning-color)', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
           <div style={{ color: 'var(--text-light)', fontSize: '13px' }}>待分配订单</div>
           <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--warning-color)' }}>{overview.pendingCount} 单</div>
         </div>
-        <div className="admin-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', borderLeft: '4px solid var(--primary-color)' }}>
+        <div className="admin-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', borderLeft: '4px solid var(--primary-color)', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
           <div style={{ color: 'var(--text-light)', fontSize: '13px' }}>待配送订单</div>
           <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--primary-color)' }}>{overview.dispatchingCount} 单</div>
         </div>
-        <div className="admin-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', borderLeft: '4px solid var(--error-color)' }}>
+        <div className="admin-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', borderLeft: '4px solid var(--error-color)', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
           <div style={{ color: 'var(--text-light)', fontSize: '13px' }}>区域缺骑手</div>
           <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--error-color)' }}>{overview.missingRiderAreaCount} 个区域</div>
         </div>
@@ -380,16 +385,17 @@ export function DispatchHomePage() {
           open={Boolean(deleteConfirmState)}
           title="⚠️ 删除订单"
           width={500}
-          onClose={() => setDeleteConfirmState(null)}
+          onClose={submittingDelete ? () => undefined : () => setDeleteConfirmState(null)}
           footer={
             <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-              <button className="btn btn-outline" onClick={() => setDeleteConfirmState(null)}>取消</button>
+              <button className="btn btn-outline" disabled={submittingDelete} onClick={() => setDeleteConfirmState(null)}>取消</button>
               <button 
                 className="btn-delete"
+                disabled={submittingDelete}
                 onClick={() => confirmDelete().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}
               >
                 <Trash2 size={16} />
-                确认删除
+                {submittingDelete ? "确认删除中..." : "确认删除"}
               </button>
             </div>
           }

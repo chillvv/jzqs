@@ -10,7 +10,7 @@ public record CustomerAssetResponse(
     boolean fixedSubscriptionEnabled,
     boolean priorityCustomer,
     String priorityTag,
-    String remark,
+    String merchantRemark,
     String lastOrderAt,
     String registeredAt,
     String status

@@ -125,38 +125,45 @@
         bindtouchend="onTouchEnd"
         bindtouchcancel="onTouchEnd"
       >
-        <view class="order-left">
-          <view wx:if="{{batchReferenceMode}}" class="batch-checkbox {{item.batchSelected ? 'batch-checkbox-selected' : ''}}">
-            <text>{{item.batchSelected ? '✓' : ''}}</text>
-          </view>
-          <view class="order-badge {{item.itemStatus === 'DELIVERED' && currentStatusFilter === '' ? 'order-badge-completed' : ''}}">
-            <text class="badge-prefix">#</text>{{index + 1}}
-          </view>
-          <view class="order-info">
-            <view class="order-name-row">
-              <view class="order-name {{item.itemStatus === 'DELIVERED' ? 'order-name-completed' : ''}}">
-                {{item.customerName}}
-              </view>
-              <view wx:if="{{item.quantity > 1}}" class="quantity-badge">
-                ×{{item.quantity}}
-              </view>
-            </view>
-            <view class="order-address {{item.itemStatus === 'DELIVERED' ? 'order-address-completed' : ''}}">
-              <text class="address-icon">📍</text>
-              <text class="address-text-content {{!item.deliveryAddress ? 'no-address' : ''}}"><text wx:if="{{item.buildingInfo}}" style="color: #2563eb; font-weight: 900; margin-right: 8rpx;">{{item.buildingInfo}}</text>{{item.deliveryAddress || '地址未提供'}}</text>
-            </view>
-            <view wx:if="{{item.specialOrder}}" class="special-tag-row" style="margin-top: 10rpx;">
-              <view class="special-tag special-tag-warning">需留意</view>
-            </view>
-          </view>
+        <!-- 绝对定位的右上角状态标签 -->
+        <view class="order-card-status-tag {{item.itemStatus === 'DELIVERED' ? 'tag-completed' : 'tag-pending'}}">
+          {{item.itemStatus === 'DELIVERED' ? '已完成' : '待配送'}}
         </view>
 
-        <view class="order-right">
-          <view class="status-tag {{item.itemStatus === 'DELIVERED' ? 'tag-completed' : 'tag-pending'}}">
-            {{item.itemStatus === 'DELIVERED' ? '已完成' : '待配送'}}
+        <view class="order-card-content">
+          <view class="order-card-header">
+            <view wx:if="{{batchReferenceMode}}" class="batch-checkbox {{item.batchSelected ? 'batch-checkbox-selected' : ''}}">
+              <text>{{item.batchSelected ? '✓' : ''}}</text>
+            </view>
+            
+            <view class="order-badge-wrapper">
+              <view class="order-badge {{item.itemStatus === 'DELIVERED' && currentStatusFilter === '' ? 'order-badge-completed' : ''}}">
+                <text class="badge-prefix">#</text>{{index + 1}}
+              </view>
+            </view>
+            
+            <view class="order-info">
+              <view class="order-name-row">
+                <view class="order-name {{item.itemStatus === 'DELIVERED' ? 'order-name-completed' : ''}}">
+                  {{item.customerName}}
+                </view>
+                <view wx:if="{{item.specialOrder}}" class="special-tag-inline">需留意</view>
+                <view wx:if="{{item.quantity > 1}}" class="quantity-badge">
+                  ×{{item.quantity}}
+                </view>
+              </view>
+            </view>
+
+            <view class="order-right" style="{{isEditMode ? '' : 'display: none;'}}">
+              <view class="drag-handle">
+                <text class="material-symbols-outlined">⋮⋮</text>
+              </view>
+            </view>
           </view>
-          <view class="drag-handle">
-            <text class="material-symbols-outlined">⋮⋮</text>
+          
+          <view class="order-address {{item.itemStatus === 'DELIVERED' ? 'order-address-completed' : ''}}">
+            <text class="address-icon">📍</text>
+            <text class="address-text-content {{!item.deliveryAddress ? 'no-address' : ''}}"><text wx:if="{{item.buildingInfo}}" class="building-info-text">{{item.buildingInfo}}</text>{{item.deliveryAddress || '地址未提供'}}</text>
           </view>
         </view>
       </view>

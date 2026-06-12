@@ -53,8 +53,7 @@ public class DashboardServiceImpl implements DashboardService {
             WHERE CAST(do.created_at AS DATE) = ?
               AND (
                 COALESCE(NULLIF(TRIM(mso.user_note), ''), NULL) IS NOT NULL
-                OR COALESCE(NULLIF(TRIM(mso.admin_note), ''), NULL) IS NOT NULL
-                OR COALESCE(NULLIF(TRIM(mso.special_tag), ''), NULL) IS NOT NULL
+                OR COALESCE(NULLIF(TRIM(mso.merchant_remark), ''), NULL) IS NOT NULL
                 OR mso.is_priority = TRUE
               )
             """,

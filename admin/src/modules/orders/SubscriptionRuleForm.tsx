@@ -25,7 +25,7 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
     dinnerEnabled: false,
     dinnerQuantity: 1,
     defaultAddressId: null,
-    defaultNote: "",
+    merchantRemark: "",
     isPriorityFollow: false
   });
 
@@ -61,7 +61,7 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
       dinnerEnabled: item.dinnerEnabled,
       dinnerQuantity: item.dinnerQuantity,
       defaultAddressId: item.defaultAddressId,
-      defaultNote: item.defaultNote || "",
+      merchantRemark: item.merchantRemark || "",
       isPriorityFollow: item.isPriorityFollow
     });
     setCustomerKeyword(`${item.customerName}（${item.customerPhone}）`);
@@ -144,7 +144,7 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
   const isEdit = !!item;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={submitting ? undefined : onClose}>
       <div
         className="modal-content"
         style={{ maxWidth: "540px" }}
@@ -153,7 +153,7 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
         {/* Header */}
         <div className="modal-header">
           <span>{isEdit ? "编辑固定订餐计划" : "新增固定订餐计划"}</span>
-          <span className="modal-close" onClick={onClose}><X size={18} /></span>
+          <button type="button" className="modal-close" onClick={submitting ? undefined : onClose} disabled={submitting}><X size={18} /></button>
         </div>
 
         {/* Body */}
@@ -453,14 +453,14 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
             )}
           </div>
 
-          {/* 默认备注 */}
+          {/* 商家备注 */}
           <div className="form-group" style={{ marginBottom: 0 }}>
-            <label className="form-label">默认备注</label>
+            <label className="form-label">商家备注</label>
             <input
               className="form-control"
-              value={form.defaultNote}
-              onChange={(e) => setForm({ ...form, defaultNote: e.target.value })}
-              placeholder="可选，例如：不要辣、少盐"
+              value={form.merchantRemark}
+              onChange={(e) => setForm({ ...form, merchantRemark: e.target.value })}
+              placeholder="计划期内自动生成的每一单都会带上"
             />
           </div>
 

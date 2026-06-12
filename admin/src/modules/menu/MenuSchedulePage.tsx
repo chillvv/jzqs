@@ -42,6 +42,10 @@ export function MenuSchedulePage() {
   const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState("");
   const [isPublishConfirmOpen, setIsPublishConfirmOpen] = useState(false);
+  const [copyingLastWeek, setCopyingLastWeek] = useState(false);
+  const [creatingNextWeek, setCreatingNextWeek] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [savingDay, setSavingDay] = useState<string | null>(null);
 
   useEffect(() => {
     reloadMenu().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)));
@@ -66,23 +70,47 @@ export function MenuSchedulePage() {
   }
 
   async function handleCreateNextWeek() {
-    await createNextMenuWeek();
-    await reloadMenu(nextWeekDate());
-    toast("下周空白模板已创建", "success");
+    if (creatingNextWeek) {
+      return;
+    }
+    setCreatingNextWeek(true);
+    try {
+      await createNextMenuWeek();
+      await reloadMenu(nextWeekDate());
+      toast("下周空白模板已创建", "success");
+    } finally {
+      setCreatingNextWeek(false);
+    }
   }
 
   async function handleCopyFromLastWeek() {
-    await copyMenuWeekFromLastWeek();
-    await reloadMenu();
-    toast("已将上周菜单复制到本周", "success");
+    if (copyingLastWeek) {
+      return;
+    }
+    setCopyingLastWeek(true);
+    try {
+      await copyMenuWeekFromLastWeek();
+      await reloadMenu();
+      toast("已将上周菜单复制到本周", "success");
+    } finally {
+      setCopyingLastWeek(false);
+    }
   }
 
   async function handlePublish() {
     if (!week) return;
-    setIsPublishConfirmOpen(false);
-    await publishMenuWeek(week.weekId);
-    await reloadMenu();
-    toast(`${week.weekStartDate} ~ ${week.weekEndDate} 菜单已发布`, "success");
+    if (publishing) {
+      return;
+    }
+    setPublishing(true);
+    try {
+      setIsPublishConfirmOpen(false);
+      await publishMenuWeek(week.weekId);
+      await reloadMenu();
+      toast(`${week.weekStartDate} ~ ${week.weekEndDate} 菜单已发布`, "success");
+    } finally {
+      setPublishing(false);
+    }
   }
 
   const isPublished = week?.status === "PUBLISHED";
@@ -173,10 +201,18 @@ export function MenuSchedulePage() {
 
   async function handleSaveDay(serveDate: string) {
     if (!week) return;
-    await saveMenuWeekDay(week.weekId, serveDate, drafts[serveDate]);
-    await reloadMenu(week.weekStartDate);
-    setExpandedDate(serveDate);
-    toast("保存成功", "success");
+    if (savingDay === serveDate) {
+      return;
+    }
+    setSavingDay(serveDate);
+    try {
+      await saveMenuWeekDay(week.weekId, serveDate, drafts[serveDate]);
+      await reloadMenu(week.weekStartDate);
+      setExpandedDate(serveDate);
+      toast("保存成功", "success");
+    } finally {
+      setSavingDay(null);
+    }
   }
 
   async function handlePickWeek(targetDate: string) {
@@ -246,9 +282,9 @@ export function MenuSchedulePage() {
           <p className="page-subtitle">周菜单配置、休息日与发布状态</p>
         </div>
         <div className="page-header__actions">
-          <button className="btn btn-outline" onClick={() => handleCopyFromLastWeek().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>复制上周菜单到本周</button>
-          <button className="btn btn-outline" onClick={() => handleCreateNextWeek().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>新建下周空白模板</button>
-          <button className="btn btn-primary" onClick={() => setIsPublishConfirmOpen(true)} disabled={!week}>{publishButtonText}</button>
+          <button className="btn btn-outline" disabled={copyingLastWeek} onClick={() => handleCopyFromLastWeek().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>{copyingLastWeek ? "复制中..." : "复制上周菜单到本周"}</button>
+          <button className="btn btn-outline" disabled={creatingNextWeek} onClick={() => handleCreateNextWeek().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>{creatingNextWeek ? "创建中..." : "新建下周空白模板"}</button>
+          <button className="btn btn-primary" onClick={() => setIsPublishConfirmOpen(true)} disabled={!week || publishing}>{publishing ? (isPublished ? "更新中..." : "发布中...") : publishButtonText}</button>
         </div>
       </div>
       <div className="stat-row">
@@ -339,9 +375,11 @@ export function MenuSchedulePage() {
                   {renderSlotEditor(day.serveDate, "lunch", draft.lunch)}
                   {renderSlotEditor(day.serveDate, "dinner", draft.dinner)}
                   <div className="menu-week-day-card__actions">
-                    <button className="btn btn-primary" onClick={() => handleSaveDay(day.serveDate).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>保存当天</button>
-                    <button className="btn btn-outline" onClick={() => clearDay(day.serveDate)}>一键清空</button>
-                    <button className="btn btn-outline" onClick={() => setDayRest(day.serveDate)}>设为休息</button>
+                    <button className="btn btn-primary" disabled={savingDay === day.serveDate} onClick={() => handleSaveDay(day.serveDate).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+                      {savingDay === day.serveDate ? "保存中..." : "保存当天"}
+                    </button>
+                    <button className="btn btn-outline" disabled={savingDay === day.serveDate} onClick={() => clearDay(day.serveDate)}>一键清空</button>
+                    <button className="btn btn-outline" disabled={savingDay === day.serveDate} onClick={() => setDayRest(day.serveDate)}>设为休息</button>
                   </div>
                 </div>
               )}
@@ -361,9 +399,9 @@ export function MenuSchedulePage() {
               <p style={{ whiteSpace: "pre-line", lineHeight: 1.6 }}>{publishConfirmMessage}</p>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setIsPublishConfirmOpen(false)}>取消</button>
-              <button className="btn btn-primary" onClick={() => handlePublish().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
-                {isPublished ? "确认更新" : "确认发布"}
+              <button className="btn btn-outline" disabled={publishing} onClick={() => setIsPublishConfirmOpen(false)}>取消</button>
+              <button className="btn btn-primary" disabled={publishing} onClick={() => handlePublish().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+                {publishing ? (isPublished ? "更新中..." : "发布中...") : isPublished ? "确认更新" : "确认发布"}
               </button>
             </div>
           </div>

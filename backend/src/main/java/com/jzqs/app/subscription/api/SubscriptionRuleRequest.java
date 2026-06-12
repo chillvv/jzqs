@@ -12,7 +12,7 @@ public record SubscriptionRuleRequest(
     boolean dinnerEnabled,
     int dinnerQuantity,
     Long defaultAddressId,
-    String defaultNote,
+    String merchantRemark,
     boolean isPriorityFollow
 ) {
 }

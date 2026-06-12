@@ -64,6 +64,16 @@
       </view>
       <text class="list-arrow">›</text>
     </view>
+    <view class="list-item {{onboarding ? 'disabled' : ''}}" bindtap="goEditDefaultRemark">
+      <view class="list-icon-wrap">
+        <text class="list-icon">🗒️</text>
+        <view class="list-copy">
+          <view class="list-title">默认下单备注</view>
+          <view class="list-desc">{{home && home.defaultUserRemark ? home.defaultUserRemark : '设置后下单时自动带出'}}</view>
+        </view>
+      </view>
+      <text class="list-arrow">›</text>
+    </view>
     <button class="list-item list-item-btn {{onboarding ? 'disabled' : ''}}" bindtap="contactService" open-type="{{onboarding ? '' : 'contact'}}">
       <view class="list-icon-wrap">
         <text class="list-icon">💬</text>

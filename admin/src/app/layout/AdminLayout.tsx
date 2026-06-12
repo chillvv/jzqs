@@ -35,7 +35,7 @@ const items = [
   { key: "/customers", label: "客户经营中心", shortLabel: "客户", description: "余额、流水、重点客户", icon: <CreditCard size={18} /> },
   { key: "/menu", label: "菜单与营业配置", shortLabel: "菜单", description: "周菜单、排菜与发布", icon: <CalendarDays size={18} /> },
   { key: "/analysis", label: "经营分析台", shortLabel: "分析", description: "营收、成本、毛利洞察", icon: <LineChart size={18} /> },
-  { key: "/settings", label: "系统全局配置", shortLabel: "设置", description: "订餐开关与节假日公告", icon: <Settings size={18} /> },
+  { key: "/settings", label: "系统全局配置", shortLabel: "设置", description: "锁定公告与轮播图", icon: <Settings size={18} /> },
   { key: "/maintenance", label: "系统维护", shortLabel: "维护", description: "数据清理与系统维护", icon: <Wrench size={18} /> },
 ];
 

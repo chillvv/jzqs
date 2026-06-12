@@ -32,7 +32,7 @@ public interface OrderPrepService {
 
     Map<String, Object> cancelSubscription(long confirmationId, String cancelReason);
 
-    Map<String, Object> updateAdminNote(long orderId, String adminNote, String specialTag);
+    Map<String, Object> updateMerchantRemark(long orderId, String merchantRemark);
 
     Map<String, Object> updateOrderProfile(long orderId, Map<String, Object> payload);
 
@@ -44,7 +44,7 @@ public interface OrderPrepService {
 
     List<ManualCreateCustomerSearchResponse> searchManualCreateCustomers(String keyword);
 
-    Map<String, Object> manualCreate(long customerId, Long addressId, String mealSummary, String note, String deliveryAddress, String source, int quantity, String serveDate);
+    Map<String, Object> manualCreate(long customerId, Long addressId, String mealSummary, String merchantRemark, String deliveryAddress, String source, int quantity, String serveDate);
 
     Map<String, Object> cancelOrder(long orderId);
 

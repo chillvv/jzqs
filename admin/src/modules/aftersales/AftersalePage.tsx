@@ -384,9 +384,9 @@ export function AftersalePage() {
           <div className="modal-content" style={{ maxWidth: "720px" }}>
             <div className="modal-header">
               <span>处理售后</span>
-              <span className="modal-close" onClick={closeResolveModal}>
+              <button type="button" className="modal-close" onClick={submitting ? undefined : closeResolveModal} disabled={submitting}>
                 ×
-              </span>
+              </button>
             </div>
             <div className="modal-body" style={{ display: "grid", gap: "18px" }}>
               <div className="auth-panel">
@@ -445,7 +445,7 @@ export function AftersalePage() {
               </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={closeResolveModal}>
+              <button className="btn btn-outline" onClick={closeResolveModal} disabled={submitting}>
                 取消
               </button>
               <button className="btn btn-primary" onClick={() => handleResolveSubmit().catch(() => undefined)} disabled={submitting}>

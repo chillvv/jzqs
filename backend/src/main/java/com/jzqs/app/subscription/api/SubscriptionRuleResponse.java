@@ -16,7 +16,7 @@ public record SubscriptionRuleResponse(
     int dinnerQuantity,
     Long defaultAddressId,
     String defaultAddress,
-    String defaultNote,
+    String merchantRemark,
     boolean isPriorityFollow,
     boolean paused,
     boolean active,

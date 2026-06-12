@@ -71,17 +71,14 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             Integer.class
         );
         Integer specialOrderCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM meal_slot_orders WHERE user_note IS NOT NULL OR admin_note IS NOT NULL OR is_priority = TRUE OR special_tag IS NOT NULL",
+            "SELECT COUNT(*) FROM meal_slot_orders WHERE user_note IS NOT NULL OR merchant_remark IS NOT NULL OR is_priority = TRUE",
             Integer.class
         );
         Integer adminRemarkCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM meal_slot_orders WHERE admin_note IS NOT NULL AND admin_note <> ''",
+            "SELECT COUNT(*) FROM meal_slot_orders WHERE merchant_remark IS NOT NULL AND merchant_remark <> ''",
             Integer.class
         );
-        Integer labelRequiredCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM meal_slot_orders WHERE special_tag IS NOT NULL AND special_tag <> ''",
-            Integer.class
-        );
+        Integer labelRequiredCount = 0;
         return new OrderPrepStatsResponse(
             nvl(totalMeals),
             nvl(lunchCount),
@@ -116,8 +113,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
                 END AS meal_summary,
                 mso.quantity,
                 COALESCE(mso.user_note, mso.note, '-') AS user_note,
-                COALESCE(mso.admin_note, '') AS admin_note,
-                COALESCE(mso.special_tag, '') AS special_tag,
+                COALESCE(mso.merchant_remark, '') AS merchant_remark,
                 ca.address_line AS delivery_address,
                 do.source,
                 CASE WHEN c.is_priority_customer = TRUE OR mso.is_priority = TRUE THEN TRUE ELSE FALSE END AS priority_customer,
@@ -181,8 +177,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             rs.getString("meal_summary"),
             rs.getInt("quantity"),
             rs.getString("user_note"),
-            rs.getString("admin_note"),
-            rs.getString("special_tag"),
+            rs.getString("merchant_remark"),
             rs.getString("delivery_address"),
             rs.getString("source"),
             rs.getBoolean("priority_customer"),
@@ -213,7 +208,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
                 sc.quantity,
                 ca.address_line,
                 sc.user_note,
-                sc.admin_note,
+                sc.merchant_remark,
                 sc.is_priority,
                 sc.status
             FROM subscription_confirmations sc
@@ -230,7 +225,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             rs.getInt("quantity"),
             rs.getString("address_line"),
             rs.getString("user_note"),
-            rs.getString("admin_note"),
+            rs.getString("merchant_remark"),
             rs.getBoolean("is_priority"),
             rs.getString("status")
         ), java.sql.Date.valueOf(serveDate));
@@ -266,11 +261,10 @@ public class OrderPrepServiceImpl implements OrderPrepService {
 
     @Override
     @Transactional
-    public Map<String, Object> updateAdminNote(long orderId, String adminNote, String specialTag) {
+    public Map<String, Object> updateMerchantRemark(long orderId, String merchantRemark) {
         Integer updated = jdbcTemplate.update(
-            "UPDATE meal_slot_orders SET admin_note = ?, special_tag = ? WHERE id = ?",
-            adminNote,
-            specialTag,
+            "UPDATE meal_slot_orders SET merchant_remark = ? WHERE id = ?",
+            merchantRemark,
             orderId
         );
         if (updated == 0) {
@@ -291,8 +285,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
                     mso.address_id,
                     mso.status,
                     COALESCE(ca.address_line, '') AS delivery_address,
-                    COALESCE(mso.admin_note, '') AS admin_note,
-                    COALESCE(mso.special_tag, '') AS special_tag,
+                    COALESCE(mso.merchant_remark, '') AS merchant_remark,
                     COALESCE(mso.is_priority, FALSE) AS is_priority
                 FROM meal_slot_orders mso
                 JOIN daily_orders do ON do.id = mso.daily_order_id
@@ -310,12 +303,9 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         String currentMealPeriod = stringValue(current.get("meal_period"));
         int quantity = intValue(payload.get("quantity"), ((Number) current.get("quantity")).intValue());
         String deliveryAddress = fallbackString(payload.get("deliveryAddress"), stringValue(current.get("delivery_address")));
-        String adminNote = payload.containsKey("adminNote")
-            ? stringValue(payload.get("adminNote"))
-            : stringValue(current.get("admin_note"));
-        String specialTag = payload.containsKey("specialTag")
-            ? stringValue(payload.get("specialTag"))
-            : stringValue(current.get("special_tag"));
+        String merchantRemark = payload.containsKey("merchantRemark")
+            ? stringValue(payload.get("merchantRemark"))
+            : stringValue(current.get("merchant_remark"));
         boolean isPriority = payload.containsKey("priorityCustomer")
             ? booleanValue(payload.get("priorityCustomer"), false)
             : booleanValue(current.get("is_priority"), false);
@@ -326,12 +316,11 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         long addressId = ensureCustomerAddress(customerId, deliveryAddress);
 
         Integer updated = jdbcTemplate.update(
-            "UPDATE meal_slot_orders SET meal_period = ?, quantity = ?, address_id = ?, admin_note = ?, special_tag = ?, is_priority = ?, status = ? WHERE id = ?",
+            "UPDATE meal_slot_orders SET meal_period = ?, quantity = ?, address_id = ?, merchant_remark = ?, is_priority = ?, status = ? WHERE id = ?",
             mealPeriod,
             Math.max(1, quantity),
             addressId,
-            adminNote,
-            specialTag,
+            merchantRemark,
             isPriority,
             status,
             orderId
@@ -411,8 +400,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
                 mso.meal_period,
                 mso.quantity,
                 COALESCE(mso.user_note, '-') AS user_note,
-                COALESCE(mso.admin_note, '') AS admin_note,
-                COALESCE(mso.special_tag, '') AS special_tag,
+                COALESCE(mso.merchant_remark, '') AS merchant_remark,
                 CASE WHEN c.is_priority_customer = TRUE OR mso.is_priority = TRUE THEN TRUE ELSE FALSE END AS priority_customer
             FROM meal_slot_orders mso
             JOIN daily_orders do ON do.id = mso.daily_order_id
@@ -421,8 +409,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             WHERE do.serve_date = ?
               AND (
                     mso.user_note IS NOT NULL
-                 OR mso.admin_note IS NOT NULL
-                 OR mso.special_tag IS NOT NULL
+                 OR mso.merchant_remark IS NOT NULL
                  OR EXISTS (
                         SELECT 1
                         FROM order_notes onote
@@ -442,8 +429,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             rs.getString("meal_period"),
             rs.getInt("quantity"),
             rs.getString("user_note"),
-            rs.getString("admin_note"),
-            rs.getString("special_tag"),
+            rs.getString("merchant_remark"),
             rs.getBoolean("priority_customer")
         ), java.sql.Date.valueOf(serveDate));
         Map<Long, OrderNoteProjection> noteProjections = loadOrderNoteProjections(rows.stream().map(SpecialOrderRow::id).toList());
@@ -542,7 +528,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
                 'LUNCH' AS meal_period,
                 ca.id AS address_id,
                 ca.address_line AS delivery_address,
-                COALESCE(sr.default_note, '-') AS default_note,
+                COALESCE(sr.merchant_remark, '-') AS merchant_remark,
                 COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) AS remaining_meals,
                 CASE WHEN COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) > 0 THEN TRUE ELSE FALSE END AS has_balance
             FROM subscription_rules sr
@@ -564,7 +550,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
                 'DINNER' AS meal_period,
                 ca.id AS address_id,
                 ca.address_line AS delivery_address,
-                COALESCE(sr.default_note, '-') AS default_note,
+                COALESCE(sr.merchant_remark, '-') AS merchant_remark,
                 COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) AS remaining_meals,
                 CASE WHEN COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) > 0 THEN TRUE ELSE FALSE END AS has_balance
             FROM subscription_rules sr
@@ -587,7 +573,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             rs.getString("meal_period"),
             rs.getLong("address_id"),
             rs.getString("delivery_address"),
-            rs.getString("default_note"),
+            rs.getString("merchant_remark"),
             rs.getInt("remaining_meals"),
             rs.getBoolean("has_balance")
         ), targetDate, targetDate, targetDate, targetDate);
@@ -681,7 +667,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
 
     @Override
     @Transactional
-    public Map<String, Object> manualCreate(long customerId, Long addressId, String mealPeriod, String note, String deliveryAddress, String source, int quantity, String serveDate) {
+    public Map<String, Object> manualCreate(long customerId, Long addressId, String mealPeriod, String merchantRemark, String deliveryAddress, String source, int quantity, String serveDate) {
         LocalDate date = serveDate == null || serveDate.isBlank() 
             ? LocalDate.now() 
             : LocalDate.parse(serveDate);
@@ -689,7 +675,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         return manualCreateWithDate(
             customerId,
             mealPeriod,
-            note,
+            merchantRemark,
             resolveManualCreateDeliveryAddress(customerId, addressId, deliveryAddress),
             source,
             date,
@@ -698,8 +684,9 @@ public class OrderPrepServiceImpl implements OrderPrepService {
     }
 
     @Transactional
-    private Map<String, Object> manualCreateWithDate(long customerId, String mealPeriod, String note, String deliveryAddress, String source, LocalDate serveDate, int quantity) {
+    private Map<String, Object> manualCreateWithDate(long customerId, String mealPeriod, String merchantRemark, String deliveryAddress, String source, LocalDate serveDate, int quantity) {
         long addressId = ensureCustomerAddress(customerId, deliveryAddress);
+        String resolvedMerchantRemark = resolveOrderMerchantRemark(customerId, merchantRemark);
         
         Long walletId = jdbcTemplate.query(
             "SELECT id FROM meal_wallets WHERE customer_id = ? AND active = TRUE",
@@ -745,15 +732,14 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         Long mergeTargetOrderId = findMergeTargetOrderId(customerId, serveDate, normalizedMealPeriod, addressId);
         if (mergeTargetOrderId != null) {
             Map<String, Object> existingOrder = jdbcTemplate.queryForMap(
-                "SELECT COALESCE(user_note, note, '-') AS user_note, COALESCE(note, '-') AS note FROM meal_slot_orders WHERE id = ?",
+                "SELECT COALESCE(merchant_remark, '') AS merchant_remark FROM meal_slot_orders WHERE id = ?",
                 mergeTargetOrderId
             );
-            String mergedNote = mergeOrderNote(stringValue(existingOrder.get("user_note")), note);
+            String mergedMerchantRemark = mergeOrderNote(stringValue(existingOrder.get("merchant_remark")), resolvedMerchantRemark);
             jdbcTemplate.update(
-                "UPDATE meal_slot_orders SET quantity = quantity + ?, note = ?, user_note = ? WHERE id = ?",
+                "UPDATE meal_slot_orders SET quantity = quantity + ?, merchant_remark = ? WHERE id = ?",
                 quantity,
-                mergedNote,
-                mergedNote,
+                mergedMerchantRemark,
                 mergeTargetOrderId
             );
             jdbcTemplate.update("UPDATE meal_wallets SET reserved_meals = reserved_meals + ? WHERE id = ?", quantity, walletId);
@@ -769,8 +755,8 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         }
 
         long mealSlotOrderId = insertAndReturnId(
-            "INSERT INTO meal_slot_orders (daily_order_id, meal_period, quantity, address_id, note, user_note, status, source_type, confirmed_from_subscription) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            dailyOrderId, normalizedMealPeriod, quantity, addressId, note, note, "PENDING_DISPATCH", source, "SUBSCRIPTION".equals(source)
+            "INSERT INTO meal_slot_orders (daily_order_id, meal_period, quantity, address_id, merchant_remark, status, source_type, confirmed_from_subscription) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            dailyOrderId, normalizedMealPeriod, quantity, addressId, resolvedMerchantRemark, "PENDING_DISPATCH", source, "SUBSCRIPTION".equals(source)
         );
         LocalDateTime snapshotTime = LocalDateTime.now();
         jdbcTemplate.update("UPDATE meal_wallets SET reserved_meals = reserved_meals + ? WHERE id = ?", quantity, walletId);
@@ -782,13 +768,13 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             "SUBSCRIPTION".equals(source) ? "固定订餐自动扣餐" : "代客录单占用餐次",
             mealSlotOrderId
         );
-        String normalizedSnapshotNote = normalizeSnapshotNote(note);
+        String normalizedSnapshotNote = normalizeSnapshotNote(resolvedMerchantRemark);
         orderNoteSnapshotService.writeOrderSnapshot(
             mealSlotOrderId,
             customerId,
             "SUBSCRIPTION".equals(source) ? "系统" : "后台客服",
-            "SUBSCRIPTION".equals(source) ? null : normalizedSnapshotNote,
-            "SUBSCRIPTION".equals(source) ? normalizedSnapshotNote : null,
+            null,
+            normalizedSnapshotNote,
             List.of(),
             snapshotTime
         );
@@ -1146,8 +1132,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             row.mealSummary(),
             row.quantity(),
             resolveProjectedUserNote(projection, row.userNote()),
-            resolveProjectedAdminNote(projection, row.adminNote()),
-            resolveProjectedSpecialTag(projection, row.specialTag()),
+            resolveProjectedMerchantRemark(projection, row.merchantRemark()),
             row.deliveryAddress(),
             row.source(),
             row.priorityCustomer(),
@@ -1171,8 +1156,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             row.mealPeriod(),
             row.quantity(),
             resolveProjectedUserNote(projection, row.userNote()),
-            resolveProjectedAdminNote(projection, row.adminNote()),
-            resolveProjectedSpecialTag(projection, row.specialTag()),
+            resolveProjectedMerchantRemark(projection, row.merchantRemark()),
             row.priorityCustomer()
         );
     }
@@ -1185,18 +1169,24 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         return normalized.isBlank() ? "-" : normalized;
     }
 
-    private String resolveProjectedAdminNote(OrderNoteProjection projection, String legacyValue) {
+    private String resolveProjectedMerchantRemark(OrderNoteProjection projection, String legacyValue) {
         if (projection != null && projection.hasOrderNotes()) {
-            return projection.adminNote();
+            return projection.merchantRemark();
         }
         return normalizeLegacyNote(legacyValue);
     }
 
-    private String resolveProjectedSpecialTag(OrderNoteProjection projection, String legacyValue) {
-        if (projection != null && projection.hasOrderNotes()) {
-            return "";
+    private String resolveOrderMerchantRemark(long customerId, String currentOrderMerchantRemark) {
+        String normalizedCurrent = normalizeLegacyNote(currentOrderMerchantRemark);
+        if (!normalizedCurrent.isBlank()) {
+            return normalizedCurrent;
         }
-        return normalizeLegacyNote(legacyValue);
+        List<String> customerRemarks = jdbcTemplate.queryForList(
+            "SELECT COALESCE(merchant_remark, '') FROM customers WHERE id = ?",
+            String.class,
+            customerId
+        );
+        return customerRemarks.isEmpty() ? "" : normalizeLegacyNote(customerRemarks.get(0));
     }
 
     private String normalizeLegacyNote(String value) {
@@ -1280,8 +1270,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         String mealSummary,
         int quantity,
         String userNote,
-        String adminNote,
-        String specialTag,
+        String merchantRemark,
         String deliveryAddress,
         String source,
         boolean priorityCustomer,
@@ -1304,13 +1293,12 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         String mealPeriod,
         int quantity,
         String userNote,
-        String adminNote,
-        String specialTag,
+        String merchantRemark,
         boolean priorityCustomer
     ) {
     }
 
-    private record OrderNoteProjection(String userNote, String adminNote, boolean hasOrderNotes) {
+    private record OrderNoteProjection(String userNote, String merchantRemark, boolean hasOrderNotes) {
     }
 
     private static final class NoteAccumulator {

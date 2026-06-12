@@ -12,6 +12,8 @@ export function SubscriptionManagementTab() {
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<SubscriptionRuleResponse | null>(null);
+  const [togglingRuleId, setTogglingRuleId] = useState<number | null>(null);
+  const [deletingRuleId, setDeletingRuleId] = useState<number | null>(null);
 
   useEffect(() => {
     loadData();
@@ -34,20 +36,32 @@ export function SubscriptionManagementTab() {
     if (!window.confirm("确认删除该固定订餐计划？")) {
       return;
     }
+    if (deletingRuleId === id) {
+      return;
+    }
+    setDeletingRuleId(id);
     try {
       await deleteSubscriptionRule(id);
       await loadData();
     } catch (err: any) {
       alert(err?.response?.data?.message || err?.message || "删除失败");
+    } finally {
+      setDeletingRuleId(null);
     }
   }
 
   async function handleToggle(id: number) {
+    if (togglingRuleId === id) {
+      return;
+    }
+    setTogglingRuleId(id);
     try {
       await toggleSubscriptionRule(id);
       await loadData();
     } catch (err: any) {
       alert(err?.response?.data?.message || err?.message || "操作失败");
+    } finally {
+      setTogglingRuleId(null);
     }
   }
 
@@ -105,8 +119,8 @@ export function SubscriptionManagementTab() {
           <option value="EXPIRED">已过期</option>
           <option value="INACTIVE">已停用</option>
         </select>
-        <button className="btn btn-primary" onClick={loadData}>
-          查询
+        <button className="btn btn-primary" onClick={loadData} disabled={loading}>
+          {loading ? "查询中..." : "查询"}
         </button>
         <button className="btn btn-primary" onClick={handleCreate} style={{ marginLeft: "auto" }}>
           + 新增计划
@@ -196,18 +210,20 @@ export function SubscriptionManagementTab() {
                           <button
                             className="btn btn-sm btn-outline"
                             onClick={() => handleToggle(item.id)}
+                            disabled={togglingRuleId === item.id}
                             title={item.paused ? "恢复" : "暂停"}
                           >
-                            {item.paused ? <Play size={14} /> : <Pause size={14} />}
+                            {togglingRuleId === item.id ? "处理中..." : item.paused ? <Play size={14} /> : <Pause size={14} />}
                           </button>
                         )}
                         <button
                           className="btn btn-sm btn-outline"
                           onClick={() => handleDelete(item.id)}
+                          disabled={deletingRuleId === item.id}
                           title="删除"
                           style={{ color: "var(--error-color)" }}
                         >
-                          <Trash2 size={14} />
+                          {deletingRuleId === item.id ? "删除中..." : <Trash2 size={14} />}
                         </button>
                       </div>
                     </td>

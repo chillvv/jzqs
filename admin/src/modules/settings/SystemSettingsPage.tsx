@@ -1,96 +1,133 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   fetchOperationSettings,
-  pauseOrderingWithNotice,
-  updateHolidayNotice,
-  updateOrderingToggle,
   updateBannerImages,
   updatePopupAnnouncement,
   uploadBannerImage
 } from "../../shared/api/http";
 import type { OperationSettingsResponse } from "../../shared/api/types";
-import { X, Settings2, Bell, AlertTriangle, Power, Image as ImageIcon, Megaphone } from "lucide-react";
-import { buildCustomerFacingSettingHints, buildOperationRiskSummary, countBannerImages, normalizeBannerImages, resolveOrderingTone } from "./systemSettingsPage.helpers";
+import {
+  Image as ImageIcon,
+  Megaphone,
+  Loader2,
+  X
+} from "lucide-react";
+import { SettingsModal } from "../../shared/components/SettingsModal";
+import {
+  buildCustomerFacingSettingHints,
+  countBannerImages,
+  countEnabledBannerImages,
+  normalizeBannerConfigs,
+  resolveAdminMediaUrl,
+  serializeBannerConfigs,
+  type BannerConfigItem
+} from "./systemSettingsPage.helpers";
+
+const EMPTY_POPUP = { title: "", description: "", enabled: false, content: "" };
 
 export function SystemSettingsPage() {
   const [settings, setSettings] = useState<OperationSettingsResponse>({
     orderingEnabled: true,
-    orderingStatusLabel: "通道开启中",
-    holidayNoticeTitle: "节假日/店休特殊公告",
-    holidayNoticeDesc: "在小程序首页顶部展示的提示信息",
-    emergencyActionLabel: "熔断：一键暂停接单 (假期店休使用)",
-    bannerImages: '["../../assets/hero-new.jpg"]',
+    orderingStatusLabel: "",
+    holidayNoticeTitle: "锁定公告",
+    holidayNoticeDesc: "用户进入后仅可查看锁定公告内容",
+    emergencyActionLabel: "",
+    bannerImages: "[{\"imageUrl\":\"../../assets/hero-new.jpg\",\"enabled\":true}]",
+    bannerIntervalSeconds: 3,
     popupAnnouncementEnabled: false,
     popupAnnouncementContent: ""
   });
 
-  const [isNoticeOpen, setIsNoticeOpen] = useState(false);
-  const [noticeForm, setNoticeForm] = useState({ title: "", description: "" });
-  const [isBannerOpen, setIsBannerOpen] = useState(false);
-  const [bannerForm, setBannerForm] = useState<{ bannerImages: string[] }>({ bannerImages: [] });
+  const [popupForm, setPopupForm] = useState(EMPTY_POPUP);
+  const [bannerForm, setBannerForm] = useState<BannerConfigItem[]>([]);
+  const [bannerIntervalSeconds, setBannerIntervalSeconds] = useState("3");
+
+  const [modal, setModal] = useState<"banner" | "popup" | null>(null);
   const [bannerUploading, setBannerUploading] = useState(false);
-  const [isPopupOpen, setIsPopupOpen] = useState(false);
-  const [popupForm, setPopupForm] = useState({ enabled: false, content: "" });
-  const [isPauseOpen, setIsPauseOpen] = useState(false);
-  const [pauseForm, setPauseForm] = useState({
-    title: "",
-    description: "",
-    popupEnabled: true,
-    popupContent: ""
-  });
+  const [popupSubmitting, setPopupSubmitting] = useState(false);
+  const [bannerSubmitting, setBannerSubmitting] = useState(false);
+  const [previewBannerImage, setPreviewBannerImage] = useState("");
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
-  const riskSummary = buildOperationRiskSummary(settings);
-  const customerFacingHints = buildCustomerFacingSettingHints(settings);
-  const bannerImages = normalizeBannerImages(settings.bannerImages);
+
+  const customerHints = buildCustomerFacingSettingHints(settings);
+  const bannerConfigs = normalizeBannerConfigs(settings.bannerImages);
+  const enabledBannerCount = countEnabledBannerImages(settings.bannerImages);
 
   useEffect(() => {
-    reloadSettings().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)));
+    reloadSettings().catch(showError);
   }, []);
 
+  function showError(err: any) {
+    window.alert(err?.response?.data?.message || err.message || String(err));
+  }
+
   async function reloadSettings() {
-    const response = await fetchOperationSettings();
-    setSettings(response);
+    setSettings(await fetchOperationSettings());
   }
 
-  async function handleToggleOrdering() {
-    if (settings.orderingEnabled) {
-      openPauseForm();
+  function openModal(name: typeof modal) {
+    setModal(name);
+  }
+
+  function closeModal() {
+    setModal(null);
+  }
+
+  function openPopup() {
+    setPopupForm({
+      title: settings.holidayNoticeTitle || "",
+      description: settings.holidayNoticeDesc || "",
+      enabled: settings.popupAnnouncementEnabled,
+      content: settings.popupAnnouncementContent || ""
+    });
+    openModal("popup");
+  }
+
+  async function submitPopup() {
+    const title = popupForm.title.trim();
+    const description = popupForm.description.trim();
+    const content = popupForm.content.trim();
+    if (popupForm.enabled && (!title || (!description && !content))) {
+      window.alert("启用锁定公告时请至少填写主文和正文");
       return;
     }
-    const response = await updateOrderingToggle(true);
-    setSettings(response);
+    setPopupSubmitting(true);
+    try {
+      setSettings(await updatePopupAnnouncement({
+        title,
+        description,
+        enabled: popupForm.enabled,
+        content
+      }));
+      closeModal();
+    } catch (err: any) {
+      showError(err);
+    } finally {
+      setPopupSubmitting(false);
+    }
   }
 
-  function openNoticeForm() {
-    setNoticeForm({
-      title: settings.holidayNoticeTitle,
-      description: settings.holidayNoticeDesc
-    });
-    setIsNoticeOpen(true);
+  function openBanner() {
+    setBannerForm(normalizeBannerConfigs(settings.bannerImages));
+    setBannerIntervalSeconds(String(settings.bannerIntervalSeconds || 3));
+    openModal("banner");
   }
 
-  async function handleNoticeSubmit() {
-    if (!noticeForm.title || !noticeForm.description) return;
-    const response = await updateHolidayNotice(noticeForm.title, noticeForm.description);
-    setSettings(response);
-    setIsNoticeOpen(false);
-  }
-
-  function openBannerForm() {
-    setBannerForm({
-      bannerImages: normalizeBannerImages(settings.bannerImages)
-    });
-    setIsBannerOpen(true);
-  }
-
-  async function handleBannerSubmit() {
-    if (!bannerForm.bannerImages.length) {
-      window.alert("请至少上传一张轮播图");
+  async function submitBanner() {
+    const validItems = bannerForm.filter((item) => item.imageUrl.trim().length > 0);
+    if (!validItems.length) {
+      window.alert("请至少保留一张轮播图");
       return;
     }
-    const response = await updateBannerImages(JSON.stringify(bannerForm.bannerImages));
-    setSettings(response);
-    setIsBannerOpen(false);
+    setBannerSubmitting(true);
+    try {
+      setSettings(await updateBannerImages(serializeBannerConfigs(validItems), Math.max(1, Number(bannerIntervalSeconds) || 3)));
+      closeModal();
+    } catch (err: any) {
+      showError(err);
+    } finally {
+      setBannerSubmitting(false);
+    }
   }
 
   async function handleBannerFilesChange(event: React.ChangeEvent<HTMLInputElement>) {
@@ -101,61 +138,44 @@ export function SystemSettingsPage() {
     setBannerUploading(true);
     try {
       const uploaded = await Promise.all(files.map((file) => uploadBannerImage(file)));
-      setBannerForm((current) => ({
-        bannerImages: Array.from(new Set([...current.bannerImages, ...uploaded.map((item) => item.url)]))
-      }));
+      setBannerForm((prev) => [
+        ...prev,
+        ...uploaded.map((item) => ({
+          imageUrl: item.url,
+          enabled: true
+        }))
+      ]);
     } catch (err: any) {
-      window.alert(err?.response?.data?.message || err.message || String(err));
+      showError(err);
     } finally {
       setBannerUploading(false);
       event.target.value = "";
     }
   }
 
+  function updateBannerField<K extends keyof BannerConfigItem>(index: number, field: K, value: BannerConfigItem[K]) {
+    setBannerForm((prev) => prev.map((item, currentIndex) => (
+      currentIndex === index
+        ? { ...item, [field]: value }
+        : item
+    )));
+  }
+
+  function moveBanner(index: number, direction: -1 | 1) {
+    setBannerForm((prev) => {
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= prev.length) {
+        return prev;
+      }
+      const next = [...prev];
+      const [current] = next.splice(index, 1);
+      next.splice(targetIndex, 0, current);
+      return next;
+    });
+  }
+
   function removeBannerImage(index: number) {
-    setBannerForm((current) => ({
-      bannerImages: current.bannerImages.filter((_, itemIndex) => itemIndex !== index)
-    }));
-  }
-
-  function openPopupForm() {
-    setPopupForm({
-      enabled: settings.popupAnnouncementEnabled,
-      content: settings.popupAnnouncementContent
-    });
-    setIsPopupOpen(true);
-  }
-
-  async function handlePopupSubmit() {
-    const response = await updatePopupAnnouncement(popupForm.enabled, popupForm.content);
-    setSettings(response);
-    setIsPopupOpen(false);
-  }
-
-  function openPauseForm() {
-    const defaultPopupContent = settings.popupAnnouncementContent || [settings.holidayNoticeTitle, settings.holidayNoticeDesc].filter(Boolean).join("\n");
-    setPauseForm({
-      title: settings.holidayNoticeTitle || "临时停单公告",
-      description: settings.holidayNoticeDesc || "",
-      popupEnabled: true,
-      popupContent: defaultPopupContent
-    });
-    setIsPauseOpen(true);
-  }
-
-  async function handlePauseSubmit() {
-    if (!pauseForm.title.trim() || !pauseForm.description.trim()) {
-      window.alert("请先填写停单公告标题和内容");
-      return;
-    }
-    const response = await pauseOrderingWithNotice({
-      title: pauseForm.title.trim(),
-      description: pauseForm.description.trim(),
-      popupEnabled: pauseForm.popupEnabled,
-      popupContent: pauseForm.popupContent.trim()
-    });
-    setSettings(response);
-    setIsPauseOpen(false);
+    setBannerForm((prev) => prev.filter((_, currentIndex) => currentIndex !== index));
   }
 
   return (
@@ -163,346 +183,280 @@ export function SystemSettingsPage() {
       <div className="page-header">
         <div>
           <h2 className="page-title">系统设置</h2>
-          <p className="page-subtitle">接单状态、公告与营业控制</p>
+          <p className="page-subtitle">锁定公告 · 轮播图</p>
         </div>
         <div className="page-header__actions">
-          <button className="btn btn-outline" onClick={openNoticeForm}>
-            <Bell size={16} />
-            配置公告
-          </button>
-          <button
-            className={settings.orderingEnabled ? "btn btn-danger" : "btn btn-primary"}
-            onClick={() => handleToggleOrdering().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}
-          >
-            {settings.orderingEnabled ? <AlertTriangle size={16} /> : <Power size={16} />}
-            {settings.orderingEnabled ? "立即暂停接单" : "恢复接单"}
+          <button className="btn btn-outline" onClick={openPopup}>
+            <Megaphone size={16} /> 锁定公告
           </button>
         </div>
       </div>
+
       <div className="stat-row">
         <div className="stat-card">
-          <div className="stat-title">接单状态</div>
-          <div className="stat-val">{settings.orderingEnabled ? "开启" : "关闭"}</div>
-          <div className="stat-footer">{settings.orderingStatusLabel}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-title">公告配置</div>
-          <div className="stat-val">1 <span>条</span></div>
-          <div className="stat-footer">{settings.holidayNoticeTitle ? "当前首页展示公告已配置" : "当前未配置首页公告"}</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-title">暂停接单</div>
-          <div className="stat-val">熔断 <span>可用</span></div>
-          <div className="stat-footer">适用于节假日店休或临时停业</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-title">当前状态</div>
-          <div className={`stat-val ${riskSummary.tone === "warning" ? "stat-val--warning" : "stat-val--primary"}`}>
-            {riskSummary.tone === "warning" ? "注意" : "正常"}
+          <div className="stat-title">锁定公告</div>
+          <div className="stat-val">
+            <span className={settings.popupAnnouncementEnabled ? "tag tag-red" : "tag tag-gray"}>
+              {settings.popupAnnouncementEnabled ? "已锁定" : "未启用"}
+            </span>
           </div>
-          <div className="stat-footer">{riskSummary.primaryHint}</div>
+          <div className="stat-footer">
+            {settings.popupAnnouncementEnabled
+              ? settings.holidayNoticeTitle || "用户当前只能查看公告"
+              : "用户可正常使用小程序"}
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-title">轮播图</div>
+          <div className="stat-val">{countBannerImages(settings.bannerImages)} <span>张</span></div>
+          <div className="stat-footer">启用中 {enabledBannerCount} 张</div>
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px", marginBottom: "20px" }}>
-        <div className="table-container" style={{ padding: "24px" }}>
-          <div className="admin-panel-title admin-title-with-icon" style={{ marginBottom: "20px" }}>
-            <Settings2 size={18} />
-            营业状态控制
+      <div className="settings-cards">
+        <div className="settings-card settings-card--highlight">
+          <div className="settings-card__title">
+            <Megaphone size={18} /> 锁定公告
           </div>
-
-          <div style={{ display: "grid", gap: "16px" }}>
-            <div className="address-card" style={{ cursor: "default", minHeight: "92px" }}>
-              <div className="address-content">
-                <div className="address-title">接单通道</div>
-                <div className="address-detail">当前接单状态</div>
-                <div className="address-detail">{customerFacingHints.orderHint}</div>
-              </div>
-              <span className={`tag tag-${resolveOrderingTone(settings.orderingEnabled)}`}>{settings.orderingStatusLabel}</span>
+          <div className="settings-card__body">
+            <span className={`tag ${settings.popupAnnouncementEnabled ? "tag-red" : "tag-gray"}`}>
+              {settings.popupAnnouncementEnabled ? "用户仅可查看公告" : "当前未锁定"}
+            </span>
+            <div className="settings-card__detail">
+              {settings.holidayNoticeTitle || "未设置锁定公告主文"}
             </div>
-
-            <div className="address-card" style={{ cursor: "default", minHeight: "92px" }}>
-              <div className="address-content">
-                <div className="address-title">{settings.holidayNoticeTitle || "未设置公告"}</div>
-                <div className="address-detail">{settings.holidayNoticeDesc || "当前没有配置前台公告。"}</div>
-              </div>
-              <button className="btn btn-outline" onClick={openNoticeForm}>
-                <Bell size={16} />
-                编辑公告
-              </button>
+            <div className="settings-card__detail settings-card__detail--sub">
+              {settings.holidayNoticeDesc || "未设置锁定公告摘要"}
             </div>
-
-            <div className="address-card" style={{ cursor: "default", minHeight: "92px" }}>
-              <div className="address-content">
-                <div className="address-title">首页轮播图</div>
-                <div className="address-detail">{countBannerImages(settings.bannerImages)} 张图片正在轮播</div>
-                <div className="address-detail">{customerFacingHints.bannerHint}</div>
-              </div>
-              <button className="btn btn-outline" onClick={openBannerForm}>
-                <ImageIcon size={16} />
-                编辑轮播图
-              </button>
-            </div>
-
-            <div className="address-card" style={{ cursor: "default", minHeight: "92px" }}>
-              <div className="address-content">
-                <div className="address-title">登录弹窗公告</div>
-                <div className="address-detail">{settings.popupAnnouncementEnabled ? "已开启" : "已关闭"}</div>
-                <div className="address-detail">{customerFacingHints.popupHint}</div>
-              </div>
-              <button className="btn btn-outline" onClick={openPopupForm}>
-                <Megaphone size={16} />
-                配置弹窗
-              </button>
-            </div>
-
-            <div className="admin-card-section" style={{ background: "linear-gradient(180deg, rgba(255,247,237,0.78) 0%, rgba(255,255,255,0.92) 100%)", border: "1px solid #fed7aa" }}>
-              <div className="admin-panel-note" style={{ color: "var(--warning-color)", fontWeight: 800 }}>当前提醒</div>
-              <div style={{ color: "var(--text-main)", fontWeight: 700 }}>{riskSummary.primaryHint}</div>
-              <div style={{ color: "var(--text-sub)", lineHeight: 1.7 }}>{riskSummary.secondaryHint}</div>
-            </div>
-
-            <div style={{ borderTop: "1px solid var(--border-color)", paddingTop: "18px" }}>
-              <button className={settings.orderingEnabled ? "btn btn-danger" : "btn btn-primary"} style={{ width: "100%", height: "44px", fontSize: "15px" }} onClick={() => handleToggleOrdering().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
-                {settings.orderingEnabled ? <AlertTriangle size={18} /> : <Power size={18} />}
-                {settings.emergencyActionLabel}
-              </button>
-            </div>
+            <span className="settings-card__hint">{customerHints.popupHint}</span>
+          </div>
+          <div className="settings-card__actions">
+            <button className="btn btn-outline" style={{ width: "100%" }} onClick={openPopup}>
+              配置锁定公告
+            </button>
           </div>
         </div>
 
-        <div className="toolbar" style={{ margin: 0 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "12px" }}>
-            <div className="address-card" style={{ cursor: "default", minHeight: "100px" }}>
-              <div className="address-content">
-                <div className="address-title">公告状态</div>
-                <div className="address-detail">{settings.holidayNoticeTitle ? "已配置" : "未配置"}</div>
-              </div>
+        <div className="settings-card">
+          <div className="settings-card__title">
+            <ImageIcon size={18} /> 首页轮播图
+          </div>
+          <div className="settings-card__body">
+            <div className="banner-preview-grid">
+              {bannerConfigs.slice(0, 3).map((item, index) => (
+                <div key={`${item.imageUrl}-${index}`} className="banner-preview-card">
+                  <img
+                    src={resolveAdminMediaUrl(item.imageUrl)}
+                    className="banner-preview-thumb"
+                    alt={`轮播图 ${index + 1}`}
+                    onClick={() => setPreviewBannerImage(item.imageUrl)}
+                  />
+                  <div className="banner-preview-card__meta">
+                    <div className="banner-preview-card__title">{`轮播图 ${index + 1}`}</div>
+                    <div className="banner-preview-card__hint">{item.enabled ? "启用中 · 点击图片查看大图" : "已停用 · 点击图片查看大图"}</div>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="address-card" style={{ cursor: "default", minHeight: "100px" }}>
-              <div className="address-content">
-                <div className="address-title">停单场景</div>
-                <div className="address-detail">店休、爆单、停电、节假日</div>
-              </div>
+            <div className="settings-card__detail">
+              启用中 {enabledBannerCount} 张，轮播间隔 {Math.max(1, settings.bannerIntervalSeconds || 3)} 秒
             </div>
-            <div className="address-card" style={{ cursor: "default", minHeight: "100px" }}>
-              <div className="address-content">
-                <div className="address-title">执行检查</div>
-                <div className="address-detail">接单状态、公告文案、恢复时间</div>
-              </div>
+            <div className="settings-card__detail settings-card__detail--sub">
+              首页只展示图片，用户点击后仅预览大图。
             </div>
+            <span className="settings-card__hint">
+              {customerHints.bannerHint}
+            </span>
           </div>
-        </div>
-      </div>
-
-      <div className="mobile-card-list">
-        <div className="mobile-card">
-          <div className="mobile-card-header">
-            <span style={{ fontWeight: 700 }}>接单通道</span>
-            <span className={`tag tag-${resolveOrderingTone(settings.orderingEnabled)}`}>{settings.orderingStatusLabel}</span>
-          </div>
-          <div className="mobile-card-row">
-            <div className="mobile-card-label">公告</div>
-            <div className="mobile-card-value">{settings.holidayNoticeTitle || "未配置公告"}</div>
-          </div>
-          <div className="mobile-card-row">
-            <div className="mobile-card-label">状态</div>
-            <div className="mobile-card-value">{riskSummary.primaryHint}</div>
-          </div>
-          <div className="mobile-card-footer">
-            <button className="btn btn-outline" onClick={openNoticeForm}>配置公告</button>
-            <button className={settings.orderingEnabled ? "btn btn-danger" : "btn btn-primary"} onClick={() => handleToggleOrdering().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
-              {settings.orderingEnabled ? "暂停接单" : "恢复接单"}
+          <div className="settings-card__actions">
+            <button className="btn btn-outline" style={{ width: "100%" }} onClick={openBanner}>
+              管理轮播图
             </button>
           </div>
         </div>
       </div>
 
-      {isNoticeOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <span>配置首页顶部公告</span>
-              <span className="modal-close" onClick={() => setIsNoticeOpen(false)}><X size={20} /></span>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label className="form-label"><span className="required">*</span>公告标题</label>
-                <input className="form-control" value={noticeForm.title} onChange={e => setNoticeForm({...noticeForm, title: e.target.value})} placeholder="例如: 五一店休公告" />
-              </div>
-              <div className="form-group">
-                <label className="form-label"><span className="required">*</span>公告内容</label>
-                <textarea className="form-control" value={noticeForm.description} onChange={e => setNoticeForm({...noticeForm, description: e.target.value})} placeholder="例如: 5月1日至5月3日暂停接单，5月4日恢复。" />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setIsNoticeOpen(false)}>取消</button>
-              <button className="btn btn-primary" onClick={handleNoticeSubmit}>保存并展示</button>
-            </div>
+      <SettingsModal
+        open={modal === "popup"}
+        title="配置锁定公告"
+        onClose={closeModal}
+        onSubmit={submitPopup}
+        submitLabel="保存配置"
+        submitting={popupSubmitting}
+      >
+        <div className="form-group">
+          <label className="form-label">启用锁定公告</label>
+          <div className="toggle-row">
+            <input
+              type="checkbox"
+              checked={popupForm.enabled}
+              onChange={(e) => setPopupForm({ ...popupForm, enabled: e.target.checked })}
+            />
+            <span>
+              {popupForm.enabled
+                ? "开启后用户进入小程序时只能查看公告"
+                : "关闭后用户可正常浏览和下单"}
+            </span>
+          </div>
+          {popupForm.enabled ? (
+            <button
+              className="btn btn-outline"
+              style={{ marginTop: 12 }}
+              onClick={() => setPopupForm((current) => ({ ...current, enabled: false }))}
+            >
+              关闭公告
+            </button>
+          ) : null}
+        </div>
+        <div className="form-group">
+          <label className="form-label">
+            <span className="required">*</span>公告主文
+          </label>
+          <input
+            className="form-control"
+            value={popupForm.title}
+            onChange={(e) => setPopupForm({ ...popupForm, title: e.target.value })}
+            placeholder="例如：门店公告通知"
+          />
+        </div>
+        <div className="form-group">
+          <label className="form-label">公告补充</label>
+          <textarea
+            className="form-control"
+            value={popupForm.description}
+            onChange={(e) => setPopupForm({ ...popupForm, description: e.target.value })}
+            placeholder="用于后台摘要和锁定页补充展示。"
+          ></textarea>
+        </div>
+        <div className="form-group">
+          <label className="form-label">锁定页正文</label>
+          <textarea
+            className="form-control"
+            style={{ height: 150 }}
+            value={popupForm.content}
+            onChange={(e) => setPopupForm({ ...popupForm, content: e.target.value })}
+            placeholder="支持多行，不填写时默认使用主文和补充拼接。"
+          ></textarea>
+        </div>
+      </SettingsModal>
+
+      <SettingsModal
+        open={modal === "banner"}
+        title="管理首页轮播图"
+        onClose={closeModal}
+        onSubmit={submitBanner}
+        submitLabel="保存修改"
+        submitting={bannerSubmitting}
+      >
+        <div className="settings-form-callout">
+          轮播图只保留图片、启用状态、顺序和轮播秒数；顾客点击后仅预览大图。点击图片查看大图。
+        </div>
+        <div className="form-group">
+          <label className="form-label">轮播秒数</label>
+          <input
+            className="form-control"
+            type="number"
+            min="1"
+            value={bannerIntervalSeconds}
+            onChange={(e) => setBannerIntervalSeconds(e.target.value)}
+          />
+        </div>
+        <div className="form-group">
+          <label className="form-label">
+            <span className="required">*</span>上传轮播图
+          </label>
+          <input
+            ref={bannerInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            style={{ display: "none" }}
+            onChange={handleBannerFilesChange}
+          />
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              className="btn btn-outline"
+              onClick={() => bannerInputRef.current?.click()}
+              disabled={bannerUploading}
+            >
+              {bannerUploading ? <Loader2 size={16} /> : <ImageIcon size={16} />}
+              {bannerUploading ? "上传中..." : "选择图片"}
+            </button>
+            <span style={{ color: "var(--text-sub)", fontSize: 13 }}>
+              支持多张，建议横图；可配置启用状态和顺序
+            </span>
           </div>
         </div>
-      )}
-
-      {isBannerOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: "760px" }}>
-            <div className="modal-header">
-              <span>编辑首页轮播图</span>
-              <span className="modal-close" onClick={() => setIsBannerOpen(false)}><X size={20} /></span>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label className="form-label"><span className="required">*</span>上传轮播图图片</label>
-                <input
-                  ref={bannerInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  style={{ display: "none" }}
-                  onChange={handleBannerFilesChange}
-                />
-                <div style={{ display: "flex", gap: "12px", alignItems: "center", flexWrap: "wrap" }}>
-                  <button className="btn btn-outline" onClick={() => bannerInputRef.current?.click()}>
-                    <ImageIcon size={16} />
-                    {bannerUploading ? "上传中..." : "选择图片"}
-                  </button>
-                  <span style={{ color: "var(--text-sub)" }}>建议上传横图，支持多张轮播，当前生效 {bannerForm.bannerImages.length} 张。</span>
-                </div>
+        <div className="banner-grid">
+          {bannerForm.map((item, index) => (
+            <div key={`${item.imageUrl}-${index}`} className="banner-grid__item">
+              <img
+                src={resolveAdminMediaUrl(item.imageUrl)}
+                alt={`轮播图 ${index + 1}`}
+                onClick={() => setPreviewBannerImage(item.imageUrl)}
+              />
+              <div className="banner-grid__item-footer">
+                <span>第 {index + 1} 张</span>
+                <span className={`tag ${item.enabled ? "tag-green" : "tag-gray"}`}>
+                  {item.enabled ? "启用" : "停用"}
+                </span>
               </div>
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-                  gap: "16px"
-                }}
-              >
-                {bannerForm.bannerImages.map((image, index) => (
-                  <div
-                    key={`${image}-${index}`}
-                    style={{
-                      border: "1px solid var(--border-color)",
-                      borderRadius: "16px",
-                      padding: "12px",
-                      background: "#fff"
-                    }}
-                  >
-                    <img
-                      src={image}
-                      alt={`轮播图${index + 1}`}
-                      style={{
-                        width: "100%",
-                        height: "120px",
-                        objectFit: "cover",
-                        borderRadius: "12px",
-                        background: "#f5f5f5"
-                      }}
-                    />
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", marginTop: "10px" }}>
-                      <span style={{ color: "var(--text-sub)", fontSize: "12px" }}>第 {index + 1} 张</span>
-                      <button className="btn btn-outline" onClick={() => removeBannerImage(index)}>删除</button>
-                    </div>
-                  </div>
-                ))}
-                {!bannerForm.bannerImages.length && (
-                  <div style={{ color: "var(--text-sub)", lineHeight: 1.7 }}>
-                    暂未上传轮播图，保存后会同步到顾客首页轮播区域。
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setIsBannerOpen(false)}>取消</button>
-              <button className="btn btn-primary" onClick={handleBannerSubmit}>保存修改</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isPopupOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <span>配置登录弹窗公告</span>
-              <span className="modal-close" onClick={() => setIsPopupOpen(false)}><X size={20} /></span>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label className="form-label">启用状态</label>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input type="checkbox" checked={popupForm.enabled} onChange={e => setPopupForm({ ...popupForm, enabled: e.target.checked })} />
-                  <span>启用登录后自动弹窗</span>
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">弹窗内容</label>
-                <textarea className="form-control" style={{ height: '150px' }} value={popupForm.content} onChange={e => setPopupForm({ ...popupForm, content: e.target.value })} placeholder="输入公告详情内容，支持多行显示。" />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setIsPopupOpen(false)}>取消</button>
-              <button className="btn btn-primary" onClick={handlePopupSubmit}>保存配置</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isPauseOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <div className="modal-header">
-              <span>暂停接单并发布公告</span>
-              <span className="modal-close" onClick={() => setIsPauseOpen(false)}><X size={20} /></span>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label className="form-label"><span className="required">*</span>公告标题</label>
+              <div className="form-group" style={{ marginTop: 12 }}>
+                <label className="form-label">图片地址</label>
                 <input
                   className="form-control"
-                  value={pauseForm.title}
-                  onChange={(e) => setPauseForm({ ...pauseForm, title: e.target.value })}
-                  placeholder="例如：临时停单通知"
+                  value={item.imageUrl}
+                  onChange={(e) => updateBannerField(index, "imageUrl", e.target.value)}
+                  placeholder="/uploads/settings-banners/..."
                 />
               </div>
-              <div className="form-group">
-                <label className="form-label"><span className="required">*</span>首页公告内容</label>
-                <textarea
-                  className="form-control"
-                  value={pauseForm.description}
-                  onChange={(e) => setPauseForm({ ...pauseForm, description: e.target.value })}
-                  placeholder="例如：今日因设备检修暂停接单，恢复时间会在首页第一时间通知。"
+              <div className="toggle-row" style={{ marginBottom: 12 }}>
+                <input
+                  type="checkbox"
+                  checked={item.enabled}
+                  onChange={(e) => updateBannerField(index, "enabled", e.target.checked)}
                 />
+                <span>启用这张轮播图</span>
               </div>
-              <div className="form-group">
-                <label className="form-label">登录后自动弹窗</label>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                  <input
-                    type="checkbox"
-                    checked={pauseForm.popupEnabled}
-                    onChange={(e) => setPauseForm({ ...pauseForm, popupEnabled: e.target.checked })}
-                  />
-                  <span>用户进入首页后直接弹出公告</span>
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">弹窗内容</label>
-                <textarea
-                  className="form-control"
-                  style={{ height: "140px" }}
-                  value={pauseForm.popupContent}
-                  onChange={(e) => setPauseForm({ ...pauseForm, popupContent: e.target.value })}
-                  placeholder="不填写时默认使用“标题 + 首页公告内容”"
-                />
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <button className="btn btn-outline btn-sm" onClick={() => moveBanner(index, -1)} disabled={index === 0}>
+                  上移
+                </button>
+                <button className="btn btn-outline btn-sm" onClick={() => moveBanner(index, 1)} disabled={index === bannerForm.length - 1}>
+                  下移
+                </button>
+                <button className="btn btn-outline btn-sm" onClick={() => removeBannerImage(index)}>
+                  删除
+                </button>
               </div>
             </div>
+          ))}
+          {!bannerForm.length && (
+            <div className="banner-grid__empty">暂未上传轮播图</div>
+          )}
+        </div>
+      </SettingsModal>
+
+      {previewBannerImage ? (
+        <div className="modal-overlay" onClick={() => setPreviewBannerImage("")}>
+          <div className="modal-content modal-content--banner-preview" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-header">
+              <span>轮播图大图预览</span>
+              <span className="modal-close" onClick={() => setPreviewBannerImage("")}><X size={18} /></span>
+            </div>
+            <div className="modal-body">
+              <img
+                src={resolveAdminMediaUrl(previewBannerImage)}
+                alt="轮播图大图预览"
+                className="banner-preview-dialog__image"
+              />
+            </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setIsPauseOpen(false)}>取消</button>
-              <button className="btn btn-danger" onClick={() => handlePauseSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
-                保存公告并暂停接单
-              </button>
+              <button className="btn btn-outline" onClick={() => setPreviewBannerImage("")}>关闭预览</button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </>
   );
 }

@@ -121,16 +121,26 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         if (customerId == null) {
             jdbcTemplate.update(
                 """
-                    INSERT INTO customers (name, phone, source, openid, session_key, profile_completed, active, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO customers (
+                        name, phone, source, source_channel, openid, current_openid, session_key,
+                        profile_completed, active, customer_status, registered_at, last_login_at, openid_updated_at,
+                        created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                 guestNickname(finalPhone),
                 finalPhone,
                 SOURCE_DEV,
+                SOURCE_DEV,
+                finalOpenid,
                 finalOpenid,
                 "dev_session_" + finalOpenid,
                 true,
                 true,
+                "FORMAL",
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now),
                 Timestamp.valueOf(now),
                 Timestamp.valueOf(now)
             );
@@ -139,13 +149,29 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             jdbcTemplate.update(
                 """
                     UPDATE customers
-                    SET phone = ?, openid = ?, session_key = ?, source = ?, updated_at = ?
+                    SET phone = ?,
+                        openid = ?,
+                        current_openid = ?,
+                        session_key = ?,
+                        source = ?,
+                        source_channel = ?,
+                        profile_completed = TRUE,
+                        customer_status = 'FORMAL',
+                        registered_at = COALESCE(registered_at, ?),
+                        last_login_at = ?,
+                        openid_updated_at = ?,
+                        updated_at = ?
                     WHERE id = ?
                     """,
                 finalPhone,
                 finalOpenid,
+                finalOpenid,
                 "dev_session_" + finalOpenid,
                 SOURCE_DEV,
+                SOURCE_DEV,
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now),
                 Timestamp.valueOf(now),
                 customerId
             );
@@ -153,11 +179,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         if (customerId == null) {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "未找到可绑定的客户");
         }
-        jdbcTemplate.update(
-            "UPDATE customers SET profile_completed = TRUE, updated_at = ? WHERE id = ?",
-            Timestamp.valueOf(now),
-            customerId
-        );
+        ensureCustomerFormalWithZeroMealWallet(customerId, now);
         return authState(finalOpenid, "dev_session_" + finalOpenid, true, false, false, customerId);
     }
 
@@ -204,30 +226,48 @@ public class MobileAuthServiceImpl implements MobileAuthService {
     public Map<String, Object> bindRiderPhone(String openid, String phone, String nickname) {
         String finalOpenid = requireOpenid(openid);
         String finalPhone = requirePhone(phone);
+        String finalNickname = nickname != null ? nickname.trim() : "";
         LocalDateTime now = LocalDateTime.now().withNano(0);
         Long riderId = findRiderIdByPhone(finalPhone);
         
         if (riderId == null) {
-            // 手机号未注册，返回未找到
-            return riderAuthState(finalOpenid, false, false, riderNotFoundProfile(finalPhone));
+            // 新用户：自动创建账号（状态：UNASSIGNED）
+            jdbcTemplate.update(
+                """
+                    INSERT INTO rider_profiles (
+                        rider_name, phone, display_name, current_openid, wechat_open_id, auth_status,
+                        first_login_at, last_login_at, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                finalNickname.isEmpty() ? "骑手" + finalPhone.substring(7) : finalNickname,
+                finalPhone,
+                finalNickname.isEmpty() ? "骑手" + finalPhone.substring(7) : finalNickname,
+                finalOpenid,
+                finalOpenid,
+                "UNASSIGNED",
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now)
+            );
+            riderId = findRiderIdByPhone(finalPhone);
+        } else {
+            // 更新 openid 绑定
+            jdbcTemplate.update(
+                """
+                    UPDATE rider_profiles
+                    SET current_openid = ?,
+                        wechat_open_id = COALESCE(wechat_open_id, ?),
+                        last_login_at = ?,
+                        first_login_at = COALESCE(first_login_at, ?)
+                    WHERE id = ?
+                    """,
+                finalOpenid,
+                finalOpenid,
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now),
+                riderId
+            );
         }
-        
-        // 更新 openid 绑定
-        jdbcTemplate.update(
-            """
-                UPDATE rider_profiles
-                SET current_openid = ?,
-                    wechat_open_id = COALESCE(wechat_open_id, ?),
-                    last_login_at = ?,
-                    first_login_at = COALESCE(first_login_at, ?)
-                WHERE id = ?
-                """,
-            finalOpenid,
-            finalOpenid,
-            Timestamp.valueOf(now),
-            Timestamp.valueOf(now),
-            riderId
-        );
         
         RiderAuthProfileResponse profile = riderProfile(riderId);
         
@@ -370,7 +410,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
                 finalOpenid.isEmpty() ? null : "session_" + finalOpenid,
                 true,
                 true,
-                "INTENTION",
+                "FORMAL",
                 Timestamp.valueOf(now),
                 Timestamp.valueOf(now),
                 Timestamp.valueOf(now),
@@ -390,6 +430,8 @@ public class MobileAuthServiceImpl implements MobileAuthService {
                         source = ?,
                         source_channel = ?,
                         profile_completed = TRUE,
+                        customer_status = 'FORMAL',
+                        registered_at = COALESCE(registered_at, ?),
                         last_login_at = ?,
                         updated_at = ?
                     WHERE id = ?
@@ -407,6 +449,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
                 SOURCE_WX_PHONE,
                 Timestamp.valueOf(now),
                 Timestamp.valueOf(now),
+                Timestamp.valueOf(now),
                 customerId
             );
         }
@@ -414,6 +457,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         if (customerId == null) {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "微信手机号登录失败");
         }
+        ensureCustomerFormalWithZeroMealWallet(customerId, now);
 
         return authState(finalOpenid, finalOpenid.isEmpty() ? null : "session_" + finalOpenid, true, false, false, customerId);
     }
@@ -446,7 +490,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
                 "session_" + finalOpenid,
                 true,
                 true,
-                "INTENTION",
+                "FORMAL",
                 Timestamp.valueOf(now),
                 Timestamp.valueOf(now),
                 Timestamp.valueOf(now),
@@ -467,6 +511,8 @@ public class MobileAuthServiceImpl implements MobileAuthService {
                         source = ?,
                         source_channel = ?,
                         profile_completed = TRUE,
+                        customer_status = 'FORMAL',
+                        registered_at = COALESCE(registered_at, ?),
                         last_login_at = ?,
                         updated_at = ?
                     WHERE id = ?
@@ -480,9 +526,11 @@ public class MobileAuthServiceImpl implements MobileAuthService {
                 SOURCE_WX_PHONE,
                 Timestamp.valueOf(now),
                 Timestamp.valueOf(now),
+                Timestamp.valueOf(now),
                 customerId
             );
         }
+        ensureCustomerFormalWithZeroMealWallet(customerId, now);
 
         return authState(finalOpenid, "session_" + finalOpenid, true, false, false, customerId);
     }
@@ -554,6 +602,41 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         );
     }
 
+    private void ensureCustomerFormalWithZeroMealWallet(Long customerId, LocalDateTime now) {
+        if (customerId == null) {
+            return;
+        }
+        jdbcTemplate.update(
+            """
+                UPDATE customers
+                SET customer_status = 'FORMAL',
+                    registered_at = COALESCE(registered_at, ?),
+                    updated_at = ?
+                WHERE id = ?
+                """,
+            Timestamp.valueOf(now),
+            Timestamp.valueOf(now),
+            customerId
+        );
+        Integer walletCount = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM meal_wallets WHERE customer_id = ? AND active = TRUE",
+            Integer.class,
+            customerId
+        );
+        if (walletCount == null || walletCount == 0) {
+            jdbcTemplate.update(
+                """
+                    INSERT INTO meal_wallets (
+                        customer_id, total_meals, reserved_meals, consumed_meals, active, opened_at, last_adjusted_at
+                    ) VALUES (?, 0, 0, 0, TRUE, ?, ?)
+                    """,
+                customerId,
+                Timestamp.valueOf(now),
+                Timestamp.valueOf(now)
+            );
+        }
+    }
+
     private boolean hasBoundPhone(Long customerId) {
         String phone = jdbcTemplate.query(
             "SELECT phone FROM customers WHERE id = ?",
@@ -584,7 +667,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
 
     private Map<String, Object> authState(String openid, String sessionKey, boolean registered, boolean needPhoneAuth, boolean needName, Long customerId) {
         Map<String, Object> state = new LinkedHashMap<>();
-        state.put("authMode", AUTH_MODE_WECHAT);
+        state.put("authMode", (openid != null && openid.startsWith("dev_")) ? AUTH_MODE_DEV : AUTH_MODE_WECHAT);
         state.put("openid", openid);
         state.put("sessionKey", sessionKey);
         state.put("registered", registered);
@@ -631,7 +714,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         RiderAuthProfileResponse profile
     ) {
         Map<String, Object> state = new LinkedHashMap<>();
-        state.put("authMode", AUTH_MODE_DEV);
+        state.put("authMode", (openid != null && (openid.startsWith("dev_") || openid.startsWith("rider_dev_") || openid.startsWith("rider_"))) ? AUTH_MODE_DEV : AUTH_MODE_WECHAT);
         state.put("openid", openid);
         state.put("registered", registered);
         state.put("needPhoneAuth", needPhoneAuth);

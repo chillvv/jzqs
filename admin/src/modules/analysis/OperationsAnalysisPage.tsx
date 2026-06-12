@@ -22,6 +22,7 @@ export function OperationsAnalysisPage() {
   const [overview, setOverview] = useState<AnalysisOverviewResponse>(emptyOverview);
   const [costEntries, setCostEntries] = useState<CostEntryItem[]>([]);
   const [isAddCostOpen, setIsAddCostOpen] = useState(false);
+  const [submittingAddCost, setSubmittingAddCost] = useState(false);
   const [costForm, setCostForm] = useState({
     costDate: new Date().toISOString().slice(0, 10),
     costCategory: "INGREDIENT",
@@ -65,15 +66,23 @@ export function OperationsAnalysisPage() {
       window.alert("请输入正确的日期和金额");
       return;
     }
-    await createCostEntry({
-      costDate: costForm.costDate,
-      costCategory: costForm.costCategory,
-      amount: Number(costForm.amount),
-      remark: costForm.remark,
-      recordedBy: costForm.recordedBy
-    });
-    setIsAddCostOpen(false);
-    await reload();
+    if (submittingAddCost) {
+      return;
+    }
+    setSubmittingAddCost(true);
+    try {
+      await createCostEntry({
+        costDate: costForm.costDate,
+        costCategory: costForm.costCategory,
+        amount: Number(costForm.amount),
+        remark: costForm.remark,
+        recordedBy: costForm.recordedBy
+      });
+      setIsAddCostOpen(false);
+      await reload();
+    } finally {
+      setSubmittingAddCost(false);
+    }
   }
 
   const resolveCategoryLabel = (category: string) => {
@@ -276,8 +285,8 @@ export function OperationsAnalysisPage() {
               />
             </div>
             <div className="modal-footer">
-              <button className="btn btn-outline" onClick={() => setIsAddCostOpen(false)}>取消</button>
-              <button className="btn btn-primary" onClick={submitAddCost}>确认录入</button>
+              <button className="btn btn-outline" disabled={submittingAddCost} onClick={() => setIsAddCostOpen(false)}>取消</button>
+              <button className="btn btn-primary" disabled={submittingAddCost} onClick={submitAddCost}>{submittingAddCost ? "提交中..." : "确认录入"}</button>
             </div>
           </div>
         </div>

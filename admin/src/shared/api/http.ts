@@ -7,8 +7,9 @@ import type {
   ApiResponse,
   BatchOperationResponse,
   CustomerAssetResponse,
+  CustomerAddressMutationPayload,
+  CustomerAddressMutationResponse,
   CustomerDetailResponse,
-  CustomerNotesResponse,
   DashboardOverviewResponse,
   DispatchBatchResponse,
   DispatchAreaBindingResponse,
@@ -170,10 +171,9 @@ export async function logoutAdmin() {
   return response.data.data;
 }
 
-export async function updateOrderAdminNote(orderId: number, adminNote: string, specialTag: string) {
-  const response = await http.post<ApiResponse<{ orderId: number; status: string }>>(`/api/admin/orders/${orderId}/admin-note`, {
-    adminNote,
-    specialTag
+export async function updateOrderMerchantRemark(orderId: number, merchantRemark: string) {
+  const response = await http.post<ApiResponse<{ orderId: number; status: string }>>(`/api/admin/orders/${orderId}/merchant-remark`, {
+    merchantRemark
   });
   return response.data.data;
 }
@@ -182,8 +182,7 @@ export async function updateOrderProfile(orderId: number, payload: {
   mealPeriod: "LUNCH" | "DINNER";
   quantity: number;
   deliveryAddress: string;
-  adminNote: string;
-  specialTag: string;
+  merchantRemark: string;
   priorityCustomer?: boolean;
   status?: string;
 }) {
@@ -234,26 +233,6 @@ export async function fetchCustomerDetail(customerId: number) {
   return response.data.data;
 }
 
-export async function fetchCustomerNotes(customerId: number) {
-  const response = await http.get<ApiResponse<CustomerNotesResponse>>(`/api/admin/customers/${customerId}/notes`);
-  return response.data.data;
-}
-
-export async function saveCustomerNote(customerId: number, payload: {
-  noteType: "USER" | "MERCHANT";
-  scopeType: "LONG_TERM" | "TIME_BOXED";
-  content: string;
-  startAt?: string | null;
-  endAt?: string | null;
-  displayOrder?: number;
-}) {
-  const response = await http.post<ApiResponse<{ customerId: number; status: string }>>(
-    `/api/admin/customers/${customerId}/notes`,
-    payload
-  );
-  return response.data.data;
-}
-
 export async function searchManualCreateCustomers(keyword: string) {
   const response = await http.get<ApiResponse<ManualCreateCustomerSearchResponse[]>>(
     `/api/admin/orders/manual-create/customers?keyword=${encodeURIComponent(keyword)}`
@@ -264,24 +243,48 @@ export async function searchManualCreateCustomers(keyword: string) {
 export async function createCustomerProfile(payload: {
   name: string;
   phone: string;
-  remark: string;
-  priorityCustomer: boolean;
-  priorityTag: string;
-  priorityNote: string;
+  merchantRemark: string;
+  addressLine: string;
+  contactName: string;
+  contactPhone: string;
+  priorityCustomer?: boolean;
+  priorityTag?: string;
+  priorityNote?: string;
 }) {
   const response = await http.post<ApiResponse<{ customerId: number; status: string }>>("/api/admin/customers", payload);
   return response.data.data;
 }
 
 export async function updateCustomerProfile(customerId: number, payload: {
-  name: string;
-  phone: string;
-  remark: string;
-  priorityCustomer: boolean;
-  priorityTag: string;
-  priorityNote: string;
+  name?: string;
+  phone?: string;
+  merchantRemark?: string;
+  customerStatus?: string;
 }) {
   const response = await http.post<ApiResponse<{ customerId: number; status: string }>>(`/api/admin/customers/${customerId}/profile`, payload);
+  return response.data.data;
+}
+
+export async function createCustomerAddress(customerId: number, payload: CustomerAddressMutationPayload) {
+  const response = await http.post<ApiResponse<CustomerAddressMutationResponse>>(
+    `/api/admin/customers/${customerId}/addresses`,
+    payload
+  );
+  return response.data.data;
+}
+
+export async function updateCustomerAddress(customerId: number, addressId: number, payload: CustomerAddressMutationPayload) {
+  const response = await http.post<ApiResponse<CustomerAddressMutationResponse>>(
+    `/api/admin/customers/${customerId}/addresses/${addressId}`,
+    payload
+  );
+  return response.data.data;
+}
+
+export async function deleteCustomerAddress(customerId: number, addressId: number) {
+  const response = await http.delete<ApiResponse<CustomerAddressMutationResponse>>(
+    `/api/admin/customers/${customerId}/addresses/${addressId}`
+  );
   return response.data.data;
 }
 
@@ -662,11 +665,23 @@ export async function updateHolidayNotice(title: string, description: string) {
   return response.data.data;
 }
 
-export async function updateBannerImages(bannerImages: string) {
-  const response = await http.post<ApiResponse<OperationSettingsResponse>>("/api/admin/settings/banner-images", {
-    bannerImages
-  });
-  return response.data.data;
+export async function updateBannerImages(bannerImages: string, bannerIntervalSeconds: number) {
+  try {
+    const response = await http.post<ApiResponse<OperationSettingsResponse>>("/api/admin/settings/banner-images", {
+      bannerImages,
+      bannerIntervalSeconds
+    });
+    return response.data.data;
+  } catch (err: any) {
+    // Compatibility fallback for local backends still running the old payload contract.
+    if (err?.response?.status !== 400) {
+      throw err;
+    }
+    const legacyResponse = await http.post<ApiResponse<OperationSettingsResponse>>("/api/admin/settings/banner-images", {
+      bannerImages
+    });
+    return legacyResponse.data.data;
+  }
 }
 
 export async function uploadBannerImage(file: File) {
@@ -697,10 +712,17 @@ export async function pauseOrderingWithNotice(payload: {
   return response.data.data;
 }
 
-export async function updatePopupAnnouncement(enabled: boolean, content: string) {
+export async function updatePopupAnnouncement(payload: {
+  title: string;
+  description: string;
+  enabled: boolean;
+  content: string;
+}) {
   const response = await http.post<ApiResponse<OperationSettingsResponse>>("/api/admin/settings/popup-announcement", {
-    enabled,
-    content
+    title: payload.title,
+    description: payload.description,
+    enabled: payload.enabled,
+    content: payload.content
   });
   return response.data.data;
 }
@@ -709,7 +731,7 @@ export async function createManualOrder(payload: {
   customerId: number;
   addressId: number;
   mealPeriod: "LUNCH" | "DINNER";
-  note: string;
+  merchantRemark: string;
   deliveryAddress: string;
   source: string;
   quantity: number;

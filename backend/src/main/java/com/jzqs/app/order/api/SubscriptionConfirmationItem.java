@@ -8,7 +8,7 @@ public record SubscriptionConfirmationItem(
     int quantity,
     String addressLine,
     String userNote,
-    String adminNote,
+    String merchantRemark,
     boolean priority,
     String status
 ) {

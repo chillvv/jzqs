@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.DeleteMapping;
 @RestController
 @RequestMapping("/api/admin/customers")
 public class CustomerAssetController {
@@ -50,11 +51,6 @@ public class CustomerAssetController {
         return ApiResponse.success(customerAssetService.customerDetail(customerId));
     }
 
-    @GetMapping("/{customerId}/notes")
-    public ApiResponse<CustomerNotesResponse> customerNotes(@PathVariable long customerId) {
-        return ApiResponse.success(customerAssetService.customerNotes(customerId));
-    }
-
     @PostMapping
     public ApiResponse<Map<String, Object>> createProfile(@RequestBody Map<String, Object> body) {
         return ApiResponse.success(customerAssetService.createCustomerProfile(body));
@@ -65,12 +61,23 @@ public class CustomerAssetController {
         return ApiResponse.success(customerAssetService.updateCustomerProfile(customerId, body));
     }
 
-    @PostMapping("/{customerId}/notes")
-    public ApiResponse<Map<String, Object>> saveCustomerNote(
+    @PostMapping("/{customerId}/addresses")
+    public ApiResponse<Map<String, Object>> createAddress(@PathVariable long customerId, @RequestBody Map<String, Object> body) {
+        return ApiResponse.success(customerAssetService.createCustomerAddress(customerId, body));
+    }
+
+    @PostMapping("/{customerId}/addresses/{addressId}")
+    public ApiResponse<Map<String, Object>> updateAddress(
         @PathVariable long customerId,
-        @Valid @RequestBody CustomerNoteUpsertRequest request
+        @PathVariable long addressId,
+        @RequestBody Map<String, Object> body
     ) {
-        return ApiResponse.success(customerAssetService.saveCustomerNote(customerId, request));
+        return ApiResponse.success(customerAssetService.updateCustomerAddress(customerId, addressId, body));
+    }
+
+    @DeleteMapping("/{customerId}/addresses/{addressId}")
+    public ApiResponse<Map<String, Object>> deleteAddress(@PathVariable long customerId, @PathVariable long addressId) {
+        return ApiResponse.success(customerAssetService.deleteCustomerAddress(customerId, addressId));
     }
 
     @PostMapping("/{customerId}/wallet/grant")

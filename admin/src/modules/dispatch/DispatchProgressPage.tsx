@@ -312,7 +312,7 @@ export function DispatchProgressPage() {
                       <div className="dispatch-chip-list">
                         {hasOrderAttention(order) && <span className="tag tag-amber">需留意</span>}
                         {hasDisplayValue(order.userNote) && <span className="tag tag-gray">用户备注</span>}
-                        {hasDisplayValue(order.adminNote) && <span className="tag tag-gray">商家备注</span>}
+                        {hasDisplayValue(order.merchantRemark) && <span className="tag tag-gray">商家备注</span>}
                         {hasDisplayValue(order.referenceImageUrl) && <span className="tag tag-gray">参照图</span>}
                         {hasDisplayValue(order.receiptUrl) && <span className="tag tag-gray">送达图</span>}
                       </div>
@@ -364,7 +364,7 @@ export function DispatchProgressPage() {
                 </div>
                 <div className="dispatch-detail-row">
                   <div className="admin-panel-note">商家备注</div>
-                  <div>{hasDisplayValue(activeOrder.adminNote) ? activeOrder.adminNote : "-"}</div>
+                  <div>{hasDisplayValue(activeOrder.merchantRemark) ? activeOrder.merchantRemark : "-"}</div>
                 </div>
               </section>
 

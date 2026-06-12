@@ -29,6 +29,8 @@ public interface DispatchService {
 
     Map<String, Object> autoAssignPendingOrders();
 
+    Map<String, Object> autoAssignPendingOrders(String mealPeriod);
+
     BatchOperationResponse batchAssignPendingOrders(List<Long> orderIds, String areaCode, String updatedBy);
 
     Map<String, Object> notifyCustomer(long dispatchId);

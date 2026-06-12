@@ -1,7 +1,6 @@
 package com.jzqs.app.menu.service.impl;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
@@ -421,7 +420,10 @@ public class MenuWeekAdminServiceImpl implements MenuWeekAdminService {
             if (rawJson == null || rawJson.isBlank()) {
                 return List.of();
             }
-            return objectMapper.readValue(rawJson, new TypeReference<List<String>>() { });
+            return objectMapper.readValue(
+                rawJson,
+                objectMapper.getTypeFactory().constructCollectionType(List.class, String.class)
+            );
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("菜品列表解析失败", ex);
         }
@@ -432,15 +434,26 @@ public class MenuWeekAdminServiceImpl implements MenuWeekAdminService {
     }
 
     private String weekdayLabel(LocalDate serveDate) {
-        return switch (serveDate.getDayOfWeek()) {
-            case MONDAY -> "周一";
-            case TUESDAY -> "周二";
-            case WEDNESDAY -> "周三";
-            case THURSDAY -> "周四";
-            case FRIDAY -> "周五";
-            case SATURDAY -> "周六";
-            case SUNDAY -> "周日";
-        };
+        DayOfWeek dayOfWeek = serveDate.getDayOfWeek();
+        if (dayOfWeek == DayOfWeek.MONDAY) {
+            return "周一";
+        }
+        if (dayOfWeek == DayOfWeek.TUESDAY) {
+            return "周二";
+        }
+        if (dayOfWeek == DayOfWeek.WEDNESDAY) {
+            return "周三";
+        }
+        if (dayOfWeek == DayOfWeek.THURSDAY) {
+            return "周四";
+        }
+        if (dayOfWeek == DayOfWeek.FRIDAY) {
+            return "周五";
+        }
+        if (dayOfWeek == DayOfWeek.SATURDAY) {
+            return "周六";
+        }
+        return "周日";
     }
 
     private LocalDate currentWeekMonday(LocalDate date) {

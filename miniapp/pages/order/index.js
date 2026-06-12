@@ -197,7 +197,7 @@ Page({
         selectedAddressText: defaultAddress ? defaultAddress.addressLine : '请先选择地址',
         selectedContactText: defaultAddress ? `${defaultAddress.contactName} ${defaultAddress.contactPhone}` : '暂无地址'
       });
-      this.restoreRemarkDraft(home && home.remark);
+      this.restoreRemarkDraft(home && home.defaultUserRemark);
       this.syncCheckoutState();
     } catch (error) {
       wx.showToast({ title: error.message || '加载失败', icon: 'none' });

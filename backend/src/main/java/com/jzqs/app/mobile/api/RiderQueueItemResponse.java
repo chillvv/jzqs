@@ -1,5 +1,7 @@
 package com.jzqs.app.mobile.api;
 
+import java.util.List;
+
 public record RiderQueueItemResponse(
     long batchItemId,
     long batchId,
@@ -13,8 +15,10 @@ public record RiderQueueItemResponse(
     String mealName,
     int quantity,
     String note,
-    String adminNote,
-    String specialTag,
+    String merchantRemark,
+    boolean hasAttentionMark,
+    List<String> attentionSources,
+    String attentionLabel,
     boolean specialOrder,
     String specialSummary,
     String itemStatus,

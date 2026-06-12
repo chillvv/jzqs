@@ -8,8 +8,7 @@ public record SpecialOrderItem(
     String mealPeriod,
     int quantity,
     String userNote,
-    String adminNote,
-    String specialTag,
+    String merchantRemark,
     boolean priorityCustomer
 ) {
 }

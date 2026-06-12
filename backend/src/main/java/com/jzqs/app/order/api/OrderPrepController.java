@@ -81,12 +81,11 @@ public class OrderPrepController {
         return ApiResponse.success(orderPrepService.prepPage(serveDate));
     }
 
-    @PostMapping("/{orderId}/admin-note")
-    public ApiResponse<Map<String, Object>> updateAdminNote(@PathVariable long orderId, @RequestBody Map<String, String> body) {
-        return ApiResponse.success(orderPrepService.updateAdminNote(
+    @PostMapping("/{orderId}/merchant-remark")
+    public ApiResponse<Map<String, Object>> updateMerchantRemark(@PathVariable long orderId, @RequestBody Map<String, String> body) {
+        return ApiResponse.success(orderPrepService.updateMerchantRemark(
             orderId,
-            body.getOrDefault("adminNote", ""),
-            body.getOrDefault("specialTag", "")
+            body.getOrDefault("merchantRemark", "")
         ));
     }
 
@@ -114,7 +113,7 @@ public class OrderPrepController {
             request.customerId(),
             request.addressId(),
             request.mealPeriod(),
-            request.note(),
+            request.merchantRemark(),
             request.deliveryAddress(),
             request.source(),
             request.quantityOrDefault(),
