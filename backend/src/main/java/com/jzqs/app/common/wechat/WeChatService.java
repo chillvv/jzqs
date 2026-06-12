@@ -15,6 +15,7 @@ import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -113,12 +114,12 @@ public class WeChatService {
         try {
             String accessToken = getAccessToken();
             String url = GET_PHONE_NUMBER_URL + "?access_token=" + accessToken;
-
-            Map<String, String> requestBody = new HashMap<>();
-            requestBody.put("code", code);
+            String normalizedCode = normalizePhoneCode(code);
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-            HttpEntity<Map<String, String>> requestEntity = new HttpEntity<>(requestBody, headers);
+            headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+            String requestBody = objectMapper.writeValueAsString(Map.of("code", normalizedCode));
+            HttpEntity<String> requestEntity = new HttpEntity<>(requestBody, headers);
 
             String response = restTemplate.postForObject(url, requestEntity, String.class);
             JsonNode json = objectMapper.readTree(response);
@@ -233,6 +234,17 @@ public class WeChatService {
             return phone;
         }
         return phone.substring(0, 3) + "****" + phone.substring(7);
+    }
+
+    private String normalizePhoneCode(String code) throws Exception {
+        String value = code == null ? "" : code.trim();
+        if (value.startsWith("{")) {
+            JsonNode json = objectMapper.readTree(value);
+            if (json.hasNonNull("code")) {
+                return json.get("code").asText().trim();
+            }
+        }
+        return value;
     }
 
     /**
