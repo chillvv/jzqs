@@ -403,10 +403,17 @@ view, text, scroll-view, image, button, input {
 
 .subpage-nav-back-icon {
   color: var(--text-main);
-  font-size: 38rpx;
+  font-size: 40rpx;
   line-height: 1;
-  font-weight: 700;
-  font-family: "Courier New", monospace;
+  font-weight: 300;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.subpage-nav-back-icon::before {
+  content: "<";
 }
 
 .subpage-nav-title {
