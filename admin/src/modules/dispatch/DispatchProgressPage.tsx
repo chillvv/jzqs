@@ -19,6 +19,21 @@ function dispatchOrderStatusLabel(status: string, isCurrent: boolean) {
   }
 }
 
+function findFirstPendingOrderId(orders: DispatchAreaBindingResponse["orders"]) {
+  return orders.find((item) => item.deliveryStatus !== "DELIVERED")?.orderId ?? null;
+}
+
+function findFirstPendingSequenceNumber(orders: DispatchAreaBindingResponse["orders"]) {
+  return orders.find((item) => item.deliveryStatus !== "DELIVERED")?.sequenceNumber ?? null;
+}
+
+function findNextPendingOrderId(orders: DispatchAreaBindingResponse["orders"], currentOrderId: number | null) {
+  if (currentOrderId == null) return null;
+  const currentIndex = orders.findIndex((item) => item.orderId === currentOrderId);
+  if (currentIndex < 0) return null;
+  return orders.slice(currentIndex + 1).find((item) => item.deliveryStatus !== "DELIVERED")?.orderId ?? null;
+}
+
 type ProgressGroup = {
   key: string;
   areaCode: string;
@@ -72,6 +87,9 @@ export function DispatchProgressPage() {
 
       const orders = [...binding.orders].sort((left, right) => left.sequenceNumber - right.sequenceNumber);
       const deliveredCount = orders.filter((item) => item.deliveryStatus === "DELIVERED").length;
+      const currentOrderId = findFirstPendingOrderId(orders);
+      const currentSequenceNumber = findFirstPendingSequenceNumber(orders);
+      const nextOrderId = findNextPendingOrderId(orders, currentOrderId);
       const totalCount = matchedProgress?.totalCount ?? orders.length;
       const completedCount = matchedProgress?.completedCount ?? deliveredCount;
       const pendingCount = matchedProgress?.pendingCount ?? Math.max(totalCount - completedCount, 0);
@@ -85,9 +103,9 @@ export function DispatchProgressPage() {
         completedCount,
         pendingCount,
         exceptionCount: matchedProgress?.exceptionCount ?? 0,
-        currentOrderId: matchedProgress?.currentOrderId ?? null,
-        currentSequenceNumber: matchedProgress?.currentSequenceNumber ?? null,
-        nextOrderId: matchedProgress?.nextOrderId ?? null,
+        currentOrderId,
+        currentSequenceNumber,
+        nextOrderId,
         missingRider: binding.missingRider,
         orders
       });
@@ -104,9 +122,9 @@ export function DispatchProgressPage() {
         completedCount: item.completedCount,
         pendingCount: item.pendingCount,
         exceptionCount: item.exceptionCount,
-        currentOrderId: item.currentOrderId,
-        currentSequenceNumber: item.currentSequenceNumber,
-        nextOrderId: item.nextOrderId,
+        currentOrderId: null,
+        currentSequenceNumber: null,
+        nextOrderId: null,
         missingRider: false,
         orders: []
       });
@@ -200,7 +218,7 @@ export function DispatchProgressPage() {
             {progressGroups.length === 0 ? (
               <div className="dispatch-empty" style={{ margin: 0, padding: "32px", background: "#fff", borderRadius: "12px" }}>当前没有可展示的骑手进度。</div>
             ) : (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "12px" }}>
+              <div className="dispatch-progress-list">
                 {progressGroups.map((item) => {
                   const completionRatio = item.totalCount > 0 ? Math.round((item.completedCount / item.totalCount) * 100) : 0;
                   return (
@@ -284,9 +302,9 @@ export function DispatchProgressPage() {
             {activeGroup.orders.length === 0 ? (
               <div className="dispatch-empty" style={{ margin: 0 }}>当前区域暂无可查看订单。</div>
             ) : (
-              <div className="dispatch-dialog-grid">
+              <div className="dispatch-progress-order-list">
                 {activeGroup.orders.map((order) => {
-                  const isCurrent = order.orderId === activeGroup.currentOrderId;
+                  const isCurrent = activeGroup.currentOrderId != null && order.orderId === activeGroup.currentOrderId;
                   const stateClass = isCurrent
                     ? "is-current"
                     : order.deliveryStatus === "DELIVERED"

@@ -824,6 +824,16 @@ a {
   gap: 16px;
 }
 
+.dispatch-progress-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+
+.dispatch-progress-list .dispatch-card {
+  width: 100%;
+}
+
 .dispatch-dialog-header {
   display: flex;
   justify-content: space-between;
@@ -834,6 +844,12 @@ a {
 .dispatch-dialog-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.dispatch-progress-order-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 
@@ -1048,6 +1064,16 @@ a {
 .dispatch-pending-actions {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+
+.dispatch-pending-action-hint {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
 }
 
 .dispatch-card.has-warning {

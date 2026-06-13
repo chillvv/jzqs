@@ -366,24 +366,28 @@ export function DispatchHomePage() {
                         />
                       </td>
                       <td onClick={(e) => e.stopPropagation()}>
-                        {selectedPendingSet.has(item.orderId) && (
-                          <div className="dispatch-pending-actions">
-                            <button
-                              className="btn btn-primary btn-compact"
-                              disabled={!inlineAreas[item.orderId] || batchAssigning}
-                              onClick={() => handleSingleAssign(item.orderId)}
-                            >
-                              分配
-                            </button>
-                            <button
-                              className="btn-delete btn-compact"
-                              onClick={() => handleDeleteOrder(item.orderId, item.customerName)}
-                            >
-                              <Trash2 size={14} />
-                              删除
-                            </button>
-                          </div>
-                        )}
+                        <div className="dispatch-pending-actions">
+                          {selectedPendingSet.has(item.orderId) ? (
+                            <>
+                              <button
+                                className="btn btn-primary btn-compact"
+                                disabled={!inlineAreas[item.orderId] || batchAssigning}
+                                onClick={() => handleSingleAssign(item.orderId)}
+                              >
+                                确认归属
+                              </button>
+                              <button
+                                className="btn-delete btn-compact"
+                                onClick={() => handleDeleteOrder(item.orderId, item.customerName)}
+                              >
+                                <Trash2 size={14} />
+                                删除
+                              </button>
+                            </>
+                          ) : (
+                            <span className="dispatch-pending-action-hint">先勾选此单后再确认归属</span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
