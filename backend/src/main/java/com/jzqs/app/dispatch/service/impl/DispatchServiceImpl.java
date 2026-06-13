@@ -203,11 +203,12 @@ public class DispatchServiceImpl implements DispatchService {
                     da.rider_name,
                     da.area_code,
                     da.meal_slot_order_id AS order_id,
-                    da.sequence_number,
+                    COALESCE(NULLIF(da.sequence_number, 0), dbi.current_sequence, 0) AS sequence_number,
                     da.status AS delivery_status
                 FROM dispatch_assignments da
                 JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
+                LEFT JOIN dispatch_batch_items dbi ON dbi.meal_slot_order_id = da.meal_slot_order_id
                 WHERE doo.serve_date = ?
                   AND da.rider_name IS NOT NULL
                   AND da.rider_name <> ''
@@ -461,16 +462,39 @@ public class DispatchServiceImpl implements DispatchService {
     private void dispatchOrder(long orderId, String riderName, String areaCode, boolean syncAddressBinding) {
         jdbcTemplate.update("UPDATE meal_slot_orders SET status = 'DISPATCHING' WHERE id = ?", orderId);
         long riderProfileId = ensureRiderProfile(riderName, areaCode);
+        Map<String, Object> orderContext = loadOrderContext(orderId);
+        int sequenceNumber = nextAreaSequence(
+            areaCode,
+            toLocalDate(orderContext.get("serve_date")),
+            (String) orderContext.get("meal_period")
+        );
         Integer existing = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM dispatch_assignments WHERE meal_slot_order_id = ?", Integer.class, orderId);
         if (existing != null && existing > 0) {
             jdbcTemplate.update(
-                "UPDATE dispatch_assignments SET rider_name = ?, rider_profile_id = ?, area_code = ?, status = 'DISPATCHING' WHERE meal_slot_order_id = ?",
-                riderName, riderProfileId, areaCode, orderId
+                """
+                    UPDATE dispatch_assignments
+                    SET rider_name = ?,
+                        rider_profile_id = ?,
+                        area_code = ?,
+                        status = 'DISPATCHING',
+                        sequence_number = CASE WHEN sequence_number = 0 THEN ? ELSE sequence_number END
+                    WHERE meal_slot_order_id = ?
+                    """,
+                riderName, riderProfileId, areaCode, sequenceNumber, orderId
             );
         } else {
             insertAndReturnId(
-                "INSERT INTO dispatch_assignments (meal_slot_order_id, rider_name, rider_profile_id, area_code, status) VALUES (?, ?, ?, ?, ?)",
-                orderId, riderName, riderProfileId, areaCode, "DISPATCHING"
+                """
+                    INSERT INTO dispatch_assignments (
+                        meal_slot_order_id,
+                        rider_name,
+                        rider_profile_id,
+                        area_code,
+                        status,
+                        sequence_number
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                orderId, riderName, riderProfileId, areaCode, "DISPATCHING", sequenceNumber
             );
         }
         if (syncAddressBinding) {
@@ -1475,7 +1499,7 @@ public class DispatchServiceImpl implements DispatchService {
             """
                 SELECT
                     mso.id AS order_id,
-                    da.sequence_number,
+                    COALESCE(NULLIF(da.sequence_number, 0), dbi.current_sequence, 0) AS sequence_number,
                     c.name AS customer_name,
                     c.phone AS customer_phone,
                     ca.address_line AS delivery_address,
@@ -1493,6 +1517,7 @@ public class DispatchServiceImpl implements DispatchService {
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
                 JOIN customers c ON c.id = doo.customer_id
                 JOIN customer_addresses ca ON ca.id = mso.address_id
+                LEFT JOIN dispatch_batch_items dbi ON dbi.meal_slot_order_id = da.meal_slot_order_id
                 LEFT JOIN address_reference_images ari ON ari.customer_address_id = mso.address_id
                 LEFT JOIN (
                     SELECT meal_slot_order_id, receipt_url, receipt_note, delivered_at
@@ -1506,7 +1531,7 @@ public class DispatchServiceImpl implements DispatchService {
                   AND (? IS NULL OR mso.meal_period = ?)
                 ORDER BY 
                     CASE WHEN da.status = 'DELIVERED' THEN 1 ELSE 0 END,
-                    da.sequence_number, 
+                    COALESCE(NULLIF(da.sequence_number, 0), dbi.current_sequence, 0),
                     da.id
                 """,
             (rs, rowNum) -> new DispatchAreaOrderRow(
