@@ -116,7 +116,8 @@ Page({
       agreementSheetChecked: false,
       showAgreementSheet: false,
       pendingAgreementAction: '',
-      'profileForm.nickname': ''
+      'profileForm.nickname': '',
+      'profileForm.phoneNumber': String(phoneNumber || '').replace(/\D/g, '')
     });
   },
 
@@ -471,8 +472,15 @@ Page({
 
   async submitProfileCompletion() {
     const nickname = String(this.data.profileForm.nickname || '').trim();
-    if (!nickname) {
-      wx.showToast({ title: '请输入姓名', icon: 'none' });
+    const phoneNumber = this.data.profileForm.phoneNumber || (this.data.home && this.data.home.phone) || '';
+    const errorMessage = getSubmitProfileError({
+      mode: 'register',
+      nickname,
+      phoneNumber
+    });
+
+    if (errorMessage) {
+      wx.showToast({ title: errorMessage, icon: 'none' });
       return;
     }
 

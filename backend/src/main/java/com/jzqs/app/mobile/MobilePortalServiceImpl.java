@@ -677,6 +677,9 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         String areaCode,
         boolean isDefault
     ) {
+        ContactSnapshot contact = resolveCustomerAddressContact(customerId);
+        String finalAddressLine = requireAddressLine(addressLine);
+        String finalAreaCode = areaCode == null ? "" : areaCode.trim();
         if (isDefault) {
             jdbcTemplate.update("UPDATE customer_addresses SET is_default = FALSE WHERE customer_id = ?", customerId);
         }
@@ -686,13 +689,13 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
             customerId,
-            contactName.trim(),
-            contactPhone.trim(),
-            addressLine.trim(),
-            areaCode.trim(),
+            contact.name(),
+            contact.phone(),
+            finalAddressLine,
+            finalAreaCode,
             isDefault
         );
-        return new MobileAddressResponse(addressId, contactName.trim(), contactPhone.trim(), addressLine.trim(), areaCode.trim(), isDefault);
+        return new MobileAddressResponse(addressId, contact.name(), contact.phone(), finalAddressLine, finalAreaCode, isDefault);
     }
 
     @Transactional
@@ -1612,6 +1615,12 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     ) {
     }
 
+    private record ContactSnapshot(
+        String name,
+        String phone
+    ) {
+    }
+
     private long findCustomerIdByPhone(String phone) {
         Long customerId = jdbcTemplate.query(
             "SELECT id FROM customers WHERE phone = ? AND active = TRUE",
@@ -1622,6 +1631,33 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "未找到对应客户");
         }
         return customerId;
+    }
+
+    private ContactSnapshot resolveCustomerAddressContact(long customerId) {
+        Map<String, Object> customer = jdbcTemplate.queryForMap(
+            "SELECT name, phone FROM customers WHERE id = ? AND active = TRUE",
+            customerId
+        );
+        String finalName = String.valueOf(customer.get("name")).trim();
+        String finalPhone = String.valueOf(customer.get("phone")).replaceAll("\\D", "");
+        if (finalName.isBlank()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请先完善姓名");
+        }
+        if (!finalPhone.matches("^1\\d{10}$")) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请先完善手机号");
+        }
+        return new ContactSnapshot(finalName, finalPhone);
+    }
+
+    private String requireAddressLine(String addressLine) {
+        String value = addressLine == null ? "" : addressLine.trim();
+        if (value.length() < 4) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "详细地址至少 4 个字");
+        }
+        if (value.length() > 120) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "详细地址不能超过120个字");
+        }
+        return value;
     }
 
     private void ensureOrderingEnabled() {

@@ -56,12 +56,64 @@ const emptyAddressForm = {
   isDefault: false
 };
 
+function normalizeCustomerName(value: string) {
+  return String(value || "").trim();
+}
+
+function normalizeCustomerPhone(value: string) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function isValidCustomerName(value: string) {
+  return /^[\u4e00-\u9fa5A-Za-z·\s]{2,20}$/.test(normalizeCustomerName(value));
+}
+
+function isValidCustomerPhone(value: string) {
+  return /^1\d{10}$/.test(normalizeCustomerPhone(value));
+}
+
+function validateCustomerForm(input: { name: string; phone: string; addressLine?: string }) {
+  if (!normalizeCustomerName(input.name)) {
+    return "请填写客户姓名";
+  }
+  if (!isValidCustomerName(input.name)) {
+    return "请填写正确的客户姓名";
+  }
+  if (!normalizeCustomerPhone(input.phone)) {
+    return "请填写手机号";
+  }
+  if (!isValidCustomerPhone(input.phone)) {
+    return "请填写正确的11位手机号";
+  }
+  if (typeof input.addressLine === "string") {
+    const addressLine = input.addressLine.trim();
+    if (addressLine.length < 4 || addressLine.length > 120) {
+      return "收货地址长度需在4到120个字符之间";
+    }
+  }
+  return "";
+}
+
+function findDuplicateCustomer(items: CustomerAssetResponse[], current: { name: string; phone: string }, excludeId?: number | null) {
+  const targetName = normalizeCustomerName(current.name);
+  const targetPhone = normalizeCustomerPhone(current.phone);
+  return items.find((item) => {
+    if (excludeId != null && item.id === excludeId) {
+      return false;
+    }
+    return normalizeCustomerName(item.name) === targetName || normalizeCustomerPhone(item.phone) === targetPhone;
+  }) || null;
+}
+
 function buildEditForm(detail: CustomerDetailResponse | null, fallback: CustomerAssetResponse | null) {
   return {
     name: String(detail?.name || fallback?.name || ""),
     phone: String(detail?.phone || fallback?.phone || ""),
     remark: String(detail?.merchantRemark || fallback?.merchantRemark || ""),
-    customerStatus: String(detail?.customerStatus || fallback?.customerStatus || "INTENTION")
+    customerStatus: String(detail?.customerStatus || fallback?.customerStatus || "INTENTION"),
+    addressLine: "",
+    contactName: "",
+    contactPhone: ""
   };
 }
 
@@ -173,9 +225,11 @@ export function CustomerAssetPage() {
   }
 
   function buildAddressPayload(form: typeof emptyAddressForm): CustomerAddressMutationPayload {
+    const boundName = normalizeCustomerName(String(detail?.name || activeItem?.name || ""));
+    const boundPhone = normalizeCustomerPhone(String(detail?.phone || activeItem?.phone || ""));
     return {
-      contactName: form.contactName.trim(),
-      contactPhone: form.contactPhone.trim(),
+      contactName: boundName,
+      contactPhone: boundPhone,
       addressLine: form.addressLine.trim(),
       areaCode: form.areaCode.trim(),
       isDefault: form.isDefault
@@ -185,8 +239,13 @@ export function CustomerAssetPage() {
   async function handleAddressSubmit() {
     if (!activeItem) return;
     const payload = buildAddressPayload(addressForm);
-    if (!payload.contactName || !payload.contactPhone || !payload.addressLine) {
-      toast("请填写联系人、联系电话和收货地址", "error");
+    const validationError = validateCustomerForm({
+      name: payload.contactName,
+      phone: payload.contactPhone,
+      addressLine: payload.addressLine
+    });
+    if (validationError) {
+      toast(validationError, "error");
       return;
     }
     if (submittingAddress) {
@@ -307,9 +366,28 @@ export function CustomerAssetPage() {
   }
 
   async function handleCreateSubmit() {
-    if (!editForm.name || !editForm.phone) return;
-    if (!(editForm as any).addressLine || !(editForm as any).contactName || !(editForm as any).contactPhone) {
-      toast("请填写收货地址、联系人和联系电话", "error");
+    const validationError = validateCustomerForm({
+      name: editForm.name,
+      phone: editForm.phone,
+      addressLine: String((editForm as any).addressLine || "")
+    });
+    if (validationError) {
+      toast(validationError, "error");
+      return;
+    }
+    const duplicate = findDuplicateCustomer(items, { name: editForm.name, phone: editForm.phone });
+    if (duplicate) {
+      if (normalizeCustomerName(duplicate.name) === normalizeCustomerName(editForm.name)) {
+        toast("姓名已存在", "error");
+        return;
+      }
+      if (normalizeCustomerPhone(duplicate.phone) === normalizeCustomerPhone(editForm.phone)) {
+        toast("手机号已存在", "error");
+        return;
+      }
+    }
+    if (!(editForm as any).addressLine) {
+      toast("请填写收货地址", "error");
       return;
     }
     if (submittingCreate) {
@@ -318,12 +396,12 @@ export function CustomerAssetPage() {
     setSubmittingCreate(true);
     try {
       const newCustomer = await createCustomerProfile({
-        name: editForm.name,
-        phone: editForm.phone,
+        name: normalizeCustomerName(editForm.name),
+        phone: normalizeCustomerPhone(editForm.phone),
         merchantRemark: editForm.remark,
         addressLine: (editForm as any).addressLine,
-        contactName: (editForm as any).contactName,
-        contactPhone: (editForm as any).contactPhone
+        contactName: normalizeCustomerName(editForm.name),
+        contactPhone: normalizeCustomerPhone(editForm.phone)
       });
       
       const meals = Number((editForm as any).initialMeals);
@@ -336,27 +414,48 @@ export function CustomerAssetPage() {
       setEditForm(emptyEditForm);
       await reloadCustomers();
     } catch (err: any) {
-      window.alert(err?.response?.data?.message || err?.message || "创建用户失败，请检查输入或重试");
+      toast(err?.response?.data?.message || err?.message || "创建用户失败，请检查输入或重试", "error");
     } finally {
       setSubmittingCreate(false);
     }
   }
 
   async function handleInlineEditSubmit() {
-    if (!activeItem || !editForm.name || !editForm.phone) return;
+    if (!activeItem) return;
+    const validationError = validateCustomerForm({
+      name: editForm.name,
+      phone: editForm.phone
+    });
+    if (validationError) {
+      toast(validationError, "error");
+      return;
+    }
+    const duplicate = findDuplicateCustomer(items, { name: editForm.name, phone: editForm.phone }, activeItem.id);
+    if (duplicate) {
+      if (normalizeCustomerName(duplicate.name) === normalizeCustomerName(editForm.name)) {
+        toast("姓名已存在", "error");
+        return;
+      }
+      if (normalizeCustomerPhone(duplicate.phone) === normalizeCustomerPhone(editForm.phone)) {
+        toast("手机号已存在", "error");
+        return;
+      }
+    }
     if (submittingProfile) {
       return;
     }
     setSubmittingProfile(true);
     try {
       await updateCustomerProfile(activeItem.id, {
-        name: editForm.name,
-        phone: editForm.phone,
+        name: normalizeCustomerName(editForm.name),
+        phone: normalizeCustomerPhone(editForm.phone),
         merchantRemark: editForm.remark,
         customerStatus: editForm.customerStatus
       });
       await refreshCustomerWorkspace(activeItem);
       setDetailMode("view");
+    } catch (err: any) {
+      toast(err?.response?.data?.message || err?.message || "保存失败", "error");
     } finally {
       setSubmittingProfile(false);
     }
@@ -662,7 +761,7 @@ export function CustomerAssetPage() {
                         </div>
                         <div className="form-group">
                           <label className="form-label"><span className="required">*</span>联系电话</label>
-                          <input className="form-control" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+                          <input className="form-control" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: normalizeCustomerPhone(e.target.value) })} />
                         </div>
                       </div>
                       <div className="customer-detail-inline-form__remark">
@@ -814,19 +913,19 @@ export function CustomerAssetPage() {
                         </div>
                         <div className="customer-edit-form-grid">
                           <div className="form-group">
-                            <label className="form-label"><span className="required">*</span>联系人</label>
+                            <label className="form-label"><span className="required">*</span>联系人（绑定客户）</label>
                             <input
                               className="form-control"
-                              value={addressForm.contactName}
-                              onChange={(e) => setAddressForm({ ...addressForm, contactName: e.target.value })}
+                              value={String(detail?.name || activeItem?.name || "")}
+                              readOnly
                             />
                           </div>
                           <div className="form-group">
-                            <label className="form-label"><span className="required">*</span>联系电话</label>
+                            <label className="form-label"><span className="required">*</span>联系电话（绑定客户）</label>
                             <input
                               className="form-control"
-                              value={addressForm.contactPhone}
-                              onChange={(e) => setAddressForm({ ...addressForm, contactPhone: e.target.value })}
+                              value={String(detail?.phone || activeItem?.phone || "")}
+                              readOnly
                             />
                           </div>
                         </div>
@@ -974,7 +1073,7 @@ export function CustomerAssetPage() {
                     </div>
                     <div className="form-group">
                         <label className="form-label"><span className="required">*</span>联系电话</label>
-                        <input className="form-control" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} />
+                        <input className="form-control" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: normalizeCustomerPhone(e.target.value) })} />
                     </div>
                 </div>
                 <div className="form-group" style={{ marginTop: "16px" }}>
@@ -996,12 +1095,12 @@ export function CustomerAssetPage() {
                 </div>
                 <div className="customer-edit-form-grid">
                     <div className="form-group">
-                        <label className="form-label"><span className="required">*</span>联系人</label>
-                        <input className="form-control" value={(editForm as any).contactName} onChange={(e) => setEditForm({ ...editForm, contactName: e.target.value } as any)} placeholder="请输入联系人姓名" />
+                        <label className="form-label"><span className="required">*</span>联系人（绑定客户）</label>
+                        <input className="form-control" value={editForm.name} readOnly />
                     </div>
                     <div className="form-group">
-                        <label className="form-label"><span className="required">*</span>联系电话</label>
-                        <input className="form-control" value={(editForm as any).contactPhone} onChange={(e) => setEditForm({ ...editForm, contactPhone: e.target.value } as any)} placeholder="请输入联系电话" />
+                        <label className="form-label"><span className="required">*</span>联系电话（绑定客户）</label>
+                        <input className="form-control" value={normalizeCustomerPhone(editForm.phone)} readOnly />
                     </div>
                 </div>
                 <div className="customer-create-remark-field">

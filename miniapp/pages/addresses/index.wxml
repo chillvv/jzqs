@@ -51,12 +51,8 @@
     </view>
     <scroll-view scroll-y class="popup-body" style="padding-top: 20rpx;">
       <view class="inline-form-item">
-        <view class="inline-form-label">联系人</view>
-        <input class="form-input" data-field="contactName" value="{{form.contactName}}" bindinput="onInputChange" placeholder="请输入联系人姓名" />
-      </view>
-      <view class="inline-form-item">
-        <view class="inline-form-label">手机号</view>
-        <input class="form-input" data-field="contactPhone" value="{{form.contactPhone}}" bindinput="onInputChange" placeholder="请输入联系电话" />
+        <view class="inline-form-label">当前登录用户</view>
+        <view class="subpage-subtitle">{{customerProfile.name || '未设置姓名'}} {{customerProfile.phone || ''}}</view>
       </view>
       <view class="inline-form-item">
         <view class="inline-form-label">详细地址</view>

@@ -1,5 +1,36 @@
 const { request } = require('../../utils/request');
 
+function normalizePhone(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function buildEmptyForm(customerProfile, isDefault) {
+  return {
+    id: null,
+    contactName: customerProfile.name || '',
+    contactPhone: customerProfile.phone || '',
+    addressLine: '',
+    isDefault: Boolean(isDefault)
+  };
+}
+
+function validateAddressForm(form, customerProfile) {
+  const contactName = String(customerProfile.name || '').trim();
+  const contactPhone = normalizePhone(customerProfile.phone);
+  const addressLine = String(form.addressLine || '').trim();
+
+  if (!contactName || !contactPhone) {
+    return '请先完善姓名和手机号';
+  }
+  if (addressLine.length < 4) {
+    return '详细地址至少 4 个字';
+  }
+  if (addressLine.length > 120) {
+    return '详细地址不能超过120个字';
+  }
+  return '';
+}
+
 Page({
   data: {
     items: [],
@@ -9,13 +40,11 @@ Page({
     selectOrderId: null,
     statusBarHeight: 0,
     navBarHeight: 44,
-    form: {
-      id: null,
-      contactName: '',
-      contactPhone: '',
-      addressLine: '',
-      isDefault: true
-    }
+    customerProfile: {
+      name: '',
+      phone: ''
+    },
+    form: buildEmptyForm({ name: '', phone: '' }, true)
   },
 
   onLoad(options) {
@@ -43,11 +72,40 @@ Page({
   },
 
   onShow() {
-    this.loadAddresses();
+    Promise.all([
+      this.loadCustomerProfile(),
+      this.loadAddresses()
+    ]).catch(() => {});
   },
 
   onPullDownRefresh() {
-    this.loadAddresses();
+    Promise.all([
+      this.loadCustomerProfile(),
+      this.loadAddresses()
+    ]).catch(() => {});
+  },
+
+  async loadCustomerProfile() {
+    try {
+      const home = await request({
+        url: '/api/mobile/customer/home'
+      });
+      const customerProfile = {
+        name: String(home && home.name ? home.name : '').trim(),
+        phone: normalizePhone(home && home.phone ? home.phone : '')
+      };
+      const nextForm = {
+        ...this.data.form,
+        contactName: customerProfile.name,
+        contactPhone: customerProfile.phone
+      };
+      this.setData({
+        customerProfile,
+        form: nextForm
+      });
+    } catch (error) {
+      wx.showToast({ title: error.message || '用户信息加载失败', icon: 'none' });
+    }
   },
 
   async loadAddresses() {
@@ -68,15 +126,10 @@ Page({
   },
 
   showAddPopup() {
+    const { customerProfile, items } = this.data;
     this.setData({
       showPopup: true,
-      form: {
-        id: null,
-        contactName: '',
-        contactPhone: '',
-        addressLine: '',
-        isDefault: false
-      }
+      form: buildEmptyForm(customerProfile, items.length === 0)
     });
   },
 
@@ -85,15 +138,15 @@ Page({
   },
 
   editAddress(e) {
-    const id = e.currentTarget.dataset.id;
-    const address = this.data.items.find(item => item.id === id);
+    const id = Number(e.currentTarget.dataset.id);
+    const address = this.data.items.find(item => Number(item.id) === id);
     if (address) {
       this.setData({
         showPopup: true,
         form: {
           id: address.id,
-          contactName: address.contactName,
-          contactPhone: address.contactPhone,
+          contactName: this.data.customerProfile.name,
+          contactPhone: this.data.customerProfile.phone,
           addressLine: address.addressLine,
           isDefault: address.isDefault
         }
@@ -140,8 +193,6 @@ Page({
     wx.chooseAddress({
       success: (res) => {
         this.setData({
-          'form.contactName': res.userName || '',
-          'form.contactPhone': res.telNumber || '',
           'form.addressLine': `${res.provinceName || ''}${res.cityName || ''}${res.countyName || ''}${res.detailInfo || ''}`.trim()
         });
         wx.showToast({ title: '已导入微信地址', icon: 'success' });
@@ -156,11 +207,20 @@ Page({
     if (this.data.saving) {
       return;
     }
-    const { id, contactName, contactPhone, addressLine, isDefault } = this.data.form;
-    if (!contactName.trim() || !contactPhone.trim() || !addressLine.trim()) {
-      wx.showToast({ title: '请完整填写地址信息', icon: 'none' });
+    const { id, addressLine, isDefault } = this.data.form;
+    const { customerProfile } = this.data;
+    const validationError = validateAddressForm(this.data.form, customerProfile);
+    if (validationError) {
+      wx.showToast({ title: validationError, icon: 'none' });
       return;
     }
+    const payload = {
+      contactName: customerProfile.name.trim(),
+      contactPhone: normalizePhone(customerProfile.phone),
+      addressLine: addressLine.trim(),
+      areaCode: '',
+      isDefault
+    };
     this.setData({ saving: true });
     try {
       if (id) {
@@ -168,37 +228,21 @@ Page({
           url: `/api/mobile/customer/addresses/${id}`,
           method: 'PUT',
           header: { 'content-type': 'application/json' },
-          data: {
-            contactName: contactName.trim(),
-            contactPhone: contactPhone.trim(),
-            addressLine: addressLine.trim(),
-            isDefault
-          }
+          data: payload
         });
       } else {
         await request({
           url: '/api/mobile/customer/addresses',
           method: 'POST',
           header: { 'content-type': 'application/json' },
-          data: {
-            contactName: contactName.trim(),
-            contactPhone: contactPhone.trim(),
-            addressLine: addressLine.trim(),
-            isDefault
-          }
+          data: payload
         });
       }
 
       wx.showToast({ title: '地址已保存', icon: 'success' });
       this.setData({
         showPopup: false,
-        form: {
-          id: null,
-          contactName: '',
-          contactPhone: '',
-          addressLine: '',
-          isDefault: false
-        }
+        form: buildEmptyForm(customerProfile, false)
       });
       this.loadAddresses();
     } catch (error) {

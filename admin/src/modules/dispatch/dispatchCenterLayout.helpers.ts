@@ -177,10 +177,15 @@ export function riderStatusTagClass(status: string) {
 }
 
 export function validateCreateRiderDraft(draft: NewRiderDraft) {
-  if (!draft.riderName.trim()) {
+  const riderName = draft.riderName.trim();
+  const phone = draft.phone.trim();
+  if (!riderName) {
     return "请填写骑手姓名";
   }
-  if (!draft.phone.trim() || !/^1\d{10}$/.test(draft.phone.trim())) {
+  if (!/^[\u4e00-\u9fa5A-Za-z·\s]{2,20}$/.test(riderName)) {
+    return "请填写正确的骑手姓名";
+  }
+  if (!phone || !/^1\d{10}$/.test(phone)) {
     return "请填写正确的手机号";
   }
   return null;

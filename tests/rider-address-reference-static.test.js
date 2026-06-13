@@ -32,7 +32,9 @@ assert(
   'portal service must auto-seed first receipt image'
 );
 assert(queueJs.includes('batchReferenceMode'), 'queue page must support batch reference mode');
-assert(queueWxml.includes('批量参考图'), 'queue page must render batch reference entry');
+assert(queueWxml.includes('批量传图'), 'queue page must render batch reference entry');
+assert(queueWxml.includes('有备注'), 'queue page should show the concise remark tag');
+assert.equal(queueWxml.includes('需留意'), false, 'queue page should remove the old attention tag');
 assert(
   taskService.includes('saveBatchAddressReferenceImage'),
   'task service must support batch address reference api'
@@ -42,6 +44,7 @@ assert(
   'order detail must load reference image on demand'
 );
 assert(detailWxml.includes('查看参考图'), 'order detail must render view reference image button');
+assert.equal(detailWxml.includes('特殊单：'), false, 'order detail should remove special-order copy');
 assert(
   detailJs.includes('showReferenceSheet'),
   'order detail must manage reference image inside an internal sheet'

@@ -70,6 +70,7 @@ public class RiderAdminServiceImpl implements RiderAdminService {
     @Transactional
     public RiderDetailResponse create(RiderCreateRequest request) {
         assertRiderNameUnique(request.riderName(), null);
+        assertRiderPhoneUnique(request.phone(), null);
         LocalDateTime now = LocalDateTime.now();
 
         RiderEntity entity = new RiderEntity();
@@ -100,10 +101,14 @@ public class RiderAdminServiceImpl implements RiderAdminService {
         if (!newRiderName.equals(existing.getRiderName())) {
             assertRiderNameUnique(newRiderName, riderId);
         }
+        String newPhone = request.phone().trim();
+        if (!newPhone.equals(existing.getPhone())) {
+            assertRiderPhoneUnique(newPhone, riderId);
+        }
 
         existing.setRiderName(newRiderName);
         existing.setDisplayName(request.displayName().trim());
-        existing.setPhone(request.phone().trim());
+        existing.setPhone(newPhone);
         existing.setEmploymentStatus(request.employmentStatus() != null ? request.employmentStatus().trim() : existing.getEmploymentStatus());
         existing.setAuthStatus(request.authStatus() != null ? request.authStatus().trim() : existing.getAuthStatus());
         existing.setDefaultAreaCode(request.areaCode() != null ? request.areaCode().trim() : null);
@@ -133,6 +138,18 @@ public class RiderAdminServiceImpl implements RiderAdminService {
         Long count = riderMapper.selectCount(wrapper);
         if (count != null && count > 0) {
             throw new BusinessException(ErrorCode.USERNAME_ALREADY_EXISTS, "骑手名称已存在");
+        }
+    }
+
+    private void assertRiderPhoneUnique(String phone, Long excludeId) {
+        LambdaQueryWrapper<RiderEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(RiderEntity::getPhone, phone.trim());
+        if (excludeId != null) {
+            wrapper.ne(RiderEntity::getId, excludeId);
+        }
+        Long count = riderMapper.selectCount(wrapper);
+        if (count != null && count > 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "手机号已存在");
         }
     }
 

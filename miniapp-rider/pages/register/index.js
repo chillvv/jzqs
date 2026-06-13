@@ -4,6 +4,18 @@
 
 const auth = require('../../utils/auth');
 
+function normalizePhone(value) {
+  return String(value || '').replace(/\D/g, '');
+}
+
+function normalizeName(value) {
+  return String(value || '').trim();
+}
+
+function isValidName(value) {
+  return /^[\u4e00-\u9fa5A-Za-z·\s]{2,20}$/.test(normalizeName(value));
+}
+
 Page({
   data: {
     statusBarHeight: 0,
@@ -44,7 +56,7 @@ Page({
   },
 
   onPhoneInput(e) {
-    this.setData({ phone: e.detail.value });
+    this.setData({ phone: normalizePhone(e.detail.value) });
   },
 
   onAgreeChange(e) {
@@ -52,11 +64,17 @@ Page({
   },
 
   async onRegister() {
-    const { phone, name, agreed } = this.data;
+    const { agreed } = this.data;
+    const phone = normalizePhone(this.data.phone);
+    const name = normalizeName(this.data.name);
 
     // 验证表单
-    if (!name || name.trim() === '') {
+    if (!name) {
       wx.showToast({ title: '请输入姓名', icon: 'none' });
+      return;
+    }
+    if (!isValidName(name)) {
+      wx.showToast({ title: '请输入正确的姓名', icon: 'none' });
       return;
     }
 

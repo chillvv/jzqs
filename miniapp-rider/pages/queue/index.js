@@ -128,6 +128,12 @@ Page({
       specialSummary: item.specialSummary || [item.specialTag, item.note && item.note !== '-' ? '用户备注' : '', item.adminNote ? '商家备注' : '']
         .filter(Boolean)
         .join(' / '),
+      hasRemark: Boolean(
+        (item.note && item.note !== '-')
+        || (item.adminNote && item.adminNote !== '-')
+        || (item.customerNote && item.customerNote !== '-')
+        || (item.merchantNote && item.merchantNote !== '-')
+      ),
       batchSelected: selectedSet.has(item.batchItemId)
     }));
     const visibleIds = new Set(normalizedItems.map(item => item.batchItemId));

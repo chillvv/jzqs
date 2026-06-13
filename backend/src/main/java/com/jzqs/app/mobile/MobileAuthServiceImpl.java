@@ -115,9 +115,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         String finalPhone = requirePhone(phone);
         LocalDateTime now = LocalDateTime.now();
         Long customerId = findCustomerIdByOpenid(finalOpenid);
-        if (customerId == null) {
-            customerId = findCustomerIdByPhone(finalPhone);
-        }
+        validateUniqueCustomerPhone(finalPhone, customerId);
         if (customerId == null) {
             jdbcTemplate.update(
                 """
@@ -231,6 +229,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         Long riderId = findRiderIdByPhone(finalPhone);
         
         if (riderId == null) {
+            validateUniqueRiderName(finalNickname.isEmpty() ? "骑手" + finalPhone.substring(7) : finalNickname, null);
             // 新用户：自动创建账号（状态：UNASSIGNED）
             jdbcTemplate.update(
                 """
@@ -469,7 +468,8 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         String finalPhone = requirePhone(phone);
         String finalNickname = requireNickname(nickname);
         LocalDateTime now = LocalDateTime.now();
-        Long customerId = findCustomerIdByPhone(finalPhone);
+        Long customerId = findCustomerIdByOpenid(finalOpenid);
+        validateUniqueCustomerPhone(finalPhone, customerId);
         if (customerId == null) {
             validateUniqueNickname(finalNickname, null);
             jdbcTemplate.update(
@@ -661,7 +661,44 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             currentCustomerId
         );
         if (count != null && count > 0) {
-            throw new BusinessException(ErrorCode.USERNAME_ALREADY_EXISTS, "该姓名已被使用，请更换称呼");
+            throw new BusinessException(ErrorCode.USERNAME_ALREADY_EXISTS, "姓名已存在，请更换姓名");
+        }
+    }
+
+    private void validateUniqueCustomerPhone(String phone, Long currentCustomerId) {
+        Integer count = jdbcTemplate.queryForObject(
+            """
+                SELECT COUNT(*)
+                FROM customers
+                WHERE phone = ?
+                  AND active = TRUE
+                  AND (? IS NULL OR id <> ?)
+                """,
+            Integer.class,
+            phone,
+            currentCustomerId,
+            currentCustomerId
+        );
+        if (count != null && count > 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "手机号已存在，请更换手机号");
+        }
+    }
+
+    private void validateUniqueRiderName(String riderName, Long currentRiderId) {
+        Integer count = jdbcTemplate.queryForObject(
+            """
+                SELECT COUNT(*)
+                FROM rider_profiles
+                WHERE rider_name = ?
+                  AND (? IS NULL OR id <> ?)
+                """,
+            Integer.class,
+            riderName,
+            currentRiderId,
+            currentRiderId
+        );
+        if (count != null && count > 0) {
+            throw new BusinessException(ErrorCode.USERNAME_ALREADY_EXISTS, "骑手姓名已存在");
         }
     }
 
@@ -780,6 +817,9 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         if (value.isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请输入姓名");
         }
+        if (!value.matches("^[\\u4e00-\\u9fa5A-Za-z·\\s]{2,20}$")) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请输入正确的姓名");
+        }
         return value;
     }
 
@@ -848,6 +888,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         String finalName = requireNickname(name);
         String finalOpenid = openid != null && !openid.trim().isEmpty() ? openid.trim() : null;
         LocalDateTime now = LocalDateTime.now().withNano(0);
+        validateUniqueRiderName(finalName, null);
 
         // 检查手机号是否已注册
         Long existingRiderId = jdbcTemplate.query(

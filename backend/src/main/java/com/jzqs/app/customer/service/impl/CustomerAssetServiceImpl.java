@@ -192,8 +192,9 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         String customerStatus = blankToDefault(stringValue(payload.get("customerStatus")), "INTENTION");
         
         String addressLine = blankToNull(stringValue(payload.get("addressLine")));
-        String contactName = blankToNull(stringValue(payload.get("contactName")));
-        String contactPhone = blankToNull(stringValue(payload.get("contactPhone")));
+        name = requireCustomerName(name);
+        phone = requireCustomerPhone(phone);
+        addressLine = requireCustomerAddressLine(addressLine);
 
         if (!phone.isBlank()) {
             boolean phoneExists = customerMapper.selectCount(new LambdaQueryWrapper<CustomerEntity>().eq(CustomerEntity::getPhone, phone)) > 0;
@@ -203,9 +204,6 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         }
         if (initialMealDelta < 0) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "初始加餐数量不能小于 0");
-        }
-        if (addressLine == null || contactName == null || contactPhone == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "收货地址、联系人、联系电话必填");
         }
         
         boolean nameExists = customerMapper.selectCount(new LambdaQueryWrapper<CustomerEntity>()
@@ -232,12 +230,11 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         customer.setUpdatedAt(now);
         customerMapper.insert(customer);
 
-        Timestamp tsNow = Timestamp.valueOf(now);
         jdbcTemplate.update("""
             INSERT INTO customer_addresses (
-                customer_id, contact_name, contact_phone, address_line, area_code, is_default, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, TRUE, ?, ?)
-            """, customer.getId(), contactName, contactPhone, addressLine, "", tsNow, tsNow);
+                customer_id, contact_name, contact_phone, address_line, area_code, is_default
+            ) VALUES (?, ?, ?, ?, ?, TRUE)
+            """, customer.getId(), name, phone, addressLine, "");
 
         if (initialMealDelta > 0) {
             MealWalletEntity wallet = findOrCreateWallet(customer.getId());
@@ -258,7 +255,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         }
 
         if (payload.containsKey("name")) {
-            String newName = blankToDefault(stringValue(payload.get("name")), customer.getName());
+            String newName = requireCustomerName(blankToDefault(stringValue(payload.get("name")), customer.getName()));
             if (!newName.equals(customer.getName())) {
                 boolean nameExists = customerMapper.selectCount(new LambdaQueryWrapper<CustomerEntity>()
                     .eq(CustomerEntity::getName, newName)
@@ -270,7 +267,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             customer.setName(newName);
         }
         if (payload.containsKey("phone")) {
-            String newPhone = blankToDefault(stringValue(payload.get("phone")), customer.getPhone());
+            String newPhone = requireCustomerPhone(blankToDefault(stringValue(payload.get("phone")), customer.getPhone()));
             if (!newPhone.equals(customer.getPhone()) && !newPhone.isBlank()) {
                 boolean phoneExists = customerMapper.selectCount(new LambdaQueryWrapper<CustomerEntity>().eq(CustomerEntity::getPhone, newPhone)) > 0;
                 if (phoneExists) {
@@ -307,6 +304,12 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         
         customer.setUpdatedAt(LocalDateTime.now());
         customerMapper.updateById(customer);
+        jdbcTemplate.update(
+            "UPDATE customer_addresses SET contact_name = ?, contact_phone = ? WHERE customer_id = ?",
+            customer.getName(),
+            customer.getPhone(),
+            customerId
+        );
 
         return Map.of("customerId", customerId, "status", "UPDATED");
     }
@@ -315,24 +318,22 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
     @Transactional
     public Map<String, Object> createCustomerAddress(long customerId, Map<String, Object> payload) {
         requireActiveCustomer(customerId);
-        AddressPayload address = normalizeAddressPayload(payload);
+        AddressPayload address = normalizeAddressPayload(customerId, payload);
         if (address.isDefault()) {
             jdbcTemplate.update("UPDATE customer_addresses SET is_default = FALSE WHERE customer_id = ?", customerId);
         }
         long addressId = insertAndReturnId(
             """
                 INSERT INTO customer_addresses (
-                    customer_id, contact_name, contact_phone, address_line, area_code, is_default, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    customer_id, contact_name, contact_phone, address_line, area_code, is_default
+                ) VALUES (?, ?, ?, ?, ?, ?)
                 """,
             customerId,
             address.contactName(),
             address.contactPhone(),
             address.addressLine(),
             address.areaCode(),
-            address.isDefault(),
-            Timestamp.valueOf(LocalDateTime.now()),
-            Timestamp.valueOf(LocalDateTime.now())
+            address.isDefault()
         );
         return Map.of("customerId", customerId, "addressId", addressId, "status", "CREATED");
     }
@@ -342,14 +343,14 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
     public Map<String, Object> updateCustomerAddress(long customerId, long addressId, Map<String, Object> payload) {
         requireActiveCustomer(customerId);
         requireExistingCustomerAddress(customerId, addressId);
-        AddressPayload address = normalizeAddressPayload(payload);
+        AddressPayload address = normalizeAddressPayload(customerId, payload);
         if (address.isDefault()) {
             jdbcTemplate.update("UPDATE customer_addresses SET is_default = FALSE WHERE customer_id = ?", customerId);
         }
         jdbcTemplate.update(
             """
                 UPDATE customer_addresses
-                SET contact_name = ?, contact_phone = ?, address_line = ?, area_code = ?, is_default = ?, updated_at = ?
+                SET contact_name = ?, contact_phone = ?, address_line = ?, area_code = ?, is_default = ?
                 WHERE id = ? AND customer_id = ?
                 """,
             address.contactName(),
@@ -357,7 +358,6 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             address.addressLine(),
             address.areaCode(),
             address.isDefault(),
-            Timestamp.valueOf(LocalDateTime.now()),
             addressId,
             customerId
         );
@@ -622,16 +622,47 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         }
     }
 
-    private AddressPayload normalizeAddressPayload(Map<String, Object> payload) {
-        String contactName = blankToNull(stringValue(payload.get("contactName")));
-        String contactPhone = blankToNull(stringValue(payload.get("contactPhone")));
+    private AddressPayload normalizeAddressPayload(long customerId, Map<String, Object> payload) {
+        ContactSnapshot contact = resolveCustomerContact(customerId);
         String addressLine = blankToNull(stringValue(payload.get("addressLine")));
         String areaCode = blankToDefault(stringValue(payload.get("areaCode")), "");
         boolean isDefault = booleanValue(payload.get("isDefault"), false);
-        if (contactName == null || contactPhone == null || addressLine == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "联系人、联系电话、收货地址必填");
+        return new AddressPayload(contact.name(), contact.phone(), requireCustomerAddressLine(addressLine), areaCode, isDefault);
+    }
+
+    private ContactSnapshot resolveCustomerContact(long customerId) {
+        CustomerEntity customer = customerMapper.selectById(customerId);
+        if (customer == null || !Boolean.TRUE.equals(customer.getActive())) {
+            throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "客户不存在");
         }
-        return new AddressPayload(contactName, contactPhone, addressLine, areaCode, isDefault);
+        return new ContactSnapshot(
+            requireCustomerName(customer.getName()),
+            requireCustomerPhone(customer.getPhone())
+        );
+    }
+
+    private String requireCustomerName(String name) {
+        String value = blankToDefault(name, "").trim();
+        if (!value.matches("^[\\u4e00-\\u9fa5A-Za-z·\\s]{2,20}$")) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请填写正确的客户姓名");
+        }
+        return value;
+    }
+
+    private String requireCustomerPhone(String phone) {
+        String value = blankToDefault(phone, "").trim();
+        if (!value.matches("^1\\d{10}$")) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请填写正确的11位手机号");
+        }
+        return value;
+    }
+
+    private String requireCustomerAddressLine(String addressLine) {
+        String value = blankToDefault(addressLine, "").trim();
+        if (value.length() < 4 || value.length() > 120) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "收货地址长度需在4到120个字符之间");
+        }
+        return value;
     }
 
     private String normalizeCustomerNoteType(String noteType) {
@@ -839,6 +870,12 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         String addressLine,
         String areaCode,
         boolean isDefault
+    ) {
+    }
+
+    private record ContactSnapshot(
+        String name,
+        String phone
     ) {
     }
 

@@ -2,6 +2,10 @@ function isValidPhone(phone) {
   return /^1\d{10}$/.test(String(phone || '').trim());
 }
 
+function isValidNickname(nickname) {
+  return /^[\u4e00-\u9fa5A-Za-z·\s]{2,20}$/.test(String(nickname || '').trim());
+}
+
 function resolvePhoneAuthResult(detail) {
   if (!detail || detail.errMsg !== 'getPhoneNumber:ok') {
     return {
@@ -24,6 +28,10 @@ function getSubmitProfileError({ mode, nickname, phoneNumber }) {
     return '请输入姓名';
   }
 
+  if (finalMode === 'register' && !isValidNickname(nickname)) {
+    return '请输入正确的姓名';
+  }
+
   if (!String(phoneNumber || '').trim()) {
     return '请输入手机号';
   }
@@ -37,6 +45,7 @@ function getSubmitProfileError({ mode, nickname, phoneNumber }) {
 
 module.exports = {
   isValidPhone,
+  isValidNickname,
   resolvePhoneAuthResult,
   getSubmitProfileError
 };
