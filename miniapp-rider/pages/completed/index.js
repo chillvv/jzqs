@@ -18,11 +18,41 @@ Page({
     receiptTempFilePath: '',
     receiptPreviewUrl: '',
     receiptNote: '',
-    submitting: false
+    submitting: false,
+    refreshInterval: null
   },
 
   async onLoad() {
     await this.loadCompletedTasks();
+  },
+
+  onShow() {
+    this.startAutoRefresh();
+  },
+
+  onHide() {
+    this.stopAutoRefresh();
+  },
+
+  startAutoRefresh() {
+    this.stopAutoRefresh();
+    this.data.refreshInterval = setInterval(() => {
+      if (!this._isPaused()) {
+        this.loadCompletedTasks();
+      }
+    }, 8000);
+  },
+
+  stopAutoRefresh() {
+    if (this.data.refreshInterval) {
+      clearInterval(this.data.refreshInterval);
+      this.setData({ refreshInterval: null });
+    }
+  },
+
+  _isPaused() {
+    const { showEditModal, submitting } = this.data;
+    return showEditModal || submitting;
   },
 
   onPullDownRefresh() {

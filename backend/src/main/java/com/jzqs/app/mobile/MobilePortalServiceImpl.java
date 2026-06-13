@@ -902,7 +902,9 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             LEFT JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
             WHERE da.rider_name = ?
               AND do.serve_date = CURRENT_DATE
-            ORDER BY CASE WHEN da.status = 'DISPATCHING' THEN 0 ELSE 1 END, da.id DESC
+            ORDER BY CASE WHEN mso.meal_period = 'LUNCH' THEN 1 ELSE 2 END,
+                     COALESCE(da.sequence_number, 2147483647),
+                     da.id
             """, (rs, rowNum) -> new RiderTaskItemResponse(
             rs.getLong("dispatch_id"),
             rs.getLong("meal_slot_order_id"),
@@ -1391,14 +1393,80 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         if (batchItemIds == null || batchItemIds.isEmpty()) {
             return Map.of("updatedCount", 0);
         }
-        int sequence = 1;
+
+        List<Map<String, Object>> currentRows = jdbcTemplate.query(
+            """
+                SELECT id, batch_id, current_sequence
+                FROM dispatch_batch_items
+                WHERE id IN (%s)
+                ORDER BY current_sequence ASC, id ASC
+                """.formatted("?,".repeat(batchItemIds.size()).replaceAll(",$", "")),
+            ps -> {
+                for (int i = 0; i < batchItemIds.size(); i++) {
+                    ps.setLong(i + 1, batchItemIds.get(i));
+                }
+            },
+            rs -> {
+                List<Map<String, Object>> rows = new ArrayList<>();
+                while (rs.next()) {
+                    Map<String, Object> row = new HashMap<>();
+                    row.put("id", rs.getLong("id"));
+                    row.put("batchId", rs.getLong("batch_id"));
+                    row.put("sequence", rs.getInt("current_sequence"));
+                    rows.add(row);
+                }
+                return rows;
+            }
+        );
+        if (currentRows.isEmpty()) {
+            return Map.of("updatedCount", 0);
+        }
+
+        Long batchId = ((Number) currentRows.get(0).get("batchId")).longValue();
+        for (Map<String, Object> row : currentRows) {
+            long currentBatchId = ((Number) row.get("batchId")).longValue();
+            if (currentBatchId != batchId.longValue()) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "一次只能调整同一配送批次的顺序");
+            }
+        }
+
+        List<Long> fullBatchOrder = jdbcTemplate.query(
+            """
+                SELECT id
+                FROM dispatch_batch_items
+                WHERE batch_id = ?
+                ORDER BY current_sequence ASC, id ASC
+                """,
+            (rs, rowNum) -> rs.getLong("id"),
+            batchId
+        );
+        Map<Long, Boolean> submittedIds = new HashMap<>();
         for (Long batchItemId : batchItemIds) {
+            submittedIds.put(batchItemId, Boolean.TRUE);
+        }
+        List<Long> mergedOrder = new ArrayList<>();
+        int reorderedIndex = 0;
+        for (Long existingId : fullBatchOrder) {
+            if (Boolean.TRUE.equals(submittedIds.get(existingId))) {
+                mergedOrder.add(batchItemIds.get(reorderedIndex++));
+            } else {
+                mergedOrder.add(existingId);
+            }
+        }
+
+        jdbcTemplate.update(
+            "UPDATE dispatch_batch_items SET current_sequence = current_sequence + 1000 WHERE batch_id = ?",
+            batchId
+        );
+        int sequence = 1;
+        for (Long batchItemId : mergedOrder) {
             jdbcTemplate.update("""
                 UPDATE dispatch_batch_items
                 SET current_sequence = ?, manually_adjusted = TRUE, reordered_by = ?, reordered_at = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """, sequence++, riderName, batchItemId);
         }
+        syncDispatchAssignmentsFromBatch(batchId);
         return Map.of("updatedCount", batchItemIds.size(), "status", "REORDERED");
     }
 
@@ -1552,6 +1620,48 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             batchStatus,
             batchId
         );
+        syncDispatchAssignmentsFromBatch(batchId);
+    }
+
+    private void syncDispatchAssignmentsFromBatch(long batchId) {
+        jdbcTemplate.query(
+            """
+                SELECT meal_slot_order_id, current_sequence, item_status
+                FROM dispatch_batch_items
+                WHERE batch_id = ?
+                ORDER BY current_sequence ASC, id ASC
+                """,
+            ps -> ps.setLong(1, batchId),
+            rs -> {
+                while (rs.next()) {
+                    long orderId = rs.getLong("meal_slot_order_id");
+                    int sequenceNumber = rs.getInt("current_sequence");
+                    String assignmentStatus = mapAssignmentStatus(rs.getString("item_status"));
+                    jdbcTemplate.update(
+                        """
+                            UPDATE dispatch_assignments
+                            SET sequence_number = ?,
+                                status = ?
+                            WHERE meal_slot_order_id = ?
+                        """,
+                        sequenceNumber,
+                        assignmentStatus,
+                        orderId
+                    );
+                }
+                return null;
+            }
+        );
+    }
+
+    private String mapAssignmentStatus(String itemStatus) {
+        if ("DELIVERED".equals(itemStatus)) {
+            return "DELIVERED";
+        }
+        if ("DEFERRED".equals(itemStatus)) {
+            return "DEFERRED";
+        }
+        return "DISPATCHING";
     }
 
     private void sendDeliverySubscriptionIfAuthorized(long mealSlotOrderId) {

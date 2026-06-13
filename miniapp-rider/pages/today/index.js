@@ -12,7 +12,8 @@ Page({
       deliveredCount: 0,
       remainingCount: 0
     },
-    cards: []
+    cards: [],
+    refreshInterval: null
   },
   async onShow() {
     const app = getApp();
@@ -36,6 +37,25 @@ Page({
       return;
     }
     this.loadSummary();
+    this.startAutoRefresh();
+  },
+
+  onHide() {
+    this.stopAutoRefresh();
+  },
+
+  startAutoRefresh() {
+    this.stopAutoRefresh();
+    this.data.refreshInterval = setInterval(() => {
+      this.loadSummary();
+    }, 8000);
+  },
+
+  stopAutoRefresh() {
+    if (this.data.refreshInterval) {
+      clearInterval(this.data.refreshInterval);
+      this.setData({ refreshInterval: null });
+    }
   },
   onPullDownRefresh() {
     if (this.data.viewState !== 'active') {

@@ -35,7 +35,52 @@ Page({
     referenceUploading: false,
     referenceImageUrl: '',
     hasReferenceImage: false,
-    showReferenceSheet: false
+    showReferenceSheet: false,
+    refreshInterval: null
+  },
+
+  /**
+   * 页面显示
+   */
+  onShow() {
+    this.startAutoRefresh();
+  },
+
+  /**
+   * 页面隐藏
+   */
+  onHide() {
+    this.stopAutoRefresh();
+  },
+
+  /**
+   * 启动自动刷新
+   */
+  startAutoRefresh() {
+    this.stopAutoRefresh();
+    this.data.refreshInterval = setInterval(() => {
+      if (!this._isPaused() && this.data.order) {
+        this.loadOrderDetail(this.data.order.batchItemId, this.data.order.mealSlotOrderId);
+      }
+    }, 8000);
+  },
+
+  /**
+   * 停止自动刷新
+   */
+  stopAutoRefresh() {
+    if (this.data.refreshInterval) {
+      clearInterval(this.data.refreshInterval);
+      this.setData({ refreshInterval: null });
+    }
+  },
+
+  /**
+   * 判断是否暂停刷新（有进行中的交互）
+   */
+  _isPaused() {
+    const { submitting, deferring, isEditingReceipt, referenceUploading, showReferenceSheet } = this.data;
+    return submitting || deferring || isEditingReceipt || referenceUploading || showReferenceSheet;
   },
 
   /**

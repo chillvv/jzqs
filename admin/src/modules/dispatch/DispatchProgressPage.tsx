@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapPinned, PackageCheck, Truck, UserRound } from "lucide-react";
 import { fetchDispatchAreaBindings, fetchDispatchRiderProgress } from "../../shared/api/http";
 import { AdminDialog } from "../../shared/components/AdminDialog";
@@ -7,11 +7,15 @@ import type { DispatchAreaBindingResponse, DispatchRiderProgressResponse } from 
 import { hasDisplayValue, hasOrderAttention, normalizeDispatchAreaBindings } from "./dispatchCenterLayout.helpers";
 import { useDispatchContext } from "./DispatchContext";
 
+const AUTO_REFRESH_MS = 8000;
+
 function dispatchOrderStatusLabel(status: string, isCurrent: boolean) {
   if (isCurrent) return "当前配送";
   switch (status) {
     case "DELIVERED":
       return "已送达";
+    case "DEFERRED":
+      return "已稍后";
     case "DISPATCHING":
       return "配送中";
     default:
@@ -55,20 +59,40 @@ export function DispatchProgressPage() {
   const [riderProgress, setRiderProgress] = useState<DispatchRiderProgressResponse[]>([]);
   const [selectedGroupKey, setSelectedGroupKey] = useState<string>();
   const [selectedOrderId, setSelectedOrderId] = useState<number>();
+  const reloadingRef = useRef(false);
+
+  const reloadAll = useCallback(async (silent = false) => {
+    if (reloadingRef.current) return;
+    reloadingRef.current = true;
+    try {
+      const results = await Promise.allSettled([
+        fetchDispatchRiderProgress(mealPeriod, serveDate),
+        fetchDispatchAreaBindings(mealPeriod, serveDate),
+      ]);
+      const [progressResult, bindingsResult] = results;
+      if (progressResult.status === "fulfilled") setRiderProgress(progressResult.value);
+      if (bindingsResult.status === "fulfilled") {
+        setAreaBindings(normalizeDispatchAreaBindings(bindingsResult.value));
+      }
+      if (!silent && (progressResult.status === "rejected" || bindingsResult.status === "rejected")) {
+        const error = progressResult.status === "rejected" ? progressResult.reason : bindingsResult.reason;
+        throw error;
+      }
+    } finally {
+      reloadingRef.current = false;
+    }
+  }, [mealPeriod, serveDate]);
 
   useEffect(() => {
     reloadAll().catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"));
-  }, [mealPeriod, serveDate]);
+  }, [reloadAll]);
 
-  async function reloadAll() {
-    const results = await Promise.allSettled([
-      fetchDispatchRiderProgress(mealPeriod, serveDate),
-      fetchDispatchAreaBindings(mealPeriod, serveDate),
-    ]);
-    const [progressResult, bindingsResult] = results;
-    if (progressResult.status === "fulfilled") setRiderProgress(progressResult.value);
-    if (bindingsResult.status === "fulfilled") setAreaBindings(normalizeDispatchAreaBindings(bindingsResult.value));
-  }
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      reloadAll(true).catch(() => undefined);
+    }, AUTO_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, [reloadAll]);
 
   const progressGroups = useMemo<ProgressGroup[]>(() => {
     const groups = new Map<string, ProgressGroup>();

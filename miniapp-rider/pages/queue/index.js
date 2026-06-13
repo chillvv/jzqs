@@ -3,6 +3,7 @@
  * 拖拽排序 v2：插入索引 + 平移动画
  */
 const taskService = require('../../services/task.service');
+const AUTO_REFRESH_MS = 8000;
 
 Page({
   data: {
@@ -66,7 +67,16 @@ Page({
       app.globalData.queueMealFilter = null;
     }
 
+    this.startAutoRefresh();
     this.loadQueue();
+  },
+
+  onHide() {
+    this.stopAutoRefresh();
+  },
+
+  onUnload() {
+    this.stopAutoRefresh();
   },
 
   onScrollRefresh() {
@@ -76,14 +86,23 @@ Page({
     });
   },
 
-  async loadQueue() {
+  async loadQueue(options = {}) {
+    const { silent = false } = options;
     const app = getApp();
     const riderName = app.getActiveRiderName();
     if (!riderName) {
-      wx.showToast({ title: '骑手信息未就绪', icon: 'none' });
+      if (!silent) {
+        wx.showToast({ title: '骑手信息未就绪', icon: 'none' });
+      }
       return;
     }
-    this.setData({ loading: true });
+    if (this._queueLoading) {
+      return;
+    }
+    this._queueLoading = true;
+    if (!silent) {
+      this.setData({ loading: true });
+    }
     try {
       const page = await taskService.getQueue(riderName);
       const items = page.items || [];
@@ -91,9 +110,37 @@ Page({
       this.calculateMealStats(items);
       this.filterCurrentMealItems();
     } catch (error) {
-      wx.showToast({ title: error.message || '加载失败', icon: 'none' });
+      if (!silent) {
+        wx.showToast({ title: error.message || '加载失败', icon: 'none' });
+      }
     } finally {
-      this.setData({ loading: false });
+      this._queueLoading = false;
+      if (!silent) {
+        this.setData({ loading: false });
+      }
+    }
+  },
+
+  startAutoRefresh() {
+    this.stopAutoRefresh();
+    this._autoRefreshTimer = setInterval(() => {
+      if (
+        this.data.viewState !== 'active'
+        || this.data.isEditMode
+        || this.data.dragging
+        || this.data.batchReferenceMode
+        || this.data.batchSubmitting
+      ) {
+        return;
+      }
+      this.loadQueue({ silent: true });
+    }, AUTO_REFRESH_MS);
+  },
+
+  stopAutoRefresh() {
+    if (this._autoRefreshTimer) {
+      clearInterval(this._autoRefreshTimer);
+      this._autoRefreshTimer = null;
     }
   },
 

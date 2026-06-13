@@ -1,9 +1,11 @@
 const { request } = require('../../utils/request');
+const AUTO_REFRESH_MS = 8000;
 
 function mapDeliveryStatusLabel(status) {
   const map = {
     DISPATCHING: '配送中',
     PENDING_DISPATCH: '待取餐',
+    DEFERRED: '已稍后',
     DELIVERED: '已送达'
   };
   return map[status] || status;
@@ -16,6 +18,9 @@ function mapReceiptStatusLabel(status) {
 function statusClass(status) {
   if (status === 'DELIVERED') {
     return 'tag-green';
+  }
+  if (status === 'DEFERRED') {
+    return 'tag-amber';
   }
   if (status === 'DISPATCHING') {
     return 'tag-blue';
@@ -50,14 +55,28 @@ Page({
   onShow() {
     const app = getApp();
     this.setData({ riderName: app.globalData.riderName });
+    this.startAutoRefresh();
     this.loadData();
+  },
+  onHide() {
+    this.stopAutoRefresh();
+  },
+  onUnload() {
+    this.stopAutoRefresh();
   },
   onPullDownRefresh() {
     this.loadData();
   },
-  async loadData() {
+  async loadData(options = {}) {
+    const { silent = false } = options;
     const app = getApp();
-    this.setData({ loading: true });
+    if (this._dataLoading) {
+      return;
+    }
+    this._dataLoading = true;
+    if (!silent) {
+      this.setData({ loading: true });
+    }
     try {
       const page = await request({ url: `/api/mobile/rider/tasks?riderName=${app.globalData.riderName}` });
       const items = (page.items || []).map((item) => ({
@@ -72,10 +91,30 @@ Page({
       }));
       this.setData({ items: this.filterItems(items) });
     } catch (error) {
-      wx.showToast({ title: error.message || '加载失败', icon: 'none' });
+      if (!silent) {
+        wx.showToast({ title: error.message || '加载失败', icon: 'none' });
+      }
     } finally {
-      this.setData({ loading: false });
-      wx.stopPullDownRefresh();
+      this._dataLoading = false;
+      if (!silent) {
+        this.setData({ loading: false });
+        wx.stopPullDownRefresh();
+      }
+    }
+  },
+  startAutoRefresh() {
+    this.stopAutoRefresh();
+    this._autoRefreshTimer = setInterval(() => {
+      if (this.data.submittingTaskId != null) {
+        return;
+      }
+      this.loadData({ silent: true });
+    }, AUTO_REFRESH_MS);
+  },
+  stopAutoRefresh() {
+    if (this._autoRefreshTimer) {
+      clearInterval(this._autoRefreshTimer);
+      this._autoRefreshTimer = null;
     }
   },
   filterItems(items) {
