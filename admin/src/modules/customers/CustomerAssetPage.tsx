@@ -40,7 +40,7 @@ const emptyEditForm = {
   name: "",
   phone: "",
   remark: "",
-  customerStatus: "INTENTION",
+  customerStatus: "FORMAL",
   initialMeals: "0",
   addressLine: "",
   contactName: "",
@@ -113,7 +113,7 @@ function buildEditForm(
     name: String(detail?.name || fallback?.name || ""),
     phone: String(detail?.phone || fallback?.phone || ""),
     remark: String(detail?.merchantRemark || fallback?.merchantRemark || ""),
-    customerStatus: String(detail?.customerStatus || fallback?.customerStatus || "INTENTION"),
+    customerStatus: String(detail?.customerStatus || fallback?.customerStatus || "FORMAL"),
     initialMeals: "0",
     addressLine: "",
     contactName: "",
@@ -551,7 +551,6 @@ export function CustomerAssetPage() {
             value={customerStatusFilter}
             options={[
               { label: "全部状态", value: "ALL" },
-              { label: "意向客户", value: "INTENTION" },
               { label: "正式客户", value: "FORMAL" },
               { label: "沉睡客户", value: "DORMANT" }
             ]}
@@ -737,7 +736,6 @@ export function CustomerAssetPage() {
                       <AppSelect
                         value={editForm.customerStatus}
                         options={[
-                          { label: "意向客户", value: "INTENTION" },
                           { label: "正式客户", value: "FORMAL" },
                           { label: "沉睡客户", value: "DORMANT" }
                         ]}

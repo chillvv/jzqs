@@ -91,7 +91,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
                 customer.getId(),
                 customer.getName(),
                 customer.getPhone(),
-                blankToDefault(customer.getCustomerStatus(), "INTENTION"),
+                normalizeCustomerStatus(customer.getCustomerStatus()),
                 wallet == null ? 0 : nvl(wallet.getTotalMeals()),
                 remainingMeals,
                 hasOpenedCard,
@@ -165,7 +165,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         detail.put("id", customer.getId());
         detail.put("name", customer.getName());
         detail.put("phone", customer.getPhone());
-        detail.put("customerStatus", blankToDefault(customer.getCustomerStatus(), "INTENTION"));
+        detail.put("customerStatus", normalizeCustomerStatus(customer.getCustomerStatus()));
         detail.put("merchantRemark", blankToNull(customer.getMerchantRemark()));
         detail.put("priorityCustomer", false);
         detail.put("registeredAt", formatDateTime(customer.getRegisteredAt() != null ? customer.getRegisteredAt() : customer.getCreatedAt()));
@@ -189,7 +189,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         String name = blankToDefault(stringValue(payload.get("name")), "未命名客户");
         int initialMealDelta = intValue(payload.get("initialMealDelta"), 0);
         String initialMealRemark = blankToNull(stringValue(payload.get("initialMealRemark")));
-        String customerStatus = blankToDefault(stringValue(payload.get("customerStatus")), "INTENTION");
+        String customerStatus = normalizeCustomerStatus(stringValue(payload.get("customerStatus")));
         
         String addressLine = blankToNull(stringValue(payload.get("addressLine")));
         name = requireCustomerName(name);
@@ -280,7 +280,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             customer.setMerchantRemark(blankToNull(stringValue(payload.get("merchantRemark"))));
         }
         if (payload.containsKey("customerStatus")) {
-            customer.setCustomerStatus(blankToDefault(stringValue(payload.get("customerStatus")), customer.getCustomerStatus()));
+            customer.setCustomerStatus(normalizeCustomerStatus(stringValue(payload.get("customerStatus"))));
         }
         
         // 处理 defaultUserRemark 更新
@@ -663,6 +663,14 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "收货地址长度需在4到120个字符之间");
         }
         return value;
+    }
+
+    private String normalizeCustomerStatus(String status) {
+        String value = blankToDefault(status, "FORMAL").trim().toUpperCase();
+        if ("DORMANT".equals(value)) {
+            return "DORMANT";
+        }
+        return "FORMAL";
     }
 
     private String normalizeCustomerNoteType(String noteType) {

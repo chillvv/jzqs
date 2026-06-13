@@ -448,15 +448,26 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         String likeKeyword = "%" + normalizedKeyword + "%";
         List<Map<String, Object>> customerRows = jdbcTemplate.queryForList(
             """
-                SELECT c.id, c.name, c.phone,
-                       COALESCE((SELECT mw.total_meals - mw.reserved_meals - mw.consumed_meals FROM meal_wallets mw WHERE mw.customer_id = c.id AND mw.active = TRUE), 0) AS remaining_meals
+                SELECT c.id,
+                       COALESCE(c.name, '') AS name,
+                       COALESCE(c.phone, '') AS phone,
+                       COALESCE(mw.total_meals, 0) - COALESCE(mw.reserved_meals, 0) - COALESCE(mw.consumed_meals, 0) AS remaining_meals
                 FROM customers c
+                LEFT JOIN (
+                    SELECT customer_id,
+                           SUM(total_meals) AS total_meals,
+                           SUM(reserved_meals) AS reserved_meals,
+                           SUM(consumed_meals) AS consumed_meals
+                    FROM meal_wallets
+                    WHERE active = TRUE
+                    GROUP BY customer_id
+                ) mw ON mw.customer_id = c.id
                 WHERE c.active = TRUE
-                  AND (c.name LIKE ? OR c.phone LIKE ?)
+                  AND (COALESCE(c.name, '') LIKE ? OR COALESCE(c.phone, '') LIKE ?)
                 ORDER BY CASE
-                    WHEN c.phone = ? THEN 0
-                    WHEN c.phone LIKE ? THEN 1
-                    WHEN c.name = ? THEN 2
+                    WHEN COALESCE(c.phone, '') = ? THEN 0
+                    WHEN COALESCE(c.phone, '') LIKE ? THEN 1
+                    WHEN COALESCE(c.name, '') = ? THEN 2
                     ELSE 3
                 END, c.id DESC
                 LIMIT 20

@@ -23,7 +23,6 @@ export type CustomerAssetFilters = {
 
 export function buildCustomerAssetStats(items: CustomerAssetResponse[]) {
   return {
-    intentionCount: items.filter((item) => item.customerStatus === "INTENTION").length,
     formalCount: items.filter((item) => item.customerStatus === "FORMAL").length,
     dormantCount: items.filter((item) => item.customerStatus === "DORMANT").length,
     fixedSubscriptionCount: items.filter((item) => item.fixedSubscriptionEnabled).length
@@ -94,10 +93,9 @@ export function normalizeInitialMealsValue(value: string | null | undefined) {
 }
 
 export function resolveCustomerStatusLabel(status: string) {
-  if (status === "INTENTION") return "意向客户";
   if (status === "FORMAL") return "正式客户";
   if (status === "DORMANT") return "沉睡客户";
-  return status || "-";
+  return "正式客户";
 }
 
 export function resolveCustomerOrderModeLabel(item: CustomerAssetResponse) {
