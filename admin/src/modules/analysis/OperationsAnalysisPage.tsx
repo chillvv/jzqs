@@ -6,6 +6,7 @@ import { buildAnalysisInsights, formatMoney } from "./operationsAnalysisPage.hel
 import { formatDateLabel } from "../../shared/utils/dateTime";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { RemarkField } from "../../shared/components/RemarkField";
+import { toast } from "../../shared/components/Toast";
 
 const emptyOverview: AnalysisOverviewResponse = {
   date: "",
@@ -38,7 +39,7 @@ export function OperationsAnalysisPage() {
   );
 
   useEffect(() => {
-    reload().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)));
+    reload().catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"));
   }, []);
 
   async function reload() {
@@ -63,7 +64,7 @@ export function OperationsAnalysisPage() {
 
   async function submitAddCost() {
     if (!costForm.costDate || !costForm.amount || isNaN(Number(costForm.amount))) {
-      window.alert("请输入正确的日期和金额");
+      toast("请输入正确的日期和金额", "error");
       return;
     }
     if (submittingAddCost) {
@@ -80,6 +81,9 @@ export function OperationsAnalysisPage() {
       });
       setIsAddCostOpen(false);
       await reload();
+      toast("成本已录入");
+    } catch (err: any) {
+      toast(err?.response?.data?.message || err?.message || "录入成本失败", "error");
     } finally {
       setSubmittingAddCost(false);
     }

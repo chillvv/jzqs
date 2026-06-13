@@ -22,6 +22,7 @@ import type {
 } from "../../shared/api/types";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { AdminDialog } from "../../shared/components/AdminDialog";
+import { toast } from "../../shared/components/Toast";
 import {
   buildDispatchAreaStats,
   DEFAULT_OPERATOR,
@@ -50,6 +51,14 @@ type DeleteBlockedState = {
   activeOrderCount: number;
   orders: DispatchAreaBlockingOrder[];
 };
+
+function getErrorMessage(error: unknown, fallback = "操作失败") {
+  if (typeof error === "object" && error !== null) {
+    const errorLike = error as { response?: { data?: { message?: string } }; message?: string };
+    return errorLike.response?.data?.message || errorLike.message || fallback;
+  }
+  return typeof error === "string" ? error : fallback;
+}
 
 // 可拖拽的订单项组件
 function DraggableOrderItem({ 
@@ -191,7 +200,7 @@ export function DispatchAreasPage() {
   const [submittingDeleteOrder, setSubmittingDeleteOrder] = useState(false);
 
   useEffect(() => {
-    reload().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)));
+    reload().catch((err) => toast(getErrorMessage(err, "加载区域与骑手失败"), "error"));
   }, [mealPeriod, serveDate]);
 
   const riderOptions = useMemo(
@@ -253,10 +262,12 @@ export function DispatchAreasPage() {
       setSelectedRiderId("");
       await reload();
       if (result.assignedCount === 0) {
-        window.alert(`已将 ${rider.riderName} 绑定为「${assignRiderAreaCode}」的默认骑手，但当前${mealPeriodLabel(mealPeriod)}该区域暂无待分配订单，新订单归入后会自动指派。`);
+        toast(`已将 ${rider.riderName} 绑定为「${assignRiderAreaCode}」的默认骑手，但当前${mealPeriodLabel(mealPeriod)}该区域暂无待分配订单，新订单归入后会自动指派。`);
+      } else {
+        toast(`已将 ${rider.riderName} 绑定到 ${assignRiderAreaCode}`);
       }
     } catch (err: any) {
-      window.alert(err?.response?.data?.message || err.message || String(err));
+      toast(getErrorMessage(err, "更换区域骑手失败"), "error");
     } finally {
       setSavingArea(null);
     }
@@ -274,8 +285,9 @@ export function DispatchAreasPage() {
       setNewArea({ name: "", riderId: "" });
       setShowCreateModal(false);
       await reload();
+      toast("区域已创建");
     } catch (err: any) {
-      window.alert(err?.response?.data?.message || err.message || String(err));
+      toast(getErrorMessage(err, "创建区域失败"), "error");
     } finally {
       setSavingArea(null);
     }
@@ -291,8 +303,9 @@ export function DispatchAreasPage() {
       });
       setMoveState(null);
       await reload();
+      toast("订单已移到目标区域");
     } catch (err: any) {
-      window.alert(err?.response?.data?.message || err.message || String(err));
+      toast(getErrorMessage(err, "移出订单失败"), "error");
     } finally {
       setSavingArea(null);
     }
@@ -311,9 +324,9 @@ export function DispatchAreasPage() {
       await deleteOrder(deleteConfirmState.orderId);
       setDeleteConfirmState(null);
       await reload();
-      window.alert('订单已删除');
+      toast("订单已删除");
     } catch (err: any) {
-      window.alert(err?.response?.data?.message || err.message || String(err));
+      toast(getErrorMessage(err, "删除订单失败"), "error");
     } finally {
       setSubmittingDeleteOrder(false);
     }
@@ -343,8 +356,9 @@ export function DispatchAreasPage() {
       await reload();
       setIsReordering(false);
       setLocalOrders([]);
+      toast("区域内订单顺序已更新");
     } catch (err: any) {
-      window.alert(err?.response?.data?.message || err.message || String(err));
+      toast(getErrorMessage(err, "保存排序失败"), "error");
     } finally {
       setSavingArea(null);
     }
@@ -386,8 +400,9 @@ export function DispatchAreasPage() {
       }
       cancelRename();
       await reload();
+      toast("区域名称已更新");
     } catch (err: any) {
-      window.alert(err?.response?.data?.message || err.message || String(err));
+      toast(getErrorMessage(err, "修改区域名称失败"), "error");
     } finally {
       setSavingArea(null);
     }
@@ -405,6 +420,7 @@ export function DispatchAreasPage() {
       }
       setDeletingArea(null);
       await reload();
+      toast("区域已删除");
     } catch (err: any) {
       if (err instanceof DispatchAreaDeleteBlockedError) {
         setDeleteBlockedState({
@@ -415,7 +431,7 @@ export function DispatchAreasPage() {
         });
         return;
       }
-      window.alert(err?.response?.data?.message || err.message || String(err));
+      toast(getErrorMessage(err, "删除区域失败"), "error");
     } finally {
       setSavingArea(null);
     }
@@ -442,8 +458,9 @@ export function DispatchAreasPage() {
       setAssignRiderAreaCode(null);
       setSelectedRiderId("");
       await reload();
+      toast("区域默认骑手已刷新");
     } catch (err: any) {
-      window.alert(err?.response?.data?.message || err.message || String(err));
+      toast(getErrorMessage(err, "刷新区域骑手失败"), "error");
     } finally {
       setSavingArea(null);
     }
@@ -458,9 +475,9 @@ export function DispatchAreasPage() {
       await assignRiderToAreaOrder(activeArea.areaCode, orderRiderChangeState.orderId, rider.riderName);
       setOrderRiderChangeState(null);
       await reload();
-      window.alert(`已将订单 #${orderRiderChangeState.orderId} 分配给 ${rider.riderName}`);
+      toast(`已将订单 #${orderRiderChangeState.orderId} 分配给 ${rider.riderName}`);
     } catch (err: any) {
-      window.alert(err?.response?.data?.message || err.message || String(err));
+      toast(getErrorMessage(err, "切换订单骑手失败"), "error");
     } finally {
       setSavingArea(null);
     }
@@ -983,7 +1000,7 @@ export function DispatchAreasPage() {
             <button 
               className="btn-delete"
               disabled={submittingDeleteOrder}
-              onClick={() => confirmDeleteOrder().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}
+              onClick={() => confirmDeleteOrder().catch((err) => toast(getErrorMessage(err, "删除订单失败"), "error"))}
             >
               <Trash2 size={16} />
               {submittingDeleteOrder ? "确认删除中..." : "确认删除"}

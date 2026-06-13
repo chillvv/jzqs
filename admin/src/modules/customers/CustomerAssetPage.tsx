@@ -33,6 +33,7 @@ import {
 } from "./customerAssetPage.helpers";
 import { formatDateTimeLabel } from "../../shared/utils/dateTime";
 import { AppSelect } from "../../shared/components/AppSelect";
+import { AdminDialog } from "../../shared/components/AdminDialog";
 import { RemarkField } from "../../shared/components/RemarkField";
 import { toast } from "../../shared/components/Toast";
 
@@ -92,6 +93,17 @@ function validateCustomerForm(input: { name: string; phone: string; addressLine?
     }
   }
   return "";
+}
+
+function resolveErrorMessage(error: unknown, fallback = "操作失败") {
+  if (typeof error === "object" && error !== null) {
+    const errorLike = error as {
+      response?: { data?: { message?: string } };
+      message?: string;
+    };
+    return errorLike.response?.data?.message || errorLike.message || fallback;
+  }
+  return typeof error === "string" ? error : fallback;
 }
 
 function findDuplicateCustomer(items: CustomerAssetResponse[], current: { name: string; phone: string }, excludeId?: number | null) {
@@ -158,6 +170,7 @@ export function CustomerAssetPage() {
   const [isAddressExpanded, setIsAddressExpanded] = useState(false);
   const [isAddressEditorOpen, setIsAddressEditorOpen] = useState(false);
   const [editingAddressId, setEditingAddressId] = useState<number | null>(null);
+  const [deleteAddressTarget, setDeleteAddressTarget] = useState<CustomerAddressItem | null>(null);
   const [addressForm, setAddressForm] = useState(emptyAddressForm);
   const [submittingProfile, setSubmittingProfile] = useState(false);
   const [submittingAddress, setSubmittingAddress] = useState(false);
@@ -165,6 +178,9 @@ export function CustomerAssetPage() {
   const [submittingGrant, setSubmittingGrant] = useState(false);
   const [submittingCreate, setSubmittingCreate] = useState(false);
   const [submittingDeduct, setSubmittingDeduct] = useState(false);
+  const deductCount = Number(deductForm.mealDelta || 0);
+  const remainingMeals = activeItem?.remainingMeals ?? 0;
+  const deductDisabled = remainingMeals <= 0 || deductCount <= 0 || remainingMeals < deductCount;
 
   const [detailActionLabel, deductActionLabel] = useMemo(() => buildCustomerActionLabels(), []);
 
@@ -179,7 +195,7 @@ export function CustomerAssetPage() {
   );
 
   useEffect(() => {
-    reloadCustomers().catch((error) => window.alert(error?.response?.data?.message || error.message || String(error)));
+    reloadCustomers().catch((error) => toast(resolveErrorMessage(error, "加载客户列表失败"), "error"));
   }, []);
 
   async function reloadCustomers() {
@@ -293,21 +309,24 @@ export function CustomerAssetPage() {
     }
   }
 
-  async function handleDeleteAddress(address: CustomerAddressItem) {
+  function handleRequestDeleteAddress(address: CustomerAddressItem) {
+    setDeleteAddressTarget(address);
+  }
+
+  async function handleDeleteAddress() {
     if (!activeItem) return;
-    if (!window.confirm(`确认删除地址“${address.addressLine}”吗？`)) {
-      return;
-    }
+    if (!deleteAddressTarget) return;
     if (submittingAddress) {
       return;
     }
     setSubmittingAddress(true);
-    setSubmittingAddressActionId(address.id);
+    setSubmittingAddressActionId(deleteAddressTarget.id);
     try {
-      await deleteCustomerAddress(activeItem.id, address.id);
+      await deleteCustomerAddress(activeItem.id, deleteAddressTarget.id);
       await refreshCustomerWorkspace(activeItem);
       setIsAddressExpanded(true);
       resetAddressEditor();
+      setDeleteAddressTarget(null);
     } finally {
       setSubmittingAddress(false);
       setSubmittingAddressActionId(null);
@@ -331,6 +350,10 @@ export function CustomerAssetPage() {
 
   async function handleDeductSubmit() {
     if (!activeItem || !deductForm.mealDelta) return;
+    if (deductDisabled) {
+      toast("余额不足", "error");
+      return;
+    }
     if (submittingDeduct) {
       return;
     }
@@ -495,7 +518,7 @@ export function CustomerAssetPage() {
 
   const renderActions = (item: CustomerAssetResponse) => (
     <div className="customer-action-group">
-      <button type="button" className="customer-action-btn customer-action-btn--primary" onClick={() => handleOpenDetail(item).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+      <button type="button" className="customer-action-btn customer-action-btn--primary" onClick={() => handleOpenDetail(item).catch((err) => toast(resolveErrorMessage(err, "打开客户详情失败"), "error"))}>
         {detailActionLabel}
       </button>
       <button
@@ -577,12 +600,12 @@ export function CustomerAssetPage() {
             ]}
             onChange={(value) => setOrderModeFilter(value as CustomerOrderModeFilter)}
           />
-          <button className="btn btn-primary" onClick={() => reloadCustomers().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}><Search size={16} /> 刷新</button>
+          <button className="btn btn-primary" onClick={() => reloadCustomers().catch((err) => toast(resolveErrorMessage(err, "刷新客户列表失败"), "error"))}><Search size={16} /> 刷新</button>
           <button
             className="btn btn-outline"
             onClick={() => {
               resetCustomerFilters();
-              reloadCustomers().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)));
+              reloadCustomers().catch((err) => toast(resolveErrorMessage(err, "重置后刷新客户列表失败"), "error"));
             }}
           >
             <RotateCcw size={16} /> 重置
@@ -714,7 +737,7 @@ export function CustomerAssetPage() {
                   {detailMode === "edit" ? (
                     <>
                       <button className="btn btn-outline" disabled={submittingProfile} onClick={handleCancelInlineEdit}>取消编辑</button>
-                      <button className="btn btn-primary" disabled={submittingProfile} onClick={() => handleInlineEditSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>{submittingProfile ? "保存中..." : "保存资料"}</button>
+                      <button className="btn btn-primary" disabled={submittingProfile} onClick={() => handleInlineEditSubmit().catch((err) => toast(resolveErrorMessage(err, "保存资料失败"), "error"))}>{submittingProfile ? "保存中..." : "保存资料"}</button>
                     </>
                   ) : (
                     <button className="btn btn-outline" onClick={handleStartInlineEdit}>编辑资料</button>
@@ -866,7 +889,7 @@ export function CustomerAssetPage() {
                                     type="button"
                                     className="btn btn-outline"
                                     disabled={submittingAddress}
-                                    onClick={() => handleSetDefaultAddress(address).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}
+                                    onClick={() => handleSetDefaultAddress(address).catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"))}
                                   >
                                     {submittingAddress && submittingAddressActionId === address.id ? "处理中..." : "设为默认"}
                                   </button>
@@ -883,7 +906,7 @@ export function CustomerAssetPage() {
                                   type="button"
                                   className="btn btn-danger"
                                   disabled={detailAddresses.length <= 1 || submittingAddress}
-                                  onClick={() => handleDeleteAddress(address).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}
+                                  onClick={() => handleRequestDeleteAddress(address)}
                                 >
                                   {submittingAddress && submittingAddressActionId === address.id ? "处理中..." : "删除"}
                                 </button>
@@ -975,7 +998,7 @@ export function CustomerAssetPage() {
                             type="button"
                             className="btn btn-primary"
                             disabled={submittingAddress}
-                            onClick={() => handleAddressSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}
+                            onClick={() => handleAddressSubmit().catch((err) => toast(resolveErrorMessage(err, "保存地址失败"), "error"))}
                           >
                             {submittingAddress ? "保存中..." : "保存地址"}
                           </button>
@@ -1001,7 +1024,7 @@ export function CustomerAssetPage() {
                     />
                   </div>
                   <div className="customer-detail-card__actions">
-                    <button className="btn btn-primary" disabled={submittingGrant} onClick={() => handleGrantSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>{submittingGrant ? "充值中..." : "确认充值"}</button>
+                    <button className="btn btn-primary" disabled={submittingGrant} onClick={() => handleGrantSubmit().catch((err) => toast(resolveErrorMessage(err, "充值失败"), "error"))}>{submittingGrant ? "充值中..." : "确认充值"}</button>
                   </div>
                 </section>
               </div>
@@ -1120,7 +1143,7 @@ export function CustomerAssetPage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-outline" disabled={submittingCreate} onClick={() => { setIsEditOpen(false); setIsCreating(false); }}>取消</button>
-              <button className="btn btn-primary" disabled={submittingCreate} onClick={() => handleCreateSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>{submittingCreate ? "创建中..." : "确认创建"}</button>
+              <button className="btn btn-primary" disabled={submittingCreate} onClick={() => handleCreateSubmit().catch((err) => toast(resolveErrorMessage(err, "创建客户失败"), "error"))}>{submittingCreate ? "创建中..." : "确认创建"}</button>
             </div>
           </div>
         </div>
@@ -1146,6 +1169,12 @@ export function CustomerAssetPage() {
               </div>
               <section className="customer-operation-panel customer-operation-panel--danger">
                 <div className="customer-operation-panel__title">本次扣餐信息</div>
+                <div
+                  className="customer-operation-panel__hint"
+                  style={{ color: deductDisabled ? "var(--error-color-dark)" : "var(--text-sub)" }}
+                >
+                  当前剩余餐次：{remainingMeals}{deductDisabled ? "，余额不足" : ""}
+                </div>
                 <div className="customer-operation-form-grid">
                   <div className="form-group">
                     <label className="form-label"><span className="required">*</span>扣减数量</label>
@@ -1163,11 +1192,37 @@ export function CustomerAssetPage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-outline" disabled={submittingDeduct} onClick={() => setIsDeductOpen(false)}>取消</button>
-              <button className="btn btn-danger" disabled={submittingDeduct} onClick={() => handleDeductSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>{submittingDeduct ? "扣减中..." : "确认扣减"}</button>
+              <button
+                className="btn btn-danger"
+                disabled={submittingDeduct || deductDisabled}
+                onClick={() => handleDeductSubmit().catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"))}
+              >
+                {submittingDeduct ? "扣减中..." : "确认扣减"}
+              </button>
             </div>
           </div>
         </div>
       )}
+
+      <AdminDialog
+        open={!!deleteAddressTarget}
+        title="确定要删除吗？"
+        description={deleteAddressTarget ? `确认删除地址“${deleteAddressTarget.addressLine}”吗？` : ""}
+        width={420}
+        onClose={submittingAddress ? () => undefined : () => setDeleteAddressTarget(null)}
+        footer={(
+          <>
+            <button className="btn btn-outline" disabled={submittingAddress} onClick={() => setDeleteAddressTarget(null)}>取消</button>
+            <button className="btn-delete" disabled={submittingAddress} onClick={() => handleDeleteAddress().catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"))}>
+              {submittingAddress ? "删除中..." : "确认删除"}
+            </button>
+          </>
+        )}
+      >
+        <div style={{ color: "var(--text-sub)", padding: "8px 0" }}>
+          删除后该配送地址将从客户资料中移除，请确认后再执行。
+        </div>
+      </AdminDialog>
     </div>
   );
 }

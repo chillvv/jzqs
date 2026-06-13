@@ -458,7 +458,6 @@ export type DispatchCreateRiderPayload = {
   riderName: string;
   displayName: string;
   phone: string;
-  password?: string;
   areaCode?: string;
   employmentStatus?: string;
   updatedBy?: string;

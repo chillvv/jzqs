@@ -2,6 +2,7 @@ import type { OrderPrepItemResponse } from "../../shared/api/types";
 
 export type OrderPrepMealPeriodFilter = "ALL" | "LUNCH" | "DINNER";
 export type OrderPrepSourceFilter = "ALL" | "MINIAPP" | "BACKEND" | "SUBSCRIPTION";
+export type OrderPrepRemarkFilter = "ALL" | "HAS_REMARK" | "NO_REMARK";
 export type OrderPrepStatusFilter =
   | "ALL"
   | "PENDING_DISPATCH"
@@ -16,6 +17,7 @@ export type OrderPrepFilters = {
   mealPeriod: OrderPrepMealPeriodFilter;
   source: OrderPrepSourceFilter;
   status: OrderPrepStatusFilter;
+  remark: OrderPrepRemarkFilter;
 };
 
 export type OrderPrepTab = "CONFIRMATION" | "ORDERS" | "SUBSCRIPTION_MANAGEMENT";
@@ -70,8 +72,8 @@ export function resolveOrderDisplayStatusLabel(status: string) {
   return "待配送";
 }
 
-export function resolveOrderStatusTone(status: string): "orange" | "blue" | "green" | "red" | "gray" {
-  if (status === "REFUND_PROCESSING") {
+export function resolveOrderStatusTone(status: string): "orange" | "blue" | "green" | "red" {
+  if (status === "REFUND_PROCESSING" || status === "REFUNDED" || status === "CANCELLED") {
     return "red";
   }
   if (status === "DISPATCHING") {
@@ -79,9 +81,6 @@ export function resolveOrderStatusTone(status: string): "orange" | "blue" | "gre
   }
   if (status === "DELIVERED") {
     return "green";
-  }
-  if (status === "REFUNDED" || status === "CANCELLED") {
-    return "gray";
   }
   return "orange";
 }
@@ -128,8 +127,12 @@ export function buildOrderPrepView(
       || (filters.source === "SUBSCRIPTION" && sourceLabel === "固定订餐");
 
     const matchesStatus = filters.status === "ALL" || resolveOrderDisplayStatus(item) === filters.status;
+    const hasRemark = Boolean(item.userNote?.trim() || item.merchantRemark?.trim());
+    const matchesRemark = filters.remark === "ALL"
+      || (filters.remark === "HAS_REMARK" && hasRemark)
+      || (filters.remark === "NO_REMARK" && !hasRemark);
 
-    return matchesKeyword && matchesMealPeriod && matchesSource && matchesStatus;
+    return matchesKeyword && matchesMealPeriod && matchesSource && matchesStatus && matchesRemark;
   });
 
   const totalItems = filteredItems.length;

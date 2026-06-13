@@ -12,8 +12,12 @@ type DispatchOverviewLike = Partial<DispatchOverviewResponse>;
 export type NewRiderDraft = {
   riderName: string;
   phone: string;
-  password: string;
   areaCode: string;
+};
+
+export type NewRiderFieldErrors = {
+  riderName: string;
+  phone: string;
 };
 
 export const DEFAULT_OPERATOR = "管理员";
@@ -27,7 +31,6 @@ export function createEmptyNewRiderDraft(): NewRiderDraft {
   return {
     riderName: "",
     phone: "",
-    password: "888888",
     areaCode: ""
   };
 }
@@ -179,16 +182,21 @@ export function riderStatusTagClass(status: string) {
 export function validateCreateRiderDraft(draft: NewRiderDraft) {
   const riderName = draft.riderName.trim();
   const phone = draft.phone.trim();
-  if (!riderName) {
-    return "请填写骑手姓名";
-  }
-  if (!/^[\u4e00-\u9fa5A-Za-z·\s]{2,20}$/.test(riderName)) {
-    return "请填写正确的骑手姓名";
-  }
-  if (!phone || !/^1\d{10}$/.test(phone)) {
-    return "请填写正确的手机号";
-  }
-  return null;
+  const riderNameError = !riderName
+    ? "请填写骑手姓名"
+    : !/^[\u4e00-\u9fa5A-Za-z·\s]{2,20}$/.test(riderName)
+      ? "姓名需为2-20字"
+      : "";
+  const phoneError = !phone
+    ? "请填写手机号"
+    : !/^1\d{10}$/.test(phone)
+      ? "请输入正确的11位手机号"
+      : "";
+
+  return {
+    riderName: riderNameError,
+    phone: phoneError
+  };
 }
 
 export function buildCreateRiderPayload(draft: NewRiderDraft) {
@@ -196,7 +204,6 @@ export function buildCreateRiderPayload(draft: NewRiderDraft) {
     riderName: draft.riderName.trim(),
     displayName: draft.riderName.trim(),
     phone: draft.phone.trim(),
-    password: draft.password.trim() || "888888",
     areaCode: draft.areaCode.trim() || undefined,
     employmentStatus: "ACTIVE",
     updatedBy: DEFAULT_OPERATOR

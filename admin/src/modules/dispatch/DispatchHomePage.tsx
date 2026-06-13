@@ -17,6 +17,7 @@ import type {
 } from "../../shared/api/types";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { AdminDialog } from "../../shared/components/AdminDialog";
+import { toast } from "../../shared/components/Toast";
 import {
   buildDispatchBoardViewModel,
   buildDispatchPendingSearchText,
@@ -59,6 +60,14 @@ function dispatchOrderStatusLabel(status: string, isCurrent: boolean) {
   }
 }
 
+function getErrorMessage(error: unknown, fallback = "操作失败") {
+  if (typeof error === "object" && error !== null) {
+    const errorLike = error as { response?: { data?: { message?: string } }; message?: string };
+    return errorLike.response?.data?.message || errorLike.message || fallback;
+  }
+  return typeof error === "string" ? error : fallback;
+}
+
 export function DispatchHomePage() {
   const { serveDate, mealPeriod } = useDispatchContext();
   const [overview, setOverview] = useState<DispatchOverviewResponse>(normalizeDispatchOverview({}));
@@ -74,7 +83,7 @@ export function DispatchHomePage() {
   const [submittingDelete, setSubmittingDelete] = useState(false);
 
   useEffect(() => {
-    reloadAll().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)));
+    reloadAll().catch((err) => toast(getErrorMessage(err, "加载分单工作台失败"), "error"));
   }, [mealPeriod, serveDate]);
 
   const areaOptions = useMemo(
@@ -133,11 +142,11 @@ export function DispatchHomePage() {
 
   async function handleBatchAssign() {
     if (selectedPendingIds.length === 0) {
-      window.alert("请先勾选待处理订单");
+      toast("请先勾选待处理订单", "error");
       return;
     }
     if (!batchAreaCode.trim()) {
-      window.alert("请先选择区域");
+      toast("请先选择区域", "error");
       return;
     }
     setBatchAssigning(true);
@@ -150,8 +159,9 @@ export function DispatchHomePage() {
       setBatchResult(result);
       await reloadAll();
       setSelectedPendingIds([]);
+      toast(`已归入区域 ${result.successCount} 单`);
     } catch (err: any) {
-      window.alert(err?.response?.data?.message || err.message || String(err));
+      toast(getErrorMessage(err, "批量归入区域失败"), "error");
     } finally {
       setBatchAssigning(false);
     }
@@ -160,7 +170,7 @@ export function DispatchHomePage() {
   async function handleSingleAssign(orderId: number) {
     const areaCode = inlineAreas[orderId];
     if (!areaCode) {
-      window.alert("请先选择区域");
+      toast("请先选择区域", "error");
       return;
     }
     setBatchAssigning(true);
@@ -177,6 +187,9 @@ export function DispatchHomePage() {
         delete next[orderId];
         return next;
       });
+      toast(`订单 #${orderId} 已归入 ${areaCode}`);
+    } catch (err: any) {
+      toast(getErrorMessage(err, "归入区域失败"), "error");
     } finally {
       setBatchAssigning(false);
     }
@@ -195,9 +208,9 @@ export function DispatchHomePage() {
       await deleteOrder(deleteConfirmState.orderId);
       setDeleteConfirmState(null);
       await reloadAll();
-      window.alert('订单已删除');
+      toast("订单已删除");
     } catch (err: any) {
-      window.alert(err?.response?.data?.message || err.message || String(err));
+      toast(getErrorMessage(err, "删除订单失败"), "error");
     } finally {
       setSubmittingDelete(false);
     }
@@ -392,7 +405,7 @@ export function DispatchHomePage() {
               <button 
                 className="btn-delete"
                 disabled={submittingDelete}
-                onClick={() => confirmDelete().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}
+                onClick={() => confirmDelete().catch((err) => toast(getErrorMessage(err, "删除订单失败"), "error"))}
               >
                 <Trash2 size={16} />
                 {submittingDelete ? "确认删除中..." : "确认删除"}

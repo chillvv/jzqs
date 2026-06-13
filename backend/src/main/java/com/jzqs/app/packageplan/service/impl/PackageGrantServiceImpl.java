@@ -3,6 +3,7 @@ package com.jzqs.app.packageplan.service.impl;
 import com.jzqs.app.packageplan.service.PackageGrantService;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.util.List;
 import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -22,19 +23,21 @@ public class PackageGrantServiceImpl implements PackageGrantService {
     @Transactional
     public Map<String, Object> grantPackage(long customerId, String packageCode, int totalMeals, String operatorName) {
         Long packagePlanId = jdbcTemplate.queryForObject("SELECT id FROM package_plans WHERE package_code = ?", Long.class, packageCode);
-        Long existingWalletId = jdbcTemplate.query(
-            "SELECT id FROM meal_wallets WHERE customer_id = ? AND active = TRUE",
-            ps -> ps.setLong(1, customerId),
-            rs -> rs.next() ? rs.getLong(1) : null
+        List<Long> activeWalletIds = jdbcTemplate.queryForList(
+            "SELECT id FROM meal_wallets WHERE customer_id = ? AND active = TRUE ORDER BY id DESC",
+            Long.class,
+            customerId
         );
+        Long existingWalletId = activeWalletIds.isEmpty() ? null : activeWalletIds.get(0);
         if (existingWalletId == null) {
             existingWalletId = insertAndReturnId(
                 "INSERT INTO meal_wallets (customer_id, package_plan_id, total_meals, reserved_meals, consumed_meals, active) VALUES (?, ?, ?, 0, 0, TRUE)",
                 customerId, packagePlanId, totalMeals
             );
         } else {
+            jdbcTemplate.update("UPDATE meal_wallets SET active = FALSE WHERE customer_id = ? AND id <> ?", customerId, existingWalletId);
             jdbcTemplate.update(
-                "UPDATE meal_wallets SET package_plan_id = ?, total_meals = ?, reserved_meals = 0, consumed_meals = 0 WHERE id = ?",
+                "UPDATE meal_wallets SET package_plan_id = ?, total_meals = ?, reserved_meals = 0, consumed_meals = 0, active = TRUE WHERE id = ?",
                 packagePlanId,
                 totalMeals,
                 existingWalletId

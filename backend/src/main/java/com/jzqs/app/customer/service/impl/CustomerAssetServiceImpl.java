@@ -412,11 +412,15 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
     @Transactional
     public Map<String, Object> deductMeals(long customerId, WalletAdjustRequest request) {
         MealWalletEntity wallet = findOrCreateWallet(customerId);
-        int nextTotal = Math.max(0, nvl(wallet.getTotalMeals()) - request.mealDelta());
+        int remainingMeals = remainingMeals(wallet);
+        if (remainingMeals < request.mealDelta()) {
+            throw new BusinessException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH, "客户余额不足，无法继续扣餐");
+        }
+        int nextTotal = nvl(wallet.getTotalMeals()) - request.mealDelta();
         wallet.setTotalMeals(nextTotal);
         mealWalletMapper.updateById(wallet);
         insertWalletTransaction(wallet.getId(), "MANUAL_DEDUCT", -request.mealDelta(), request.operatorName(), request.remark());
-        int remainingMeals = remainingMeals(wallet);
+        remainingMeals = remainingMeals(wallet);
         return buildAdjustResult(customerId, remainingMeals);
     }
 

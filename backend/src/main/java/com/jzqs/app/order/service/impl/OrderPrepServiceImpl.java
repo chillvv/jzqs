@@ -446,22 +446,20 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         }
 
         String likeKeyword = "%" + normalizedKeyword + "%";
-        List<Map<String, Object>> customerRows = jdbcTemplate.queryForList(
+        List<ManualCreateCustomerSearchRow> customerRows = jdbcTemplate.query(
             """
                 SELECT c.id,
                        COALESCE(c.name, '') AS name,
                        COALESCE(c.phone, '') AS phone,
-                       COALESCE(mw.total_meals, 0) - COALESCE(mw.reserved_meals, 0) - COALESCE(mw.consumed_meals, 0) AS remaining_meals
+                       COALESCE(wallet_summary.remaining_meals, 0) AS remaining_meals
                 FROM customers c
                 LEFT JOIN (
                     SELECT customer_id,
-                           SUM(total_meals) AS total_meals,
-                           SUM(reserved_meals) AS reserved_meals,
-                           SUM(consumed_meals) AS consumed_meals
+                           COALESCE(SUM(total_meals), 0) - COALESCE(SUM(reserved_meals), 0) - COALESCE(SUM(consumed_meals), 0) AS remaining_meals
                     FROM meal_wallets
                     WHERE active = TRUE
                     GROUP BY customer_id
-                ) mw ON mw.customer_id = c.id
+                ) wallet_summary ON wallet_summary.customer_id = c.id
                 WHERE c.active = TRUE
                   AND (COALESCE(c.name, '') LIKE ? OR COALESCE(c.phone, '') LIKE ?)
                 ORDER BY CASE
@@ -472,6 +470,12 @@ public class OrderPrepServiceImpl implements OrderPrepService {
                 END, c.id DESC
                 LIMIT 20
                 """,
+            (rs, rowNum) -> new ManualCreateCustomerSearchRow(
+                rs.getLong("id"),
+                stringValue(rs.getString("name")),
+                stringValue(rs.getString("phone")),
+                rs.getInt("remaining_meals")
+            ),
             likeKeyword,
             likeKeyword,
             normalizedKeyword,
@@ -483,13 +487,13 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         }
 
         List<Long> customerIds = customerRows.stream()
-            .map(row -> ((Number) row.get("id")).longValue())
+            .map(ManualCreateCustomerSearchRow::customerId)
             .toList();
         Map<Long, List<ManualCreateCustomerAddressResponse>> addressesByCustomerId = new LinkedHashMap<>();
         customerIds.forEach(customerId -> addressesByCustomerId.put(customerId, new ArrayList<>()));
 
         String placeholders = String.join(",", customerIds.stream().map(id -> "?").toList());
-        List<Map<String, Object>> addressRows = jdbcTemplate.queryForList(
+        List<ManualCreateCustomerAddressRow> addressRows = jdbcTemplate.query(
             """
                 SELECT id, customer_id, address_line, COALESCE(area_code, '') AS area_code, is_default
                 FROM customer_addresses
@@ -499,29 +503,35 @@ public class OrderPrepServiceImpl implements OrderPrepService {
                 )
                 ORDER BY customer_id, is_default DESC, id ASC
                 """,
+            (rs, rowNum) -> new ManualCreateCustomerAddressRow(
+                rs.getLong("id"),
+                rs.getLong("customer_id"),
+                stringValue(rs.getString("address_line")),
+                stringValue(rs.getString("area_code")),
+                rs.getBoolean("is_default")
+            ),
             customerIds.toArray()
         );
-        for (Map<String, Object> row : addressRows) {
-            long customerId = ((Number) row.get("customer_id")).longValue();
+        for (ManualCreateCustomerAddressRow row : addressRows) {
+            long customerId = row.customerId();
             addressesByCustomerId.computeIfAbsent(customerId, ignored -> new ArrayList<>()).add(
                 new ManualCreateCustomerAddressResponse(
-                    ((Number) row.get("id")).longValue(),
-                    stringValue(row.get("address_line")),
-                    stringValue(row.get("area_code")),
-                    booleanValue(row.get("is_default"), false)
+                    row.addressId(),
+                    row.addressLine(),
+                    row.areaCode(),
+                    row.isDefault()
                 )
             );
         }
 
         return customerRows.stream()
             .map(row -> {
-                long customerId = ((Number) row.get("id")).longValue();
-                int remainingMeals = ((Number) row.get("remaining_meals")).intValue();
+                long customerId = row.customerId();
                 return new ManualCreateCustomerSearchResponse(
                     customerId,
-                    stringValue(row.get("name")),
-                    stringValue(row.get("phone")),
-                    remainingMeals,
+                    row.customerName(),
+                    row.customerPhone(),
+                    row.remainingMeals(),
                     List.copyOf(addressesByCustomerId.getOrDefault(customerId, List.of()))
                 );
             })
@@ -1306,6 +1316,23 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         String userNote,
         String merchantRemark,
         boolean priorityCustomer
+    ) {
+    }
+
+    private record ManualCreateCustomerSearchRow(
+        long customerId,
+        String customerName,
+        String customerPhone,
+        int remainingMeals
+    ) {
+    }
+
+    private record ManualCreateCustomerAddressRow(
+        long addressId,
+        long customerId,
+        String addressLine,
+        String areaCode,
+        boolean isDefault
     ) {
     }
 

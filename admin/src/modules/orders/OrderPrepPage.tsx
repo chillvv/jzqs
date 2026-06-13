@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import {
   assignDispatch,
-  cancelOrder,
   deleteOrder,
   cancelSubscriptionConfirmation,
   confirmSubscription,
@@ -41,6 +40,7 @@ import {
   resolveOrderStatusTone,
   type OrderPrepTab,
   type OrderPrepMealPeriodFilter,
+  type OrderPrepRemarkFilter,
   type OrderPrepSourceFilter,
   type OrderPrepStatusFilter
 } from "./orderPrepPage.helpers";
@@ -53,7 +53,7 @@ import {
   resolveManualCreateMenuOptions,
   shouldShowManualCustomerEmptyState
 } from "./manualCreateOrder.helpers";
-import { Printer, CheckCircle, Search, RotateCcw, UserPlus, X, Bot, MapPin, ChevronLeft, ChevronRight, AlertTriangle, Trash2, Settings, MoreHorizontal } from "lucide-react";
+import { Printer, CheckCircle, Search, RotateCcw, UserPlus, X, Bot, MapPin, ChevronLeft, ChevronRight, AlertTriangle, Trash2, MoreHorizontal } from "lucide-react";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { AdminDialog } from "../../shared/components/AdminDialog";
 import { RemarkField } from "../../shared/components/RemarkField";
@@ -93,6 +93,8 @@ export function OrderPrepPage() {
   const [isSubscriptionPreviewOpen, setIsSubscriptionPreviewOpen] = useState(false);
   const [isSpecialOrdersOpen, setIsSpecialOrdersOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [isOrderDetailOpen, setIsOrderDetailOpen] = useState(false);
+  const [isBulkConsumeConfirmOpen, setIsBulkConsumeConfirmOpen] = useState(false);
   const [activeItem, setActiveItem] = useState<OrderPrepItemResponse | null>(null);
   const [orderAftersaleItem, setOrderAftersaleItem] = useState<OrderPrepItemResponse | null>(null);
   const [orderAftersaleForm, setOrderAftersaleForm] = useState({
@@ -117,7 +119,10 @@ export function OrderPrepPage() {
   const [mealPeriodFilter, setMealPeriodFilter] = useState<OrderPrepMealPeriodFilter>("ALL");
   const [sourceFilter, setSourceFilter] = useState<OrderPrepSourceFilter>("ALL");
   const [statusFilter, setStatusFilter] = useState<OrderPrepStatusFilter>("ALL");
+  const [remarkFilter, setRemarkFilter] = useState<OrderPrepRemarkFilter>("ALL");
   const [keywordFilter, setKeywordFilter] = useState("");
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [ordersError, setOrdersError] = useState("");
 
   // Forms state
   const [manualForm, setManualForm] = useState(createInitialManualCreateForm);
@@ -144,6 +149,21 @@ export function OrderPrepPage() {
   const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
 
+  function getErrorMessage(error: any, fallback: string) {
+    return error?.response?.data?.message || error?.message || fallback;
+  }
+
+  function openReceiptModal(item: OrderPrepItemResponse) {
+    setActiveItem(item);
+    setReceiptForm({ receiptUrl: "", receiptNote: "" });
+    setIsReceiptOpen(true);
+  }
+
+  function openOrderDetail(item: OrderPrepItemResponse) {
+    setActiveItem(item);
+    setIsOrderDetailOpen(true);
+  }
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -155,7 +175,7 @@ export function OrderPrepPage() {
   }, []);
 
   useEffect(() => {
-    reloadOrders(DEFAULT_FILTER_DATE).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)));
+    reloadOrders(DEFAULT_FILTER_DATE).catch(() => undefined);
 
     fetchRemarkSuggestions("SUBSCRIPTION_NOTE")
       .then((response) => setSubscriptionNoteSuggestions(response.items))
@@ -261,10 +281,17 @@ export function OrderPrepPage() {
       keyword: keywordFilter,
       mealPeriod: mealPeriodFilter,
       source: sourceFilter,
-      status: statusFilter
+      status: statusFilter,
+      remark: remarkFilter
     }, currentPage, PAGE_SIZE),
-    [items, keywordFilter, mealPeriodFilter, sourceFilter, statusFilter, currentPage]
+    [items, keywordFilter, mealPeriodFilter, sourceFilter, statusFilter, remarkFilter, currentPage]
   );
+  const hasOrderFilters = keywordFilter.trim().length > 0
+    || mealPeriodFilter !== "ALL"
+    || sourceFilter !== "ALL"
+    || statusFilter !== "ALL"
+    || remarkFilter !== "ALL";
+  const emptyOrderText = hasOrderFilters ? "未找到相关数据" : "暂无订单";
 
   const summary = useMemo(
     () => buildOrderPrepSummary(items, confirmationItems, specialOrders),
@@ -302,7 +329,7 @@ export function OrderPrepPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [items, keywordFilter, mealPeriodFilter, sourceFilter, statusFilter]);
+  }, [items, keywordFilter, mealPeriodFilter, sourceFilter, statusFilter, remarkFilter]);
 
   useEffect(() => {
     setActiveTab((currentTab) => {
@@ -320,17 +347,28 @@ export function OrderPrepPage() {
   }, [summary.confirmationCount, hasManualTabSelection]);
 
   async function reloadOrders(serveDate = filterDate) {
-    const [statsResponse, listResponse, confirmationsResponse, specialOrdersResponse] = await Promise.all([
-      fetchOrderPrepStats(),
-      fetchOrderPrepList(serveDate),
-      fetchSubscriptionConfirmations(serveDate),
-      fetchSpecialOrders(serveDate)
-    ]);
-    setStats(statsResponse);
-    setItems(listResponse.items);
-    setConfirmationItems(confirmationsResponse);
-    setSpecialOrders(specialOrdersResponse);
-    setCurrentPage(1);
+    setLoadingOrders(true);
+    setOrdersError("");
+    try {
+      const [statsResponse, listResponse, confirmationsResponse, specialOrdersResponse] = await Promise.all([
+        fetchOrderPrepStats(),
+        fetchOrderPrepList(serveDate),
+        fetchSubscriptionConfirmations(serveDate),
+        fetchSpecialOrders(serveDate)
+      ]);
+      setStats(statsResponse);
+      setItems(listResponse.items);
+      setConfirmationItems(confirmationsResponse);
+      setSpecialOrders(specialOrdersResponse);
+      setCurrentPage(1);
+    } catch (err: any) {
+      const message = getErrorMessage(err, "加载订单失败");
+      setOrdersError(message);
+      toast(message, "error");
+      throw err;
+    } finally {
+      setLoadingOrders(false);
+    }
   }
 
   async function handleAutoImportClick() {
@@ -350,7 +388,7 @@ export function OrderPrepPage() {
       setPreviewItems(data.map(item => ({ ...item, selected: item.hasBalance })));
       setIsSubscriptionPreviewOpen(true);
     } catch (err) {
-      window.alert("获取包月预览列表失败");
+      toast(getErrorMessage(err, "获取包月预览列表失败"), "error");
     }
   }
 
@@ -366,7 +404,7 @@ export function OrderPrepPage() {
       }
       setIsSubscriptionPreviewOpen(true);
     } catch (err) {
-      window.alert("获取包月预览列表失败");
+      toast(getErrorMessage(err, "获取包月预览列表失败"), "error");
     }
   }
 
@@ -374,7 +412,7 @@ export function OrderPrepPage() {
     if (isSubmittingImport) return;
     const selectedItems = previewItems.filter(i => i.selected && i.hasBalance);
     if (selectedItems.length === 0) {
-      window.alert("未选择任何有效的订单");
+      toast("未选择任何有效的订单", "error");
       return;
     }
     setIsSubmittingImport(true);
@@ -386,11 +424,11 @@ export function OrderPrepPage() {
         merchantRemark: item.merchantRemark || ""
       }));
       const result = await bulkImportSubscription(filterDate, payload);
-      window.alert(`成功生成包月订单 ${result.successCount} 份`);
+      toast(`成功生成包月订单 ${result.successCount} 份`);
       setIsSubscriptionPreviewOpen(false);
       await reloadOrders();
-    } catch (err) {
-      window.alert("生成失败，请重试");
+    } catch (err: any) {
+      toast(getErrorMessage(err, "生成失败，请重试"), "error");
     } finally {
       setIsSubmittingImport(false);
     }
@@ -418,6 +456,10 @@ export function OrderPrepPage() {
       await assignDispatch(activeItem.id, assignForm.riderName, assignForm.areaCode);
       setIsAssignOpen(false);
       await reloadOrders();
+      toast("骑手分配成功");
+    } catch (err: any) {
+      toast(getErrorMessage(err, "分配骑手失败"), "error");
+      throw err;
     } finally {
       setSubmittingAssign(false);
     }
@@ -430,6 +472,10 @@ export function OrderPrepPage() {
       await createManualOrder(buildManualCreatePayload(manualForm, filterDate));
       closeManualCreateModal();
       await reloadOrders();
+      toast("代客订单已录入");
+    } catch (err: any) {
+      toast(getErrorMessage(err, "录入代客订单失败"), "error");
+      throw err;
     } finally {
       setSubmittingManualCreate(false);
     }
@@ -465,13 +511,6 @@ export function OrderPrepPage() {
       return;
     }
     setManualForm((current) => applyManualCreateAddressSelection(current, manualSelectedCustomer.addresses, addressId));
-  }
-
-  async function handleCancel(item: OrderPrepItemResponse) {
-    if (!item.canCancel) return;
-    if (!window.confirm(`确认取消 ${item.customerName} 的订单吗？`)) return;
-    await cancelOrder(item.id);
-    await reloadOrders();
   }
 
   function openOrderAftersaleModal(item: OrderPrepItemResponse) {
@@ -539,24 +578,37 @@ export function OrderPrepPage() {
       setIsDeleteConfirmOpen(false);
       setActiveItem(null);
       await reloadOrders();
+      toast("订单已删除");
+    } catch (err: any) {
+      toast(getErrorMessage(err, "删除订单失败"), "error");
+      throw err;
     } finally {
       setSubmittingDelete(false);
     }
   }
 
   async function handleReceiptSubmit() {
-    if (!activeItem || !receiptForm.receiptUrl) return;
+    const receiptUrl = receiptForm.receiptUrl.trim();
+    if (!activeItem || !receiptUrl) {
+      toast("请填写回执图片 URL", "error");
+      return;
+    }
     if (submittingReceipt) return;
     setSubmittingReceipt(true);
     try {
       await recordDeliveryReceipt({
         mealSlotOrderId: activeItem.id,
-        receiptUrl: receiptForm.receiptUrl,
+        receiptUrl,
         receiptNote: receiptForm.receiptNote,
         deliveredAt: new Date().toISOString()
       });
       setIsReceiptOpen(false);
+      setReceiptForm({ receiptUrl: "", receiptNote: "" });
       await reloadOrders();
+      toast("回执已提交");
+    } catch (err: any) {
+      toast(getErrorMessage(err, "提交回执失败"), "error");
+      throw err;
     } finally {
       setSubmittingReceipt(false);
     }
@@ -578,6 +630,10 @@ export function OrderPrepPage() {
       });
       setIsEditOpen(false);
       await reloadOrders();
+      toast("订单已更新");
+    } catch (err: any) {
+      toast(getErrorMessage(err, "保存订单失败"), "error");
+      throw err;
     } finally {
       setSubmittingEdit(false);
     }
@@ -586,19 +642,31 @@ export function OrderPrepPage() {
   async function handleConsumeDelivered() {
     const deliveredIds = items.filter((item) => item.status === "DELIVERED").map((item) => item.id);
     if (deliveredIds.length === 0) {
-      window.alert("当前没有可核销的已送达订单");
+      toast("当前没有可核销的已送达订单", "error");
       return;
     }
-    if (!window.confirm(`确认核销 ${deliveredIds.length} 笔订单吗？`)) return;
     if (submittingConsumeDelivered) return;
     setSubmittingConsumeDelivered(true);
     try {
       const result = await consumeOrders(deliveredIds);
-      window.alert(`核销完成：成功 ${result.successCount} 条，失败 ${result.failureCount} 条`);
+      setIsBulkConsumeConfirmOpen(false);
+      toast(`核销完成：成功 ${result.successCount} 条，失败 ${result.failureCount} 条`);
       await reloadOrders();
+    } catch (err: any) {
+      toast(getErrorMessage(err, "批量核销失败"), "error");
+      throw err;
     } finally {
       setSubmittingConsumeDelivered(false);
     }
+  }
+
+  function handleOpenConsumeDeliveredConfirm() {
+    const deliveredIds = items.filter((item) => item.status === "DELIVERED").map((item) => item.id);
+    if (deliveredIds.length === 0) {
+      toast("当前没有可核销的已送达订单", "error");
+      return;
+    }
+    setIsBulkConsumeConfirmOpen(true);
   }
 
   async function handleConfirmConfirmation(id: number) {
@@ -608,6 +676,10 @@ export function OrderPrepPage() {
     try {
       await confirmSubscription(id);
       await reloadOrders();
+      toast("待确认订单已生成");
+    } catch (err: any) {
+      toast(getErrorMessage(err, "确认生成失败"), "error");
+      throw err;
     } finally {
       setProcessingConfirmationId(null);
       setProcessingConfirmationAction(null);
@@ -621,6 +693,10 @@ export function OrderPrepPage() {
     try {
       await cancelSubscriptionConfirmation(id, "后台取消");
       await reloadOrders();
+      toast("待确认订单已取消");
+    } catch (err: any) {
+      toast(getErrorMessage(err, "取消待确认订单失败"), "error");
+      throw err;
     } finally {
       setProcessingConfirmationId(null);
       setProcessingConfirmationAction(null);
@@ -658,6 +734,20 @@ export function OrderPrepPage() {
     return "";
   }
 
+  async function handleCopyCustomerPhone(item: OrderPrepItemResponse) {
+    const phone = item.customerPhone?.trim();
+    if (!phone) {
+      toast("未找到客户手机号", "error");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(phone);
+      toast("复制手机号成功");
+    } catch (error) {
+      toast(getErrorMessage(error, "复制手机号失败"), "error");
+    }
+  }
+
   const renderActions = (item: OrderPrepItemResponse) => {
     const displayStatus = resolveOrderDisplayStatus(item);
     const isDropdownOpen = openDropdownId === item.id;
@@ -676,7 +766,7 @@ export function OrderPrepPage() {
         {displayStatus === "DISPATCHING" && (
           <button
             className="btn btn-success btn-sm"
-            onClick={() => { setActiveItem(item); setReceiptForm({ receiptUrl: "", receiptNote: "" }); setIsReceiptOpen(true); }}
+            onClick={() => openReceiptModal(item)}
             style={{ marginRight: "8px" }}
           >
             核销回执
@@ -693,58 +783,30 @@ export function OrderPrepPage() {
           
           {isDropdownOpen && (
             <div className="dropdown-menu">
-              <button 
+              <button
+                className="dropdown-item"
+                onClick={() => { openOrderDetail(item); setOpenDropdownId(null); }}
+              >
+                查看详情
+              </button>
+              <button
                 className="dropdown-item"
                 onClick={() => {
-                  setActiveItem(item);
-                  setEditForm({
-                    mealPeriod: resolveMealPeriod(item),
-                    quantity: String(item.quantity || 1),
-                    deliveryAddress: item.deliveryAddress || "",
-                    merchantRemark: item.merchantRemark || "",
-                    priorityCustomer: !!item.priorityCustomer,
-                    status: item.status
-                  });
-                  setIsEditOpen(true);
+                  openReceiptModal(item);
                   setOpenDropdownId(null);
                 }}
               >
-                编辑订单
+                核销回执
               </button>
-              
-              {displayStatus !== "PENDING_DISPATCH" && item.canAssign && (
-                <button
-                  className="dropdown-item"
-                  onClick={() => { setActiveItem(item); setIsAssignOpen(true); setOpenDropdownId(null); }}
-                >
-                  分配骑手
-                </button>
-              )}
-              
-              {displayStatus !== "DISPATCHING" && item.canReceipt && (
-                <button
-                  className="dropdown-item"
-                  onClick={() => { setActiveItem(item); setReceiptForm({ receiptUrl: "", receiptNote: "" }); setIsReceiptOpen(true); setOpenDropdownId(null); }}
-                >
-                  上传回执
-                </button>
-              )}
-              
-              <button 
-                className="dropdown-item dropdown-item-danger"
-                onClick={() => { openOrderAftersaleModal(item); setOpenDropdownId(null); }}
+              <button
+                className="dropdown-item"
+                onClick={() => {
+                  handleCopyCustomerPhone(item).catch(() => undefined);
+                  setOpenDropdownId(null);
+                }}
               >
-                售后处理
+                联系客户
               </button>
-              
-              {item.canCancel && (
-                <button 
-                  className="dropdown-item dropdown-item-danger"
-                  onClick={() => { handleCancel(item); setOpenDropdownId(null); }}
-                >
-                  取消订单
-                </button>
-              )}
             </div>
           )}
         </div>
@@ -764,7 +826,7 @@ export function OrderPrepPage() {
             <AlertTriangle size={16} />
             特殊单 {specialOrders.length}
           </button>
-          <button className="btn btn-primary" onClick={() => handleAutoImportClick().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+          <button className="btn btn-primary" onClick={() => handleAutoImportClick().catch(() => undefined)}>
             <Bot size={16} />
             导入固定订餐
           </button>
@@ -857,9 +919,24 @@ export function OrderPrepPage() {
                   onChange={(e) => setKeywordFilter(e.target.value)}
                 />
               </div>
+              <div className="filter-item">
+                <span className="filter-label">备注:</span>
+                <AppSelect
+                  className="app-select--filter"
+                  style={{ width: "120px" }}
+                  value={remarkFilter}
+                  options={[
+                    { label: "全部备注", value: "ALL" },
+                    { label: "有备注", value: "HAS_REMARK" },
+                    { label: "无备注", value: "NO_REMARK" }
+                  ]}
+                  onChange={(value) => setRemarkFilter(value as OrderPrepRemarkFilter)}
+                />
+              </div>
             </>
           )}
-          <button className="btn btn-primary" onClick={() => reloadOrders(filterDate).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}><Search size={16} /> 查询</button>
+          {activeTab === "ORDERS" ? <span className="dispatch-table-toolbar__count">筛选出 {view.filteredItems.length} 条</span> : null}
+          <button className="btn btn-primary" disabled={loadingOrders} onClick={() => reloadOrders(filterDate).catch(() => undefined)}><Search size={16} /> {loadingOrders ? "查询中..." : "查询"}</button>
           <button
             className="btn btn-outline"
             onClick={() => {
@@ -867,8 +944,9 @@ export function OrderPrepPage() {
               setMealPeriodFilter("ALL");
               setSourceFilter("ALL");
               setStatusFilter("ALL");
+              setRemarkFilter("ALL");
               setKeywordFilter("");
-              reloadOrders(DEFAULT_FILTER_DATE).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)));
+              reloadOrders(DEFAULT_FILTER_DATE).catch(() => undefined);
             }}
           >
             <RotateCcw size={16} /> 重置
@@ -881,7 +959,7 @@ export function OrderPrepPage() {
         </div>
       </div>
 
-      <div className="table-container">
+      <div className={`table-container ${activeTab === "ORDERS" ? "table-container--orders" : ""}`}>
         <div className="table-header-toolbar">
           <div style={{ display: "grid", gap: "10px" }}>
             <span>
@@ -923,7 +1001,7 @@ export function OrderPrepPage() {
             <div style={{ display: "flex", gap: "8px" }}>
               <button className="btn btn-outline" onClick={openManualCreateModal}><UserPlus size={16} /> 录入代客订单</button>
               <button className="btn btn-outline" onClick={handleExportMealPrep}><Printer size={16} /> 导出备餐单</button>
-              <button className="btn btn-primary" disabled={submittingConsumeDelivered} onClick={() => handleConsumeDelivered().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+              <button className="btn btn-primary" disabled={submittingConsumeDelivered} onClick={handleOpenConsumeDeliveredConfirm}>
                 <CheckCircle size={16} /> {submittingConsumeDelivered ? "核销中..." : "批量核销扣餐"}
               </button>
             </div>
@@ -949,10 +1027,10 @@ export function OrderPrepPage() {
                   <div className="address-detail">用户备注：{item.userNote || "-"} / 商家备注：{item.merchantRemark || "-"}</div>
                 </div>
                 <div style={{ display: "flex", gap: "8px" }}>
-                  <button className="btn btn-outline" disabled={processingConfirmationId === item.id} onClick={() => handleCancelConfirmation(item.id).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+                  <button className="btn btn-outline" disabled={processingConfirmationId === item.id} onClick={() => handleCancelConfirmation(item.id).catch(() => undefined)}>
                     {processingConfirmationId === item.id && processingConfirmationAction === "cancel" ? "取消中..." : "取消"}
                   </button>
-                  <button className="btn btn-primary" disabled={processingConfirmationId === item.id} onClick={() => handleConfirmConfirmation(item.id).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+                  <button className="btn btn-primary" disabled={processingConfirmationId === item.id} onClick={() => handleConfirmConfirmation(item.id).catch(() => undefined)}>
                     {processingConfirmationId === item.id && processingConfirmationAction === "confirm" ? "生成中..." : "确认生成"}
                   </button>
                 </div>
@@ -961,6 +1039,7 @@ export function OrderPrepPage() {
           </div>
         ) : (
           <>
+            <div className="order-list-shell">
             <div className="table-responsive">
               <table className="admin-table" style={{ background: "#FFFFFF", borderTop: "1px solid var(--border-color)", borderBottom: "1px solid var(--border-color)", width: "100%" }}>
                 <thead>
@@ -978,10 +1057,22 @@ export function OrderPrepPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {view.filteredItems.length === 0 ? (
+                  {loadingOrders ? (
                     <tr>
                       <td colSpan={10} style={{ textAlign: "center", padding: "32px", color: "var(--text-muted)" }}>
-                        当前条件下没有找到订单
+                        订单加载中...
+                      </td>
+                    </tr>
+                  ) : ordersError ? (
+                    <tr>
+                      <td colSpan={10} style={{ textAlign: "center", padding: "32px", color: "var(--error-color-dark)" }}>
+                        加载失败：{ordersError}
+                      </td>
+                    </tr>
+                  ) : view.filteredItems.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} style={{ textAlign: "center", padding: "32px", color: "var(--text-muted)" }}>
+                        {emptyOrderText}
                       </td>
                     </tr>
                   ) : (
@@ -1082,23 +1173,35 @@ export function OrderPrepPage() {
                   </div>
                 );
               })}
+              {view.pageItems.length === 0 && !loadingOrders && !ordersError ? (
+                <div className="empty-state">{emptyOrderText}</div>
+              ) : null}
             </div>
 
-        <div className="pagination">
+        <div className="order-list-footer">
+        <div className="pagination pagination--embedded">
           <div className="pagination-info">共 {view.totalItems} 条记录，第 {view.currentPage} / {view.totalPages} 页</div>
           <div className="pagination-pages">
-            <button className="page-btn" disabled={view.currentPage === 1} onClick={() => setCurrentPage(c => Math.max(1, c - 1))}><ChevronLeft size={16} /></button>
-            {Array.from({ length: view.totalPages }, (_, index) => index + 1).map((page) => (
-              <button
-                key={page}
-                className={`page-btn ${view.currentPage === page ? "active" : ""}`}
-                onClick={() => setCurrentPage(page)}
-              >
-                {page}
-              </button>
-            ))}
-            <button className="page-btn" disabled={view.currentPage === view.totalPages} onClick={() => setCurrentPage(c => Math.min(view.totalPages, c + 1))}><ChevronRight size={16} /></button>
+            {view.totalPages === 1 ? (
+              <span className="pagination-pages__single">仅 1 页</span>
+            ) : (
+              <>
+                <button className="page-btn" disabled={view.currentPage === 1} onClick={() => setCurrentPage(c => Math.max(1, c - 1))}><ChevronLeft size={16} /></button>
+                {Array.from({ length: view.totalPages }, (_, index) => index + 1).map((page) => (
+                  <button
+                    key={page}
+                    className={`page-btn ${view.currentPage === page ? "active" : ""}`}
+                    onClick={() => setCurrentPage(page)}
+                  >
+                    {page}
+                  </button>
+                ))}
+                <button className="page-btn" disabled={view.currentPage === view.totalPages} onClick={() => setCurrentPage(c => Math.min(view.totalPages, c + 1))}><ChevronRight size={16} /></button>
+              </>
+            )}
           </div>
+        </div>
+        </div>
         </div>
           </>
         )}
@@ -1196,7 +1299,7 @@ export function OrderPrepPage() {
               </div>
               <div style={{ display: "flex", gap: "12px" }}>
                 <button className="btn btn-outline" disabled={isSubmittingImport} onClick={() => setIsSubscriptionPreviewOpen(false)}>取消</button>
-                <button className="btn btn-primary" onClick={() => handleConfirmBulkImport().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))} disabled={isSubmittingImport}>
+                <button className="btn btn-primary" onClick={() => handleConfirmBulkImport().catch(() => undefined)} disabled={isSubmittingImport}>
                   {isSubmittingImport ? "生成中..." : "确认生成订单"}
                 </button>
               </div>
@@ -1413,7 +1516,7 @@ export function OrderPrepPage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-outline" onClick={closeManualCreateModal} disabled={submittingManualCreate}>取消</button>
-              <button className="btn btn-primary" disabled={submittingManualCreate} onClick={() => handleManualCreateSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+              <button className="btn btn-primary" disabled={submittingManualCreate} onClick={() => handleManualCreateSubmit().catch(() => undefined)}>
                 {submittingManualCreate ? "提交中..." : "确认录入"}
               </button>
             </div>
@@ -1514,7 +1617,7 @@ export function OrderPrepPage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-outline" onClick={() => setIsAssignOpen(false)} disabled={submittingAssign}>取消</button>
-              <button className="btn btn-primary" disabled={submittingAssign} onClick={() => handleAssignSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+              <button className="btn btn-primary" disabled={submittingAssign} onClick={() => handleAssignSubmit().catch(() => undefined)}>
                 {submittingAssign ? "提交中..." : "确认分配"}
               </button>
             </div>
@@ -1532,7 +1635,7 @@ export function OrderPrepPage() {
             <div className="modal-body">
               <div className="form-group">
                 <label className="form-label"><span className="required">*</span>回执图片 URL</label>
-                <input className="form-control" value={receiptForm.receiptUrl} onChange={e => setReceiptForm({...receiptForm, receiptUrl: e.target.value})} placeholder="https://" />
+                <input className="form-control" value={receiptForm.receiptUrl} onChange={e => setReceiptForm({...receiptForm, receiptUrl: e.target.value})} placeholder="请输入图片 URL" />
               </div>
               <RemarkField
                 label="回执备注"
@@ -1545,7 +1648,7 @@ export function OrderPrepPage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-outline" onClick={() => setIsReceiptOpen(false)} disabled={submittingReceipt}>取消</button>
-              <button className="btn btn-primary" disabled={submittingReceipt} onClick={() => handleReceiptSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+              <button className="btn btn-primary" disabled={submittingReceipt} onClick={() => handleReceiptSubmit().catch(() => undefined)}>
                 {submittingReceipt ? "提交中..." : "提交回执"}
               </button>
             </div>
@@ -1616,13 +1719,113 @@ export function OrderPrepPage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-outline" onClick={() => setIsEditOpen(false)} disabled={submittingEdit}>取消</button>
-              <button className="btn btn-primary" disabled={submittingEdit} onClick={() => handleEditSubmit().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+              <button className="btn btn-primary" disabled={submittingEdit} onClick={() => handleEditSubmit().catch(() => undefined)}>
                 {submittingEdit ? "提交中..." : "保存订单"}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      <AdminDialog
+        open={isOrderDetailOpen}
+        title={activeItem ? `订单详情 - ${activeItem.customerName}` : "订单详情"}
+        width={560}
+        onClose={() => setIsOrderDetailOpen(false)}
+        footer={
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button className="btn btn-outline" onClick={() => setIsOrderDetailOpen(false)}>关闭</button>
+          </div>
+        }
+      >
+        {activeItem ? (
+          <div className="order-detail-modal">
+            <section className="order-detail-modal__info">
+              <div className="delete-confirm-details">
+                <div className="delete-confirm-details__item">
+                  <span className="delete-confirm-details__label">订单号：</span>
+                  <span className="delete-confirm-details__value">#{activeItem.id}</span>
+                </div>
+                <div className="delete-confirm-details__item">
+                  <span className="delete-confirm-details__label">客户：</span>
+                  <span className="delete-confirm-details__value">{activeItem.customerName}</span>
+                </div>
+                <div className="delete-confirm-details__item">
+                  <span className="delete-confirm-details__label">电话：</span>
+                  <span className="delete-confirm-details__value">{activeItem.customerPhone}</span>
+                </div>
+                <div className="delete-confirm-details__item">
+                  <span className="delete-confirm-details__label">餐次：</span>
+                  <span className="delete-confirm-details__value">{resolveMealPeriod(activeItem) === "DINNER" ? "晚餐" : "午餐"} ×{activeItem.quantity}</span>
+                </div>
+                <div className="delete-confirm-details__item">
+                  <span className="delete-confirm-details__label">来源：</span>
+                  <span className="delete-confirm-details__value">{resolveOrderSourceLabel(activeItem)}</span>
+                </div>
+                <div className="delete-confirm-details__item">
+                  <span className="delete-confirm-details__label">订单状态：</span>
+                  <span className="delete-confirm-details__value">{activeItem.displayStatusLabel || resolveOrderDisplayStatusLabel(resolveOrderDisplayStatus(activeItem))}</span>
+                </div>
+                <div className="delete-confirm-details__item">
+                  <span className="delete-confirm-details__label">钱包状态：</span>
+                  <span className="delete-confirm-details__value">{activeItem.walletStatusLabel}</span>
+                </div>
+                <div className="delete-confirm-details__item">
+                  <span className="delete-confirm-details__label">配送地址：</span>
+                  <span className="delete-confirm-details__value">{activeItem.deliveryAddress || "-"}</span>
+                </div>
+                <div className="delete-confirm-details__item">
+                  <span className="delete-confirm-details__label">用户备注：</span>
+                  <span className="delete-confirm-details__value">{formatOrderNote(activeItem.userNote)}</span>
+                </div>
+                <div className="delete-confirm-details__item">
+                  <span className="delete-confirm-details__label">商家备注：</span>
+                  <span className="delete-confirm-details__value">{formatOrderNote(activeItem.merchantRemark)}</span>
+                </div>
+              </div>
+            </section>
+            <aside className="order-detail-modal__actions">
+              <div className="order-detail-modal__status">
+                {renderStatus(activeItem)}
+              </div>
+              <div className="order-detail-modal__meta">来源：{resolveOrderSourceLabel(activeItem)}</div>
+              <div className="order-detail-modal__meta">钱包：{activeItem.walletStatusLabel}</div>
+              <button className="btn btn-outline" onClick={() => handleCopyCustomerPhone(activeItem).catch(() => undefined)}>
+                复制手机号
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setIsOrderDetailOpen(false);
+                  openReceiptModal(activeItem);
+                }}
+              >
+                核销回执
+              </button>
+            </aside>
+          </div>
+        ) : null}
+      </AdminDialog>
+
+      <AdminDialog
+        open={isBulkConsumeConfirmOpen}
+        title="确认批量核销"
+        description={`即将核销 ${items.filter((item) => item.status === "DELIVERED").length} 笔已送达订单，请确认是否继续。`}
+        width={520}
+        onClose={submittingConsumeDelivered ? () => undefined : () => setIsBulkConsumeConfirmOpen(false)}
+        footer={
+          <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
+            <button className="btn btn-outline" disabled={submittingConsumeDelivered} onClick={() => setIsBulkConsumeConfirmOpen(false)}>取消</button>
+            <button className="btn btn-primary" disabled={submittingConsumeDelivered} onClick={() => handleConsumeDelivered().catch(() => undefined)}>
+              {submittingConsumeDelivered ? "核销中..." : "确认批量核销"}
+            </button>
+          </div>
+        }
+      >
+        <div style={{ color: "var(--text-sub)", fontSize: "14px", lineHeight: 1.7 }}>
+          批量核销会统一处理当前列表中的已送达订单，请确认数量无误后再执行。
+        </div>
+      </AdminDialog>
 
       {/* 删除确认对话框 */}
       <AdminDialog
@@ -1636,7 +1839,7 @@ export function OrderPrepPage() {
             <button 
               className="btn-delete"
               disabled={submittingDelete}
-              onClick={() => activeItem && handleDelete(activeItem).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}
+              onClick={() => activeItem && handleDelete(activeItem).catch(() => undefined)}
             >
               <Trash2 size={16} />
               {submittingDelete ? "提交中..." : "确认删除"}

@@ -3,6 +3,7 @@ import { X, Search, MapPin, User, Calendar, UtensilsCrossed } from "lucide-react
 import { createSubscriptionRule, updateSubscriptionRule, fetchCustomerAssets, fetchCustomerDetail } from "../../shared/api/http";
 import type { SubscriptionRuleResponse, SubscriptionRuleFormData, CustomerAssetResponse } from "../../shared/api/types";
 import { DatePicker } from "../../shared/components/DatePicker";
+import { toast } from "../../shared/components/Toast";
 
 type AddressOption = {
   id: number;
@@ -121,10 +122,22 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
   }
 
   async function handleSubmit() {
-    if (!form.customerId) return alert("请选择客户");
-    if (!form.startDate || !form.endDate) return alert("请选择时间段");
-    if (form.startDate > form.endDate) return alert("开始日期不能晚于结束日期");
-    if (!form.lunchEnabled && !form.dinnerEnabled) return alert("至少启用午餐或晚餐之一");
+    if (!form.customerId) {
+      toast("请选择客户", "error");
+      return;
+    }
+    if (!form.startDate || !form.endDate) {
+      toast("请选择时间段", "error");
+      return;
+    }
+    if (form.startDate > form.endDate) {
+      toast("开始日期不能晚于结束日期", "error");
+      return;
+    }
+    if (!form.lunchEnabled && !form.dinnerEnabled) {
+      toast("至少启用午餐或晚餐之一", "error");
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -133,9 +146,10 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
       } else {
         await createSubscriptionRule(form);
       }
+      toast(isEdit ? "固定订餐计划已更新" : "固定订餐计划已创建");
       onClose();
     } catch (err: any) {
-      alert(err?.response?.data?.message || err?.message || "保存失败");
+      toast(err?.response?.data?.message || err?.message || "保存失败", "error");
     } finally {
       setSubmitting(false);
     }

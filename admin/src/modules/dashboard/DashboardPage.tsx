@@ -145,6 +145,14 @@ export function DashboardPage() {
     newCards: Math.max(...growthNewCards, 0),
     recharges: Math.max(...growthRecharges, 0)
   };
+  const heroMetricActionMap: Record<string, () => void> = {
+    "今日送达": () => navigate("/orders"),
+    "明日订单": () => navigate("/orders"),
+    "今日售后": () => navigate("/aftersales"),
+    "今日取消": () => navigate("/orders"),
+    "今日新开卡": () => navigate("/customers"),
+    "今日续卡充值": () => navigate("/customers")
+  };
 
   return (
     <div className="dashboard-bi">
@@ -160,7 +168,19 @@ export function DashboardPage() {
 
       <div className="dashboard-bi__metrics">
         {heroMetrics.map((item) => (
-          <div key={item.label} className="dashboard-bi__metric-card">
+          <div
+            key={item.label}
+            className="dashboard-bi__metric-card dashboard-bi__metric-card--clickable"
+            onClick={heroMetricActionMap[item.label]}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                heroMetricActionMap[item.label]?.();
+              }
+            }}
+          >
             <div className="dashboard-bi__metric-label">{item.label}</div>
             <div className={`dashboard-bi__metric-value ${TONE_CLASS_MAP[item.tone] ?? ""}`}>
               {item.value}

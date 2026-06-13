@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { MapPinned, PackageCheck, Truck, UserRound } from "lucide-react";
 import { fetchDispatchAreaBindings, fetchDispatchRiderProgress } from "../../shared/api/http";
 import { AdminDialog } from "../../shared/components/AdminDialog";
+import { toast } from "../../shared/components/Toast";
 import type { DispatchAreaBindingResponse, DispatchRiderProgressResponse } from "../../shared/api/types";
 import { hasDisplayValue, hasOrderAttention, normalizeDispatchAreaBindings } from "./dispatchCenterLayout.helpers";
 import { useDispatchContext } from "./DispatchContext";
@@ -41,7 +42,7 @@ export function DispatchProgressPage() {
   const [selectedOrderId, setSelectedOrderId] = useState<number>();
 
   useEffect(() => {
-    reloadAll().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)));
+    reloadAll().catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"));
   }, [mealPeriod, serveDate]);
 
   async function reloadAll() {

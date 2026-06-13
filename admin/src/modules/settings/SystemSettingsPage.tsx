@@ -13,6 +13,7 @@ import {
   X
 } from "lucide-react";
 import { SettingsModal } from "../../shared/components/SettingsModal";
+import { toast } from "../../shared/components/Toast";
 import {
   buildCustomerFacingSettingHints,
   countBannerImages,
@@ -58,7 +59,7 @@ export function SystemSettingsPage() {
   }, []);
 
   function showError(err: any) {
-    window.alert(err?.response?.data?.message || err.message || String(err));
+    toast(err?.response?.data?.message || err.message || String(err), "error");
   }
 
   async function reloadSettings() {
@@ -88,7 +89,7 @@ export function SystemSettingsPage() {
     const description = popupForm.description.trim();
     const content = popupForm.content.trim();
     if (popupForm.enabled && (!title || (!description && !content))) {
-      window.alert("启用锁定公告时请至少填写主文和正文");
+      toast("启用锁定公告时请至少填写主文和正文", "error");
       return;
     }
     setPopupSubmitting(true);
@@ -100,6 +101,7 @@ export function SystemSettingsPage() {
         content
       }));
       closeModal();
+      toast("锁定公告已更新");
     } catch (err: any) {
       showError(err);
     } finally {
@@ -116,13 +118,14 @@ export function SystemSettingsPage() {
   async function submitBanner() {
     const validItems = bannerForm.filter((item) => item.imageUrl.trim().length > 0);
     if (!validItems.length) {
-      window.alert("请至少保留一张轮播图");
+      toast("请至少保留一张轮播图", "error");
       return;
     }
     setBannerSubmitting(true);
     try {
       setSettings(await updateBannerImages(serializeBannerConfigs(validItems), Math.max(1, Number(bannerIntervalSeconds) || 3)));
       closeModal();
+      toast("轮播图配置已更新");
     } catch (err: any) {
       showError(err);
     } finally {
@@ -145,6 +148,7 @@ export function SystemSettingsPage() {
           enabled: true
         }))
       ]);
+      toast(`已上传 ${uploaded.length} 张轮播图`);
     } catch (err: any) {
       showError(err);
     } finally {

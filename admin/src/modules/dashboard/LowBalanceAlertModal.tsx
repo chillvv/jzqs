@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { fetchLowBalanceSubscriptions } from "../../shared/api/http";
 import type { LowBalanceSubscriptionItem } from "../../shared/api/types";
 import { http } from "../../shared/api/http";
+import { AdminDialog } from "../../shared/components/AdminDialog";
+import { toast } from "../../shared/components/Toast";
 
 type LowBalanceAlertModalProps = {
   visible: boolean;
@@ -15,6 +17,7 @@ export function LowBalanceAlertModal({ visible, onClose }: LowBalanceAlertModalP
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submittingDormantCustomerId, setSubmittingDormantCustomerId] = useState<number | null>(null);
+  const [confirmDormantItem, setConfirmDormantItem] = useState<LowBalanceSubscriptionItem | null>(null);
 
   useEffect(() => {
     if (!visible) {
@@ -50,9 +53,6 @@ export function LowBalanceAlertModal({ visible, onClose }: LowBalanceAlertModalP
   }, [visible]);
 
   const handleMarkDormant = async (customerId: number) => {
-    if (!window.confirm("确认将该客户标记为沉睡状态？标记后将不再出现在预警列表中。")) {
-      return;
-    }
     if (submittingDormantCustomerId === customerId) {
       return;
     }
@@ -65,8 +65,10 @@ export function LowBalanceAlertModal({ visible, onClose }: LowBalanceAlertModalP
       // 刷新列表
       const updatedItems = items.filter((item) => item.customerId !== customerId);
       setItems(updatedItems);
+      setConfirmDormantItem(null);
+      toast("客户已标记为沉睡");
     } catch (err: any) {
-      alert(err?.response?.data?.message || err?.message || "标记失败");
+      toast(err?.response?.data?.message || err?.message || "标记失败", "error");
     } finally {
       setSubmittingDormantCustomerId(null);
     }
@@ -151,7 +153,7 @@ export function LowBalanceAlertModal({ visible, onClose }: LowBalanceAlertModalP
                           <button
                             className="btn btn-sm btn-outline"
                             disabled={submittingDormantCustomerId === item.customerId}
-                            onClick={() => handleMarkDormant(item.customerId)}
+                            onClick={() => setConfirmDormantItem(item)}
                           >
                             {submittingDormantCustomerId === item.customerId ? "标记中..." : "标记沉睡"}
                           </button>
@@ -171,6 +173,43 @@ export function LowBalanceAlertModal({ visible, onClose }: LowBalanceAlertModalP
           </button>
         </div>
       </div>
+
+      <AdminDialog
+        open={Boolean(confirmDormantItem)}
+        title="确认标记沉睡客户"
+        description={confirmDormantItem ? `确认将 ${confirmDormantItem.customerName} 标记为沉睡状态吗？标记后将不再出现在预警列表。` : undefined}
+        width={480}
+        onClose={submittingDormantCustomerId ? () => undefined : () => setConfirmDormantItem(null)}
+        footer={
+          <>
+            <button className="btn btn-outline" disabled={Boolean(submittingDormantCustomerId)} onClick={() => setConfirmDormantItem(null)}>取消</button>
+            <button
+              className="btn-delete"
+              disabled={!confirmDormantItem || Boolean(submittingDormantCustomerId)}
+              onClick={() => confirmDormantItem && handleMarkDormant(confirmDormantItem.customerId).catch((err) => toast(err?.response?.data?.message || err?.message || "标记失败", "error"))}
+            >
+              {submittingDormantCustomerId ? "处理中..." : "确认标记"}
+            </button>
+          </>
+        }
+      >
+        {confirmDormantItem ? (
+          <div className="delete-confirm-details">
+            <div className="delete-confirm-details__item">
+              <span className="delete-confirm-details__label">客户：</span>
+              <span className="delete-confirm-details__value">{confirmDormantItem.customerName}</span>
+            </div>
+            <div className="delete-confirm-details__item">
+              <span className="delete-confirm-details__label">电话：</span>
+              <span className="delete-confirm-details__value">{confirmDormantItem.customerPhone}</span>
+            </div>
+            <div className="delete-confirm-details__item">
+              <span className="delete-confirm-details__label">剩余餐数：</span>
+              <span className="delete-confirm-details__value">{confirmDormantItem.remainingMeals} 餐</span>
+            </div>
+          </div>
+        ) : null}
+      </AdminDialog>
     </div>
   );
 }

@@ -224,49 +224,29 @@ public class MobileAuthServiceImpl implements MobileAuthService {
     public Map<String, Object> bindRiderPhone(String openid, String phone, String nickname) {
         String finalOpenid = requireOpenid(openid);
         String finalPhone = requirePhone(phone);
-        String finalNickname = nickname != null ? nickname.trim() : "";
         LocalDateTime now = LocalDateTime.now().withNano(0);
         Long riderId = findRiderIdByPhone(finalPhone);
         
         if (riderId == null) {
-            validateUniqueRiderName(finalNickname.isEmpty() ? "骑手" + finalPhone.substring(7) : finalNickname, null);
-            // 新用户：自动创建账号（状态：UNASSIGNED）
-            jdbcTemplate.update(
-                """
-                    INSERT INTO rider_profiles (
-                        rider_name, phone, display_name, current_openid, wechat_open_id, auth_status,
-                        first_login_at, last_login_at, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                finalNickname.isEmpty() ? "骑手" + finalPhone.substring(7) : finalNickname,
-                finalPhone,
-                finalNickname.isEmpty() ? "骑手" + finalPhone.substring(7) : finalNickname,
-                finalOpenid,
-                finalOpenid,
-                "UNASSIGNED",
-                Timestamp.valueOf(now),
-                Timestamp.valueOf(now),
-                Timestamp.valueOf(now)
-            );
-            riderId = findRiderIdByPhone(finalPhone);
-        } else {
-            // 更新 openid 绑定
-            jdbcTemplate.update(
-                """
-                    UPDATE rider_profiles
-                    SET current_openid = ?,
-                        wechat_open_id = COALESCE(wechat_open_id, ?),
-                        last_login_at = ?,
-                        first_login_at = COALESCE(first_login_at, ?)
-                    WHERE id = ?
-                    """,
-                finalOpenid,
-                finalOpenid,
-                Timestamp.valueOf(now),
-                Timestamp.valueOf(now),
-                riderId
-            );
+            throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "该手机号未注册骑手账号");
         }
+
+        // 仅允许后台已建档骑手完成 openid 绑定
+        jdbcTemplate.update(
+            """
+                UPDATE rider_profiles
+                SET current_openid = ?,
+                    wechat_open_id = COALESCE(wechat_open_id, ?),
+                    last_login_at = ?,
+                    first_login_at = COALESCE(first_login_at, ?)
+                WHERE id = ?
+                """,
+            finalOpenid,
+            finalOpenid,
+            Timestamp.valueOf(now),
+            Timestamp.valueOf(now),
+            riderId
+        );
         
         RiderAuthProfileResponse profile = riderProfile(riderId);
         

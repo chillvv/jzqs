@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Eye, EyeOff, PlusCircle, Search, Trash2, UserCog } from "lucide-react";
+import { PlusCircle, Search, Trash2, UserCog } from "lucide-react";
 import {
   activateDispatchRider,
   createDispatchRider,
@@ -15,6 +15,7 @@ import type {
 } from "../../shared/api/types";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { AdminDialog } from "../../shared/components/AdminDialog";
+import { toast } from "../../shared/components/Toast";
 import {
   buildCreateRiderPayload,
   createEmptyNewRiderDraft,
@@ -37,6 +38,10 @@ const inputStyle: React.CSSProperties = {
 
 const selectStyle: React.CSSProperties = { width: "100%" };
 
+function getErrorMessage(error: any, fallback: string) {
+  return error?.response?.data?.message || error?.message || fallback;
+}
+
 export function DispatchRidersPage() {
   const [riders, setRiders] = useState<DispatchManagedRiderResponse[]>([]);
   const [bindings, setBindings] = useState<DispatchAreaBindingResponse[]>([]);
@@ -45,14 +50,15 @@ export function DispatchRidersPage() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editRiderId, setEditRiderId] = useState<number | null>(null);
   const [draft, setDraft] = useState<NewRiderDraft>(createEmptyNewRiderDraft());
-  const [showPassword, setShowPassword] = useState(false);
   const [saving, setSaving] = useState(false);
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [deleteConfirmRider, setDeleteConfirmRider] = useState<DispatchManagedRiderResponse | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const fieldErrors = validateCreateRiderDraft(draft);
+  const canSubmit = !fieldErrors.riderName && !fieldErrors.phone;
 
   useEffect(() => {
-    reload().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)));
+    reload().catch((err) => toast(getErrorMessage(err, "加载骑手列表失败"), "error"));
   }, []);
 
   const riderAreas = useMemo(() => {
@@ -106,7 +112,6 @@ export function DispatchRidersPage() {
   function openAdd() {
     setDraft(createEmptyNewRiderDraft());
     setEditRiderId(null);
-    setShowPassword(false);
     setShowAddModal(true);
   }
 
@@ -114,45 +119,36 @@ export function DispatchRidersPage() {
     setDraft({
       riderName: rider.riderName,
       phone: rider.phone || "",
-      password: "",
       areaCode: rider.areaCode || ""
     });
     setEditRiderId(rider.riderId);
-    setShowPassword(false);
     setShowAddModal(true);
   }
 
   async function handleSave() {
-    const err = validateCreateRiderDraft(draft);
-    if (err) { window.alert(err); return; }
+    if (!canSubmit) {
+      toast(fieldErrors.riderName || fieldErrors.phone || "请完善骑手信息", "error");
+      return;
+    }
     setSaving(true);
     try {
       if (editRiderId) {
-        const payload: {
-          riderName: string;
-          displayName: string;
-          phone: string;
-          areaCode: string;
-          updatedBy: string;
-          password?: string;
-        } = {
+        const payload = {
           riderName: draft.riderName.trim(),
           displayName: draft.riderName.trim(),
           phone: draft.phone.trim(),
           areaCode: draft.areaCode.trim(),
           updatedBy: DEFAULT_OPERATOR
         };
-        if (draft.password.trim()) {
-          payload.password = draft.password.trim();
-        }
         await updateDispatchRiderProfile(editRiderId, payload);
       } else {
         await createDispatchRider(buildCreateRiderPayload(draft));
       }
       setShowAddModal(false);
       await reload();
+      toast(editRiderId ? "骑手信息已更新" : "骑手已创建");
     } catch (err: any) {
-      window.alert(err?.response?.data?.message || err.message || String(err));
+      toast(getErrorMessage(err, editRiderId ? "保存骑手失败" : "创建骑手失败"), "error");
     } finally {
       setSaving(false);
     }
@@ -183,8 +179,9 @@ export function DispatchRidersPage() {
       await deleteDispatchRider(deleteConfirmRider.riderId);
       setDeleteConfirmRider(null);
       await reload();
+      toast("骑手已删除");
     } catch (err: any) {
-      window.alert(err?.response?.data?.message || err.message || String(err));
+      toast(getErrorMessage(err, "删除骑手失败"), "error");
     } finally {
       setDeleting(false);
     }
@@ -311,13 +308,13 @@ export function DispatchRidersPage() {
       <AdminDialog
         open={showAddModal}
         title={editRiderId ? "编辑骑手" : "新增骑手"}
-        description={editRiderId ? "修改骑手姓名、登录手机号或重置密码。" : "新增骑手账号后即可参与区域绑定和派单。"}
+        description={editRiderId ? "修改骑手姓名、登录手机号或负责区域。" : "后台新增骑手后，骑手即可使用对应手机号完成登录绑定。"}
         width={460}
         onClose={saving ? () => undefined : () => setShowAddModal(false)}
         footer={
           <>
             <button className="btn btn-outline" disabled={saving} onClick={() => setShowAddModal(false)}>取消</button>
-            <button className="btn btn-primary" disabled={saving} onClick={handleSave}>
+            <button className="btn btn-primary" disabled={saving || !canSubmit} onClick={handleSave}>
               {saving ? "保存中..." : editRiderId ? "保存修改" : "创建骑手"}
             </button>
           </>
@@ -326,21 +323,31 @@ export function DispatchRidersPage() {
         <label className="admin-field">
           <span className="admin-field-label">姓名</span>
           <input
+            className={fieldErrors.riderName ? "admin-input admin-input--error" : "admin-input"}
             value={draft.riderName}
             onChange={(e) => setDraft((d) => ({ ...d, riderName: e.target.value }))}
             placeholder="骑手全名"
-            style={inputStyle}
+            style={{
+              ...inputStyle,
+              border: fieldErrors.riderName ? "1px solid var(--error-color-dark)" : inputStyle.border
+            }}
           />
+          {fieldErrors.riderName ? <div className="form-error">{fieldErrors.riderName}</div> : null}
         </label>
 
         <label className="admin-field">
           <span className="admin-field-label">手机号</span>
           <input
+            className={fieldErrors.phone ? "admin-input admin-input--error" : "admin-input"}
             value={draft.phone}
             onChange={(e) => setDraft((d) => ({ ...d, phone: e.target.value }))}
-            placeholder="用于登录"
-            style={inputStyle}
+            placeholder="后台建档后供骑手登录绑定"
+            style={{
+              ...inputStyle,
+              border: fieldErrors.phone ? "1px solid var(--error-color-dark)" : inputStyle.border
+            }}
           />
+          {fieldErrors.phone ? <div className="form-error">{fieldErrors.phone}</div> : null}
         </label>
 
         <label className="admin-field">
@@ -351,30 +358,6 @@ export function DispatchRidersPage() {
             onChange={(value) => setDraft((d) => ({ ...d, areaCode: value }))}
             style={selectStyle}
           />
-        </label>
-
-        <label className="admin-field">
-          <span className="admin-field-label">
-            密码
-            {editRiderId && <span style={{ color: "var(--text-sub)", fontWeight: 400, marginLeft: "8px", fontSize: "12px" }}>留空则不修改</span>}
-          </span>
-          <div style={{ position: "relative" }}>
-            <input
-              type={showPassword ? "text" : "password"}
-              value={draft.password}
-              onChange={(e) => setDraft((d) => ({ ...d, password: e.target.value }))}
-              placeholder={editRiderId ? "留空不修改" : "默认 888888"}
-              style={{ ...inputStyle, paddingRight: "36px" }}
-            />
-            <button
-              type="button"
-              className="btn btn-outline btn-compact"
-              style={{ position: "absolute", right: "4px", top: "50%", transform: "translateY(-50%)", border: "none", background: "none" }}
-              onClick={() => setShowPassword(!showPassword)}
-            >
-              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-            </button>
-          </div>
         </label>
       </AdminDialog>
 

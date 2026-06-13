@@ -48,7 +48,7 @@ export function MenuSchedulePage() {
   const [savingDay, setSavingDay] = useState<string | null>(null);
 
   useEffect(() => {
-    reloadMenu().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)));
+    reloadMenu().catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"));
   }, []);
 
 
@@ -282,8 +282,8 @@ export function MenuSchedulePage() {
           <p className="page-subtitle">周菜单配置、休息日与发布状态</p>
         </div>
         <div className="page-header__actions">
-          <button className="btn btn-outline" disabled={copyingLastWeek} onClick={() => handleCopyFromLastWeek().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>{copyingLastWeek ? "复制中..." : "复制上周菜单到本周"}</button>
-          <button className="btn btn-outline" disabled={creatingNextWeek} onClick={() => handleCreateNextWeek().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>{creatingNextWeek ? "创建中..." : "新建下周空白模板"}</button>
+          <button className="btn btn-outline" disabled={copyingLastWeek} onClick={() => handleCopyFromLastWeek().catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"))}>{copyingLastWeek ? "复制中..." : "复制上周菜单到本周"}</button>
+          <button className="btn btn-outline" disabled={creatingNextWeek} onClick={() => handleCreateNextWeek().catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"))}>{creatingNextWeek ? "创建中..." : "新建下周空白模板"}</button>
           <button className="btn btn-primary" onClick={() => setIsPublishConfirmOpen(true)} disabled={!week || publishing}>{publishing ? (isPublished ? "更新中..." : "发布中...") : publishButtonText}</button>
         </div>
       </div>
@@ -318,12 +318,12 @@ export function MenuSchedulePage() {
           onClick={() => {
             const prev = new Date(selectedDate);
             prev.setDate(prev.getDate() - 7);
-            handlePickWeek(prev.toISOString().slice(0, 10)).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)));
+            handlePickWeek(prev.toISOString().slice(0, 10)).catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"));
           }}
         >‹ 上一周</button>
         <DatePicker
           value={selectedDate}
-          onChange={(date) => handlePickWeek(date).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}
+          onChange={(date) => handlePickWeek(date).catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"))}
           showTomorrowShortcut={false}
         />
         <span className="menu-week-toolbar__range">
@@ -334,7 +334,7 @@ export function MenuSchedulePage() {
           onClick={() => {
             const next = new Date(selectedDate);
             next.setDate(next.getDate() + 7);
-            handlePickWeek(next.toISOString().slice(0, 10)).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)));
+            handlePickWeek(next.toISOString().slice(0, 10)).catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"));
           }}
         >下一周 ›</button>
       </div>
@@ -375,7 +375,7 @@ export function MenuSchedulePage() {
                   {renderSlotEditor(day.serveDate, "lunch", draft.lunch)}
                   {renderSlotEditor(day.serveDate, "dinner", draft.dinner)}
                   <div className="menu-week-day-card__actions">
-                    <button className="btn btn-primary" disabled={savingDay === day.serveDate} onClick={() => handleSaveDay(day.serveDate).catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+                    <button className="btn btn-primary" disabled={savingDay === day.serveDate} onClick={() => handleSaveDay(day.serveDate).catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"))}>
                       {savingDay === day.serveDate ? "保存中..." : "保存当天"}
                     </button>
                     <button className="btn btn-outline" disabled={savingDay === day.serveDate} onClick={() => clearDay(day.serveDate)}>一键清空</button>
@@ -400,7 +400,7 @@ export function MenuSchedulePage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-outline" disabled={publishing} onClick={() => setIsPublishConfirmOpen(false)}>取消</button>
-              <button className="btn btn-primary" disabled={publishing} onClick={() => handlePublish().catch((err) => window.alert(err?.response?.data?.message || err.message || String(err)))}>
+              <button className="btn btn-primary" disabled={publishing} onClick={() => handlePublish().catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"))}>
                 {publishing ? (isPublished ? "更新中..." : "发布中...") : isPublished ? "确认更新" : "确认发布"}
               </button>
             </div>

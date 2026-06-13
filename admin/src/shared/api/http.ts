@@ -422,7 +422,6 @@ export async function updateDispatchRiderProfile(riderId: number, payload: {
   riderName: string;
   displayName: string;
   phone: string;
-  password?: string;
   areaCode: string;
   updatedBy: string;
 }) {

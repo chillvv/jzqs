@@ -4,6 +4,8 @@ import { fetchMaintenanceLogs, fetchMaintenanceOverview, triggerDataCleanup } fr
 import type { MaintenanceLogItemResponse, MaintenanceOverviewResponse } from "../../shared/api/types";
 import { buildMaintenanceLogRows, type MaintenanceTone } from "./maintenancePage.helpers";
 import { formatDateTimeLabel } from "../../shared/utils/dateTime";
+import { AdminDialog } from "../../shared/components/AdminDialog";
+import { toast } from "../../shared/components/Toast";
 
 const EMPTY_OVERVIEW: MaintenanceOverviewResponse = {
   latestManual: null,
@@ -26,6 +28,7 @@ export function MaintenancePage() {
   const [cleaning, setCleaning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ status: string; message: string } | null>(null);
+  const [isCleanupConfirmOpen, setIsCleanupConfirmOpen] = useState(false);
 
   async function reloadMaintenanceData() {
     setLoading(true);
@@ -47,21 +50,19 @@ export function MaintenancePage() {
   }
 
   useEffect(() => {
-    reloadMaintenanceData().catch((err) => window.alert(err?.response?.data?.message || err?.message || String(err)));
+    reloadMaintenanceData().catch((err) => toast(err?.response?.data?.message || err?.message || String(err), "error"));
   }, []);
 
   async function handleCleanup() {
-    if (!window.confirm("确定要执行数据清理吗？历史过期数据将被永久删除。")) {
-      return;
-    }
-
     setCleaning(true);
     try {
+      setIsCleanupConfirmOpen(false);
       const response = await triggerDataCleanup();
       setResult(response);
       await reloadMaintenanceData();
+      toast(response.message || "数据清理已完成");
     } catch (err: any) {
-      window.alert(err?.response?.data?.message || err?.message || String(err));
+      toast(err?.response?.data?.message || err?.message || String(err), "error");
     } finally {
       setCleaning(false);
     }
@@ -134,7 +135,7 @@ export function MaintenancePage() {
             className="btn btn-primary" 
             style={{ padding: "8px 20px", borderRadius: "8px" }}
             disabled={cleaning} 
-            onClick={() => handleCleanup().catch(() => undefined)}
+            onClick={() => setIsCleanupConfirmOpen(true)}
           >
             <Trash2 size={16} />
             {cleaning ? "正在清理..." : "立即清理过期数据"}
@@ -191,6 +192,33 @@ export function MaintenancePage() {
           </div>
         )}
       </div>
+
+      <AdminDialog
+        open={isCleanupConfirmOpen}
+        title="确认执行数据清理"
+        description="历史过期数据将被永久删除，请确认是否继续。"
+        width={500}
+        onClose={cleaning ? () => undefined : () => setIsCleanupConfirmOpen(false)}
+        footer={
+          <>
+            <button className="btn btn-outline" disabled={cleaning} onClick={() => setIsCleanupConfirmOpen(false)}>取消</button>
+            <button className="btn-delete" disabled={cleaning} onClick={() => handleCleanup().catch(() => undefined)}>
+              {cleaning ? "清理中..." : "确认清理"}
+            </button>
+          </>
+        }
+      >
+        <div className="delete-confirm-details">
+          <div className="delete-confirm-details__item">
+            <span className="delete-confirm-details__label">影响范围：</span>
+            <span className="delete-confirm-details__value">历史过期维护数据</span>
+          </div>
+          <div className="delete-confirm-details__item">
+            <span className="delete-confirm-details__label">执行结果：</span>
+            <span className="delete-confirm-details__value">清理完成后会自动刷新维护日志</span>
+          </div>
+        </div>
+      </AdminDialog>
     </div>
   );
 }

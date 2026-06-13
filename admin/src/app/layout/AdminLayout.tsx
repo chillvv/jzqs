@@ -11,6 +11,7 @@ import {
   LineChart,
   Wrench,
   LifeBuoy,
+  Menu,
 } from "lucide-react";
 import "../../index.css";
 import { changeAdminPassword, fetchAdminProfile, logoutAdmin } from "../../shared/api/http";
@@ -50,6 +51,7 @@ export function AdminLayout() {
     return parseAdminAuthSession(window.localStorage.getItem(ADMIN_AUTH_STORAGE_KEY));
   });
   const [isPasswordOpen, setIsPasswordOpen] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [passwordForm, setPasswordForm] = useState({
     oldPassword: "",
     newPassword: "",
@@ -78,6 +80,10 @@ export function AdminLayout() {
         navigate("/login", { replace: true });
       });
   }, [navigate]);
+
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [location.pathname]);
 
   async function handleLogout() {
     try {
@@ -137,7 +143,23 @@ export function AdminLayout() {
   return (
     <div className="admin-shell" style={scaleStyle}>
       <ToastContainer />
-      <div className="sidebar">
+      <button
+        type="button"
+        className="mobile-sidebar-toggle"
+        onClick={() => setMobileSidebarOpen((current) => !current)}
+      >
+        <Menu size={18} />
+        菜单
+      </button>
+      {mobileSidebarOpen ? (
+        <button
+          type="button"
+          className="mobile-sidebar-backdrop"
+          onClick={() => setMobileSidebarOpen(false)}
+          aria-label="关闭侧边栏"
+        />
+      ) : null}
+      <div className={`sidebar ${mobileSidebarOpen ? "sidebar--mobile-open" : ""}`}>
         <div className="logo-area">
           <UtensilsCrossed size={24} strokeWidth={2.5} />
           <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>

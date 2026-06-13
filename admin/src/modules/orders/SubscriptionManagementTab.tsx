@@ -3,6 +3,8 @@ import { fetchSubscriptionRules, deleteSubscriptionRule, toggleSubscriptionRule 
 import type { SubscriptionRuleResponse } from "../../shared/api/types";
 import { SubscriptionRuleForm } from "./SubscriptionRuleForm";
 import { AlertTriangle, Edit, Pause, Play, Trash2 } from "lucide-react";
+import { AdminDialog } from "../../shared/components/AdminDialog";
+import { toast } from "../../shared/components/Toast";
 
 export function SubscriptionManagementTab() {
   const [items, setItems] = useState<SubscriptionRuleResponse[]>([]);
@@ -14,6 +16,7 @@ export function SubscriptionManagementTab() {
   const [editingItem, setEditingItem] = useState<SubscriptionRuleResponse | null>(null);
   const [togglingRuleId, setTogglingRuleId] = useState<number | null>(null);
   const [deletingRuleId, setDeletingRuleId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SubscriptionRuleResponse | null>(null);
 
   useEffect(() => {
     loadData();
@@ -33,18 +36,17 @@ export function SubscriptionManagementTab() {
   }
 
   async function handleDelete(id: number) {
-    if (!window.confirm("确认删除该固定订餐计划？")) {
-      return;
-    }
     if (deletingRuleId === id) {
       return;
     }
     setDeletingRuleId(id);
     try {
       await deleteSubscriptionRule(id);
+      setDeleteTarget(null);
       await loadData();
+      toast("固定订餐计划已删除");
     } catch (err: any) {
-      alert(err?.response?.data?.message || err?.message || "删除失败");
+      toast(err?.response?.data?.message || err?.message || "删除失败", "error");
     } finally {
       setDeletingRuleId(null);
     }
@@ -58,8 +60,9 @@ export function SubscriptionManagementTab() {
     try {
       await toggleSubscriptionRule(id);
       await loadData();
+      toast("固定订餐计划状态已更新");
     } catch (err: any) {
-      alert(err?.response?.data?.message || err?.message || "操作失败");
+      toast(err?.response?.data?.message || err?.message || "操作失败", "error");
     } finally {
       setTogglingRuleId(null);
     }
@@ -218,7 +221,7 @@ export function SubscriptionManagementTab() {
                         )}
                         <button
                           className="btn btn-sm btn-outline"
-                          onClick={() => handleDelete(item.id)}
+                          onClick={() => setDeleteTarget(item)}
                           disabled={deletingRuleId === item.id}
                           title="删除"
                           style={{ color: "var(--error-color)" }}
@@ -241,6 +244,43 @@ export function SubscriptionManagementTab() {
           onClose={handleFormClose}
         />
       )}
+
+      <AdminDialog
+        open={Boolean(deleteTarget)}
+        title="确认删除固定订餐计划"
+        description={deleteTarget ? `确认删除 ${deleteTarget.customerName} 的固定订餐计划吗？` : undefined}
+        width={480}
+        onClose={deletingRuleId ? () => undefined : () => setDeleteTarget(null)}
+        footer={
+          <>
+            <button className="btn btn-outline" disabled={Boolean(deletingRuleId)} onClick={() => setDeleteTarget(null)}>取消</button>
+            <button
+              className="btn-delete"
+              disabled={!deleteTarget || Boolean(deletingRuleId)}
+              onClick={() => deleteTarget && handleDelete(deleteTarget.id).catch((err) => toast(err?.response?.data?.message || err?.message || "删除失败", "error"))}
+            >
+              {deletingRuleId ? "删除中..." : "确认删除"}
+            </button>
+          </>
+        }
+      >
+        {deleteTarget ? (
+          <div className="delete-confirm-details">
+            <div className="delete-confirm-details__item">
+              <span className="delete-confirm-details__label">客户：</span>
+              <span className="delete-confirm-details__value">{deleteTarget.customerName}</span>
+            </div>
+            <div className="delete-confirm-details__item">
+              <span className="delete-confirm-details__label">电话：</span>
+              <span className="delete-confirm-details__value">{deleteTarget.customerPhone}</span>
+            </div>
+            <div className="delete-confirm-details__item">
+              <span className="delete-confirm-details__label">状态：</span>
+              <span className="delete-confirm-details__value">{getStatusLabel(deleteTarget.status).label}</span>
+            </div>
+          </div>
+        ) : null}
+      </AdminDialog>
     </div>
   );
 }
