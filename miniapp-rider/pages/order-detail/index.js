@@ -21,6 +21,7 @@ function normalizeOptionalText(value) {
 Page({
   data: {
     statusBarHeight: 0,
+    navBarHeight: 44,
     loading: true,
     order: null,
     deliverySectionExpanded: false,
@@ -42,8 +43,11 @@ Page({
    */
   async onLoad(options) {
     const app = getApp();
-    this.setData({ statusBarHeight: app.globalData.statusBarHeight });
-    
+    this.setData({
+      statusBarHeight: app.globalData.statusBarHeight,
+      navBarHeight: app.globalData.navBarHeight
+    });
+
     const { batchItemId, mealSlotOrderId, expandDelivery } = options;
 
     if (!batchItemId || !mealSlotOrderId) {
@@ -101,7 +105,7 @@ Page({
       let originalReceiptUrl = '';
       let receiptTempFilePath = '';
       let receiptNote = '';
-      
+
       if (normalizedOrder.itemStatus === 'DELIVERED') {
         originalReceiptUrl = normalizedOrder.receiptUrl || '';
         receiptTempFilePath = normalizedOrder.receiptUrl || '';
@@ -218,13 +222,13 @@ Page({
    */
   previewPhoto() {
     const { receiptTempFilePath, order, isEditingReceipt } = this.data;
-    
+
     // 如果是已送达且未编辑模式，预览原有照片
     let imageUrl = receiptTempFilePath;
     if (!isEditingReceipt && order && order.itemStatus === 'DELIVERED' && order.receiptUrl) {
       imageUrl = order.receiptUrl;
     }
-    
+
     if (!imageUrl) return;
 
     imageUtil.previewImage([imageUrl], 0);
@@ -395,7 +399,7 @@ Page({
    */
   cancelEditReceipt() {
     const { order } = this.data;
-    
+
     // 退出编辑模式，恢复原有数据
     this.setData({
       isEditingReceipt: false,
@@ -472,7 +476,11 @@ Page({
   },
 
   goBack() {
-    wx.navigateBack();
+    if (getCurrentPages().length > 1) {
+      wx.navigateBack();
+      return;
+    }
+    wx.switchTab({ url: '/pages/queue/index' });
   },
 
   /**
@@ -491,10 +499,10 @@ Page({
     // 验证：照片和说明至少要有一个
     const hasPhoto = receiptTempFilePath && receiptTempFilePath.trim();
     const hasNote = receiptNote && receiptNote.trim();
-    
+
     if (!hasPhoto && !hasNote) {
-      wx.showToast({ 
-        title: '请至少上传照片或填写说明', 
+      wx.showToast({
+        title: '请至少上传照片或填写说明',
         icon: 'none',
         duration: 2000
       });
@@ -509,7 +517,7 @@ Page({
 
     try {
       let receiptFileKey = '';
-      
+
       // 1. 上传图片 (如果选择了图片)
       if (receiptTempFilePath && !isStoredReceiptReference(receiptTempFilePath)) {
         console.log('[提交回执] 开始上传图片', receiptTempFilePath);
@@ -603,7 +611,7 @@ Page({
 
     try {
       await taskService.undoDelivery(riderName, order.mealSlotOrderId);
-      
+
       wx.hideLoading();
       wx.showToast({
         title: '已撤回送达',

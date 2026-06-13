@@ -3,6 +3,8 @@ const { buildTodayCards } = require('../../utils/today-helpers');
 
 Page({
   data: {
+    statusBarHeight: 0,
+    navBarHeight: 44,
     loading: false,
     viewState: 'checking',
     summary: {
@@ -14,6 +16,10 @@ Page({
   },
   async onShow() {
     const app = getApp();
+    this.setData({
+      statusBarHeight: app.globalData.statusBarHeight,
+      navBarHeight: app.globalData.navBarHeight
+    });
     await app.waitForRiderAuth();
     const viewState = app.getRiderViewState();
     this.setData({ viewState });
@@ -64,6 +70,14 @@ Page({
     const app = getApp();
     if (app.getRiderViewState() !== 'active') {
       wx.switchTab({ url: '/pages/profile/index' });
+      return;
+    }
+    wx.switchTab({ url: '/pages/queue/index' });
+  },
+
+  goBack() {
+    if (getCurrentPages().length > 1) {
+      wx.navigateBack();
       return;
     }
     wx.switchTab({ url: '/pages/queue/index' });

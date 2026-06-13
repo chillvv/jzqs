@@ -1,3 +1,16 @@
+<view class="subpage-nav-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+  <view class="subpage-nav-content" style="height: {{navBarHeight - statusBarHeight}}px;">
+    <view class="subpage-nav-left">
+      <view class="subpage-nav-back" bindtap="goBack">
+        <text class="subpage-nav-back-icon">&lt;</text>
+      </view>
+      <text class="subpage-nav-title">{{targetOrderId ? '订单详情' : '每日送达回执'}}</text>
+    </view>
+    <view class="subpage-nav-right"></view>
+  </view>
+</view>
+<view class="subpage-nav-spacer" style="height: {{navBarHeight}}px;"></view>
+
 <view class="subpage">
   <view wx:if="{{!targetOrderId}}" class="subpage-card">
     <view class="hero-inline-main">每日送达回执</view>
@@ -41,7 +54,7 @@
           <view class="detail-section-head">
             <view class="detail-section-title">配送回执</view>
           </view>
-          
+
           <view class="detail-info-list" style="background: transparent; padding: 0; margin-bottom: 24rpx;">
             <view class="detail-info-row rider-note-block" style="padding-top: 0; border-top: none;">
               <text class="detail-info-label">骑手备注</text>

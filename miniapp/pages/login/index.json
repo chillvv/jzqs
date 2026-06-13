@@ -2,5 +2,5 @@
   "navigationBarTitleText": "登录会员",
   "navigationBarBackgroundColor": "#FFFFFF",
   "navigationBarTextStyle": "black",
-  "navigationStyle": "default"
+  "navigationStyle": "custom"
 }

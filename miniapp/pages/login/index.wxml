@@ -1,6 +1,19 @@
+<view class="subpage-nav-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+  <view class="subpage-nav-content" style="height: {{navBarHeight - statusBarHeight}}px;">
+    <view class="subpage-nav-left">
+      <view class="subpage-nav-back" bindtap="goBack">
+        <text class="subpage-nav-back-icon">&lt;</text>
+      </view>
+      <text class="subpage-nav-title">{{authFlowMode === 'complete-profile' ? '完善资料' : '登录'}}</text>
+    </view>
+    <view class="subpage-nav-right"></view>
+  </view>
+</view>
+<view class="subpage-nav-spacer" style="height: {{navBarHeight}}px;"></view>
+
 <view class="auth-page-shell">
   <!-- Top Section: Logo and Welcome -->
-  <view class="auth-page-hero" style="margin-top: calc({{navBarHeight}}px + 40rpx);">
+  <view class="auth-page-hero" style="margin-top: 40rpx;">
     <image class="auth-logo" src="/assets/logo.jpeg" mode="aspectFill"></image>
     <view class="auth-page-title">{{authFlowMode === 'complete-profile' ? '填写姓名完成注册' : '欢迎登录'}}</view>
     <view class="auth-page-subtitle">{{authFlowMode === 'complete-profile' ? '该名称将作为您的默认收货人姓名' : '为了保障您的账号安全，请使用微信一键登录'}}</view>

@@ -253,13 +253,13 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             .filter(item -> "DINNER".equals(item.mealPeriod()))
             .findFirst()
             .orElse(null);
-            
+
         Map<String, Object> settings = jdbcTemplate.queryForMap(
             "SELECT ordering_enabled, holiday_notice_desc FROM admin_settings WHERE id = 1"
         );
         boolean isOrderingEnabled = Boolean.TRUE.equals(settings.get("ordering_enabled"));
         String notice = safeString(settings.get("holiday_notice_desc"));
-        
+
         boolean selfOrderEnabled = LocalTime.now().isBefore(LocalTime.of(23, 0));
         String selfOrderNotice = selfOrderEnabled ? "" : "当前自助下单已截止，如需加单请联系专属客服微信";
 
@@ -396,16 +396,76 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         ensureOrderingEnabled();
         ensureSelfOrderAllowed(serveDate, mealPeriod);
         requirePublishedMenu(serveDate, mealPeriod);
-        
+
         LocalDate orderDate = LocalDate.parse(serveDate);
-        
+        String normalizedMealPeriod = normalizeMealPeriod(mealPeriod);
+
         long walletId = activeWalletId(customerId);
         int remainingMeals = remainingMealsForUpdate(walletId);
         if (remainingMeals <= 0) {
             throw new BusinessException(ErrorCode.INSUFFICIENT_MEALS, "剩余餐次不足，无法下单");
         }
         long addressId = ensureCustomerAddress(customerId, deliveryAddress);
-        ensureNoDuplicateMealOrder(customerId, orderDate, mealPeriod);
+        String finalUserNote = normalizeNote(note);
+        String merchantRemark = normalizeCustomerMerchantRemark(customerId);
+        Long mergeTargetOrderId = findMergeTargetOrderId(customerId, orderDate, normalizedMealPeriod, addressId);
+        if (mergeTargetOrderId != null) {
+            Map<String, Object> existingOrder = jdbcTemplate.queryForMap(
+                """
+                    SELECT COALESCE(note, '-') AS note,
+                           COALESCE(user_note, '-') AS user_note
+                    FROM meal_slot_orders
+                    WHERE id = ?
+                    """,
+                mergeTargetOrderId
+            );
+            String mergedUserNote = mergeOrderNote(
+                preferredOrderNote(existingOrder.get("user_note"), existingOrder.get("note")),
+                finalUserNote
+            );
+            LocalDateTime mergeTime = LocalDateTime.now();
+            jdbcTemplate.update(
+                """
+                    UPDATE meal_slot_orders
+                    SET quantity = quantity + 1,
+                        note = ?,
+                        user_note = ?,
+                        merchant_remark = CASE
+                            WHEN (merchant_remark IS NULL OR TRIM(merchant_remark) = '' OR merchant_remark = '-') AND ? <> '' THEN ?
+                            ELSE merchant_remark
+                        END
+                    WHERE id = ?
+                    """,
+                mergedUserNote,
+                mergedUserNote,
+                merchantRemark,
+                merchantRemark,
+                mergeTargetOrderId
+            );
+            jdbcTemplate.update(
+                "UPDATE customers SET last_order_at = ? WHERE id = ?",
+                Timestamp.valueOf(mergeTime),
+                customerId
+            );
+            jdbcTemplate.update("UPDATE meal_wallets SET reserved_meals = reserved_meals + 1 WHERE id = ?", walletId);
+            insertWalletTransaction(walletId, "RESERVE", -1, "小程序", "用户自主下单加餐占用餐次", mergeTime, mergeTargetOrderId);
+            orderNoteSnapshotService.writeOrderSnapshot(
+                mergeTargetOrderId,
+                customerId,
+                "小程序",
+                normalizeSnapshotNote(mergedUserNote),
+                null,
+                List.of(),
+                mergeTime
+            );
+            jdbcTemplate.execute("/* force flush */ SELECT 1");
+            dispatchService.autoAssignPendingOrders(normalizedMealPeriod);
+            return Map.of(
+                "orderId", mergeTargetOrderId,
+                "status", "MERGED",
+                "walletAction", "RESERVED"
+            );
+        }
         LocalDateTime now = LocalDateTime.now();
         Long existingDailyOrderId = jdbcTemplate.query(
             """
@@ -427,8 +487,6 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 customerId, orderDate, "MINIAPP", "PENDING_DISPATCH", false, Timestamp.valueOf(now)
             )
             : existingDailyOrderId;
-        String finalUserNote = normalizeNote(note);
-        String merchantRemark = normalizeCustomerMerchantRemark(customerId);
         LocalDateTime snapshotTime = LocalDateTime.now();
         long mealSlotOrderId = insertAndReturnId(
             """
@@ -436,7 +494,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                     daily_order_id, meal_period, quantity, address_id, note, user_note, merchant_remark, status, source_type
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-            dailyOrderId, mealPeriod, 1, addressId, finalUserNote, finalUserNote, merchantRemark, "PENDING_DISPATCH", "MINIAPP"
+            dailyOrderId, normalizedMealPeriod, 1, addressId, finalUserNote, finalUserNote, merchantRemark, "PENDING_DISPATCH", "MINIAPP"
         );
         jdbcTemplate.update(
             "UPDATE daily_orders SET status = 'PENDING_DISPATCH', source = 'MINIAPP' WHERE id = ?",
@@ -458,19 +516,19 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             List.of(),
             snapshotTime
         );
-        
+
         // 尝试自动派单（如果有记忆地址绑定）
         // 在同一个事务中，JdbcTemplate 应该能看到刚插入的订单
         jdbcTemplate.execute("/* force flush */ SELECT 1");
-        dispatchService.autoAssignPendingOrders(mealPeriod);
-        
+        dispatchService.autoAssignPendingOrders(normalizedMealPeriod);
+
         // 重新查询状态以返回准确结果
         String currentStatus = jdbcTemplate.queryForObject(
             "SELECT status FROM meal_slot_orders WHERE id = ?",
             String.class,
             mealSlotOrderId
         );
-        
+
         return Map.of(
             "orderId", mealSlotOrderId,
             "status", currentStatus != null ? currentStatus : "PENDING_DISPATCH",
@@ -566,7 +624,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             WHERE mso.id = ? AND do.customer_id = ?
               AND mso.status IN ('CANCELLED', 'REFUNDED')
             """, orderId, customerId);
-        
+
         if (updated == 0) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "无法删除该订单（可能状态不符或订单不存在）");
         }
@@ -1225,7 +1283,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         if (count == null || count == 0) {
             throw new BusinessException(ErrorCode.RIDER_TASK_NOT_FOUND, "未找到该配送任务");
         }
-        
+
         // 检查是否已有回执记录
         Integer receiptCount = jdbcTemplate.queryForObject("""
             SELECT COUNT(*)
@@ -1249,7 +1307,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             : LocalDateTime.parse(deliveredAt);
         LocalDateTime visibleAt = resolveReceiptVisibleAt(mealSlotOrderId, deliveredDateTime);
         LocalDateTime expiresAt = deliveredDateTime.plusHours(48);
-        
+
         // 更新回执记录
         jdbcTemplate.update("""
             UPDATE delivery_receipts
@@ -1270,7 +1328,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             mealSlotOrderId
         );
         deleteManagedReceiptFileQuietly(previousReceiptUrl, finalReceiptUrl);
-        
+
         return Map.of(
             "mealSlotOrderId", mealSlotOrderId,
             "orderStatus", "DELIVERED",
@@ -1292,7 +1350,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         if (count == null || count == 0) {
             throw new BusinessException(ErrorCode.RIDER_TASK_NOT_FOUND, "未找到该配送任务");
         }
-        
+
         // 检查是否已有回执记录
         Integer receiptCount = jdbcTemplate.queryForObject("""
             SELECT COUNT(*)
@@ -1316,7 +1374,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             WHERE meal_slot_order_id = ?
             """, mealSlotOrderId);
         deleteManagedReceiptFileQuietly(previousReceiptUrl, "");
-        
+
         return Map.of(
             "mealSlotOrderId", mealSlotOrderId,
             "orderStatus", "DELIVERED",
@@ -1361,7 +1419,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         );
         // 先移出范围避免唯一约束冲突
         jdbcTemplate.update("UPDATE dispatch_batch_items SET current_sequence = -1 WHERE id = ?", batchItemId);
-        
+
         jdbcTemplate.update("""
             UPDATE dispatch_batch_items
             SET current_sequence = current_sequence - 1,
@@ -1371,7 +1429,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             WHERE batch_id = ? AND current_sequence > ?
             ORDER BY current_sequence ASC
             """, riderName, context.batchId(), context.currentSequence());
-            
+
         jdbcTemplate.update("""
             UPDATE dispatch_batch_items
             SET current_sequence = ?,
@@ -1411,13 +1469,13 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             WHERE id = ?
             """, riderName, batchItemId);
         refreshRiderBatchState(context.batchId());
-        
+
         String finalStatus = jdbcTemplate.queryForObject(
             "SELECT item_status FROM dispatch_batch_items WHERE id = ?",
             String.class,
             batchItemId
         );
-        
+
         return Map.of(
             "batchItemId", batchItemId,
             "itemStatus", finalStatus != null ? finalStatus : "PENDING",
@@ -1735,19 +1793,35 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         return count == null ? 0 : count;
     }
 
-    private void ensureNoDuplicateMealOrder(long customerId, LocalDate serveDate, String mealPeriod) {
-        Integer count = jdbcTemplate.queryForObject("""
-            SELECT COUNT(*)
-            FROM meal_slot_orders mso
-            JOIN daily_orders do ON do.id = mso.daily_order_id
-            WHERE do.customer_id = ?
-              AND do.serve_date = ?
-              AND mso.meal_period = ?
-              AND mso.status <> 'CANCELLED'
-            """, Integer.class, customerId, serveDate, mealPeriod);
-        if (count != null && count > 0) {
-            throw new BusinessException(ErrorCode.ALREADY_ORDERED, "当前餐次已经下过单，请勿重复提交");
-        }
+    private Long findMergeTargetOrderId(long customerId, LocalDate serveDate, String mealPeriod, long addressId) {
+        return jdbcTemplate.query(
+            """
+                SELECT mso.id
+                FROM meal_slot_orders mso
+                JOIN daily_orders do ON do.id = mso.daily_order_id
+                WHERE do.customer_id = ?
+                  AND do.serve_date = ?
+                  AND mso.meal_period = ?
+                  AND mso.address_id = ?
+                  AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM aftersale_cases ac
+                      WHERE ac.meal_slot_order_id = mso.id
+                        AND ac.issue_type = 'REFUND'
+                        AND ac.status IN ('PENDING', 'PROCESSING', 'APPROVED')
+                  )
+                ORDER BY mso.id DESC
+                LIMIT 1
+                """,
+            ps -> {
+                ps.setLong(1, customerId);
+                ps.setObject(2, serveDate);
+                ps.setString(3, mealPeriod);
+                ps.setLong(4, addressId);
+            },
+            rs -> rs.next() ? rs.getLong(1) : null
+        );
     }
 
     private long ensureCustomerAddress(long customerId, String deliveryAddress) {
@@ -1825,6 +1899,11 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         return isBlank(note) ? "-" : note.trim();
     }
 
+    private String normalizeSnapshotNote(String note) {
+        String normalized = isBlank(note) ? "" : note.trim();
+        return normalized.isEmpty() || "-".equals(normalized) ? null : normalized;
+    }
+
     private String normalizeCustomerMerchantRemark(long customerId) {
         List<String> remarks = jdbcTemplate.queryForList(
             "SELECT COALESCE(merchant_remark, '') FROM customers WHERE id = ?",
@@ -1836,6 +1915,41 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         }
         String normalized = remarks.get(0) == null ? "" : remarks.get(0).trim();
         return "-".equals(normalized) ? "" : normalized;
+    }
+
+    private String preferredOrderNote(Object userNote, Object fallbackNote) {
+        String normalizedUserNote = normalizeOrderMergeNote(userNote);
+        if (!normalizedUserNote.isEmpty()) {
+            return normalizedUserNote;
+        }
+        return normalizeOrderMergeNote(fallbackNote);
+    }
+
+    private String normalizeOrderMergeNote(Object value) {
+        String normalized = value == null ? "" : String.valueOf(value).trim();
+        return normalized.isEmpty() || "-".equals(normalized) ? "" : normalized;
+    }
+
+    private String mergeOrderNote(String existingNote, String newNote) {
+        String current = normalizeOrderMergeNote(existingNote);
+        String incoming = normalizeOrderMergeNote(newNote);
+        if (incoming.isEmpty()) {
+            return current.isEmpty() ? "-" : current;
+        }
+        if (current.isEmpty()) {
+            return incoming;
+        }
+        if (current.contains(incoming)) {
+            return current;
+        }
+        return current + "；" + incoming;
+    }
+
+    private String normalizeMealPeriod(String mealPeriod) {
+        if ("DINNER".equalsIgnoreCase(mealPeriod) || safeString(mealPeriod).contains("晚餐")) {
+            return "DINNER";
+        }
+        return "LUNCH";
     }
 
     private boolean isBlank(String value) {
@@ -2048,11 +2162,11 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 return row;
             }
         );
-        
+
         if (orderInfo == null) {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "未找到对应订单或骑手信息");
         }
-        
+
         // 2. 保存异常记录
         String imagesJson = null;
         if (exceptionImages != null && !exceptionImages.isEmpty()) {
@@ -2062,7 +2176,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 // 忽略JSON序列化错误
             }
         }
-        
+
         long exceptionId = insertAndReturnId("""
             INSERT INTO delivery_exceptions (
                 meal_slot_order_id,
@@ -2085,7 +2199,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             orderInfo.get("deliveryAddress"),
             imagesJson
         );
-        
+
         return Map.of(
             "exceptionId", exceptionId,
             "status", "REPORTED",

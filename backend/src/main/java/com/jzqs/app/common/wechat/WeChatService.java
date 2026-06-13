@@ -47,7 +47,7 @@ public class WeChatService {
 
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
-    
+
     // 缓存 access_token（实际生产应该用 Redis）
     private String cachedAccessToken;
     private long accessTokenExpireTime;
@@ -71,7 +71,7 @@ public class WeChatService {
         try {
             String url = String.format("%s?appid=%s&secret=%s&js_code=%s&grant_type=authorization_code",
                     CODE2SESSION_URL, appid, secret, code);
-            
+
             String response = restTemplate.getForObject(url, String.class);
             JsonNode json = objectMapper.readTree(response);
 

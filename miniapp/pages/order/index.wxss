@@ -105,3 +105,36 @@
 .inline-auth-sheet__secondary::after {
   border: none;
 }
+
+.remark-default-card {
+  background: #f8fafc;
+  border-radius: 20rpx;
+  padding: 20rpx 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.remark-default-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.remark-default-label {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.remark-default-value {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--text-sub);
+}
+
+.remark-default-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+}

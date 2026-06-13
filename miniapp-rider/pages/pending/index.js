@@ -1,10 +1,16 @@
-﻿Page({
+Page({
   data: {
+    statusBarHeight: 0,
+    navBarHeight: 44,
     riderProfile: null,
     refreshing: false
   },
   async onShow() {
     const app = getApp();
+    this.setData({
+      statusBarHeight: app.globalData.statusBarHeight,
+      navBarHeight: app.globalData.navBarHeight
+    });
     await app.waitForRiderAuth();
     if (app.canUseWorkbench()) {
       app.openWorkbench();
@@ -60,5 +66,12 @@
   },
   logout() {
     getApp().logoutRider();
+  },
+  goBack() {
+    if (getCurrentPages().length > 1) {
+      wx.navigateBack();
+      return;
+    }
+    wx.switchTab({ url: '/pages/profile/index' });
   }
 });

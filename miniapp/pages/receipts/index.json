@@ -1,4 +1,5 @@
 {
   "navigationBarTitleText": "送达回执",
-  "enablePullDownRefresh": true
+  "enablePullDownRefresh": true,
+  "navigationStyle": "custom"
 }

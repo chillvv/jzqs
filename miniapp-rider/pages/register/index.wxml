@@ -1,3 +1,16 @@
+<view class="subpage-nav-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+  <view class="subpage-nav-content" style="height: {{navBarHeight - statusBarHeight}}px;">
+    <view class="subpage-nav-left">
+      <view class="subpage-nav-back" bindtap="goBack">
+        <text class="subpage-nav-back-icon">&lt;</text>
+      </view>
+      <text class="subpage-nav-title">骑手注册</text>
+    </view>
+    <view class="subpage-nav-right"></view>
+  </view>
+</view>
+<view class="subpage-nav-spacer" style="height: {{navBarHeight}}px;"></view>
+
 <view class="register-container">
   <view class="register-header">
     <text class="title">骑手注册</text>

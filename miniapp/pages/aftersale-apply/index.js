@@ -9,6 +9,8 @@ const REASON_OPTIONS = [
 
 Page({
   data: {
+    statusBarHeight: 0,
+    navBarHeight: 44,
     orderId: "",
     type: "REFUND",
     reasonCode: "USER_TEMP_CHANGE",
@@ -20,9 +22,24 @@ Page({
   },
 
   onLoad(options) {
+    const app = getApp();
     this.setData({
+      statusBarHeight: app.globalData.statusBarHeight,
+      navBarHeight: app.globalData.navBarHeight,
       orderId: options.orderId || ""
     });
+  },
+
+  goBack() {
+    if (getCurrentPages().length > 1) {
+      wx.navigateBack();
+      return;
+    }
+    if (this.data.orderId) {
+      wx.navigateTo({ url: `/pages/orders/index?orderId=${this.data.orderId}` });
+      return;
+    }
+    wx.switchTab({ url: '/pages/profile/index' });
   },
 
   onTypeChange(e) {

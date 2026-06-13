@@ -90,11 +90,18 @@
 
   <!-- 结算视图 -->
   <view id="view-checkout" style="display: {{showCheckout ? 'block' : 'none'}};">
-    <view class="checkout-nav">
-      <view class="back-btn" bindtap="backToMenu">‹</view>
-      <view>确认订单</view>
-      <view style="width: 48rpx;"></view>
+    <view class="checkout-nav" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+      <view class="subpage-nav-content" style="height: {{navBarHeight - statusBarHeight}}px;">
+        <view class="subpage-nav-left">
+          <view class="subpage-nav-back" bindtap="backToMenu">
+            <text class="subpage-nav-back-icon">&lt;</text>
+          </view>
+          <text class="subpage-nav-title">确认订单</text>
+        </view>
+        <view class="subpage-nav-right"></view>
+      </view>
     </view>
+    <view class="subpage-nav-spacer" style="height: {{navBarHeight}}px;"></view>
 
     <view class="checkout-scroll">
       <view class="address-card" bindtap="showAddressList">
@@ -144,6 +151,17 @@
           <view style="display: flex; justify-content: space-between; align-items: center;">
             <text class="checkout-row-label">订单备注</text>
             <text wx:if="{{historyRemarkSuggestions.length > 0}}" style="font-size: 22rpx; color: #999;">最近使用</text>
+          </view>
+          <view class="remark-default-card">
+            <view class="remark-default-copy">
+              <text class="remark-default-label">本店默认备注</text>
+              <text class="remark-default-value">{{defaultRemark || '还未设置，设置后下单时可自动带出'}}</text>
+            </view>
+            <view class="remark-default-actions">
+              <text class="remark-chip remark-chip-secondary" bindtap="setDefaultRemark">设为默认</text>
+              <text class="remark-chip remark-chip-secondary" bindtap="useDefaultRemark">使用默认</text>
+              <text class="remark-chip remark-chip-secondary" bindtap="clearDefaultRemark">清空默认</text>
+            </view>
           </view>
           <view class="remark-preset-list" wx:if="{{historyRemarkSuggestions.length > 0}}" style="justify-content: flex-start; margin-bottom: 8rpx;">
             <view class="remark-chip {{customRemark === item ? 'active' : ''}}" wx:for="{{historyRemarkSuggestions}}" wx:key="*this" bindtap="selectHistoryRemark" data-note="{{item}}">

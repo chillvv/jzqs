@@ -53,23 +53,13 @@
       <text class="list-arrow">›</text>
     </view>
   </view>
-  
+
   <view class="menu-group">
     <view class="list-item {{onboarding ? 'disabled' : ''}}" bindtap="goAddresses">
       <view class="list-icon-wrap">
         <text class="list-icon">📍</text>
         <view class="list-copy">
           <view class="list-title">收餐地址管理</view>
-        </view>
-      </view>
-      <text class="list-arrow">›</text>
-    </view>
-    <view class="list-item {{onboarding ? 'disabled' : ''}}" bindtap="goEditDefaultRemark">
-      <view class="list-icon-wrap">
-        <text class="list-icon">🗒️</text>
-        <view class="list-copy">
-          <view class="list-title">默认下单备注</view>
-          <view class="list-desc">{{home && home.defaultUserRemark ? home.defaultUserRemark : '设置后下单时自动带出'}}</view>
         </view>
       </view>
       <text class="list-arrow">›</text>

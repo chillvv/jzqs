@@ -1,4 +1,5 @@
 {
   "navigationBarTitleText": "骑手注册",
-  "usingComponents": {}
+  "usingComponents": {},
+  "navigationStyle": "custom"
 }

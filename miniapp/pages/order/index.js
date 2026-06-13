@@ -115,9 +115,11 @@ Page({
     selectedContactText: '暂无地址',
     remark: '',
     customRemark: '',
+    defaultRemark: '',
     historyRemarkSuggestions: [],
     showRemarkDropdown: false,
     submitting: false,
+    savingDefaultRemark: false,
     loading: false,
     home: null,
     isGuest: true,
@@ -190,6 +192,7 @@ Page({
         lunchItem,
         dinnerItem,
         addresses,
+        defaultRemark: home && home.defaultUserRemark ? String(home.defaultUserRemark).trim() : '',
         historyRemarkSuggestions: normalizeHistoryRemarkSuggestions(undefined, {
           customerId: home && home.customerId
         }),
@@ -263,6 +266,88 @@ Page({
       showRemarkDropdown: false
     });
     this.persistRemarkDraft(customRemark);
+  },
+
+  async setDefaultRemark() {
+    if (!getApp().globalData.token) {
+      openInlineAuth(this, 'order');
+      return;
+    }
+    const defaultRemark = String(this.data.customRemark || this.data.remark || '').trim();
+    if (!defaultRemark) {
+      wx.showToast({ title: '请先输入备注内容', icon: 'none' });
+      return;
+    }
+    if (this.data.savingDefaultRemark) {
+      return;
+    }
+    this.setData({ savingDefaultRemark: true });
+    try {
+      await request({
+        url: '/api/mobile/customer/profile',
+        method: 'POST',
+        header: { 'content-type': 'application/json' },
+        data: { defaultUserRemark: defaultRemark }
+      });
+      this.setData({
+        defaultRemark,
+        home: this.data.home
+          ? { ...this.data.home, defaultUserRemark: defaultRemark }
+          : this.data.home
+      });
+      wx.showToast({ title: '已设为本店默认备注', icon: 'success' });
+    } catch (error) {
+      wx.showToast({ title: error.message || '保存失败', icon: 'none' });
+    } finally {
+      this.setData({ savingDefaultRemark: false });
+    }
+  },
+
+  useDefaultRemark() {
+    const defaultRemark = String(this.data.defaultRemark || '').trim();
+    if (!defaultRemark) {
+      wx.showToast({ title: '还没有本店默认备注', icon: 'none' });
+      return;
+    }
+    this.setData({
+      customRemark: defaultRemark,
+      remark: defaultRemark
+    });
+    this.persistRemarkDraft(defaultRemark);
+  },
+
+  async clearDefaultRemark() {
+    if (!getApp().globalData.token) {
+      openInlineAuth(this, 'order');
+      return;
+    }
+    if (!this.data.defaultRemark) {
+      wx.showToast({ title: '当前没有默认备注', icon: 'none' });
+      return;
+    }
+    if (this.data.savingDefaultRemark) {
+      return;
+    }
+    this.setData({ savingDefaultRemark: true });
+    try {
+      await request({
+        url: '/api/mobile/customer/profile',
+        method: 'POST',
+        header: { 'content-type': 'application/json' },
+        data: { defaultUserRemark: '' }
+      });
+      this.setData({
+        defaultRemark: '',
+        home: this.data.home
+          ? { ...this.data.home, defaultUserRemark: '' }
+          : this.data.home
+      });
+      wx.showToast({ title: '已清空本店默认备注', icon: 'success' });
+    } catch (error) {
+      wx.showToast({ title: error.message || '清空失败', icon: 'none' });
+    } finally {
+      this.setData({ savingDefaultRemark: false });
+    }
   },
 
   showAddressList() {
@@ -387,20 +472,23 @@ Page({
     this.setData({ submitting: true });
     try {
       const orderResults = await Promise.all(requests);
-      const orderIds = orderResults
+      const mergedCount = orderResults.filter((item) => item && item.status === 'MERGED').length;
+      const orderIds = [...new Set(orderResults
         .map((item) => item && item.orderId)
-        .filter(Boolean);
-      
+        .filter(Boolean))];
+
       // Save remark to history
       if (this.data.remark) {
         addHistoryRemark(this.data.remark, {
           customerId: this.data.home && this.data.home.customerId
         });
       }
-      
+
       wx.showModal({
         title: '下单成功',
-        content: `已成功预订明天的餐食，共扣减 ${this.data.totalQty} 餐。`,
+        content: mergedCount > 0
+          ? `同地址餐次已自动加到原订单，共扣减 ${this.data.totalQty} 餐。`
+          : `已成功预订明天的餐食，共扣减 ${this.data.totalQty} 餐。`,
         showCancel: false,
         confirmText: '查看预订',
         confirmColor: '#B8D060',
@@ -428,10 +516,10 @@ Page({
           confirmText: '联系客服',
           confirmColor: '#B8D060',
           cancelText: '取消',
-          success: (res) => { 
-            if (res.confirm) { 
+          success: (res) => {
+            if (res.confirm) {
               wx.switchTab({ url: '/pages/profile/index' });
-            } 
+            }
           }
         });
       } else {

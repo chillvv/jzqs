@@ -100,7 +100,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         } else {
             targetDate = LocalDate.parse(serveDate);
         }
-        
+
         String sql = """
             SELECT
                 mso.id,
@@ -521,7 +521,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
     public List<SubscriptionPreviewItem> subscriptionPreview(String serveDate) {
         LocalDate targetDate = LocalDate.parse(serveDate);
         String sql = """
-            SELECT 
+            SELECT
                 sr.customer_id,
                 c.name AS customer_name,
                 c.phone AS customer_phone,
@@ -535,15 +535,15 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             JOIN customers c ON c.id = sr.customer_id
             LEFT JOIN meal_wallets mw ON mw.customer_id = sr.customer_id AND mw.active = TRUE
             LEFT JOIN customer_addresses ca ON ca.id = sr.default_address_id
-            WHERE sr.active = TRUE 
+            WHERE sr.active = TRUE
               AND sr.paused = FALSE
               AND sr.lunch_enabled = TRUE
               AND sr.start_date <= ?
               AND sr.end_date >= ?
-            
+
             UNION ALL
-            
-            SELECT 
+
+            SELECT
                 sr.customer_id,
                 c.name AS customer_name,
                 c.phone AS customer_phone,
@@ -557,15 +557,15 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             JOIN customers c ON c.id = sr.customer_id
             LEFT JOIN meal_wallets mw ON mw.customer_id = sr.customer_id AND mw.active = TRUE
             LEFT JOIN customer_addresses ca ON ca.id = sr.default_address_id
-            WHERE sr.active = TRUE 
+            WHERE sr.active = TRUE
               AND sr.paused = FALSE
               AND sr.dinner_enabled = TRUE
               AND sr.start_date <= ?
               AND sr.end_date >= ?
-            
+
             ORDER BY customer_id, meal_period
             """;
-        
+
         return jdbcTemplate.query(sql, (rs, rowNum) -> new SubscriptionPreviewItem(
             rs.getLong("customer_id"),
             rs.getString("customer_name"),
@@ -582,10 +582,10 @@ public class OrderPrepServiceImpl implements OrderPrepService {
     @Override
     public SubscriptionPreviewCheckResponse subscriptionPreviewCheck(String serveDate) {
         List<SubscriptionPreviewItem> previewItems = subscriptionPreview(serveDate);
-        
+
         List<SubscriptionPreviewCheckResponse.InsufficientCustomer> insufficientCustomers = new ArrayList<>();
         int sufficientCount = 0;
-        
+
         for (SubscriptionPreviewItem item : previewItems) {
             if (!item.hasBalance()) {
                 insufficientCustomers.add(new SubscriptionPreviewCheckResponse.InsufficientCustomer(
@@ -600,7 +600,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
                 sufficientCount++;
             }
         }
-        
+
         return new SubscriptionPreviewCheckResponse(
             previewItems.size(),
             sufficientCount,
@@ -615,7 +615,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         LocalDate targetDate = LocalDate.parse(serveDate);
         int successCount = 0;
         List<Map<String, Object>> failures = new ArrayList<>();
-        
+
         for (com.jzqs.app.order.api.SubscriptionImportItem item : items) {
             // 检查余额
             Integer remainingMeals = jdbcTemplate.queryForObject(
@@ -623,7 +623,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
                 Integer.class,
                 item.customerId()
             );
-            
+
             if (remainingMeals == null || remainingMeals <= 0) {
                 String customerName = jdbcTemplate.queryForObject(
                     "SELECT name FROM customers WHERE id = ?",
@@ -639,7 +639,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
                 ));
                 continue;
             }
-            
+
             try {
                 String addressLine = jdbcTemplate.queryForObject("SELECT address_line FROM customer_addresses WHERE id = ?", String.class, item.addressId());
                 manualCreateWithDate(item.customerId(), item.mealPeriod(), item.note(), addressLine, "SUBSCRIPTION", targetDate, 1);
@@ -657,7 +657,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
                 ));
             }
         }
-        
+
         return Map.of(
             "successCount", successCount,
             "failureCount", failures.size(),
@@ -668,10 +668,10 @@ public class OrderPrepServiceImpl implements OrderPrepService {
     @Override
     @Transactional
     public Map<String, Object> manualCreate(long customerId, Long addressId, String mealPeriod, String merchantRemark, String deliveryAddress, String source, int quantity, String serveDate) {
-        LocalDate date = serveDate == null || serveDate.isBlank() 
-            ? LocalDate.now() 
+        LocalDate date = serveDate == null || serveDate.isBlank()
+            ? LocalDate.now()
             : LocalDate.parse(serveDate);
-            
+
         return manualCreateWithDate(
             customerId,
             mealPeriod,
@@ -687,7 +687,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
     private Map<String, Object> manualCreateWithDate(long customerId, String mealPeriod, String merchantRemark, String deliveryAddress, String source, LocalDate serveDate, int quantity) {
         long addressId = ensureCustomerAddress(customerId, deliveryAddress);
         String resolvedMerchantRemark = resolveOrderMerchantRemark(customerId, merchantRemark);
-        
+
         Long walletId = jdbcTemplate.query(
             "SELECT id FROM meal_wallets WHERE customer_id = ? AND active = TRUE",
             ps -> ps.setLong(1, customerId),
@@ -704,7 +704,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         if (remainingMeals < quantity) {
             throw new com.jzqs.app.common.error.BusinessException(com.jzqs.app.common.error.ErrorCode.INSUFFICIENT_MEALS, "该客户剩余餐次不足（仅剩 " + remainingMeals + " 餐）");
         }
-        
+
         Long existingDailyOrderId = jdbcTemplate.query(
             """
                 SELECT id
@@ -719,14 +719,14 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             },
             rs -> rs.next() ? rs.getLong(1) : null
         );
-        
+
         long dailyOrderId = existingDailyOrderId == null
             ? insertAndReturnId(
                 "INSERT INTO daily_orders (customer_id, serve_date, source, status, locked, created_at) VALUES (?, ?, ?, ?, ?, ?)",
                 customerId, serveDate, source, "PENDING_DISPATCH", false, Timestamp.valueOf(LocalDateTime.now())
             )
             : existingDailyOrderId;
-            
+
         String normalizedMealPeriod = normalizeMealPeriod(mealPeriod);
 
         Long mergeTargetOrderId = findMergeTargetOrderId(customerId, serveDate, normalizedMealPeriod, addressId);
@@ -845,7 +845,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             """, orderId);
         Long walletId = ((Number) orderInfo.get("wallet_id")).longValue();
         int quantity = ((Number) orderInfo.get("quantity")).intValue();
-        
+
         jdbcTemplate.update("UPDATE meal_wallets SET reserved_meals = CASE WHEN reserved_meals >= ? THEN reserved_meals - ? ELSE 0 END WHERE id = ?", quantity, quantity, walletId);
         insertWalletTransaction(walletId, "RELEASE", quantity, "系统", "取消订单释放餐次", orderId);
         return Map.of("orderId", orderId, "status", "CANCELLED");
@@ -856,8 +856,8 @@ public class OrderPrepServiceImpl implements OrderPrepService {
     public Map<String, Object> deleteOrder(long orderId) {
         // 1. 检查订单是否存在
         Integer count = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM meal_slot_orders WHERE id = ?", 
-            Integer.class, 
+            "SELECT COUNT(*) FROM meal_slot_orders WHERE id = ?",
+            Integer.class,
             orderId
         );
         if (count == null || count == 0) {
@@ -871,7 +871,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             JOIN daily_orders do ON do.id = mso.daily_order_id
             WHERE mso.id = ?
             """, orderId);
-        
+
         long dailyOrderId = ((Number) orderInfo.get("daily_order_id")).longValue();
         long customerId = ((Number) orderInfo.get("customer_id")).longValue();
         String status = (String) orderInfo.get("status");
@@ -880,13 +880,13 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         // 3. 如果订单未取消，先释放餐次余额
         if (!"CANCELLED".equals(status)) {
             Long walletId = jdbcTemplate.queryForObject(
-                "SELECT id FROM meal_wallets WHERE customer_id = ? AND active = TRUE", 
-                Long.class, 
+                "SELECT id FROM meal_wallets WHERE customer_id = ? AND active = TRUE",
+                Long.class,
                 customerId
             );
             if (walletId != null) {
                 jdbcTemplate.update(
-                    "UPDATE meal_wallets SET reserved_meals = CASE WHEN reserved_meals >= ? THEN reserved_meals - ? ELSE 0 END WHERE id = ?", 
+                    "UPDATE meal_wallets SET reserved_meals = CASE WHEN reserved_meals >= ? THEN reserved_meals - ? ELSE 0 END WHERE id = ?",
                     quantity, quantity, walletId
                 );
                 insertWalletTransaction(walletId, "RELEASE", quantity, "系统", "删除订单释放餐次", orderId);
@@ -903,9 +903,9 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             jdbcTemplate.update("DELETE FROM dispatch_batch_items WHERE meal_slot_order_id = ?", orderId);
             for (long batchId : batchIds) {
                 jdbcTemplate.update("""
-                    UPDATE dispatch_batches 
-                    SET total_count = (SELECT COUNT(*) FROM dispatch_batch_items WHERE batch_id = ?), 
-                        delivered_count = (SELECT COUNT(*) FROM dispatch_batch_items WHERE batch_id = ? AND item_status = 'DELIVERED') 
+                    UPDATE dispatch_batches
+                    SET total_count = (SELECT COUNT(*) FROM dispatch_batch_items WHERE batch_id = ?),
+                        delivered_count = (SELECT COUNT(*) FROM dispatch_batch_items WHERE batch_id = ? AND item_status = 'DELIVERED')
                     WHERE id = ?
                     """, batchId, batchId, batchId);
             }
@@ -920,8 +920,8 @@ public class OrderPrepServiceImpl implements OrderPrepService {
 
         // 7. 检查 daily_order 是否还有其他餐次，如果没有则删除
         Integer remainingSlots = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM meal_slot_orders WHERE daily_order_id = ?", 
-            Integer.class, 
+            "SELECT COUNT(*) FROM meal_slot_orders WHERE daily_order_id = ?",
+            Integer.class,
             dailyOrderId
         );
         if (remainingSlots != null && remainingSlots == 0) {
@@ -1081,7 +1081,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         if (current.contains(incoming)) {
             return current;
         }
-        return current + " / " + incoming;
+        return current + "；" + incoming;
     }
 
     private String normalizeSnapshotNote(String note) {

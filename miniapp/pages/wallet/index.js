@@ -4,9 +4,19 @@ const { buildWalletHint } = require('../../utils/customer-order-flow');
 
 Page({
   data: {
+    statusBarHeight: 0,
+    navBarHeight: 44,
     home: null,
     items: [],
     loading: false
+  },
+
+  onLoad() {
+    const app = getApp();
+    this.setData({
+      statusBarHeight: app.globalData.statusBarHeight,
+      navBarHeight: app.globalData.navBarHeight
+    });
   },
 
   onShow() {
@@ -48,5 +58,13 @@ Page({
     wx.navigateTo({
       url: `/pages/orders/index?orderId=${id}`
     });
+  },
+
+  goBack() {
+    if (getCurrentPages().length > 1) {
+      wx.navigateBack();
+      return;
+    }
+    wx.switchTab({ url: '/pages/profile/index' });
   }
 });

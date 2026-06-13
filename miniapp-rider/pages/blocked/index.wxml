@@ -1,4 +1,17 @@
-﻿<view class="state-page">
+<view class="subpage-nav-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+  <view class="subpage-nav-content" style="height: {{navBarHeight - statusBarHeight}}px;">
+    <view class="subpage-nav-left">
+      <view class="subpage-nav-back" bindtap="goBack">
+        <text class="subpage-nav-back-icon">&lt;</text>
+      </view>
+      <text class="subpage-nav-title">已停用</text>
+    </view>
+    <view class="subpage-nav-right"></view>
+  </view>
+</view>
+<view class="subpage-nav-spacer" style="height: {{navBarHeight}}px;"></view>
+
+<view class="state-page">
   <view class="state-banner banner-red">
     <view class="state-badge">账号禁用</view>
     <view class="state-title">当前骑手账号已停用</view>

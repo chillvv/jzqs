@@ -1,3 +1,16 @@
+<view class="subpage-nav-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+  <view class="subpage-nav-content" style="height: {{navBarHeight - statusBarHeight}}px;">
+    <view class="subpage-nav-left">
+      <view class="subpage-nav-back" bindtap="goBack">
+        <text class="subpage-nav-back-icon">&lt;</text>
+      </view>
+      <text class="subpage-nav-title">{{showingTargetOrderOnly ? '关联订单' : '我的预订记录'}}</text>
+    </view>
+    <view class="subpage-nav-right"></view>
+  </view>
+</view>
+<view class="subpage-nav-spacer" style="height: {{navBarHeight}}px;"></view>
+
 <view class="subpage">
   <view class="subpage-card">
     <view class="hero-inline-main">{{showingTargetOrderOnly ? '关联订单' : '我的预订记录'}}</view>
@@ -42,7 +55,7 @@
           <view class="order-meal-name">{{item.mealName}}</view>
           <view class="order-guidance" wx:if="{{item.guidanceText}}">{{item.guidanceText}}</view>
         </view>
-        
+
         <view class="order-detail-list">
           <view class="detail-row" wx:if="{{item.mealDetail && item.mealDetail !== item.mealName}}">
             <text class="detail-label">内容</text>

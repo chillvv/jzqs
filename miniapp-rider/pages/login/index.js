@@ -17,6 +17,8 @@ function persistAgreementAccepted() {
 Page({
   data: {
     savingProfile: false,
+    statusBarHeight: 0,
+    navBarHeight: 44,
     profileForm: {
       phoneNumber: ''
     },
@@ -27,9 +29,12 @@ Page({
   },
 
   onLoad(options = {}) {
+    const app = getApp();
     const agreementAccepted = readAgreementAccepted();
     const phoneNumber = String(options.phoneNumber || '').replace(/\D/g, '');
     this.setData({
+      statusBarHeight: app.globalData.statusBarHeight,
+      navBarHeight: app.globalData.navBarHeight,
       agreementAccepted,
       agreementSheetChecked: agreementAccepted,
       'profileForm.phoneNumber': phoneNumber

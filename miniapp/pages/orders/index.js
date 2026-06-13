@@ -5,6 +5,8 @@ const { buildRejectedAftersaleDetail } = require('../../utils/aftersale');
 
 Page({
   data: {
+    statusBarHeight: 0,
+    navBarHeight: 44,
     filters: [
       { label: '全部', value: '' },
       { label: '待配送', value: 'PENDING_DISPATCH' },
@@ -18,10 +20,23 @@ Page({
   },
 
   onLoad(options) {
+    const app = getApp();
+    this.setData({
+      statusBarHeight: app.globalData.statusBarHeight,
+      navBarHeight: app.globalData.navBarHeight
+    });
     if (options.orderId) {
       this.setData({ targetOrderId: options.orderId });
       wx.setNavigationBarTitle({ title: '关联订单' });
     }
+  },
+
+  goBack() {
+    if (getCurrentPages().length > 1) {
+      wx.navigateBack();
+      return;
+    }
+    wx.switchTab({ url: '/pages/profile/index' });
   },
 
   onShow() {

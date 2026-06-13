@@ -3,18 +3,37 @@ const { mapReceiptRecord } = require('../../utils/receipt-display');
 
 Page({
   data: {
+    statusBarHeight: 0,
+    navBarHeight: 44,
     items: [],
     loading: false,
     targetOrderId: ''
   },
 
   onLoad(options) {
+    const app = getApp();
+    this.setData({
+      statusBarHeight: app.globalData.statusBarHeight,
+      navBarHeight: app.globalData.navBarHeight
+    });
     if (options.orderId) {
       this.setData({ targetOrderId: String(options.orderId) });
       wx.setNavigationBarTitle({ title: '订单详情' });
       return;
     }
     wx.setNavigationBarTitle({ title: '送达回执' });
+  },
+
+  goBack() {
+    if (getCurrentPages().length > 1) {
+      wx.navigateBack();
+      return;
+    }
+    if (this.data.targetOrderId) {
+      wx.navigateTo({ url: `/pages/orders/index?orderId=${this.data.targetOrderId}` });
+      return;
+    }
+    wx.switchTab({ url: '/pages/profile/index' });
   },
 
   onShow() {

@@ -7,6 +7,8 @@ Page({
     saving: false,
     showPopup: false,
     selectOrderId: null,
+    statusBarHeight: 0,
+    navBarHeight: 44,
     form: {
       id: null,
       contactName: '',
@@ -17,10 +19,27 @@ Page({
   },
 
   onLoad(options) {
+    const app = getApp();
+    this.setData({
+      statusBarHeight: app.globalData.statusBarHeight,
+      navBarHeight: app.globalData.navBarHeight
+    });
     if (options.selectOrderId) {
       this.setData({ selectOrderId: Number(options.selectOrderId) });
       wx.setNavigationBarTitle({ title: '选择配送地址' });
     }
+  },
+
+  goBack() {
+    if (getCurrentPages().length > 1) {
+      wx.navigateBack();
+      return;
+    }
+    if (this.data.selectOrderId) {
+      wx.navigateTo({ url: `/pages/orders/index?orderId=${this.data.selectOrderId}` });
+      return;
+    }
+    wx.switchTab({ url: '/pages/profile/index' });
   },
 
   onShow() {
@@ -49,7 +68,7 @@ Page({
   },
 
   showAddPopup() {
-    this.setData({ 
+    this.setData({
       showPopup: true,
       form: {
         id: null,
@@ -169,7 +188,7 @@ Page({
           }
         });
       }
-      
+
       wx.showToast({ title: '地址已保存', icon: 'success' });
       this.setData({
         showPopup: false,

@@ -1,4 +1,5 @@
 {
   "navigationBarTitleText": "今日",
-  "enablePullDownRefresh": true
+  "enablePullDownRefresh": true,
+  "navigationStyle": "custom"
 }

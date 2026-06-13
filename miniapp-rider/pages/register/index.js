@@ -6,6 +6,8 @@ const auth = require('../../utils/auth');
 
 Page({
   data: {
+    statusBarHeight: 0,
+    navBarHeight: 44,
     phone: '',
     name: '',
     agreed: false,
@@ -16,14 +18,25 @@ Page({
    * 页面加载时读取上次登录的手机号
    */
   onLoad(options = {}) {
+    const app = getApp();
     try {
       const initialPhone = String(options.phoneNumber || wx.getStorageSync('lastLoginPhone') || '');
-      if (initialPhone) {
-        this.setData({ phone: initialPhone });
-      }
+      this.setData({
+        statusBarHeight: app.globalData.statusBarHeight,
+        navBarHeight: app.globalData.navBarHeight,
+        phone: initialPhone || ''
+      });
     } catch (error) {
       console.error('[读取上次手机号失败]', error);
     }
+  },
+
+  goBack() {
+    if (getCurrentPages().length > 1) {
+      wx.navigateBack();
+      return;
+    }
+    wx.switchTab({ url: '/pages/profile/index' });
   },
 
   onNameInput(e) {
