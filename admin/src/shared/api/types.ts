@@ -59,6 +59,17 @@ export type CustomerDetailResponse = {
   [key: string]: unknown;
 };
 
+export type CustomerNoteItem = {
+  id: number;
+  noteType: string;
+  scopeType: string;
+  content: string;
+  startAt?: string | null;
+  endAt?: string | null;
+  active?: boolean;
+  displayOrder?: number;
+};
+
 export type RemarkSuggestionScene =
   | "CUSTOMER_REMARK"
   | "PRIORITY_NOTE"

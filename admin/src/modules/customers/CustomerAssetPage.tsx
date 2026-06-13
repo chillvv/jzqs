@@ -105,12 +105,16 @@ function findDuplicateCustomer(items: CustomerAssetResponse[], current: { name: 
   }) || null;
 }
 
-function buildEditForm(detail: CustomerDetailResponse | null, fallback: CustomerAssetResponse | null) {
+function buildEditForm(
+  detail: CustomerDetailResponse | null,
+  fallback: CustomerAssetResponse | null
+): typeof emptyEditForm {
   return {
     name: String(detail?.name || fallback?.name || ""),
     phone: String(detail?.phone || fallback?.phone || ""),
     remark: String(detail?.merchantRemark || fallback?.merchantRemark || ""),
     customerStatus: String(detail?.customerStatus || fallback?.customerStatus || "INTENTION"),
+    initialMeals: "0",
     addressLine: "",
     contactName: "",
     contactPhone: ""
