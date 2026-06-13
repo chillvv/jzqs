@@ -35,8 +35,8 @@ assert.equal(
 
 assert.match(
   orderWxml,
-  /本店默认备注/,
-  '顾客端下单页应展示本店默认备注入口'
+  /bindtap="toggleDefaultRemark"/,
+  '顾客端下单页应展示设为默认入口'
 );
 
 assert.match(

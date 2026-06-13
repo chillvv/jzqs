@@ -2,7 +2,7 @@
   <view class="subpage-nav-content" style="height: {{navBarHeight - statusBarHeight}}px;">
     <view class="subpage-nav-left">
       <view class="subpage-nav-back" bindtap="goBack">
-        <text class="subpage-nav-back-icon">&lt;</text>
+        <view class="subpage-nav-back-icon"></view>
       </view>
       <text class="subpage-nav-title">今日任务</text>
     </view>

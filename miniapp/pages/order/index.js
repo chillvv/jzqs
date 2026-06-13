@@ -268,14 +268,13 @@ Page({
     this.persistRemarkDraft(customRemark);
   },
 
-  async setDefaultRemark() {
+  async toggleDefaultRemark() {
     if (!getApp().globalData.token) {
       openInlineAuth(this, 'order');
       return;
     }
-    const defaultRemark = String(this.data.customRemark || this.data.remark || '').trim();
-    if (!defaultRemark) {
-      wx.showToast({ title: '请先输入备注内容', icon: 'none' });
+    const currentRemark = String(this.data.customRemark || this.data.remark || '').trim();
+    if (currentRemark === this.data.defaultRemark) {
       return;
     }
     if (this.data.savingDefaultRemark) {
@@ -287,64 +286,21 @@ Page({
         url: '/api/mobile/customer/profile',
         method: 'POST',
         header: { 'content-type': 'application/json' },
-        data: { defaultUserRemark: defaultRemark }
+        data: { defaultUserRemark: currentRemark }
       });
       this.setData({
-        defaultRemark,
+        defaultRemark: currentRemark,
         home: this.data.home
-          ? { ...this.data.home, defaultUserRemark: defaultRemark }
+          ? { ...this.data.home, defaultUserRemark: currentRemark }
           : this.data.home
       });
-      wx.showToast({ title: '已设为本店默认备注', icon: 'success' });
+      if (currentRemark) {
+        wx.showToast({ title: '已设为默认备注', icon: 'success' });
+      } else {
+        wx.showToast({ title: '已清空默认备注', icon: 'success' });
+      }
     } catch (error) {
-      wx.showToast({ title: error.message || '保存失败', icon: 'none' });
-    } finally {
-      this.setData({ savingDefaultRemark: false });
-    }
-  },
-
-  useDefaultRemark() {
-    const defaultRemark = String(this.data.defaultRemark || '').trim();
-    if (!defaultRemark) {
-      wx.showToast({ title: '还没有本店默认备注', icon: 'none' });
-      return;
-    }
-    this.setData({
-      customRemark: defaultRemark,
-      remark: defaultRemark
-    });
-    this.persistRemarkDraft(defaultRemark);
-  },
-
-  async clearDefaultRemark() {
-    if (!getApp().globalData.token) {
-      openInlineAuth(this, 'order');
-      return;
-    }
-    if (!this.data.defaultRemark) {
-      wx.showToast({ title: '当前没有默认备注', icon: 'none' });
-      return;
-    }
-    if (this.data.savingDefaultRemark) {
-      return;
-    }
-    this.setData({ savingDefaultRemark: true });
-    try {
-      await request({
-        url: '/api/mobile/customer/profile',
-        method: 'POST',
-        header: { 'content-type': 'application/json' },
-        data: { defaultUserRemark: '' }
-      });
-      this.setData({
-        defaultRemark: '',
-        home: this.data.home
-          ? { ...this.data.home, defaultUserRemark: '' }
-          : this.data.home
-      });
-      wx.showToast({ title: '已清空本店默认备注', icon: 'success' });
-    } catch (error) {
-      wx.showToast({ title: error.message || '清空失败', icon: 'none' });
+      wx.showToast({ title: error.message || '设置失败', icon: 'none' });   
     } finally {
       this.setData({ savingDefaultRemark: false });
     }

@@ -105,14 +105,14 @@
   padding: 20rpx 28rpx;
   border-top: 1rpx solid #f1f5f9;
   display: flex;
-  justify-content: flex-end;
+  justify-content: center;
 }
 
 .action-btn-group {
   display: flex;
   gap: 16rpx;
   flex-wrap: wrap;
-  justify-content: flex-end;
+  justify-content: center;
 }
 
 .action-btn {
