@@ -123,18 +123,14 @@ page {
 }
 
 .subpage-nav-back-icon {
-  color: var(--on-surface, #0F172A);
-  font-size: 40rpx;
-  line-height: 1;
-  font-weight: 300;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.subpage-nav-back-icon::before {
-  content: "<";
+  display: inline-block;
+  width: 22rpx;
+  height: 22rpx;
+  border-top: 5rpx solid var(--on-surface, #0F172A);
+  border-left: 5rpx solid var(--on-surface, #0F172A);
+  transform: rotate(-45deg);
+  margin-left: 12rpx;
+  border-top-left-radius: 3rpx;
 }
 
 .subpage-nav-title {
