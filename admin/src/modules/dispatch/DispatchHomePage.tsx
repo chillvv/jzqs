@@ -18,6 +18,7 @@ import type {
 import { AppSelect } from "../../shared/components/AppSelect";
 import { AdminDialog } from "../../shared/components/AdminDialog";
 import { toast } from "../../shared/components/Toast";
+import { useAdminRealtime } from "../../shared/realtime/adminRealtime";
 import {
   buildDispatchBoardViewModel,
   buildDispatchPendingSearchText,
@@ -85,6 +86,15 @@ export function DispatchHomePage() {
   useEffect(() => {
     reloadAll().catch((err) => toast(getErrorMessage(err, "加载分单工作台失败"), "error"));
   }, [mealPeriod, serveDate]);
+
+  useEffect(() => {
+    return useAdminRealtime((message) => {
+      if (!message.eventType || !message.eventType.startsWith("dispatch.")) {
+        return;
+      }
+      reloadAll().catch(() => undefined);
+    });
+  }, [reloadAll]);
 
   const areaOptions = useMemo(
     () =>

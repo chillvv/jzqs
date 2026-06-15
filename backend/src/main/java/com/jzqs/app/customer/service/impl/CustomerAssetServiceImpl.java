@@ -17,7 +17,9 @@ import com.jzqs.app.customer.model.entity.WalletTransactionEntity;
 import com.jzqs.app.customer.service.CustomerAssetService;
 import java.sql.PreparedStatement;
 import java.sql.Timestamp;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,6 +39,7 @@ import org.springframework.jdbc.support.KeyHolder;
 @Service
 public class CustomerAssetServiceImpl implements CustomerAssetService {
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+    private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     private final CustomerMapper customerMapper;
     private final MealWalletMapper mealWalletMapper;
@@ -81,12 +84,14 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         Map<Long, MealWalletEntity> walletMap = wallets.stream()
             .collect(Collectors.toMap(MealWalletEntity::getCustomerId, wallet -> wallet, (left, right) -> left));
         Set<Long> fixedCustomerIds = fixedSubscriptionCustomerIds();
+        PackageReminderSettings reminderSettings = loadPackageReminderSettings();
 
         List<CustomerAssetResponse> items = customers.stream().map(customer -> {
             MealWalletEntity wallet = walletMap.get(customer.getId());
             int remainingMeals = wallet == null ? 0 : remainingMeals(wallet);
             boolean hasOpenedCard = wallet != null;
             boolean fixedEnabled = fixedCustomerIds.contains(customer.getId());
+            PackageAlert packageAlert = evaluatePackageAlert(wallet, remainingMeals, reminderSettings);
             return new CustomerAssetResponse(
                 customer.getId(),
                 customer.getName(),
@@ -99,6 +104,10 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
                 Boolean.TRUE.equals(customer.getPriorityCustomer()),
                 blankToNull(customer.getPriorityTag()),
                 blankToNull(customer.getMerchantRemark()),
+                formatDate(wallet == null ? null : wallet.getExpiredAt()),
+                remainingValidityDays(wallet == null ? null : wallet.getExpiredAt()),
+                packageAlert.code(),
+                packageAlert.label(),
                 formatDateTime(customer.getLastOrderAt()),
                 formatDateTime(customer.getRegisteredAt() != null ? customer.getRegisteredAt() : customer.getCreatedAt()),
                 remainingMeals > 0 ? "ACTIVE" : "EXHAUSTED"
@@ -174,7 +183,11 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             "totalMeals", nvl(wallet.getTotalMeals()),
             "reservedMeals", nvl(wallet.getReservedMeals()),
             "consumedMeals", nvl(wallet.getConsumedMeals()),
-            "remainingMeals", remainingMeals(wallet)
+            "remainingMeals", remainingMeals(wallet),
+            "expiredAt", formatDate(wallet.getExpiredAt()),
+            "remainingValidityDays", remainingValidityDays(wallet.getExpiredAt()),
+            "packageAlertCode", evaluatePackageAlert(wallet, remainingMeals(wallet), loadPackageReminderSettings()).code(),
+            "packageAlertLabel", evaluatePackageAlert(wallet, remainingMeals(wallet), loadPackageReminderSettings()).label()
         ));
         detail.put("addresses", addresses);
         detail.put("subscriptions", subscriptions);
@@ -189,6 +202,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         String name = blankToDefault(stringValue(payload.get("name")), "未命名客户");
         int initialMealDelta = intValue(payload.get("initialMealDelta"), 0);
         String initialMealRemark = blankToNull(stringValue(payload.get("initialMealRemark")));
+        int initialValidityDays = intValue(payload.get("initialValidityDays"), 0);
         String customerStatus = normalizeCustomerStatus(stringValue(payload.get("customerStatus")));
         
         String addressLine = blankToNull(stringValue(payload.get("addressLine")));
@@ -204,6 +218,9 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         }
         if (initialMealDelta < 0) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "初始加餐数量不能小于 0");
+        }
+        if (initialMealDelta > 0 && initialValidityDays <= 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "初始加餐后请同时填写有效期天数");
         }
         
         boolean nameExists = customerMapper.selectCount(new LambdaQueryWrapper<CustomerEntity>()
@@ -239,6 +256,8 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         if (initialMealDelta > 0) {
             MealWalletEntity wallet = findOrCreateWallet(customer.getId());
             wallet.setTotalMeals(nvl(wallet.getTotalMeals()) + initialMealDelta);
+            wallet.setExpiredAt(resolveWalletExpiry(initialValidityDays));
+            wallet.setLastAdjustedAt(LocalDateTime.now());
             mealWalletMapper.updateById(wallet);
             insertWalletTransaction(wallet.getId(), "GRANT", initialMealDelta, "ADMIN", initialMealRemark);
         }
@@ -402,6 +421,8 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
     public Map<String, Object> grantMeals(long customerId, WalletAdjustRequest request) {
         MealWalletEntity wallet = findOrCreateWallet(customerId);
         wallet.setTotalMeals(nvl(wallet.getTotalMeals()) + request.mealDelta());
+        wallet.setExpiredAt(resolveWalletExpiry(request.validityDays()));
+        wallet.setLastAdjustedAt(LocalDateTime.now());
         mealWalletMapper.updateById(wallet);
         insertWalletTransaction(wallet.getId(), "GRANT", request.mealDelta(), request.operatorName(), request.remark());
         int remainingMeals = remainingMeals(wallet);
@@ -535,8 +556,48 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         wallet.setReservedMeals(0);
         wallet.setConsumedMeals(0);
         wallet.setActive(true);
+        wallet.setOpenedAt(now);
+        wallet.setLastAdjustedAt(now);
         mealWalletMapper.insert(wallet);
         return wallet;
+    }
+
+    private PackageReminderSettings loadPackageReminderSettings() {
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+            "SELECT package_expiry_reminder_days, package_low_balance_threshold FROM admin_settings WHERE id = 1"
+        );
+        return new PackageReminderSettings(
+            intValue(row.get("package_expiry_reminder_days"), 7),
+            intValue(row.get("package_low_balance_threshold"), 3)
+        );
+    }
+
+    private LocalDateTime resolveWalletExpiry(int validityDays) {
+        return LocalDate.now().plusDays(validityDays).atTime(23, 59, 59);
+    }
+
+    private int remainingValidityDays(LocalDateTime expiredAt) {
+        if (expiredAt == null) {
+            return 0;
+        }
+        return (int) ChronoUnit.DAYS.between(LocalDate.now(), expiredAt.toLocalDate());
+    }
+
+    private PackageAlert evaluatePackageAlert(MealWalletEntity wallet, int remainingMeals, PackageReminderSettings settings) {
+        if (wallet == null || wallet.getExpiredAt() == null) {
+            return PackageAlert.none();
+        }
+        int remainingDays = remainingValidityDays(wallet.getExpiredAt());
+        if (remainingDays < 0) {
+            return new PackageAlert("EXPIRED", "已过期");
+        }
+        if (remainingDays <= settings.expiryReminderDays()) {
+            return new PackageAlert("EXPIRING_SOON", "即将到期");
+        }
+        if (remainingMeals <= settings.lowBalanceThreshold()) {
+            return new PackageAlert("LOW_BALANCE", "餐数不足");
+        }
+        return PackageAlert.none();
     }
 
     private void insertWalletTransaction(long walletId, String transactionType, int mealDelta, String operatorName, String remark) {
@@ -785,6 +846,13 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         return DATETIME_FORMATTER.format(value);
     }
 
+    private String formatDate(LocalDateTime value) {
+        if (value == null) {
+            return "";
+        }
+        return DATE_FORMATTER.format(value);
+    }
+
     private boolean matchesKeyword(CustomerAssetResponse item, String keyword) {
         if (keyword == null || keyword.isBlank()) {
             return true;
@@ -889,6 +957,21 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         String name,
         String phone
     ) {
+    }
+
+    private record PackageReminderSettings(
+        int expiryReminderDays,
+        int lowBalanceThreshold
+    ) {
+    }
+
+    private record PackageAlert(
+        String code,
+        String label
+    ) {
+        private static PackageAlert none() {
+            return new PackageAlert("", "");
+        }
     }
 
 

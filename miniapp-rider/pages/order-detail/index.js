@@ -7,8 +7,9 @@ const taskService = require('../../services/task.service');
 const mapService = require('../../services/map.service');
 const imageUtil = require('../../utils/image');
 const { resolveMediaUrl } = require('../../utils/media-url');
-const { formatCurrentDateTime, getMealPeriodLabel } = require('../../utils/formatter');
+const { formatCurrentDateMMDD, formatCurrentDateTime, getMealPeriodLabel } = require('../../utils/formatter');
 const { EXCEPTION_TYPE_OPTIONS } = require('../../utils/constants');
+const realtime = require('../../utils/realtime');
 
 function isStoredReceiptReference(value) {
   return /^https?:\/\//i.test(value) || value.startsWith('cloud://') || value.startsWith('/uploads/');
@@ -36,7 +37,8 @@ Page({
     referenceImageUrl: '',
     hasReferenceImage: false,
     showReferenceSheet: false,
-    refreshInterval: null
+    refreshInterval: null,
+    currentDateLabel: ''
   },
 
   /**
@@ -44,6 +46,7 @@ Page({
    */
   onShow() {
     this.startAutoRefresh();
+    this.startRealtimeSync();
   },
 
   /**
@@ -51,6 +54,7 @@ Page({
    */
   onHide() {
     this.stopAutoRefresh();
+    this.stopRealtimeSync();
   },
 
   /**
@@ -59,6 +63,9 @@ Page({
   startAutoRefresh() {
     this.stopAutoRefresh();
     this.data.refreshInterval = setInterval(() => {
+      if (this._syncCurrentDateLabel()) {
+        return;
+      }
       if (!this._isPaused() && this.data.order) {
         this.loadOrderDetail(this.data.order.batchItemId, this.data.order.mealSlotOrderId);
       }
@@ -75,12 +82,48 @@ Page({
     }
   },
 
+  startRealtimeSync() {
+    this.stopRealtimeSync();
+    this._unsubscribeRealtime = realtime.subscribe((message) => {
+      if (!message || !message.eventType || !String(message.eventType).startsWith('dispatch.')) {
+        return;
+      }
+      if (this._isPaused() || !this.data.order) {
+        return;
+      }
+      this.loadOrderDetail(this.data.order.batchItemId, this.data.order.mealSlotOrderId);
+    });
+  },
+
+  stopRealtimeSync() {
+    if (this._unsubscribeRealtime) {
+      this._unsubscribeRealtime();
+      this._unsubscribeRealtime = null;
+    }
+  },
+
   /**
    * 判断是否暂停刷新（有进行中的交互）
    */
   _isPaused() {
     const { submitting, deferring, isEditingReceipt, referenceUploading, showReferenceSheet } = this.data;
     return submitting || deferring || isEditingReceipt || referenceUploading || showReferenceSheet;
+  },
+
+  _syncCurrentDateLabel() {
+    const todayLabel = formatCurrentDateMMDD();
+    if (!this.data.currentDateLabel || this.data.currentDateLabel === todayLabel) {
+      if (!this.data.currentDateLabel) {
+        this.setData({ currentDateLabel: todayLabel });
+      }
+      return false;
+    }
+    this.setData({ currentDateLabel: todayLabel, order: null, loading: false });
+    wx.showToast({ title: '已切换到新一天，请返回今日队列', icon: 'none' });
+    setTimeout(() => {
+      wx.navigateBack();
+    }, 200);
+    return true;
   },
 
   /**
@@ -90,7 +133,8 @@ Page({
     const app = getApp();
     this.setData({
       statusBarHeight: app.globalData.statusBarHeight,
-      navBarHeight: app.globalData.navBarHeight
+      navBarHeight: app.globalData.navBarHeight,
+      currentDateLabel: formatCurrentDateMMDD()
     });
 
     const { batchItemId, mealSlotOrderId, expandDelivery } = options;

@@ -119,6 +119,25 @@
 }
 
 /* 批次列表 */
+.section-title {
+  font-size: 36rpx;
+  font-weight: 600;
+  margin-bottom: 24rpx;
+  padding: 0 16rpx;
+  display: flex;
+  align-items: center;
+}
+
+.date-badge {
+  font-size: 24rpx;
+  font-weight: normal;
+  color: #10b981;
+  background-color: #ecfdf5;
+  padding: 4rpx 12rpx;
+  border-radius: 8rpx;
+  margin-left: 16rpx;
+}
+
 .batch-list {
   display: flex;
   flex-direction: column;

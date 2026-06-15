@@ -3,6 +3,7 @@ import { MapPinned, PackageCheck, Truck, UserRound } from "lucide-react";
 import { fetchDispatchAreaBindings, fetchDispatchRiderProgress } from "../../shared/api/http";
 import { AdminDialog } from "../../shared/components/AdminDialog";
 import { toast } from "../../shared/components/Toast";
+import { useAdminRealtime } from "../../shared/realtime/adminRealtime";
 import type { DispatchAreaBindingResponse, DispatchRiderProgressResponse } from "../../shared/api/types";
 import { hasDisplayValue, hasOrderAttention, normalizeDispatchAreaBindings } from "./dispatchCenterLayout.helpers";
 import { useDispatchContext } from "./DispatchContext";
@@ -85,6 +86,15 @@ export function DispatchProgressPage() {
 
   useEffect(() => {
     reloadAll().catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"));
+  }, [reloadAll]);
+
+  useEffect(() => {
+    return useAdminRealtime((message) => {
+      if (!message.eventType || !message.eventType.startsWith("dispatch.")) {
+        return;
+      }
+      reloadAll(true).catch(() => undefined);
+    });
   }, [reloadAll]);
 
   useEffect(() => {

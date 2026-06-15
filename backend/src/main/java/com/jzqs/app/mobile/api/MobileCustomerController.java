@@ -29,7 +29,10 @@ public class MobileCustomerController {
     private final MobilePortalService mobilePortalService;
     private final CustomerAssetService customerAssetService;
 
-    public MobileCustomerController(MobilePortalService mobilePortalService, CustomerAssetService customerAssetService) {
+    public MobileCustomerController(
+        MobilePortalService mobilePortalService,
+        CustomerAssetService customerAssetService
+    ) {
         this.mobilePortalService = mobilePortalService;
         this.customerAssetService = customerAssetService;
     }
@@ -78,13 +81,15 @@ public class MobileCustomerController {
         @RequestHeader("Authorization") String authorization,
         @Valid @RequestBody MobileCreateOrderRequest request
     ) {
-        return ApiResponse.success(mobilePortalService.createMiniappOrder(
-            extractCustomerId(authorization),
+        long customerId = extractCustomerId(authorization);
+        Map<String, Object> response = mobilePortalService.createMiniappOrder(
+            customerId,
             request.serveDate(),
             request.mealPeriod(),
             request.deliveryAddress(),
             request.note()
-        ));
+        );
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/orders/{orderId}/delivery-subscription")
@@ -108,7 +113,9 @@ public class MobileCustomerController {
         @PathVariable long orderId,
         @RequestHeader("Authorization") String authorization
     ) {
-        return ApiResponse.success(mobilePortalService.cancelMiniappOrder(extractCustomerId(authorization), orderId));
+        long customerId = extractCustomerId(authorization);
+        Map<String, Object> response = mobilePortalService.cancelMiniappOrder(customerId, orderId);
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/orders/{orderId}/change-address")
@@ -117,13 +124,13 @@ public class MobileCustomerController {
         @RequestHeader("Authorization") String authorization,
         @Valid @RequestBody MobileOrderAddressChangeRequest request
     ) {
-        return ApiResponse.success(
-            mobilePortalService.changeCustomerOrderAddress(
-                extractCustomerId(authorization),
-                orderId,
-                request.addressId()
-            )
+        long customerId = extractCustomerId(authorization);
+        Map<String, Object> response = mobilePortalService.changeCustomerOrderAddress(
+            customerId,
+            orderId,
+            request.addressId()
         );
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/orders/{orderId}/delete")
@@ -131,7 +138,9 @@ public class MobileCustomerController {
         @PathVariable long orderId,
         @RequestHeader("Authorization") String authorization
     ) {
-        return ApiResponse.success(mobilePortalService.deleteMiniappOrder(extractCustomerId(authorization), orderId));
+        long customerId = extractCustomerId(authorization);
+        Map<String, Object> response = mobilePortalService.deleteMiniappOrder(customerId, orderId);
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/orders/{orderId}/after-sales")

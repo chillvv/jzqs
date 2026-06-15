@@ -11,6 +11,10 @@ public record CustomerAssetResponse(
     boolean priorityCustomer,
     String priorityTag,
     String merchantRemark,
+    String packageExpiredAt,
+    int remainingValidityDays,
+    String packageAlertCode,
+    String packageAlertLabel,
     String lastOrderAt,
     String registeredAt,
     String status

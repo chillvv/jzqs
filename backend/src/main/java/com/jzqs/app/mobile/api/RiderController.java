@@ -208,9 +208,7 @@ public class RiderController {
         @Parameter(description = "骑手姓名", required = true)
         @RequestParam String riderName
     ) {
-        return ApiResponse.success(
-            mobilePortalService.revertOrderStatus(orderId, riderName)
-        );
+        return ApiResponse.success(mobilePortalService.revertOrderStatus(orderId, riderName));
     }
 
     /**
@@ -224,9 +222,7 @@ public class RiderController {
         @RequestParam String riderName,
         @Valid @RequestBody RiderReorderRequest request
     ) {
-        return ApiResponse.success(
-            mobilePortalService.reorderRiderQueue(riderName, request.batchItemIds())
-        );
+        return ApiResponse.success(mobilePortalService.reorderRiderQueue(riderName, request.batchItemIds()));
     }
 
     // ==================== 文件上传 ====================
@@ -275,9 +271,7 @@ public class RiderController {
         @Parameter(description = "骑手姓名", required = true)
         @RequestParam String riderName
     ) {
-        return ApiResponse.success(
-            mobilePortalService.deleteRiderReceiptImage(orderId, riderName)
-        );
+        return ApiResponse.success(mobilePortalService.deleteRiderReceiptImage(orderId, riderName));
     }
 
     // ==================== 其他功能 ====================

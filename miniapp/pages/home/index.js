@@ -1,5 +1,6 @@
 const { request } = require('../../utils/request');
 const { resolveMediaUrl } = require('../../utils/media-url');
+const realtime = require('../../utils/realtime');
 
 Page({
   data: {
@@ -26,6 +27,7 @@ Page({
         selected: 0
       })
     }
+    this.startRealtimeSync();
     this.loadPageData();
   },
 
@@ -93,10 +95,12 @@ Page({
 
   onHide() {
     this.stopAnnouncementPolling();
+    this.stopRealtimeSync();
   },
 
   onUnload() {
     this.stopAnnouncementPolling();
+    this.stopRealtimeSync();
   },
 
   _pollAnnouncementTimer: null,
@@ -119,6 +123,24 @@ Page({
     if (this._pollAnnouncementTimer) {
       clearInterval(this._pollAnnouncementTimer);
       this._pollAnnouncementTimer = null;
+    }
+  },
+
+  startRealtimeSync() {
+    this.stopRealtimeSync();
+    this._unsubscribeRealtime = realtime.subscribe((message) => {
+      const eventType = String((message && message.eventType) || '');
+      if (!eventType.startsWith('system.') && !eventType.startsWith('customer.')) {
+        return;
+      }
+      this.loadPageData();
+    });
+  },
+
+  stopRealtimeSync() {
+    if (this._unsubscribeRealtime) {
+      this._unsubscribeRealtime();
+      this._unsubscribeRealtime = null;
     }
   },
 

@@ -1,5 +1,6 @@
 const auth = require('./utils/auth');
 const { DEFAULT_API_BASE_URL, resolveApiBaseUrl } = require('./utils/api-base');
+const realtime = require('./utils/realtime');
 
 const UNOPENED_RIDER_ACCOUNT_MESSAGE = '后台未开通该手机号对应的骑手账号';
 
@@ -52,6 +53,10 @@ App({
         console.error('[自动登录] 失败', error);
         return null;
       });
+    realtime.init({
+      clientLabel: 'rider',
+      getToken: () => wx.getStorageSync('auth_token') || auth.globalData.token || ''
+    });
 
     // 根据认证状态自动跳转
     this.authPromise.then(() => {

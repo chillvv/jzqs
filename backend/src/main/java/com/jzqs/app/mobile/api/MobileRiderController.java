@@ -53,13 +53,14 @@ public class MobileRiderController {
         @PathVariable long mealSlotOrderId,
         @Valid @RequestBody RiderReceiptRequest request
     ) {
-        return ApiResponse.success(mobilePortalService.submitRiderReceipt(
+        Map<String, Object> response = mobilePortalService.submitRiderReceipt(
             mealSlotOrderId,
             request.riderName(),
             request.receiptFileKey(),
             request.receiptNote(),
             request.deliveredAt()
-        ));
+        );
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/tasks/{mealSlotOrderId}/receipt/update")
@@ -67,13 +68,14 @@ public class MobileRiderController {
         @PathVariable long mealSlotOrderId,
         @Valid @RequestBody RiderReceiptRequest request
     ) {
-        return ApiResponse.success(mobilePortalService.updateRiderReceipt(
+        Map<String, Object> response = mobilePortalService.updateRiderReceipt(
             mealSlotOrderId,
             request.riderName(),
             request.receiptFileKey(),
             request.receiptNote(),
             request.deliveredAt()
-        ));
+        );
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/queue/reorder")
@@ -81,7 +83,8 @@ public class MobileRiderController {
         @RequestParam String riderName,
         @Valid @RequestBody RiderReorderRequest request
     ) {
-        return ApiResponse.success(mobilePortalService.reorderRiderQueue(riderName, request.batchItemIds()));
+        Map<String, Object> response = mobilePortalService.reorderRiderQueue(riderName, request.batchItemIds());
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/queue/items/{batchItemId}/defer")
@@ -89,7 +92,8 @@ public class MobileRiderController {
         @RequestParam String riderName,
         @PathVariable long batchItemId
     ) {
-        return ApiResponse.success(mobilePortalService.deferRiderQueueItem(riderName, batchItemId));
+        Map<String, Object> response = mobilePortalService.deferRiderQueueItem(riderName, batchItemId);
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/queue/items/{batchItemId}/resume")
@@ -97,7 +101,8 @@ public class MobileRiderController {
         @RequestParam String riderName,
         @PathVariable long batchItemId
     ) {
-        return ApiResponse.success(mobilePortalService.resumeRiderQueueItem(riderName, batchItemId));
+        Map<String, Object> response = mobilePortalService.resumeRiderQueueItem(riderName, batchItemId);
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/tasks/{mealSlotOrderId}/report-exception")
@@ -105,13 +110,14 @@ public class MobileRiderController {
         @PathVariable long mealSlotOrderId,
         @Valid @RequestBody RiderExceptionReportRequest request
     ) {
-        return ApiResponse.success(mobilePortalService.reportDeliveryException(
+        Map<String, Object> response = mobilePortalService.reportDeliveryException(
             mealSlotOrderId,
             request.riderName(),
             request.exceptionType(),
             request.exceptionNote(),
             request.exceptionImages()
-        ));
+        );
+        return ApiResponse.success(response);
     }
 
     @GetMapping("/completed-today")

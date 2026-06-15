@@ -5,6 +5,8 @@ import com.jzqs.app.common.api.BatchOperationResponse;
 import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
+import com.jzqs.app.common.realtime.RealtimeEvent;
+import com.jzqs.app.common.realtime.TransactionalRealtimePublisher;
 import com.jzqs.app.dispatch.api.DispatchAreaBlockingOrderResponse;
 import com.jzqs.app.dispatch.api.DispatchAreaOrderItemResponse;
 import com.jzqs.app.dispatch.api.DispatchBatchResponse;
@@ -40,9 +42,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class DispatchServiceImpl implements DispatchService {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private final JdbcTemplate jdbcTemplate;
+    private final TransactionalRealtimePublisher realtimeEventPublisher;
 
-    public DispatchServiceImpl(JdbcTemplate jdbcTemplate) {
+    public DispatchServiceImpl(JdbcTemplate jdbcTemplate, TransactionalRealtimePublisher realtimeEventPublisher) {
         this.jdbcTemplate = jdbcTemplate;
+        this.realtimeEventPublisher = realtimeEventPublisher;
     }
 
     @Override
@@ -416,6 +420,7 @@ public class DispatchServiceImpl implements DispatchService {
                 ));
             }
         }
+        publishDispatchEvent("dispatch.assignment.changed", normalizedAreaCode, defaultRiderName, successCount);
         return new BatchOperationResponse(successCount, failures.size(), failures);
     }
 
@@ -442,6 +447,7 @@ public class DispatchServiceImpl implements DispatchService {
     @Transactional
     public Map<String, Object> assignOrder(long orderId, String riderName, String areaCode) {
         dispatchOrder(orderId, riderName, areaCode, true);
+        publishDispatchEvent("dispatch.assignment.changed", areaCode, riderName, orderId);
         return Map.of("mealSlotOrderId", orderId, "riderName", riderName, "status", "DISPATCHED");
     }
 
@@ -449,6 +455,7 @@ public class DispatchServiceImpl implements DispatchService {
     @Transactional
     public Map<String, Object> confirmExceptionArea(long mealSlotOrderId, String areaCode, String riderName, boolean rememberAddress, String updatedBy) {
         dispatchOrder(mealSlotOrderId, riderName, areaCode, rememberAddress);
+        publishDispatchEvent("dispatch.assignment.changed", areaCode, riderName, mealSlotOrderId);
         return Map.of(
             "mealSlotOrderId", mealSlotOrderId,
             "areaCode", areaCode,
@@ -500,7 +507,12 @@ public class DispatchServiceImpl implements DispatchService {
         if (syncAddressBinding) {
             syncAddressBinding(orderId, riderProfileId, areaCode);
         }
-        ensureBatchItem(orderId, riderProfileId, areaCode);
+        int finalSequenceNumber = ensureBatchItem(orderId, riderProfileId, areaCode);
+        jdbcTemplate.update(
+            "UPDATE dispatch_assignments SET sequence_number = ? WHERE meal_slot_order_id = ?",
+            finalSequenceNumber,
+            orderId
+        );
     }
 
     @Override
@@ -1078,7 +1090,7 @@ public class DispatchServiceImpl implements DispatchService {
             dispatchOrder(orderId, resolveAssignmentRiderName(normalizedAreaCode, riderName), normalizedAreaCode, true);
             successCount++;
         }
-        
+        publishDispatchEvent("dispatch.queue.changed", normalizedAreaCode, riderName, null);
         return Map.of(
             "areaCode", normalizedAreaCode,
             "assignedCount", successCount,
@@ -1091,6 +1103,7 @@ public class DispatchServiceImpl implements DispatchService {
     public Map<String, Object> assignRiderToAreaOrder(String areaCode, long orderId, String riderName, String updatedBy) {
         String normalizedAreaCode = requireAreaCode(areaCode);
         dispatchOrder(orderId, resolveAssignmentRiderName(normalizedAreaCode, riderName), normalizedAreaCode, true);
+        publishDispatchEvent("dispatch.queue.changed", normalizedAreaCode, riderName, orderId);
         return Map.of("areaCode", normalizedAreaCode, "orderId", orderId, "status", "DISPATCHED");
     }
 
@@ -1098,6 +1111,24 @@ public class DispatchServiceImpl implements DispatchService {
     @Transactional
     public Map<String, Object> reorderAreaOrders(String areaCode, List<DispatchOrderReorderItemRequest> items) {
         String normalizedAreaCode = requireAreaCode(areaCode);
+        if (items == null || items.isEmpty()) {
+            return Map.of("areaCode", normalizedAreaCode, "updatedCount", 0);
+        }
+
+        List<Long> orderIds = items.stream()
+            .map(DispatchOrderReorderItemRequest::orderId)
+            .filter(id -> id != null && id > 0)
+            .toList();
+        if (!orderIds.isEmpty()) {
+            String placeholders = String.join(",", java.util.Collections.nCopies(orderIds.size(), "?"));
+            List<Object> tempArgs = new ArrayList<>(orderIds.size());
+            tempArgs.addAll(orderIds);
+            jdbcTemplate.update(
+                "UPDATE dispatch_batch_items SET current_sequence = current_sequence + 1000 WHERE manually_adjusted = FALSE AND meal_slot_order_id IN (" + placeholders + ")",
+                tempArgs.toArray()
+            );
+        }
+
         int updatedCount = 0;
         for (DispatchOrderReorderItemRequest item : items) {
             jdbcTemplate.update(
@@ -1113,6 +1144,7 @@ public class DispatchServiceImpl implements DispatchService {
             );
             updatedCount++;
         }
+        publishDispatchEvent("dispatch.queue.changed", normalizedAreaCode, null, items.get(0).orderId());
         return Map.of("areaCode", normalizedAreaCode, "updatedCount", updatedCount);
     }
 
@@ -1155,6 +1187,7 @@ public class DispatchServiceImpl implements DispatchService {
             normalizedAreaCode
         );
         syncAddressBindingForArea(orderId, normalizedTargetAreaCode, updatedBy, "AREA_MOVED");
+        publishDispatchEvent("dispatch.assignment.changed", normalizedTargetAreaCode, null, orderId);
         return Map.of(
             "areaCode", normalizedAreaCode,
             "orderId", orderId,
@@ -1216,6 +1249,7 @@ public class DispatchServiceImpl implements DispatchService {
                 updateAreaBinding(finalAreaCode, null, riderId, null, createdBy);
             }
         }
+        publishDispatchEvent("dispatch.assignment.changed", finalAreaCode, toRiderName, targetId);
         return Map.of(
             "reassignLevel", reassignLevel,
             "targetId", targetId,
@@ -1859,7 +1893,7 @@ public class DispatchServiceImpl implements DispatchService {
         );
     }
 
-    private void ensureBatchItem(long orderId, long riderProfileId, String areaCode) {
+    private int ensureBatchItem(long orderId, long riderProfileId, String areaCode) {
         Map<String, Object> row = jdbcTemplate.queryForMap("""
             SELECT doo.serve_date AS serve_date, mso.meal_period
             FROM meal_slot_orders mso
@@ -1892,6 +1926,7 @@ public class DispatchServiceImpl implements DispatchService {
         } else {
             batchId = batchIds.get(0);
         }
+        int finalSequence;
         List<Long> existingBatchIds = jdbcTemplate.query(
             "SELECT batch_id FROM dispatch_batch_items WHERE meal_slot_order_id = ?",
             (rs, rowNum) -> rs.getLong("batch_id"),
@@ -1907,6 +1942,7 @@ public class DispatchServiceImpl implements DispatchService {
                 nextSequence,
                 "PENDING"
             );
+            finalSequence = nextSequence;
         } else if (existingBatchIds.get(0) != batchId) {
             long previousBatchId = existingBatchIds.get(0);
             int nextSequence = nextBatchSequence(batchId);
@@ -1928,8 +1964,17 @@ public class DispatchServiceImpl implements DispatchService {
                 orderId
             );
             refreshBatchMetrics(previousBatchId);
+            finalSequence = nextSequence;
+        } else {
+            Integer currentSequence = jdbcTemplate.queryForObject(
+                "SELECT current_sequence FROM dispatch_batch_items WHERE meal_slot_order_id = ?",
+                Integer.class,
+                orderId
+            );
+            finalSequence = currentSequence == null ? 1 : currentSequence;
         }
         refreshBatchMetrics(batchId);
+        return finalSequence;
     }
 
     private int nextBatchSequence(long batchId) {
@@ -1939,6 +1984,22 @@ public class DispatchServiceImpl implements DispatchService {
             batchId
         );
         return sequence == null ? 1 : sequence;
+    }
+
+    private void publishDispatchEvent(String eventType, String areaCode, String riderName, Object orderId) {
+        RealtimeEvent.Builder builder = RealtimeEvent.builder(eventType)
+            .audience("admin")
+            .audience("rider:all");
+        if (areaCode != null && !areaCode.isBlank()) {
+            builder.payload("areaCode", areaCode);
+        }
+        if (riderName != null && !riderName.isBlank()) {
+            builder.audience("rider:name:" + riderName.trim()).payload("riderName", riderName.trim());
+        }
+        if (orderId != null) {
+            builder.payload("orderId", orderId);
+        }
+        realtimeEventPublisher.publish(builder.build());
     }
 
     private void refreshBatchMetrics(long batchId) {

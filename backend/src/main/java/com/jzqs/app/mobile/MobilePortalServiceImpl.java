@@ -8,6 +8,8 @@ import com.jzqs.app.aftersale.service.AftersaleService;
 import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
+import com.jzqs.app.common.realtime.RealtimeEvent;
+import com.jzqs.app.common.realtime.TransactionalRealtimePublisher;
 import com.jzqs.app.common.wechat.WeChatService;
 import com.jzqs.app.customer.api.WalletTransactionResponse;
 import com.jzqs.app.dispatch.service.DispatchService;
@@ -69,6 +71,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     private final MobilePortalServiceExtension extension;
     private final AftersaleService aftersaleService;
     private final WeChatService weChatService;
+    private final TransactionalRealtimePublisher realtimeEventPublisher;
     private final Path uploadRootDir;
 
     public MobilePortalServiceImpl(
@@ -81,6 +84,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         MobilePortalServiceExtension extension,
         AftersaleService aftersaleService,
         WeChatService weChatService,
+        TransactionalRealtimePublisher realtimeEventPublisher,
         @Value("${app.upload-dir:./uploads}") String uploadDir
     ) {
         this.jdbcTemplate = jdbcTemplate;
@@ -92,6 +96,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         this.extension = extension;
         this.aftersaleService = aftersaleService;
         this.weChatService = weChatService;
+        this.realtimeEventPublisher = realtimeEventPublisher;
         this.uploadRootDir = Path.of(uploadDir).toAbsolutePath().normalize();
     }
 
@@ -115,6 +120,10 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             "未开通套餐",
             0,
             0,
+            "",
+            0,
+            "",
+            "",
             orderingEnabled,
             orderingEnabled ? "可浏览菜单" : "暂停接单",
             safeString(settings.get("holiday_notice_title")),
@@ -138,6 +147,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 COALESCE(pp.package_name, '未开通套餐') AS package_name,
                 COALESCE(mw.total_meals, 0) AS total_meals,
                 COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) AS remaining_meals,
+                mw.expired_at,
                 c.merchant_remark,
                 (
                     SELECT ca.address_line
@@ -171,6 +181,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             row.put("package_name", rs.getString("package_name"));
             row.put("total_meals", rs.getInt("total_meals"));
             row.put("remaining_meals", rs.getInt("remaining_meals"));
+            row.put("expired_at", rs.getTimestamp("expired_at") == null ? null : rs.getTimestamp("expired_at").toLocalDateTime());
             row.put("merchant_remark", rs.getString("merchant_remark"));
             row.put("default_address", rs.getString("default_address"));
             row.put("default_user_remark", rs.getString("default_user_remark"));
@@ -180,16 +191,29 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "未找到对应客户");
         }
         Map<String, Object> settings = jdbcTemplate.queryForMap(
-            "SELECT ordering_enabled, holiday_notice_title, holiday_notice_desc, banner_images, banner_interval_seconds, popup_announcement_enabled, popup_announcement_content FROM admin_settings WHERE id = 1"
+            "SELECT ordering_enabled, holiday_notice_title, holiday_notice_desc, banner_images, banner_interval_seconds, package_expiry_reminder_days, package_low_balance_threshold, popup_announcement_enabled, popup_announcement_content FROM admin_settings WHERE id = 1"
         );
         boolean orderingEnabled = Boolean.TRUE.equals(settings.get("ordering_enabled"));
+        LocalDateTime expiredAt = (LocalDateTime) customer.get("expired_at");
+        int remainingMeals = ((Number) customer.get("remaining_meals")).intValue();
+        int remainingValidityDays = remainingValidityDays(expiredAt);
+        String packageAlertCode = resolvePackageAlertCode(
+            remainingMeals,
+            expiredAt,
+            intSetting(settings.get("package_expiry_reminder_days"), 7),
+            intSetting(settings.get("package_low_balance_threshold"), 3)
+        );
         return new MobileHomeResponse(
             ((Number) customer.get("id")).longValue(),
             String.valueOf(customer.get("name")),
             String.valueOf(customer.get("phone")),
             String.valueOf(customer.get("package_name")),
             ((Number) customer.get("total_meals")).intValue(),
-            ((Number) customer.get("remaining_meals")).intValue(),
+            remainingMeals,
+            formatDate(expiredAt),
+            remainingValidityDays,
+            packageAlertCode,
+            resolvePackageAlertMessage(packageAlertCode, remainingMeals, remainingValidityDays),
             orderingEnabled,
             orderingEnabled ? "可下单" : "暂停接单",
             safeString(settings.get("holiday_notice_title")),
@@ -460,11 +484,14 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             );
             jdbcTemplate.execute("/* force flush */ SELECT 1");
             dispatchService.autoAssignPendingOrders(normalizedMealPeriod);
-            return Map.of(
+            Map<String, Object> result = Map.of(
                 "orderId", mergeTargetOrderId,
                 "status", "MERGED",
                 "walletAction", "RESERVED"
             );
+            publishCustomerEvent("customer.order.changed", customerId, mergeTargetOrderId);
+            publishCustomerEvent("customer.wallet.changed", customerId, mergeTargetOrderId);
+            return result;
         }
         LocalDateTime now = LocalDateTime.now();
         Long existingDailyOrderId = jdbcTemplate.query(
@@ -529,11 +556,14 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             mealSlotOrderId
         );
 
-        return Map.of(
+        Map<String, Object> result = Map.of(
             "orderId", mealSlotOrderId,
             "status", currentStatus != null ? currentStatus : "PENDING_DISPATCH",
             "walletAction", "RESERVED"
         );
+        publishCustomerEvent("customer.order.changed", customerId, mealSlotOrderId);
+        publishCustomerEvent("customer.wallet.changed", customerId, mealSlotOrderId);
+        return result;
     }
 
     @Override
@@ -568,6 +598,16 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             "orderId", orderId,
             "status", "AUTHORIZED"
         );
+    }
+
+    @Override
+    @Transactional
+    public int sendScheduledDeliverySubscribeMessages(String mealPeriod) {
+        String normalizedMealPeriod = safeString(mealPeriod).trim().toUpperCase();
+        if (!"LUNCH".equals(normalizedMealPeriod) && !"DINNER".equals(normalizedMealPeriod)) {
+            return 0;
+        }
+        return sendScheduledDeliverySubscribeMessagesInternal(normalizedMealPeriod, LocalDate.now(), LocalDateTime.now().withNano(0));
     }
 
     @Transactional
@@ -605,7 +645,10 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         if (!MiniappCustomerCancelGuard.canCustomerCancel(LocalDateTime.now(), serveDate, status)) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "该订单已过用户可取消时间，仅商家后台可处理");
         }
-        return orderPrepService.cancelOrder(orderId);
+        Map<String, Object> result = orderPrepService.cancelOrder(orderId);
+        publishCustomerEvent("customer.order.changed", customerId, orderId);
+        publishCustomerEvent("customer.wallet.changed", customerId, orderId);
+        return result;
     }
 
     @Override
@@ -628,7 +671,10 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         if (updated == 0) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "无法删除该订单（可能状态不符或订单不存在）");
         }
-        return Map.of("orderId", orderId, "status", "HIDDEN");
+        Map<String, Object> result = Map.of("orderId", orderId, "status", "HIDDEN");
+        publishCustomerEvent("customer.order.changed", customerId, orderId);
+        publishCustomerEvent("customer.wallet.changed", customerId, orderId);
+        return result;
     }
 
     @Override
@@ -759,6 +805,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             throw new BusinessException(ErrorCode.ADDRESS_NOT_FOUND, "未找到该地址");
         }
         jdbcTemplate.update("UPDATE meal_slot_orders SET address_id = ? WHERE id = ?", addressId, orderId);
+        publishCustomerEvent("customer.order.changed", customerId, orderId);
         return Map.of("orderId", orderId, "addressId", addressId, "status", "ADDRESS_UPDATED");
     }
 
@@ -816,10 +863,13 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         if (!"DELIVERED".equals(actualStatus) || serveDate == null || deliveredAt == null) {
             return actualStatus;
         }
-        LocalDateTime gate = "DINNER".equals(mealPeriod)
-            ? LocalDateTime.of(serveDate, LocalTime.of(17, 0))
-            : LocalDateTime.of(serveDate, LocalTime.of(11, 30));
+        LocalDateTime gate = resolveDeliveryNotifyThreshold(serveDate, mealPeriod);
         return LocalDateTime.now().isBefore(gate) ? "PENDING_DISPATCH" : "DELIVERED";
+    }
+
+    private LocalDateTime resolveDeliveryNotifyThreshold(LocalDate serveDate, String mealPeriod) {
+        LocalTime cutoff = "DINNER".equalsIgnoreCase(mealPeriod) ? LocalTime.of(17, 0) : LocalTime.of(11, 30);
+        return LocalDateTime.of(serveDate, cutoff);
     }
 
     private boolean canChangeAddress(LocalDate serveDate) {
@@ -877,6 +927,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     }
 
     public PageResponse<RiderTaskItemResponse> riderTasks(String riderName) {
+        LocalDate today = LocalDate.now();
         List<RiderTaskItemResponse> items = jdbcTemplate.query("""
             SELECT
                 da.id AS dispatch_id,
@@ -901,7 +952,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 AND EXISTS (SELECT 1 FROM menu_weeks mw2 WHERE mw2.id = ms.week_id AND mw2.status = 'PUBLISHED')
             LEFT JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
             WHERE da.rider_name = ?
-              AND do.serve_date = CURRENT_DATE
+              AND do.serve_date = ?
             ORDER BY CASE WHEN mso.meal_period = 'LUNCH' THEN 1 ELSE 2 END,
                      COALESCE(da.sequence_number, 2147483647),
                      da.id
@@ -917,11 +968,12 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             rs.getString("delivery_status"),
             rs.getString("receipt_status"),
             rs.getString("receipt_url")
-        ), riderName);
+        ), riderName, today);
         return PageResponse.of(items, 1, 20, items.size());
     }
 
     public RiderBatchSummaryResponse riderSummary(String riderName) {
+        LocalDate today = LocalDate.now();
         List<RiderBatchSummaryResponse.BatchCardResponse> cards = jdbcTemplate.query("""
             SELECT
                 db.id AS batch_id,
@@ -949,7 +1001,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             FROM dispatch_batches db
             JOIN rider_profiles rp ON rp.id = db.rider_profile_id
             WHERE rp.rider_name = ?
-              AND db.serve_date = CURRENT_DATE
+              AND db.serve_date = ?
             ORDER BY CASE WHEN db.meal_period = 'LUNCH' THEN 1 ELSE 2 END, db.id DESC
             """, (rs, rowNum) -> new RiderBatchSummaryResponse.BatchCardResponse(
             rs.getLong("batch_id"),
@@ -961,7 +1013,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             rs.getInt("current_sequence"),
             rs.getString("current_customer_name"),
             rs.getString("next_customer_name")
-        ), riderName);
+        ), riderName, today);
         RiderBatchSummaryResponse.BatchCardResponse lunch = cards.stream().filter(item -> "LUNCH".equals(item.mealPeriod())).findFirst().orElse(null);
         RiderBatchSummaryResponse.BatchCardResponse dinner = cards.stream().filter(item -> "DINNER".equals(item.mealPeriod())).findFirst().orElse(null);
         int totalCount = cards.stream().mapToInt(RiderBatchSummaryResponse.BatchCardResponse::totalCount).sum();
@@ -977,6 +1029,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     }
 
     public PageResponse<RiderQueueItemResponse> riderQueue(String riderName) {
+        LocalDate today = LocalDate.now();
         List<RiderQueueItemResponse> items = jdbcTemplate.query("""
             SELECT
                 dbi.id AS batch_item_id,
@@ -1014,7 +1067,8 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 AND EXISTS (SELECT 1 FROM menu_weeks mw2 WHERE mw2.id = ms.week_id AND mw2.status = 'PUBLISHED')
             LEFT JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
             WHERE rp.rider_name = ?
-              AND db.serve_date = CURRENT_DATE
+              AND db.serve_date = ?
+              AND doo.serve_date = ?
             ORDER BY CASE WHEN db.meal_period = 'LUNCH' THEN 1 ELSE 2 END, dbi.current_sequence ASC
             """, (rs, rowNum) -> {
             String note = rs.getString("note");
@@ -1045,11 +1099,12 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 rs.getString("receipt_url"),
                 rs.getString("receipt_note")
             );
-        }, riderName);
+        }, riderName, today, today);
         return PageResponse.of(items, 1, 50, items.size());
     }
 
     public RiderQueueItemResponse riderQueueItem(long batchItemId, String riderName) {
+        LocalDate today = LocalDate.now();
         List<RiderQueueItemResponse> results = jdbcTemplate.query("""
             SELECT
                 dbi.id AS batch_item_id,
@@ -1076,6 +1131,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 COALESCE(dr.receipt_note, '') AS receipt_note
             FROM dispatch_batch_items dbi
             JOIN dispatch_batches db ON db.id = dbi.batch_id
+            JOIN rider_profiles rp ON rp.id = db.rider_profile_id
             JOIN meal_slot_orders mso ON mso.id = dbi.meal_slot_order_id
             JOIN daily_orders doo ON doo.id = mso.daily_order_id
             JOIN customers c ON c.id = doo.customer_id
@@ -1086,6 +1142,9 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 AND EXISTS (SELECT 1 FROM menu_weeks mw2 WHERE mw2.id = ms.week_id AND mw2.status = 'PUBLISHED')
             LEFT JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
             WHERE dbi.id = ?
+              AND rp.rider_name = ?
+              AND db.serve_date = ?
+              AND doo.serve_date = ?
             """, (rs, rowNum) -> {
             String note = rs.getString("note");
             String merchantRemark = rs.getString("merchant_remark");
@@ -1115,7 +1174,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 rs.getString("receipt_url"),
                 rs.getString("receipt_note")
             );
-        }, batchItemId);
+        }, batchItemId, riderName, today, today);
         return results.isEmpty() ? null : results.get(0);
     }
 
@@ -1270,10 +1329,11 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             // Keep receipt submission successful even if reference-image auto-save fails.
         }
         try {
-            sendDeliverySubscriptionIfAuthorized(mealSlotOrderId);
+            sendDeliverySubscriptionAfterCutoffIfReached(mealSlotOrderId, deliveredDateTime);
         } catch (Exception ex) {
             // Keep receipt submission successful even if notification delivery fails.
         }
+        publishRiderEvent("dispatch.receipt.changed", riderName, mealSlotOrderId);
         return result;
     }
 
@@ -1333,6 +1393,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             mealSlotOrderId
         );
         deleteManagedReceiptFileQuietly(previousReceiptUrl, finalReceiptUrl);
+        publishRiderEvent("dispatch.receipt.changed", riderName, mealSlotOrderId);
 
         return Map.of(
             "mealSlotOrderId", mealSlotOrderId,
@@ -1379,6 +1440,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             WHERE meal_slot_order_id = ?
             """, mealSlotOrderId);
         deleteManagedReceiptFileQuietly(previousReceiptUrl, "");
+        publishRiderEvent("dispatch.receipt.changed", riderName, mealSlotOrderId);
 
         return Map.of(
             "mealSlotOrderId", mealSlotOrderId,
@@ -1467,6 +1529,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 """, sequence++, riderName, batchItemId);
         }
         syncDispatchAssignmentsFromBatch(batchId);
+        publishRiderEvent("dispatch.queue.changed", riderName, batchItemIds.get(0));
         return Map.of("updatedCount", batchItemIds.size(), "status", "REORDERED");
     }
 
@@ -1511,6 +1574,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             WHERE id = ?
             """, lastSequence, riderName, batchItemId);
         refreshRiderBatchState(context.batchId());
+        publishRiderEvent("dispatch.queue.changed", riderName, batchItemId);
         return Map.of(
             "batchItemId", batchItemId,
             "itemStatus", "DEFERRED",
@@ -1546,6 +1610,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             String.class,
             batchItemId
         );
+        publishRiderEvent("dispatch.queue.changed", riderName, batchItemId);
 
         return Map.of(
             "batchItemId", batchItemId,
@@ -1664,11 +1729,97 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         return "DISPATCHING";
     }
 
-    private void sendDeliverySubscriptionIfAuthorized(long mealSlotOrderId) {
-        Map<String, Object> row = jdbcTemplate.query("""
+    private void publishRiderEvent(String eventType, String riderName, Object orderId) {
+        RealtimeEvent.Builder builder = RealtimeEvent.builder(eventType)
+            .audience("admin")
+            .audience("rider:all");
+        if (riderName != null && !riderName.isBlank()) {
+            builder.audience("rider:name:" + riderName.trim()).payload("riderName", riderName.trim());
+        }
+        if (orderId != null) {
+            builder.payload("orderId", orderId);
+        }
+        realtimeEventPublisher.publish(builder.build());
+    }
+
+    private void publishCustomerEvent(String eventType, long customerId, Object orderId) {
+        RealtimeEvent.Builder builder = RealtimeEvent.builder(eventType)
+            .audience("admin")
+            .audience("customer:id:" + customerId)
+            .payload("customerId", customerId);
+        if (orderId != null) {
+            builder.payload("orderId", orderId);
+        }
+        realtimeEventPublisher.publish(builder.build());
+    }
+
+    private void sendDeliverySubscriptionAfterCutoffIfReached(long mealSlotOrderId, LocalDateTime deliveredDateTime) {
+        DeliveryMealSlotContext context = findDeliveryMealSlotContext(mealSlotOrderId);
+        if (context == null || !hasReachedDeliveryNotifyCutoff(context.mealPeriod(), context.serveDate(), deliveredDateTime)) {
+            return;
+        }
+        trySendDeliverySubscription(mealSlotOrderId, deliveredDateTime);
+    }
+
+    private int sendScheduledDeliverySubscribeMessagesInternal(String mealPeriod, LocalDate serveDate, LocalDateTime now) {
+        List<Long> orderIds = jdbcTemplate.query(
+            """
+            SELECT cds.meal_slot_order_id
+            FROM customer_delivery_subscriptions cds
+            JOIN meal_slot_orders mso ON mso.id = cds.meal_slot_order_id
+            JOIN daily_orders do ON do.id = mso.daily_order_id
+            WHERE cds.status IN ('AUTHORIZED', 'FAILED')
+              AND mso.status = 'DELIVERED'
+              AND mso.meal_period = ?
+              AND do.serve_date = ?
+            ORDER BY cds.meal_slot_order_id
+            """,
+            (rs, rowNum) -> rs.getLong(1),
+            mealPeriod,
+            serveDate
+        );
+        int sentCount = 0;
+        for (Long orderId : orderIds) {
+            if (trySendDeliverySubscription(orderId, now)) {
+                sentCount++;
+            }
+        }
+        return sentCount;
+    }
+
+    private boolean trySendDeliverySubscription(long mealSlotOrderId, LocalDateTime triggerTime) {
+        DeliverySubscriptionSendContext context = findDeliverySubscriptionSendContext(mealSlotOrderId);
+        if (context == null || isBlank(context.openid())) {
+            return false;
+        }
+        try {
+            weChatService.sendDeliverySubscribeMessage(
+                context.openid(),
+                weChatService.buildDeliveryPage(mealSlotOrderId),
+                "简知轻食",
+                "您的餐食已送达，可查看回执照片与备注"
+            );
+            jdbcTemplate.update(
+                "UPDATE customer_delivery_subscriptions SET status = 'SENT', sent_at = ?, last_error_message = NULL WHERE id = ?",
+                Timestamp.valueOf(triggerTime),
+                context.id()
+            );
+            return true;
+        } catch (Exception ex) {
+            jdbcTemplate.update(
+                "UPDATE customer_delivery_subscriptions SET status = 'FAILED', last_error_message = ? WHERE id = ?",
+                ex.getMessage(),
+                context.id()
+            );
+            throw ex;
+        }
+    }
+
+    private DeliverySubscriptionSendContext findDeliverySubscriptionSendContext(long mealSlotOrderId) {
+        return jdbcTemplate.query(
+            """
             SELECT
                 cds.id,
-                cds.template_id,
                 COALESCE(c.current_openid, c.openid, '') AS current_openid,
                 COALESCE(ca.address_line, '') AS address_line
             FROM customer_delivery_subscriptions cds
@@ -1677,44 +1828,55 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             JOIN customers c ON c.id = do.customer_id
             JOIN customer_addresses ca ON ca.id = mso.address_id
             WHERE cds.meal_slot_order_id = ?
-              AND cds.status = 'AUTHORIZED'
+              AND cds.status IN ('AUTHORIZED', 'FAILED')
             """,
             ps -> ps.setLong(1, mealSlotOrderId),
-            rs -> {
-                if (!rs.next()) {
-                    return null;
-                }
-                Map<String, Object> result = new HashMap<>();
-                result.put("id", rs.getLong("id"));
-                result.put("templateId", rs.getString("template_id"));
-                result.put("openid", rs.getString("current_openid"));
-                result.put("addressLine", rs.getString("address_line"));
-                return result;
-            }
+            rs -> rs.next()
+                ? new DeliverySubscriptionSendContext(
+                    rs.getLong("id"),
+                    rs.getString("current_openid"),
+                    rs.getString("address_line")
+                )
+                : null
         );
-        if (row == null || isBlank(String.valueOf(row.get("openid")))) {
-            return;
+    }
+
+    private DeliveryMealSlotContext findDeliveryMealSlotContext(long mealSlotOrderId) {
+        return jdbcTemplate.query(
+            """
+            SELECT do.serve_date, mso.meal_period
+            FROM meal_slot_orders mso
+            JOIN daily_orders do ON do.id = mso.daily_order_id
+            WHERE mso.id = ?
+            """,
+            ps -> ps.setLong(1, mealSlotOrderId),
+            rs -> rs.next()
+                ? new DeliveryMealSlotContext(
+                    rs.getDate("serve_date").toLocalDate(),
+                    rs.getString("meal_period")
+                )
+                : null
+        );
+    }
+
+    private boolean hasReachedDeliveryNotifyCutoff(String mealPeriod, LocalDate serveDate, LocalDateTime now) {
+        if (serveDate == null || mealPeriod == null || now == null) {
+            return false;
         }
-        try {
-            weChatService.sendDeliverySubscribeMessage(
-                String.valueOf(row.get("openid")),
-                weChatService.buildDeliveryPage(mealSlotOrderId),
-                "简知轻食",
-                safeString(row.get("addressLine")),
-                "您的餐食已送达，可查看回执照片与备注"
-            );
-            jdbcTemplate.update(
-                "UPDATE customer_delivery_subscriptions SET status = 'SENT', sent_at = CURRENT_TIMESTAMP, last_error_message = NULL WHERE id = ?",
-                row.get("id")
-            );
-        } catch (Exception ex) {
-            jdbcTemplate.update(
-                "UPDATE customer_delivery_subscriptions SET status = 'FAILED', last_error_message = ? WHERE id = ?",
-                ex.getMessage(),
-                row.get("id")
-            );
-            throw ex;
-        }
+        return !now.isBefore(resolveDeliveryNotifyThreshold(serveDate, mealPeriod));
+    }
+
+    private record DeliverySubscriptionSendContext(
+        long id,
+        String openid,
+        String addressLine
+    ) {
+    }
+
+    private record DeliveryMealSlotContext(
+        LocalDate serveDate,
+        String mealPeriod
+    ) {
     }
 
     private record RiderBatchItemContext(
@@ -1911,7 +2073,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
 
     private long activeWalletId(long customerId) {
         Long walletId = jdbcTemplate.query(
-            "SELECT id FROM meal_wallets WHERE customer_id = ? AND active = TRUE",
+            "SELECT id FROM meal_wallets WHERE customer_id = ? AND active = TRUE AND (expired_at IS NULL OR expired_at >= CURRENT_TIMESTAMP)",
             ps -> ps.setLong(1, customerId),
             rs -> rs.next() ? rs.getLong(1) : null
         );
@@ -1928,6 +2090,51 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             walletId
         );
         return count == null ? 0 : count;
+    }
+
+    private int remainingValidityDays(LocalDateTime expiredAt) {
+        if (expiredAt == null) {
+            return 0;
+        }
+        return (int) java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), expiredAt.toLocalDate());
+    }
+
+    private int intSetting(Object value, int fallback) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        try {
+            return Integer.parseInt(String.valueOf(value));
+        } catch (Exception ex) {
+            return fallback;
+        }
+    }
+
+    private String formatDate(LocalDateTime value) {
+        return value == null ? "" : value.toLocalDate().toString();
+    }
+
+    private String resolvePackageAlertCode(int remainingMeals, LocalDateTime expiredAt, int expiryReminderDays, int lowBalanceThreshold) {
+        int remainingDays = remainingValidityDays(expiredAt);
+        if (expiredAt != null && remainingDays < 0) {
+            return "EXPIRED";
+        }
+        if (expiredAt != null && remainingDays <= expiryReminderDays) {
+            return "EXPIRING_SOON";
+        }
+        if (remainingMeals <= lowBalanceThreshold) {
+            return "LOW_BALANCE";
+        }
+        return "";
+    }
+
+    private String resolvePackageAlertMessage(String alertCode, int remainingMeals, int remainingValidityDays) {
+        return switch (alertCode) {
+            case "EXPIRED" -> "餐包已过期，请联系客服续餐";
+            case "EXPIRING_SOON" -> "餐包将于 " + Math.max(0, remainingValidityDays) + " 天后到期，请及时续餐";
+            case "LOW_BALANCE" -> "剩余 " + remainingMeals + " 餐，请及时续餐";
+            default -> "";
+        };
     }
 
     private int remainingMealsForUpdate(long walletId) {
@@ -2242,9 +2449,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             """, mealSlotOrderId);
         LocalDate serveDate = ((java.sql.Date) row.get("serve_date")).toLocalDate();
         String mealPeriod = String.valueOf(row.get("meal_period"));
-        LocalDateTime threshold = "LUNCH".equals(mealPeriod)
-            ? LocalDateTime.of(serveDate, LocalTime.of(11, 30))
-            : LocalDateTime.of(serveDate, LocalTime.of(17, 0));
+        LocalDateTime threshold = resolveDeliveryNotifyThreshold(serveDate, mealPeriod);
         return deliveredDateTime.isBefore(threshold) ? threshold : deliveredDateTime;
     }
 
@@ -2345,6 +2550,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             orderInfo.get("deliveryAddress"),
             imagesJson
         );
+        publishRiderEvent("dispatch.exception.changed", riderName, mealSlotOrderId);
 
         return Map.of(
             "exceptionId", exceptionId,
@@ -2355,6 +2561,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
 
     @Override
     public PageResponse<RiderTaskItemResponse> riderCompletedToday(String riderName) {
+        LocalDate today = LocalDate.now();
         List<RiderTaskItemResponse> items = jdbcTemplate.query("""
             SELECT
                 da.id AS dispatch_id,
@@ -2379,7 +2586,8 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 AND EXISTS (SELECT 1 FROM menu_weeks mw2 WHERE mw2.id = ms.week_id AND mw2.status = 'PUBLISHED')
             JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
             WHERE da.rider_name = ?
-              AND DATE(dr.delivered_at) = CURDATE()
+              AND do.serve_date = ?
+              AND DATE(dr.delivered_at) = ?
               AND da.status = 'DELIVERED'
             ORDER BY dr.delivered_at DESC
             """, (rs, rowNum) -> new RiderTaskItemResponse(
@@ -2394,13 +2602,15 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             rs.getString("delivery_status"),
             rs.getString("receipt_status"),
             rs.getString("receipt_url")
-        ), riderName);
+        ), riderName, today, today);
         return PageResponse.of(items, 1, 20, items.size());
     }
 
     @Override
     public Map<String, Object> revertOrderStatus(long mealSlotOrderId, String riderName) {
-        return extension.revertOrderStatus(mealSlotOrderId, riderName);
+        Map<String, Object> result = extension.revertOrderStatus(mealSlotOrderId, riderName);
+        publishRiderEvent("dispatch.receipt.changed", riderName, mealSlotOrderId);
+        return result;
     }
 
     @Override

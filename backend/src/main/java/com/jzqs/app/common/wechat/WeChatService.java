@@ -146,7 +146,7 @@ public class WeChatService {
         }
     }
 
-    public void sendDeliverySubscribeMessage(String openid, String page, String merchantName, String address, String hint) {
+    public void sendDeliverySubscribeMessage(String openid, String page, String merchantName, String hint) {
         if (openid == null || openid.trim().isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "缺少订阅消息接收人");
         }
@@ -165,8 +165,7 @@ public class WeChatService {
             payload.put("template_id", deliveryTemplateId);
             payload.put("page", page);
             payload.put("data", Map.of(
-                "thing18", Map.of("value", merchantName),
-                "thing7", Map.of("value", address),
+                "thing2", Map.of("value", merchantName),
                 "thing11", Map.of("value", hint)
             ));
             String response = restTemplate.postForObject(url, payload, String.class);

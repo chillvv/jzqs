@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import java.time.LocalDateTime;
 
 @TableName("meal_wallets")
 public class MealWalletEntity {
@@ -26,6 +27,15 @@ public class MealWalletEntity {
     private Integer consumedMeals;
 
     private Boolean active;
+
+    @TableField("opened_at")
+    private LocalDateTime openedAt;
+
+    @TableField("expired_at")
+    private LocalDateTime expiredAt;
+
+    @TableField("last_adjusted_at")
+    private LocalDateTime lastAdjustedAt;
 
     public Long getId() {
         return id;
@@ -81,5 +91,29 @@ public class MealWalletEntity {
 
     public void setActive(Boolean active) {
         this.active = active;
+    }
+
+    public LocalDateTime getOpenedAt() {
+        return openedAt;
+    }
+
+    public void setOpenedAt(LocalDateTime openedAt) {
+        this.openedAt = openedAt;
+    }
+
+    public LocalDateTime getExpiredAt() {
+        return expiredAt;
+    }
+
+    public void setExpiredAt(LocalDateTime expiredAt) {
+        this.expiredAt = expiredAt;
+    }
+
+    public LocalDateTime getLastAdjustedAt() {
+        return lastAdjustedAt;
+    }
+
+    public void setLastAdjustedAt(LocalDateTime lastAdjustedAt) {
+        this.lastAdjustedAt = lastAdjustedAt;
     }
 }

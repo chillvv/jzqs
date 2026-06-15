@@ -8,7 +8,7 @@ const {
   resolveInitialRemark
 } = require('../../utils/order-remark');
 
-const DELIVERY_TEMPLATE_ID = 'LUxfZUE3i9iv2MyRpMmY-8jShHTAJhntznUFfEigZrA';
+const DELIVERY_TEMPLATE_ID = 'DCpNx6852oVCXO83CKuR-uO8WsgvVEDdAaUgwkLNi3s';
 const DELIVERY_SUBSCRIPTION_HINT_KEY = 'deliverySubscriptionHintShown';
 
 function tomorrowDate() {
@@ -44,7 +44,7 @@ function showDeliverySubscriptionHint() {
   return new Promise((resolve) => {
     wx.showModal({
       title: '送达后提醒你',
-      content: '用于在骑手送达并上传回执后，第一时间通知你查看送达结果。',
+      content: '用于在午餐 11:30 / 晚餐 17:00 送达后提醒你查看，若超过时间点才送达会立即补发通知。',
       confirmText: '继续',
       cancelText: '跳过',
       success(res) {

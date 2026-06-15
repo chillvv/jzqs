@@ -244,6 +244,18 @@
   word-break: break-all;
 }
 
+.vip-alert {
+  margin-top: 12rpx;
+  padding: 12rpx 18rpx;
+  border-radius: 16rpx;
+  background: rgba(238, 220, 154, 0.12);
+  color: #f6e8b1;
+  font-size: 24rpx;
+  line-height: 1.6;
+  position: relative;
+  z-index: 1;
+}
+
 .edit-icon {
   display: inline-block;
   margin-left: 8rpx;

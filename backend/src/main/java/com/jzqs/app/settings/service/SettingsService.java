@@ -16,6 +16,8 @@ public interface SettingsService {
 
     OperationSettingsResponse updatePopupAnnouncement(String title, String desc, boolean enabled, String content);
 
+    OperationSettingsResponse updatePackageReminderSettings(int packageExpiryReminderDays, int packageLowBalanceThreshold);
+
     BannerImageUploadResponse uploadBannerImage(MultipartFile file);
 
     OperationSettingsResponse pauseOrderingWithNotice(String title, String desc, boolean popupEnabled, String popupContent);

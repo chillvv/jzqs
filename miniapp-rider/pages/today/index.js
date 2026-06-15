@@ -1,5 +1,7 @@
 const { request } = require('../../utils/request');
 const { buildTodayCards } = require('../../utils/today-helpers');
+const { formatCurrentDateMMDD } = require('../../utils/formatter');
+const realtime = require('../../utils/realtime');
 
 Page({
   data: {
@@ -13,13 +15,22 @@ Page({
       remainingCount: 0
     },
     cards: [],
-    refreshInterval: null
+    refreshInterval: null,
+    currentDateLabel: ''
   },
   async onShow() {
     const app = getApp();
+    
+    // 检查日期是否变更，如变更直接清空缓存重载
+    const todayLabel = formatCurrentDateMMDD();
+    if (this.data.currentDateLabel && this.data.currentDateLabel !== todayLabel) {
+      console.log('日期已变更，清空页面数据');
+      this.setData({ cards: [], summary: { totalCount: 0, deliveredCount: 0, remainingCount: 0 } });
+    }
     this.setData({
       statusBarHeight: app.globalData.statusBarHeight,
-      navBarHeight: app.globalData.navBarHeight
+      navBarHeight: app.globalData.navBarHeight,
+      currentDateLabel: todayLabel
     });
     await app.waitForRiderAuth();
     const viewState = app.getRiderViewState();
@@ -38,15 +49,35 @@ Page({
     }
     this.loadSummary();
     this.startAutoRefresh();
+    this.startRealtimeSync();
   },
 
   onHide() {
     this.stopAutoRefresh();
+    this.stopRealtimeSync();
+  },
+
+  _syncCurrentDateLabel() {
+    const todayLabel = formatCurrentDateMMDD();
+    if (this.data.currentDateLabel === todayLabel) {
+      return false;
+    }
+    this.setData({
+      currentDateLabel: todayLabel,
+      cards: [],
+      summary: {
+        totalCount: 0,
+        deliveredCount: 0,
+        remainingCount: 0
+      }
+    });
+    return true;
   },
 
   startAutoRefresh() {
     this.stopAutoRefresh();
     this.data.refreshInterval = setInterval(() => {
+      this._syncCurrentDateLabel();
       this.loadSummary();
     }, 8000);
   },
@@ -55,6 +86,26 @@ Page({
     if (this.data.refreshInterval) {
       clearInterval(this.data.refreshInterval);
       this.setData({ refreshInterval: null });
+    }
+  },
+
+  startRealtimeSync() {
+    this.stopRealtimeSync();
+    this._unsubscribeRealtime = realtime.subscribe((message) => {
+      if (!message || !message.eventType || !String(message.eventType).startsWith('dispatch.')) {
+        return;
+      }
+      if (this.data.viewState !== 'active') {
+        return;
+      }
+      this.loadSummary();
+    });
+  },
+
+  stopRealtimeSync() {
+    if (this._unsubscribeRealtime) {
+      this._unsubscribeRealtime();
+      this._unsubscribeRealtime = null;
     }
   },
   onPullDownRefresh() {

@@ -6,6 +6,7 @@
     <view class="header-left">
       <image class="header-logo" src="/assets/logo.jpeg" mode="aspectFit"></image>
       <text class="header-title">简知轻食</text>
+      <text class="header-date">{{currentDateLabel}}</text>
     </view>
   </view>
 

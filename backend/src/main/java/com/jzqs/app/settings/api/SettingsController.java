@@ -48,25 +48,29 @@ public class SettingsController {
 
     @PostMapping("/ordering/pause-with-notice")
     public ApiResponse<OperationSettingsResponse> pauseOrderingWithNotice(@Valid @RequestBody PauseOrderingWithNoticeRequest request) {
-        return ApiResponse.success(
-            settingsService.pauseOrderingWithNotice(
-                request.title(),
-                request.description(),
-                request.popupEnabled(),
-                request.popupContent()
-            )
-        );
+        return ApiResponse.success(settingsService.pauseOrderingWithNotice(
+            request.title(),
+            request.description(),
+            request.popupEnabled(),
+            request.popupContent()
+        ));
     }
 
     @PostMapping("/popup-announcement")
     public ApiResponse<OperationSettingsResponse> updatePopupAnnouncement(@Valid @RequestBody PopupAnnouncementUpdateRequest request) {
-        return ApiResponse.success(
-            settingsService.updatePopupAnnouncement(
-                request.title(),
-                request.description(),
-                request.enabled(),
-                request.content()
-            )
-        );
+        return ApiResponse.success(settingsService.updatePopupAnnouncement(
+            request.title(),
+            request.description(),
+            request.enabled(),
+            request.content()
+        ));
+    }
+
+    @PostMapping("/package-reminders")
+    public ApiResponse<OperationSettingsResponse> updatePackageReminders(@Valid @RequestBody PackageReminderSettingsUpdateRequest request) {
+        return ApiResponse.success(settingsService.updatePackageReminderSettings(
+            request.packageExpiryReminderDays(),
+            request.packageLowBalanceThreshold()
+        ));
     }
 }

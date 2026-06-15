@@ -2,6 +2,7 @@ const { request } = require('../../utils/request');
 const { mapOrderForDisplay, resolveVisibleOrders } = require('../../utils/order-list');
 const { buildOrderStatusGuidance } = require('../../utils/customer-order-flow');
 const { buildRejectedAftersaleDetail } = require('../../utils/aftersale');
+const realtime = require('../../utils/realtime');
 
 Page({
   data: {
@@ -40,7 +41,16 @@ Page({
   },
 
   onShow() {
+    this.startRealtimeSync();
     this.loadOrders();
+  },
+
+  onHide() {
+    this.stopRealtimeSync();
+  },
+
+  onUnload() {
+    this.stopRealtimeSync();
   },
 
   onPullDownRefresh() {
@@ -73,6 +83,24 @@ Page({
     } finally {
       this.setData({ loading: false });
       wx.stopPullDownRefresh();
+    }
+  },
+
+  startRealtimeSync() {
+    this.stopRealtimeSync();
+    this._unsubscribeRealtime = realtime.subscribe((message) => {
+      const eventType = String((message && message.eventType) || '');
+      if (!eventType.startsWith('customer.')) {
+        return;
+      }
+      this.loadOrders();
+    });
+  },
+
+  stopRealtimeSync() {
+    if (this._unsubscribeRealtime) {
+      this._unsubscribeRealtime();
+      this._unsubscribeRealtime = null;
     }
   },
 

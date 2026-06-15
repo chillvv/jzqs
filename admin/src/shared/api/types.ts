@@ -21,6 +21,10 @@ export type CustomerAssetResponse = {
   priorityCustomer: boolean;
   priorityTag: string | null;
   merchantRemark: string | null;
+  packageExpiredAt: string | null;
+  remainingValidityDays: number;
+  packageAlertCode: string;
+  packageAlertLabel: string;
   lastOrderAt: string | null;
   registeredAt: string | null;
   status: string;
@@ -55,6 +59,16 @@ export type CustomerDetailResponse = {
   merchantRemark?: string | null;
   customerStatus?: string;
   remainingMeals?: number;
+  wallet?: {
+    totalMeals?: number;
+    reservedMeals?: number;
+    consumedMeals?: number;
+    remainingMeals?: number;
+    expiredAt?: string | null;
+    remainingValidityDays?: number;
+    packageAlertCode?: string;
+    packageAlertLabel?: string;
+  } | null;
   addresses?: CustomerAddressItem[];
   [key: string]: unknown;
 };
@@ -154,6 +168,7 @@ export type DashboardOverviewResponse = {
   dispatchingOrdersToday: number;
   deliveredOrdersToday: number;
   lowBalanceCustomers: number;
+  expiringSoonCustomers: number;
   openAftersaleCount: number;
   specialOrdersToday: number;
   menuRiskDays: number;
@@ -513,6 +528,8 @@ export type OperationSettingsResponse = {
   emergencyActionLabel: string;
   bannerImages: string;
   bannerIntervalSeconds: number;
+  packageExpiryReminderDays: number;
+  packageLowBalanceThreshold: number;
   popupAnnouncementEnabled: boolean;
   popupAnnouncementContent: string;
 };
@@ -564,6 +581,10 @@ export type LowBalanceSubscriptionItem = {
   customerName: string;
   customerPhone: string;
   remainingMeals: number;
+  packageExpiredAt: string;
+  remainingValidityDays: number;
+  packageAlertCode: string;
+  packageAlertLabel: string;
   lunchEnabled: boolean;
   dinnerEnabled: boolean;
   nextServeDate: string;

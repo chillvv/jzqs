@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import {
   fetchOperationSettings,
   updateBannerImages,
+  updatePackageReminderSettings,
   updatePopupAnnouncement,
   uploadBannerImage
 } from "../../shared/api/http";
@@ -25,6 +26,7 @@ import {
 } from "./systemSettingsPage.helpers";
 
 const EMPTY_POPUP = { title: "", description: "", enabled: false, content: "" };
+const EMPTY_PACKAGE_REMINDER = { packageExpiryReminderDays: "7", packageLowBalanceThreshold: "3" };
 
 export function SystemSettingsPage() {
   const [settings, setSettings] = useState<OperationSettingsResponse>({
@@ -35,6 +37,8 @@ export function SystemSettingsPage() {
     emergencyActionLabel: "",
     bannerImages: "[{\"imageUrl\":\"../../assets/hero-new.jpg\",\"enabled\":true}]",
     bannerIntervalSeconds: 3,
+    packageExpiryReminderDays: 7,
+    packageLowBalanceThreshold: 3,
     popupAnnouncementEnabled: false,
     popupAnnouncementContent: ""
   });
@@ -42,8 +46,9 @@ export function SystemSettingsPage() {
   const [popupForm, setPopupForm] = useState(EMPTY_POPUP);
   const [bannerForm, setBannerForm] = useState<BannerConfigItem[]>([]);
   const [bannerIntervalSeconds, setBannerIntervalSeconds] = useState("3");
+  const [packageReminderForm, setPackageReminderForm] = useState(EMPTY_PACKAGE_REMINDER);
 
-  const [modal, setModal] = useState<"banner" | "popup" | null>(null);
+  const [modal, setModal] = useState<"banner" | "popup" | "packageReminder" | null>(null);
   const [bannerUploading, setBannerUploading] = useState(false);
   const [popupSubmitting, setPopupSubmitting] = useState(false);
   const [bannerSubmitting, setBannerSubmitting] = useState(false);
@@ -113,6 +118,33 @@ export function SystemSettingsPage() {
     setBannerForm(normalizeBannerConfigs(settings.bannerImages));
     setBannerIntervalSeconds(String(settings.bannerIntervalSeconds || 3));
     openModal("banner");
+  }
+
+  function openPackageReminder() {
+    setPackageReminderForm({
+      packageExpiryReminderDays: String(settings.packageExpiryReminderDays || 7),
+      packageLowBalanceThreshold: String(settings.packageLowBalanceThreshold || 3)
+    });
+    openModal("packageReminder");
+  }
+
+  async function submitPackageReminder() {
+    const packageExpiryReminderDays = Math.max(1, Number(packageReminderForm.packageExpiryReminderDays) || 0);
+    const packageLowBalanceThreshold = Math.max(1, Number(packageReminderForm.packageLowBalanceThreshold) || 0);
+    if (!packageExpiryReminderDays || !packageLowBalanceThreshold) {
+      toast("请填写有效的提醒阈值", "error");
+      return;
+    }
+    setPopupSubmitting(true);
+    try {
+      setSettings(await updatePackageReminderSettings(packageExpiryReminderDays, packageLowBalanceThreshold));
+      closeModal();
+      toast("餐包提醒已更新");
+    } catch (err: any) {
+      showError(err);
+    } finally {
+      setPopupSubmitting(false);
+    }
   }
 
   async function submitBanner() {
@@ -215,6 +247,11 @@ export function SystemSettingsPage() {
           <div className="stat-val">{countBannerImages(settings.bannerImages)} <span>张</span></div>
           <div className="stat-footer">启用中 {enabledBannerCount} 张</div>
         </div>
+        <div className="stat-card">
+          <div className="stat-title">餐包提醒</div>
+          <div className="stat-val">{settings.packageExpiryReminderDays} <span>天</span></div>
+          <div className="stat-footer">低餐量阈值 {settings.packageLowBalanceThreshold} 餐</div>
+        </div>
       </div>
 
       <div className="settings-cards">
@@ -237,6 +274,23 @@ export function SystemSettingsPage() {
           <div className="settings-card__actions">
             <button className="btn btn-outline" style={{ width: "100%" }} onClick={openPopup}>
               配置锁定公告
+            </button>
+          </div>
+        </div>
+
+        <div className="settings-card">
+          <div className="settings-card__title">餐包提醒</div>
+          <div className="settings-card__body">
+            <div className="settings-card__detail">
+              到期前 {settings.packageExpiryReminderDays} 天提醒用户和商家
+            </div>
+            <div className="settings-card__detail settings-card__detail--sub">
+              剩余餐数小于等于 {settings.packageLowBalanceThreshold} 餐时标记为餐数不足
+            </div>
+          </div>
+          <div className="settings-card__actions">
+            <button className="btn btn-outline" style={{ width: "100%" }} onClick={openPackageReminder}>
+              配置餐包提醒
             </button>
           </div>
         </div>
@@ -341,6 +395,36 @@ export function SystemSettingsPage() {
             onChange={(e) => setPopupForm({ ...popupForm, content: e.target.value })}
             placeholder="支持多行，不填写时默认使用主文和补充拼接。"
           ></textarea>
+        </div>
+      </SettingsModal>
+
+      <SettingsModal
+        open={modal === "packageReminder"}
+        title="配置餐包提醒"
+        onClose={closeModal}
+        onSubmit={submitPackageReminder}
+        submitLabel="保存阈值"
+        submitting={popupSubmitting}
+      >
+        <div className="form-group">
+          <label className="form-label">到期提醒提前天数</label>
+          <input
+            className="form-control"
+            type="number"
+            min="1"
+            value={packageReminderForm.packageExpiryReminderDays}
+            onChange={(e) => setPackageReminderForm({ ...packageReminderForm, packageExpiryReminderDays: e.target.value })}
+          />
+        </div>
+        <div className="form-group">
+          <label className="form-label">低餐量提醒阈值</label>
+          <input
+            className="form-control"
+            type="number"
+            min="1"
+            value={packageReminderForm.packageLowBalanceThreshold}
+            onChange={(e) => setPackageReminderForm({ ...packageReminderForm, packageLowBalanceThreshold: e.target.value })}
+          />
         </div>
       </SettingsModal>
 

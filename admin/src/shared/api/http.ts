@@ -247,6 +247,9 @@ export async function createCustomerProfile(payload: {
   addressLine: string;
   contactName: string;
   contactPhone: string;
+  initialMealDelta?: number;
+  initialMealRemark?: string;
+  initialValidityDays?: number;
   priorityCustomer?: boolean;
   priorityTag?: string;
   priorityNote?: string;
@@ -765,11 +768,20 @@ export async function recordDeliveryReceipt(payload: {
   return response.data.data;
 }
 
-export async function grantWalletMeals(customerId: number, mealDelta: number, operatorName: string, remark: string) {
+export async function grantWalletMeals(customerId: number, mealDelta: number, validityDays: number, operatorName: string, remark: string) {
   const response = await http.post<ApiResponse<{ remainingMeals: number }>>(`/api/admin/customers/${customerId}/wallet/grant`, {
     mealDelta,
+    validityDays,
     operatorName,
     remark
+  });
+  return response.data.data;
+}
+
+export async function updatePackageReminderSettings(packageExpiryReminderDays: number, packageLowBalanceThreshold: number) {
+  const response = await http.post<ApiResponse<OperationSettingsResponse>>("/api/admin/settings/package-reminders", {
+    packageExpiryReminderDays,
+    packageLowBalanceThreshold
   });
   return response.data.data;
 }

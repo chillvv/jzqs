@@ -3,6 +3,8 @@
  * 拖拽排序 v2：插入索引 + 平移动画
  */
 const taskService = require('../../services/task.service');
+const { formatCurrentDateMMDD } = require('../../utils/formatter');
+const realtime = require('../../utils/realtime');
 const AUTO_REFRESH_MS = 8000;
 
 Page({
@@ -15,6 +17,7 @@ Page({
     batchReferenceMode: false,
     batchSubmitting: false,
     selectedReferenceItemIds: [],
+    currentDateLabel: '',
 
     // 拖拽状态
     dragging: false,
@@ -40,9 +43,17 @@ Page({
 
   async onShow() {
     const app = getApp();
+    
+    const todayLabel = formatCurrentDateMMDD();
+    if (this.data.currentDateLabel && this.data.currentDateLabel !== todayLabel) {
+      console.log('日期已变更，清空队列数据');
+      this.resetQueueState();
+    }
+    
     this.setData({ 
       statusBarHeight: app.globalData.statusBarHeight,
-      navBarHeight: app.globalData.navBarHeight
+      navBarHeight: app.globalData.navBarHeight,
+      currentDateLabel: todayLabel
     });
     
     // 更新 tabBar 选中状态
@@ -68,15 +79,18 @@ Page({
     }
 
     this.startAutoRefresh();
+    this.startRealtimeSync();
     this.loadQueue();
   },
 
   onHide() {
     this.stopAutoRefresh();
+    this.stopRealtimeSync();
   },
 
   onUnload() {
     this.stopAutoRefresh();
+    this.stopRealtimeSync();
   },
 
   onScrollRefresh() {
@@ -84,6 +98,16 @@ Page({
     this.loadQueue().finally(() => {
       this.setData({ refresherTriggered: false });
     });
+  },
+
+  _syncCurrentDateLabel() {
+    const todayLabel = formatCurrentDateMMDD();
+    if (this.data.currentDateLabel === todayLabel) {
+      return false;
+    }
+    this.resetQueueState();
+    this.setData({ currentDateLabel: todayLabel });
+    return true;
   },
 
   async loadQueue(options = {}) {
@@ -124,6 +148,7 @@ Page({
   startAutoRefresh() {
     this.stopAutoRefresh();
     this._autoRefreshTimer = setInterval(() => {
+      this._syncCurrentDateLabel();
       if (
         this.data.viewState !== 'active'
         || this.data.isEditMode
@@ -141,6 +166,26 @@ Page({
     if (this._autoRefreshTimer) {
       clearInterval(this._autoRefreshTimer);
       this._autoRefreshTimer = null;
+    }
+  },
+
+  startRealtimeSync() {
+    this.stopRealtimeSync();
+    this._unsubscribeRealtime = realtime.subscribe((message) => {
+      if (!message || !message.eventType || !String(message.eventType).startsWith('dispatch.')) {
+        return;
+      }
+      if (this.data.viewState !== 'active' || this.data.isEditMode || this.data.dragging || this.data.batchSubmitting) {
+        return;
+      }
+      this.loadQueue({ silent: true });
+    });
+  },
+
+  stopRealtimeSync() {
+    if (this._unsubscribeRealtime) {
+      this._unsubscribeRealtime();
+      this._unsubscribeRealtime = null;
     }
   },
 

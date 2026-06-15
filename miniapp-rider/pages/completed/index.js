@@ -4,7 +4,7 @@
  */
 
 const taskService = require('../../services/task.service');
-const { formatDateTime, getMealPeriodLabel, formatCurrentDateTime } = require('../../utils/formatter');
+const { formatDateTime, getMealPeriodLabel, formatCurrentDateTime, formatCurrentDateMMDD } = require('../../utils/formatter');
 const imageUtil = require('../../utils/image');
 const { resolveMediaUrl } = require('../../utils/media-url');
 
@@ -19,14 +19,21 @@ Page({
     receiptPreviewUrl: '',
     receiptNote: '',
     submitting: false,
-    refreshInterval: null
+    refreshInterval: null,
+    currentDateLabel: ''
   },
 
   async onLoad() {
+    this.setData({ currentDateLabel: formatCurrentDateMMDD() });
     await this.loadCompletedTasks();
   },
 
   onShow() {
+    const todayLabel = formatCurrentDateMMDD();
+    if (this.data.currentDateLabel && this.data.currentDateLabel !== todayLabel) {
+      console.log('日期已变更，清空已完成列表');
+      this.setData({ items: [], totalCount: 0, currentDateLabel: todayLabel });
+    }
     this.startAutoRefresh();
   },
 
@@ -34,9 +41,23 @@ Page({
     this.stopAutoRefresh();
   },
 
+  _syncCurrentDateLabel() {
+    const todayLabel = formatCurrentDateMMDD();
+    if (this.data.currentDateLabel === todayLabel) {
+      return false;
+    }
+    this.setData({
+      currentDateLabel: todayLabel,
+      items: [],
+      totalCount: 0
+    });
+    return true;
+  },
+
   startAutoRefresh() {
     this.stopAutoRefresh();
     this.data.refreshInterval = setInterval(() => {
+      this._syncCurrentDateLabel();
       if (!this._isPaused()) {
         this.loadCompletedTasks();
       }

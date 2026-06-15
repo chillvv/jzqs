@@ -12,7 +12,10 @@
 <view class="subpage-nav-spacer" style="height: {{navBarHeight}}px;"></view>
 
 <view class="container">
-  <view class="section-title">今日任务</view>
+  <view class="section-title">
+    <text>今日任务</text>
+    <text class="date-badge">{{currentDateLabel}}</text>
+  </view>
 
   <view wx:if="{{viewState === 'guest'}}" class="card guest-card">
     <view class="muted">先去我的里面登录</view>

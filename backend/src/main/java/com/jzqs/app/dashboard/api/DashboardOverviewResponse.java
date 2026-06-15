@@ -15,6 +15,7 @@ public record DashboardOverviewResponse(
     int dispatchingOrdersToday,
     int deliveredOrdersToday,
     int lowBalanceCustomers,
+    int expiringSoonCustomers,
     int openAftersaleCount,
     int specialOrdersToday,
     int menuRiskDays,

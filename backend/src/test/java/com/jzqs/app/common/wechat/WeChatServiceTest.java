@@ -68,4 +68,43 @@ class WeChatServiceTest {
         assertEquals("13800138001", phone);
         server.verify();
     }
+
+    @Test
+    void shouldSendDeliverySubscribeMessageWithThing2AndThing11Only() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(restTemplate).build();
+        WeChatService service = new WeChatService(restTemplate, new ObjectMapper());
+        ReflectionTestUtils.setField(service, "devMode", false);
+        ReflectionTestUtils.setField(service, "appid", "wx-test-appid");
+        ReflectionTestUtils.setField(service, "secret", "wx-test-secret");
+        ReflectionTestUtils.setField(service, "deliveryTemplateId", "DCpNx6852oVCXO83CKuR-uO8WsgvVEDdAaUgwkLNi3s");
+
+        server.expect(once(), requestTo("https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=wx-test-appid&secret=wx-test-secret"))
+            .andExpect(method(HttpMethod.GET))
+            .andRespond(withSuccess("{\"access_token\":\"token-1\",\"expires_in\":7200}", MediaType.APPLICATION_JSON));
+
+        server.expect(once(), requestTo("https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=token-1"))
+            .andExpect(method(HttpMethod.POST))
+            .andExpect(content().json("""
+                {
+                  "touser": "openid-1",
+                  "template_id": "DCpNx6852oVCXO83CKuR-uO8WsgvVEDdAaUgwkLNi3s",
+                  "page": "pages/orders/index?orderId=901",
+                  "data": {
+                    "thing2": { "value": "简知轻食" },
+                    "thing11": { "value": "您的餐食已送达，可查看回执照片与备注" }
+                  }
+                }
+                """))
+            .andRespond(withSuccess("{\"errcode\":0,\"errmsg\":\"ok\"}", MediaType.APPLICATION_JSON));
+
+        service.sendDeliverySubscribeMessage(
+            "openid-1",
+            "pages/orders/index?orderId=901",
+            "简知轻食",
+            "您的餐食已送达，可查看回执照片与备注"
+        );
+
+        server.verify();
+    }
 }

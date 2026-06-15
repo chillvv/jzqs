@@ -5,6 +5,17 @@
 const { ITEM_STATUS, ITEM_STATUS_CLASS, MEAL_PERIOD_LABEL, BATCH_STATUS_LABEL } = require('./constants');
 
 /**
+ * 获取当前日期的 MM-DD 格式
+ * @returns {string} 例如 "06-14"
+ */
+function formatCurrentDateMMDD() {
+  const date = new Date();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${month}-${day}`;
+}
+
+/**
  * 格式化当前日期时间（ISO格式）
  * @returns {string} 格式化后的日期时间
  */
@@ -120,6 +131,7 @@ function calculateProgress(delivered, total) {
 }
 
 module.exports = {
+  formatCurrentDateMMDD,
   formatCurrentDateTime,
   formatDateTime,
   formatTime,

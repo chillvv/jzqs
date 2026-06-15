@@ -60,11 +60,12 @@ public class DispatchController {
 
     @PostMapping("/pending-items/batch-assign")
     public ApiResponse<BatchOperationResponse> batchAssignPendingOrders(@Valid @RequestBody DispatchBatchAssignRequest request) {
-        return ApiResponse.success(dispatchService.batchAssignPendingOrders(
+        BatchOperationResponse response = dispatchService.batchAssignPendingOrders(
             request.orderIds(),
             request.areaCode(),
             request.updatedBy()
-        ));
+        );
+        return ApiResponse.success(response);
     }
 
     @GetMapping("/pending-riders")
@@ -190,12 +191,13 @@ public class DispatchController {
         @RequestParam String mealPeriod,
         @Valid @RequestBody DispatchAreaRiderAssignRequest request
     ) {
-        return ApiResponse.success(dispatchService.assignRiderToArea(
+        Map<String, Object> response = dispatchService.assignRiderToArea(
             areaCode,
             request.riderName(),
             request.updatedBy(),
             mealPeriod
-        ));
+        );
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/areas/{areaCode}/orders/{orderId}/assign-rider")
@@ -204,12 +206,13 @@ public class DispatchController {
         @PathVariable long orderId,
         @Valid @RequestBody DispatchAreaRiderAssignRequest request
     ) {
-        return ApiResponse.success(dispatchService.assignRiderToAreaOrder(
+        Map<String, Object> response = dispatchService.assignRiderToAreaOrder(
             areaCode,
             orderId,
             request.riderName(),
             request.updatedBy()
-        ));
+        );
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/areas/{areaCode}/reorder")
@@ -217,7 +220,8 @@ public class DispatchController {
         @PathVariable String areaCode,
         @Valid @RequestBody List<DispatchOrderReorderItemRequest> items
     ) {
-        return ApiResponse.success(dispatchService.reorderAreaOrders(areaCode, items));
+        Map<String, Object> response = dispatchService.reorderAreaOrders(areaCode, items);
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/areas/{areaCode}/orders/{orderId}/move")
@@ -226,17 +230,18 @@ public class DispatchController {
         @PathVariable long orderId,
         @Valid @RequestBody DispatchOrderMoveRequest request
     ) {
-        return ApiResponse.success(dispatchService.moveOrderToArea(
+        Map<String, Object> response = dispatchService.moveOrderToArea(
             areaCode,
             orderId,
             request.targetAreaCode(),
             request.updatedBy()
-        ));
+        );
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/reassign")
     public ApiResponse<Map<String, Object>> reassignDispatch(@Valid @RequestBody DispatchReassignRequest request) {
-        return ApiResponse.success(dispatchService.reassignDispatch(
+        Map<String, Object> response = dispatchService.reassignDispatch(
             request.reassignLevel(),
             request.targetId(),
             request.fromRiderName(),
@@ -247,7 +252,8 @@ public class DispatchController {
             Boolean.TRUE.equals(request.syncDefaultBinding()),
             request.reason(),
             request.createdBy()
-        ));
+        );
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/auto-assign")
@@ -260,11 +266,12 @@ public class DispatchController {
         @PathVariable long mealSlotOrderId,
         @Valid @RequestBody DispatchExceptionResolveRequest request
     ) {
-        return ApiResponse.success(dispatchService.assignOrder(
+        Map<String, Object> response = dispatchService.assignOrder(
             mealSlotOrderId,
             request.riderName(),
             request.areaCode()
-        ));
+        );
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/exceptions/{mealSlotOrderId}/confirm-area")
@@ -272,13 +279,14 @@ public class DispatchController {
         @PathVariable long mealSlotOrderId,
         @Valid @RequestBody DispatchExceptionConfirmRequest request
     ) {
-        return ApiResponse.success(dispatchService.confirmExceptionArea(
+        Map<String, Object> response = dispatchService.confirmExceptionArea(
             mealSlotOrderId,
             request.areaCode(),
             request.riderName(),
             Boolean.TRUE.equals(request.rememberAddress()),
             request.updatedBy()
-        ));
+        );
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/{dispatchId}/notify")
@@ -288,11 +296,12 @@ public class DispatchController {
 
     @PostMapping("/assign")
     public ApiResponse<Map<String, Object>> assign(@Valid @RequestBody DispatchAssignRequest request) {
-        return ApiResponse.success(dispatchService.assignOrder(
+        Map<String, Object> response = dispatchService.assignOrder(
             request.mealSlotOrderId(),
             request.riderName(),
             request.areaCode()
-        ));
+        );
+        return ApiResponse.success(response);
     }
 
     @PostMapping("/riders/{riderId}/activate")

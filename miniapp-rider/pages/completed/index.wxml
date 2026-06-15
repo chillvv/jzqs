@@ -1,6 +1,9 @@
 <view class="container">
   <view class="page-header">
-    <view class="header-title">今日已完成</view>
+    <view class="header-title-row">
+      <text class="header-title">今日已完成</text>
+      <text class="date-badge">{{currentDateLabel}}</text>
+    </view>
     <view class="header-count">共 {{totalCount}} 单</view>
   </view>
 

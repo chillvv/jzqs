@@ -710,7 +710,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         String resolvedMerchantRemark = resolveOrderMerchantRemark(customerId, merchantRemark);
 
         Long walletId = jdbcTemplate.query(
-            "SELECT id FROM meal_wallets WHERE customer_id = ? AND active = TRUE",
+            "SELECT id FROM meal_wallets WHERE customer_id = ? AND active = TRUE AND (expired_at IS NULL OR expired_at >= CURRENT_TIMESTAMP)",
             ps -> ps.setLong(1, customerId),
             rs -> rs.next() ? rs.getLong(1) : null
         );
@@ -901,7 +901,7 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         // 3. 如果订单未取消，先释放餐次余额
         if (!"CANCELLED".equals(status)) {
             Long walletId = jdbcTemplate.queryForObject(
-                "SELECT id FROM meal_wallets WHERE customer_id = ? AND active = TRUE",
+                "SELECT id FROM meal_wallets WHERE customer_id = ? AND active = TRUE AND (expired_at IS NULL OR expired_at >= CURRENT_TIMESTAMP)",
                 Long.class,
                 customerId
             );

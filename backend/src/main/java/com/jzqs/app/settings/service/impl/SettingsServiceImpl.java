@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
+import com.jzqs.app.common.realtime.RealtimeEvent;
+import com.jzqs.app.common.realtime.TransactionalRealtimePublisher;
 import com.jzqs.app.settings.api.BannerImageUploadResponse;
 import com.jzqs.app.settings.api.OperationSettingsResponse;
 import com.jzqs.app.settings.service.SettingsService;
@@ -31,11 +33,18 @@ public class SettingsServiceImpl implements SettingsService {
     private static final int DEFAULT_BANNER_INTERVAL_SECONDS = 3;
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final TransactionalRealtimePublisher realtimeEventPublisher;
     private final Path uploadRootDir;
 
-    public SettingsServiceImpl(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper, @Value("${app.upload-dir:./uploads}") String uploadDir) {
+    public SettingsServiceImpl(
+        JdbcTemplate jdbcTemplate,
+        ObjectMapper objectMapper,
+        TransactionalRealtimePublisher realtimeEventPublisher,
+        @Value("${app.upload-dir:./uploads}") String uploadDir
+    ) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+        this.realtimeEventPublisher = realtimeEventPublisher;
         this.uploadRootDir = Path.of(uploadDir).toAbsolutePath().normalize();
     }
 
@@ -46,7 +55,7 @@ public class SettingsServiceImpl implements SettingsService {
     @Override
     public OperationSettingsResponse operationSettings() {
         Map<String, Object> row = jdbcTemplate.queryForMap(
-            "SELECT ordering_enabled, holiday_notice_title, holiday_notice_desc, banner_images, banner_interval_seconds, popup_announcement_enabled, popup_announcement_content FROM admin_settings WHERE id = 1"
+            "SELECT ordering_enabled, holiday_notice_title, holiday_notice_desc, banner_images, banner_interval_seconds, package_expiry_reminder_days, package_low_balance_threshold, popup_announcement_enabled, popup_announcement_content FROM admin_settings WHERE id = 1"
         );
         boolean orderingEnabled = Boolean.TRUE.equals(row.get("ordering_enabled"));
         return new OperationSettingsResponse(
@@ -57,6 +66,8 @@ public class SettingsServiceImpl implements SettingsService {
             orderingEnabled ? "熔断：一键暂停接单 (假期店休使用)" : "恢复：重新开启接单",
             normalizeStoredBannerImages(safeString(row.get("banner_images"))),
             normalizeBannerIntervalSeconds(row.get("banner_interval_seconds")),
+            normalizePositiveInt(row.get("package_expiry_reminder_days"), 7),
+            normalizePositiveInt(row.get("package_low_balance_threshold"), 3),
             Boolean.TRUE.equals(row.get("popup_announcement_enabled")),
             safeString(row.get("popup_announcement_content"))
         );
@@ -66,6 +77,7 @@ public class SettingsServiceImpl implements SettingsService {
     @Transactional
     public OperationSettingsResponse updateOrderingEnabled(boolean enabled) {
         jdbcTemplate.update("UPDATE admin_settings SET ordering_enabled = ?, updated_at = ? WHERE id = 1", enabled, Timestamp.valueOf(LocalDateTime.now()));
+        publishHomeEvent("system.announcement.changed");
         return operationSettings();
     }
 
@@ -73,6 +85,7 @@ public class SettingsServiceImpl implements SettingsService {
     @Transactional
     public OperationSettingsResponse updateHolidayNotice(String title, String desc) {
         jdbcTemplate.update("UPDATE admin_settings SET holiday_notice_title = ?, holiday_notice_desc = ?, updated_at = ? WHERE id = 1", title, desc, Timestamp.valueOf(LocalDateTime.now()));
+        publishHomeEvent("system.announcement.changed");
         return operationSettings();
     }
 
@@ -91,6 +104,7 @@ public class SettingsServiceImpl implements SettingsService {
             Math.max(1, bannerIntervalSeconds),
             Timestamp.valueOf(LocalDateTime.now())
         );
+        publishHomeEvent("system.home.changed");
         return operationSettings();
     }
 
@@ -119,6 +133,26 @@ public class SettingsServiceImpl implements SettingsService {
             enabled ? normalizedContent : "",
             Timestamp.valueOf(LocalDateTime.now())
         );
+        publishHomeEvent("system.announcement.changed");
+        return operationSettings();
+    }
+
+    @Override
+    @Transactional
+    public OperationSettingsResponse updatePackageReminderSettings(int packageExpiryReminderDays, int packageLowBalanceThreshold) {
+        jdbcTemplate.update(
+            """
+                UPDATE admin_settings
+                SET package_expiry_reminder_days = ?,
+                    package_low_balance_threshold = ?,
+                    updated_at = ?
+                WHERE id = 1
+                """,
+            Math.max(1, packageExpiryReminderDays),
+            Math.max(1, packageLowBalanceThreshold),
+            Timestamp.valueOf(LocalDateTime.now())
+        );
+        publishHomeEvent("system.home.changed");
         return operationSettings();
     }
 
@@ -172,6 +206,7 @@ public class SettingsServiceImpl implements SettingsService {
             popupEnabled ? normalizedPopupContent : "",
             Timestamp.valueOf(LocalDateTime.now())
         );
+        publishHomeEvent("system.announcement.changed");
         return operationSettings();
     }
 
@@ -183,6 +218,27 @@ public class SettingsServiceImpl implements SettingsService {
             return title;
         }
         return title + "\n" + desc;
+    }
+
+    private int normalizePositiveInt(Object value, int fallback) {
+        if (value instanceof Number number) {
+            return Math.max(1, number.intValue());
+        }
+        try {
+            return Math.max(1, Integer.parseInt(safeString(value)));
+        } catch (NumberFormatException ex) {
+            return fallback;
+        }
+    }
+
+    private void publishHomeEvent(String eventType) {
+        realtimeEventPublisher.publish(
+            RealtimeEvent.builder(eventType)
+                .audience("admin")
+                .audience("rider:all")
+                .audience("customer:all")
+                .build()
+        );
     }
 
     private String normalizeStoredBannerImages(String rawBannerImages) {
@@ -203,7 +259,7 @@ public class SettingsServiceImpl implements SettingsService {
                 if (node.isTextual()) {
                     String imageUrl = node.asText("").trim();
                     if (!imageUrl.isEmpty()) {
-                        normalizedArray.add(createBannerNode(imageUrl, true));
+                        normalizedArray.add(createBannerNode(imageUrl, "", "", true, "PREVIEW_IMAGE", ""));
                     }
                     continue;
                 }
@@ -218,7 +274,14 @@ public class SettingsServiceImpl implements SettingsService {
                     continue;
                 }
                 boolean enabled = !node.has("enabled") || node.path("enabled").asBoolean(true);
-                normalizedArray.add(createBannerNode(imageUrl, enabled));
+                normalizedArray.add(createBannerNode(
+                    imageUrl,
+                    node.path("title").asText(""),
+                    node.path("description").asText(""),
+                    enabled,
+                    normalizeBannerActionType(node.path("actionType").asText("")),
+                    normalizeBannerActionTarget(node.path("actionTarget").asText(""))
+                ));
             }
             return normalizedArray.isEmpty() ? defaultBannerImagesJson() : objectMapper.writeValueAsString(normalizedArray);
         } catch (JsonProcessingException ex) {
@@ -228,22 +291,48 @@ public class SettingsServiceImpl implements SettingsService {
 
     private ObjectNode createBannerNode(
         String imageUrl,
-        boolean enabled
+        String title,
+        String description,
+        boolean enabled,
+        String actionType,
+        String actionTarget
     ) {
         ObjectNode node = objectMapper.createObjectNode();
         node.put("imageUrl", imageUrl);
+        node.put("title", title);
+        node.put("description", description);
         node.put("enabled", enabled);
+        node.put("actionType", actionType);
+        node.put("actionTarget", actionTarget);
         return node;
     }
 
     private String defaultBannerImagesJson() {
         try {
             return objectMapper.writeValueAsString(
-                objectMapper.createArrayNode().add(createBannerNode(DEFAULT_BANNER_IMAGE, true))
+                objectMapper.createArrayNode().add(
+                    createBannerNode(DEFAULT_BANNER_IMAGE, "", "", true, "PREVIEW_IMAGE", "")
+                )
             );
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("默认轮播图配置序列化失败", ex);
         }
+    }
+
+    private String normalizeBannerActionType(String actionType) {
+        String normalized = actionType == null ? "" : actionType.trim();
+        return normalized.isEmpty() ? "PREVIEW_IMAGE" : normalized;
+    }
+
+    private String normalizeBannerActionTarget(String actionTarget) {
+        String normalized = actionTarget == null ? "" : actionTarget.trim();
+        if (normalized.isEmpty()) {
+            return "";
+        }
+        if (normalized.startsWith("/") || normalized.startsWith("http://") || normalized.startsWith("https://")) {
+            return normalized;
+        }
+        return "/" + normalized;
     }
 
     private int normalizeBannerIntervalSeconds(Object value) {

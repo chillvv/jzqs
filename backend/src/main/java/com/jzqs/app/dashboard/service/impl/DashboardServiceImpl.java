@@ -24,6 +24,7 @@ public class DashboardServiceImpl implements DashboardService {
     public DashboardOverviewResponse overview() {
         LocalDate businessDate = resolveBusinessDate();
         LocalDate upcomingServeDate = resolveUpcomingServeDate(businessDate);
+        PackageReminderSettings settings = loadPackageReminderSettings();
         int deliveredToday = countByBusinessDate(
             "SELECT COUNT(*) FROM delivery_receipts WHERE CAST(delivered_at AS DATE) = ?",
             businessDate
@@ -43,7 +44,8 @@ public class DashboardServiceImpl implements DashboardService {
         int pendingDispatchToday = quantityByCreatedDateAndStatus(businessDate, "PENDING_DISPATCH");
         int dispatchingOrdersToday = quantityByCreatedDateAndStatus(businessDate, "DISPATCHING");
         int deliveredOrdersToday = quantityByCreatedDateAndStatus(businessDate, "DELIVERED");
-        int lowBalanceCustomers = countLowBalanceCustomers();
+        int lowBalanceCustomers = countLowBalanceCustomers(settings.lowBalanceThreshold());
+        int expiringSoonCustomers = countExpiringSoonCustomers(settings.expiryReminderDays());
         int openAftersaleCount = countOpenAftersales();
         int specialOrdersToday = countByBusinessDate(
             """
@@ -76,6 +78,7 @@ public class DashboardServiceImpl implements DashboardService {
             dispatchingOrdersToday,
             deliveredOrdersToday,
             lowBalanceCustomers,
+            expiringSoonCustomers,
             openAftersaleCount,
             specialOrdersToday,
             menuRiskDays,
@@ -87,12 +90,14 @@ public class DashboardServiceImpl implements DashboardService {
     @Override
     public List<LowBalanceSubscriptionItem> lowBalanceSubscriptions() {
         LocalDate today = LocalDate.now();
+        PackageReminderSettings settings = loadPackageReminderSettings();
         String sql = """
             SELECT
                 sr.customer_id,
                 c.name AS customer_name,
                 c.phone AS customer_phone,
                 COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) AS remaining_meals,
+                mw.expired_at,
                 sr.lunch_enabled,
                 sr.dinner_enabled,
                 sr.id AS subscription_rule_id
@@ -104,8 +109,14 @@ public class DashboardServiceImpl implements DashboardService {
               AND sr.start_date <= ?
               AND sr.end_date >= ?
               AND c.customer_status != 'DORMANT'
-              AND COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) <= 3
-            ORDER BY remaining_meals ASC, sr.customer_id
+              AND (
+                COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) <= ?
+                OR (
+                    mw.expired_at IS NOT NULL
+                    AND DATEDIFF(CAST(mw.expired_at AS DATE), CURRENT_DATE) BETWEEN 0 AND ?
+                )
+              )
+            ORDER BY remaining_meals ASC, mw.expired_at ASC, sr.customer_id
             """;
 
         return jdbcTemplate.query(sql, (rs, rowNum) -> new LowBalanceSubscriptionItem(
@@ -113,11 +124,23 @@ public class DashboardServiceImpl implements DashboardService {
             rs.getString("customer_name"),
             rs.getString("customer_phone"),
             rs.getInt("remaining_meals"),
+            rs.getTimestamp("expired_at") == null ? "" : rs.getTimestamp("expired_at").toLocalDateTime().toLocalDate().toString(),
+            remainingValidityDays(rs.getTimestamp("expired_at") == null ? null : rs.getTimestamp("expired_at").toLocalDateTime().toLocalDate()),
+            resolveAlertCode(
+                rs.getInt("remaining_meals"),
+                rs.getTimestamp("expired_at") == null ? null : rs.getTimestamp("expired_at").toLocalDateTime().toLocalDate(),
+                settings
+            ),
+            resolveAlertLabel(
+                rs.getInt("remaining_meals"),
+                rs.getTimestamp("expired_at") == null ? null : rs.getTimestamp("expired_at").toLocalDateTime().toLocalDate(),
+                settings
+            ),
             rs.getBoolean("lunch_enabled"),
             rs.getBoolean("dinner_enabled"),
             today.plusDays(1), // nextServeDate
             rs.getLong("subscription_rule_id")
-        ), today, today);
+        ), today, today, settings.lowBalanceThreshold(), settings.expiryReminderDays());
     }
 
     private LocalDate resolveBusinessDate() {
@@ -221,15 +244,30 @@ public class DashboardServiceImpl implements DashboardService {
         );
     }
 
-    private int countLowBalanceCustomers() {
+    private int countLowBalanceCustomers(int threshold) {
         return nvl(jdbcTemplate.queryForObject(
             """
             SELECT COUNT(*)
             FROM meal_wallets
             WHERE active = TRUE
-              AND (total_meals - reserved_meals - consumed_meals) <= 3
+              AND (total_meals - reserved_meals - consumed_meals) <= ?
             """,
-            Integer.class
+            Integer.class,
+            threshold
+        ));
+    }
+
+    private int countExpiringSoonCustomers(int reminderDays) {
+        return nvl(jdbcTemplate.queryForObject(
+            """
+            SELECT COUNT(*)
+            FROM meal_wallets
+            WHERE active = TRUE
+              AND expired_at IS NOT NULL
+              AND DATEDIFF(CAST(expired_at AS DATE), CURRENT_DATE) BETWEEN 0 AND ?
+            """,
+            Integer.class,
+            reminderDays
         ));
     }
 
@@ -315,5 +353,51 @@ public class DashboardServiceImpl implements DashboardService {
 
     private int nvl(Integer value) {
         return value == null ? 0 : value;
+    }
+
+    private int remainingValidityDays(LocalDate expiredAt) {
+        if (expiredAt == null) {
+            return 0;
+        }
+        return (int) java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), expiredAt);
+    }
+
+    private PackageReminderSettings loadPackageReminderSettings() {
+        return jdbcTemplate.query(
+            "SELECT package_expiry_reminder_days, package_low_balance_threshold FROM admin_settings WHERE id = 1",
+            rs -> rs.next()
+                ? new PackageReminderSettings(rs.getInt("package_expiry_reminder_days"), rs.getInt("package_low_balance_threshold"))
+                : new PackageReminderSettings(7, 3)
+        );
+    }
+
+    private String resolveAlertCode(int remainingMeals, LocalDate expiredAt, PackageReminderSettings settings) {
+        int remainingDays = remainingValidityDays(expiredAt);
+        if (expiredAt != null && remainingDays < 0) {
+            return "EXPIRED";
+        }
+        if (expiredAt != null && remainingDays <= settings.expiryReminderDays()) {
+            return "EXPIRING_SOON";
+        }
+        if (remainingMeals <= settings.lowBalanceThreshold()) {
+            return "LOW_BALANCE";
+        }
+        return "";
+    }
+
+    private String resolveAlertLabel(int remainingMeals, LocalDate expiredAt, PackageReminderSettings settings) {
+        String code = resolveAlertCode(remainingMeals, expiredAt, settings);
+        return switch (code) {
+            case "EXPIRED" -> "已过期";
+            case "EXPIRING_SOON" -> "即将到期";
+            case "LOW_BALANCE" -> "餐数不足";
+            default -> "";
+        };
+    }
+
+    private record PackageReminderSettings(
+        int expiryReminderDays,
+        int lowBalanceThreshold
+    ) {
     }
 }

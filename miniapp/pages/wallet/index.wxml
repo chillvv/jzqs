@@ -26,6 +26,11 @@
       <view class="wallet-summary-value strong">{{home ? home.remainingMeals : '--'}}</view>
     </view>
   </view>
+  <view class="subpage-card" wx:if="{{home}}">
+    <view class="detail-line">到期日：{{home.packageExpiredAt || '--'}}</view>
+    <view class="detail-line">剩余天数：{{home.packageExpiredAt ? home.remainingValidityDays : '--'}}{{home.packageExpiredAt ? ' 天' : ''}}</view>
+    <view class="detail-line" wx:if="{{home.packageAlertMessage}}">提醒：{{home.packageAlertMessage}}</view>
+  </view>
 
   <view wx:if="{{items.length}}">
     <view wx:for="{{items}}" wx:key="id" class="subpage-card" bindtap="goToRelatedOrder" data-id="{{item.relatedOrderId}}">

@@ -18,6 +18,7 @@ import { changeAdminPassword, fetchAdminProfile, logoutAdmin } from "../../share
 import { toast } from "../../shared/components/Toast";
 import { useScale } from "../../shared/hooks/useScale";
 import { ToastContainer } from "../../shared/components/Toast";
+import { startAdminRealtime, stopAdminRealtime } from "../../shared/realtime/adminRealtime";
 import {
   ADMIN_AUTH_STORAGE_KEY,
   ADMIN_CREDENTIALS_STORAGE_KEY,
@@ -61,9 +62,11 @@ export function AdminLayout() {
 
   useEffect(() => {
     if (!session) {
+      stopAdminRealtime();
       navigate("/login", { replace: true });
       return;
     }
+    startAdminRealtime();
     fetchAdminProfile()
       .then((profile) => {
         const nextSession = buildAdminAuthSession({
@@ -79,7 +82,10 @@ export function AdminLayout() {
         toast("登录已失效，请重新登录", "error");
         navigate("/login", { replace: true });
       });
-  }, [navigate]);
+    return () => {
+      stopAdminRealtime();
+    };
+  }, [navigate, session]);
 
   useEffect(() => {
     setMobileSidebarOpen(false);

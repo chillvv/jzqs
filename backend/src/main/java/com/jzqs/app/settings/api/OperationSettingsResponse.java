@@ -7,6 +7,8 @@ public record OperationSettingsResponse(
     String emergencyActionLabel,
     String bannerImages,
     int bannerIntervalSeconds,
+    int packageExpiryReminderDays,
+    int packageLowBalanceThreshold,
     boolean popupAnnouncementEnabled,
     String popupAnnouncementContent
 ) {

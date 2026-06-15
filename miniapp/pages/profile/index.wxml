@@ -26,7 +26,9 @@
   <view class="vip-card" wx:if="{{!onboarding}}">
     <view class="vip-title">当前剩余餐数</view>
     <view class="vip-balance"><text class="num">{{home ? home.remainingMeals : '--'}}</text><text class="unit">餐</text></view>
-    <view class="member-copy">{{home ? home.orderStatusText : '会员预订专享'}}</view>
+    <view class="member-copy">{{home && home.packageExpiredAt ? ('到期日：' + home.packageExpiredAt) : '会员预订专享'}}</view>
+    <view class="member-copy" wx:if="{{home && home.packageExpiredAt}}">剩余天数：{{home.remainingValidityDays}} 天</view>
+    <view class="vip-alert" wx:if="{{home && home.packageAlertMessage}}">{{home.packageAlertMessage}}</view>
     <view class="vip-footer">
       <view class="vip-status">会员预订专享</view>
       <view class="btn-outline" bindtap="goWallet">餐次流水单</view>

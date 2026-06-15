@@ -1,6 +1,7 @@
 const { request } = require('../../utils/request');
 const { formatWalletTransaction } = require('../../utils/aftersale');
 const { buildWalletHint } = require('../../utils/customer-order-flow');
+const realtime = require('../../utils/realtime');
 
 Page({
   data: {
@@ -20,7 +21,16 @@ Page({
   },
 
   onShow() {
+    this.startRealtimeSync();
     this.loadWalletData();
+  },
+
+  onHide() {
+    this.stopRealtimeSync();
+  },
+
+  onUnload() {
+    this.stopRealtimeSync();
   },
 
   onPullDownRefresh() {
@@ -49,6 +59,24 @@ Page({
     } finally {
       this.setData({ loading: false });
       wx.stopPullDownRefresh();
+    }
+  },
+
+  startRealtimeSync() {
+    this.stopRealtimeSync();
+    this._unsubscribeRealtime = realtime.subscribe((message) => {
+      const eventType = String((message && message.eventType) || '');
+      if (!eventType.startsWith('customer.wallet.') && eventType !== 'customer.wallet.changed') {
+        return;
+      }
+      this.loadWalletData();
+    });
+  },
+
+  stopRealtimeSync() {
+    if (this._unsubscribeRealtime) {
+      this._unsubscribeRealtime();
+      this._unsubscribeRealtime = null;
     }
   },
 

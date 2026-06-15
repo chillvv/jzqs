@@ -43,11 +43,12 @@ const emptyEditForm = {
   remark: "",
   customerStatus: "FORMAL",
   initialMeals: "0",
+  initialValidityDays: "30",
   addressLine: "",
   contactName: "",
   contactPhone: ""
 };
-const defaultGrantForm = { mealDelta: "5", remark: "补餐" };
+const defaultGrantForm = { mealDelta: "5", validityDays: "30", remark: "补餐" };
 const defaultDeductForm = { mealDelta: "1", remark: "手工扣减" };
 const emptyAddressForm = {
   contactName: "",
@@ -127,6 +128,7 @@ function buildEditForm(
     remark: String(detail?.merchantRemark || fallback?.merchantRemark || ""),
     customerStatus: String(detail?.customerStatus || fallback?.customerStatus || "FORMAL"),
     initialMeals: "0",
+    initialValidityDays: "30",
     addressLine: "",
     contactName: "",
     contactPhone: ""
@@ -335,12 +337,22 @@ export function CustomerAssetPage() {
 
   async function handleGrantSubmit() {
     if (!activeItem || !grantForm.mealDelta) return;
+    if (Number(grantForm.validityDays || 0) <= 0) {
+      toast("请填写有效期天数", "error");
+      return;
+    }
     if (submittingGrant) {
       return;
     }
     setSubmittingGrant(true);
     try {
-      await grantWalletMeals(activeItem.id, Number(grantForm.mealDelta), "后台客服", grantForm.remark || "充值/补餐");
+      await grantWalletMeals(
+        activeItem.id,
+        Number(grantForm.mealDelta),
+        Number(grantForm.validityDays),
+        "后台客服",
+        grantForm.remark || "充值/补餐"
+      );
       setGrantForm(defaultGrantForm);
       await refreshCustomerWorkspace(activeItem);
     } finally {
@@ -417,6 +429,12 @@ export function CustomerAssetPage() {
       toast("请填写收货地址", "error");
       return;
     }
+    const meals = Number((editForm as any).initialMeals);
+    const validityDays = Number((editForm as any).initialValidityDays);
+    if (meals > 0 && validityDays <= 0) {
+      toast("请填写初始有效期天数", "error");
+      return;
+    }
     if (submittingCreate) {
       return;
     }
@@ -428,13 +446,11 @@ export function CustomerAssetPage() {
         merchantRemark: editForm.remark,
         addressLine: (editForm as any).addressLine,
         contactName: normalizeCustomerName(editForm.name),
-        contactPhone: normalizeCustomerPhone(editForm.phone)
+        contactPhone: normalizeCustomerPhone(editForm.phone),
+        initialMealDelta: meals,
+        initialMealRemark: meals > 0 ? "建档初始加餐" : "",
+        initialValidityDays: meals > 0 ? validityDays : undefined
       });
-      
-      const meals = Number((editForm as any).initialMeals);
-      if (meals > 0 && newCustomer && newCustomer.customerId) {
-        await grantWalletMeals(newCustomer.customerId, meals, "后台客服", "建档初始加餐");
-      }
 
       setIsEditOpen(false);
       setIsCreating(false);
@@ -640,6 +656,9 @@ export function CustomerAssetPage() {
             {filteredItems.map((item) => {
               const exhausted = item.status === "EXHAUSTED";
               const statusLabel = resolveCustomerStatusLabel(item.customerStatus);
+              const packageSummary = item.packageExpiredAt
+                ? `${item.packageExpiredAt} / 剩余 ${item.remainingValidityDays} 天`
+                : "未设置";
               return (
                 <tr key={item.id}>
                   <td>
@@ -657,6 +676,8 @@ export function CustomerAssetPage() {
                   <td><span className="customer-status-text" style={{ whiteSpace: "nowrap" }}>{statusLabel}</span></td>
                   <td>
                     <div className="customer-table-note">{item.merchantRemark || "暂无备注"}</div>
+                    <div className="customer-table-note">{`有效期：${packageSummary}`}</div>
+                    {item.packageAlertLabel ? <div className="customer-table-note">{`提醒：${item.packageAlertLabel}`}</div> : null}
                   </td>
                   <td>
                     <div className="customer-balance-cell">
@@ -683,6 +704,9 @@ export function CustomerAssetPage() {
           {filteredItems.map((item) => {
             const exhausted = item.status === "EXHAUSTED";
             const statusLabel = resolveCustomerStatusLabel(item.customerStatus);
+            const packageSummary = item.packageExpiredAt
+              ? `${item.packageExpiredAt} / ${item.remainingValidityDays} 天`
+              : "未设置";
             return (
               <div className="mobile-card" key={item.id}>
                 <div className="mobile-card-header">
@@ -704,6 +728,16 @@ export function CustomerAssetPage() {
                   <div className="mobile-card-label">商家备注</div>
                   <div className="mobile-card-value">{item.merchantRemark || "-"}</div>
                 </div>
+                <div className="mobile-card-row">
+                  <div className="mobile-card-label">餐包有效期</div>
+                  <div className="mobile-card-value">{packageSummary}</div>
+                </div>
+                {item.packageAlertLabel ? (
+                  <div className="mobile-card-row">
+                    <div className="mobile-card-label">提醒</div>
+                    <div className="mobile-card-value">{item.packageAlertLabel}</div>
+                  </div>
+                ) : null}
                 <div className="mobile-card-footer">
                   {renderActions(item)}
                 </div>
@@ -753,6 +787,12 @@ export function CustomerAssetPage() {
                   </div>
                 </div>
                 <div className="customer-detail-kpi">
+                  <div className="customer-detail-kpi__label">餐包有效期</div>
+                  <div className="customer-detail-kpi__value">
+                    {String(detail?.wallet?.expiredAt || activeItem.packageExpiredAt || "未设置")}
+                  </div>
+                </div>
+                <div className="customer-detail-kpi">
                   <div className="customer-detail-kpi__label">客户状态</div>
                   {detailMode === "edit" ? (
                     <div className="customer-detail-kpi__value">
@@ -771,6 +811,12 @@ export function CustomerAssetPage() {
                   )}
                 </div>
               </div>
+              {(detail?.wallet?.packageAlertLabel || activeItem.packageAlertLabel) ? (
+                <div className="customer-detail-note-block" style={{ marginTop: 16 }}>
+                  <div className="customer-detail-note-block__label">当前提醒</div>
+                  <div className="customer-detail-note-block__value">{String(detail?.wallet?.packageAlertLabel || activeItem.packageAlertLabel)}</div>
+                </div>
+              ) : null}
 
               <div className="customer-detail-grid">
                 <section className="customer-detail-card">
@@ -1015,6 +1061,10 @@ export function CustomerAssetPage() {
                       <label className="form-label"><span className="required">*</span>充值/补餐数量</label>
                       <input className="form-control" type="number" value={grantForm.mealDelta} onChange={(e) => setGrantForm({ ...grantForm, mealDelta: e.target.value })} />
                     </div>
+                    <div className="form-group">
+                      <label className="form-label"><span className="required">*</span>有效期天数</label>
+                      <input className="form-control" type="number" min="1" value={grantForm.validityDays} onChange={(e) => setGrantForm({ ...grantForm, validityDays: e.target.value })} />
+                    </div>
                     <RemarkField
                       label="操作备注"
                       value={grantForm.remark}
@@ -1111,6 +1161,17 @@ export function CustomerAssetPage() {
                       onChange={(e) => setEditForm({ ...editForm, initialMeals: e.target.value } as any)} 
                     />
                     <div className="admin-panel-note" style={{ marginTop: "4px" }}>如果填写大于 0，将在建档后自动为用户加餐</div>
+                </div>
+                <div className="form-group" style={{ marginTop: "16px" }}>
+                    <label className="form-label">初始有效期天数</label>
+                    <input
+                      className="form-control"
+                      type="number"
+                      min="1"
+                      value={String((editForm as any).initialValidityDays || "30")}
+                      onChange={(e) => setEditForm({ ...editForm, initialValidityDays: e.target.value } as any)}
+                    />
+                    <div className="admin-panel-note" style={{ marginTop: "4px" }}>填写后会同步生成该客户当前餐包的到期日</div>
                 </div>
                 <div className="customer-edit-form-grid">
                     <div className="form-group">

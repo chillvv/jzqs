@@ -52,6 +52,16 @@
   letter-spacing: -0.02em;
 }
 
+.header-date {
+  font-size: 24rpx;
+  font-weight: normal;
+  color: #10b981;
+  background-color: #ecfdf5;
+  padding: 4rpx 12rpx;
+  border-radius: 8rpx;
+  margin-left: 16rpx;
+}
+
 /* Banners */
 .banner {
   padding: 16rpx 32rpx;

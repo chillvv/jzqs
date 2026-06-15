@@ -18,6 +18,7 @@ export function normalizeDashboardOverview(data: DashboardOverviewLike): Dashboa
     dispatchingOrdersToday: data.dispatchingOrdersToday ?? 0,
     deliveredOrdersToday: data.deliveredOrdersToday ?? data.deliveredToday ?? 0,
     lowBalanceCustomers: data.lowBalanceCustomers ?? 0,
+    expiringSoonCustomers: data.expiringSoonCustomers ?? 0,
     openAftersaleCount: data.openAftersaleCount ?? 0,
     specialOrdersToday: data.specialOrdersToday ?? 0,
     menuRiskDays: data.menuRiskDays ?? 0,
@@ -85,7 +86,8 @@ export function buildDashboardProgressItems(data: DashboardOverviewResponse) {
 
 export function buildDashboardExceptionItems(data: DashboardOverviewResponse) {
   return [
-    { label: "低余额客户", value: data.lowBalanceCustomers, tone: "amber", detail: "余额小于等于 3 餐" },
+    { label: "低余额客户", value: data.lowBalanceCustomers, tone: "amber", detail: "余额低于阈值的客户" },
+    { label: "即将到期", value: data.expiringSoonCustomers, tone: "violet", detail: "餐包即将到期客户" },
     { label: "待处理售后", value: data.openAftersaleCount, tone: "red", detail: "待闭环售后单" },
     { label: "特殊备注订单", value: data.specialOrdersToday, tone: "violet", detail: "含备注需跟进" },
     { label: "菜单配置风险", value: data.menuRiskDays, tone: "blue", detail: "未来 7 天未配餐槽" }

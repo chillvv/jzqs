@@ -1,5 +1,6 @@
 const auth = require('./utils/auth');
 const { DEFAULT_API_BASE_URL, resolveApiBaseUrl } = require('./utils/api-base');
+const realtime = require('./utils/realtime');
 
 App({
   globalData: {
@@ -12,6 +13,10 @@ App({
   
   async onLaunch() {
     this.globalData.apiBaseUrl = resolveApiBaseUrl(wx.getStorageSync('apiBaseUrl'));
+    realtime.init({
+      clientLabel: 'customer',
+      getToken: () => wx.getStorageSync('auth_token') || auth.globalData.token || ''
+    });
     
     // 获取设备信息以计算自定义导航栏高度
     try {

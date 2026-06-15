@@ -18,6 +18,12 @@ assert.equal(
 );
 
 assert.equal(
+  orderPage.includes("DCpNx6852oVCXO83CKuR-uO8WsgvVEDdAaUgwkLNi3s"),
+  true,
+  '顾客端应使用最新的取餐提醒模板 ID'
+);
+
+assert.equal(
   orderPage.includes('pages/orders/index'),
   true,
   '授权流程完成后仍应跳转订单页'
