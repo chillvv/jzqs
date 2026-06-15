@@ -1333,6 +1333,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         } catch (Exception ex) {
             // Keep receipt submission successful even if notification delivery fails.
         }
+        publishCustomerOrderChanged(mealSlotOrderId);
         publishRiderEvent("dispatch.receipt.changed", riderName, mealSlotOrderId);
         return result;
     }
@@ -1393,6 +1394,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             mealSlotOrderId
         );
         deleteManagedReceiptFileQuietly(previousReceiptUrl, finalReceiptUrl);
+        publishCustomerOrderChanged(mealSlotOrderId);
         publishRiderEvent("dispatch.receipt.changed", riderName, mealSlotOrderId);
 
         return Map.of(
@@ -1440,6 +1442,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             WHERE meal_slot_order_id = ?
             """, mealSlotOrderId);
         deleteManagedReceiptFileQuietly(previousReceiptUrl, "");
+        publishCustomerOrderChanged(mealSlotOrderId);
         publishRiderEvent("dispatch.receipt.changed", riderName, mealSlotOrderId);
 
         return Map.of(
@@ -2609,8 +2612,31 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     @Override
     public Map<String, Object> revertOrderStatus(long mealSlotOrderId, String riderName) {
         Map<String, Object> result = extension.revertOrderStatus(mealSlotOrderId, riderName);
+        publishCustomerOrderChanged(mealSlotOrderId);
         publishRiderEvent("dispatch.receipt.changed", riderName, mealSlotOrderId);
         return result;
+    }
+
+    private void publishCustomerOrderChanged(long mealSlotOrderId) {
+        Long customerId = findCustomerIdByMealSlotOrderId(mealSlotOrderId);
+        if (customerId == null) {
+            return;
+        }
+        publishCustomerEvent("customer.order.changed", customerId, mealSlotOrderId);
+    }
+
+    private Long findCustomerIdByMealSlotOrderId(long mealSlotOrderId) {
+        List<Long> customerIds = jdbcTemplate.query(
+            """
+                SELECT doo.customer_id
+                FROM meal_slot_orders mso
+                JOIN daily_orders doo ON doo.id = mso.daily_order_id
+                WHERE mso.id = ?
+                """,
+            (rs, rowNum) -> rs.getLong("customer_id"),
+            mealSlotOrderId
+        );
+        return customerIds.isEmpty() ? null : customerIds.get(0);
     }
 
     @Override

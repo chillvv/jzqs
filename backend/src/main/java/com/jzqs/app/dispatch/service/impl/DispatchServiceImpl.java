@@ -857,9 +857,7 @@ public class DispatchServiceImpl implements DispatchService {
                 );
             }
         );
-        return responses.stream()
-            .filter(binding -> !binding.orders().isEmpty())
-            .toList();
+        return responses;
     }
 
     @Override

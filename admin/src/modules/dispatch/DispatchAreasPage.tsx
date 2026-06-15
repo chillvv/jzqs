@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { GripVertical, Pencil, PlusCircle, Shuffle, Trash2, UserPlus } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, type DropResult } from '@hello-pangea/dnd';
 import {
@@ -23,6 +23,7 @@ import type {
 import { AppSelect } from "../../shared/components/AppSelect";
 import { AdminDialog } from "../../shared/components/AdminDialog";
 import { toast } from "../../shared/components/Toast";
+import { useAdminRealtime } from "../../shared/realtime/adminRealtime";
 import {
   buildDispatchAreaStats,
   DEFAULT_OPERATOR,
@@ -199,9 +200,31 @@ export function DispatchAreasPage() {
   const [deleteConfirmState, setDeleteConfirmState] = useState<{ orderId: number; customerName: string } | null>(null);
   const [submittingDeleteOrder, setSubmittingDeleteOrder] = useState(false);
 
+  const reload = useCallback(async () => {
+    const results = await Promise.allSettled([
+      fetchDispatchAreaBindings(mealPeriod, serveDate),
+      fetchDispatchManagedRiders()
+    ]);
+    const [bindingResult, riderResult] = results;
+    if (bindingResult.status === "fulfilled") setBindings(normalizeDispatchAreaBindings(bindingResult.value));
+    if (riderResult.status === "fulfilled") setRiders(riderResult.value);
+  }, [mealPeriod, serveDate]);
+
   useEffect(() => {
     reload().catch((err) => toast(getErrorMessage(err, "加载区域与骑手失败"), "error"));
-  }, [mealPeriod, serveDate]);
+  }, [reload]);
+
+  useEffect(() => {
+    return useAdminRealtime((message) => {
+      if (!message.eventType || !message.eventType.startsWith("dispatch.")) {
+        return;
+      }
+      if (isReordering || savingArea !== null) {
+        return;
+      }
+      reload().catch(() => undefined);
+    });
+  }, [isReordering, reload, savingArea]);
 
   const riderOptions = useMemo(
     () =>
@@ -234,16 +257,6 @@ export function DispatchAreasPage() {
     () => displayOrders.find((item) => item.orderId === orderDetailId) ?? null,
     [orderDetailId, displayOrders]
   );
-
-  async function reload() {
-    const results = await Promise.allSettled([
-      fetchDispatchAreaBindings(mealPeriod, serveDate),
-      fetchDispatchManagedRiders()
-    ]);
-    const [bindingResult, riderResult] = results;
-    if (bindingResult.status === "fulfilled") setBindings(normalizeDispatchAreaBindings(bindingResult.value));
-    if (riderResult.status === "fulfilled") setRiders(riderResult.value);
-  }
 
   async function handleAssignRider() {
     if (!assignRiderAreaCode || !selectedRiderId) return;

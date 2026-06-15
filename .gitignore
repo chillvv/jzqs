@@ -12,6 +12,7 @@
 /.kiro/
 /.claude/
 /.worktrees/
+/.worktree-backups/
 /docs/superpowers/
 .trae-sandbox/
 
