@@ -5,7 +5,7 @@ import jakarta.validation.constraints.NotBlank;
 
 public record WalletAdjustRequest(
     @Min(1) int mealDelta,
-    @Min(1) int validityDays,
+    @Min(1) Integer validityDays,
     @NotBlank String operatorName,
     @NotBlank String remark
 ) {

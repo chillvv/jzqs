@@ -419,6 +419,9 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
     @Override
     @Transactional
     public Map<String, Object> grantMeals(long customerId, WalletAdjustRequest request) {
+        if (request.validityDays() == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "validityDays 不能为空且必须大于等于 1");
+        }
         MealWalletEntity wallet = findOrCreateWallet(customerId);
         wallet.setTotalMeals(nvl(wallet.getTotalMeals()) + request.mealDelta());
         wallet.setExpiredAt(resolveWalletExpiry(request.validityDays()));

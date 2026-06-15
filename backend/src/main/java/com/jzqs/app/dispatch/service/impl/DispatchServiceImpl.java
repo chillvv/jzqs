@@ -636,7 +636,7 @@ public class DispatchServiceImpl implements DispatchService {
                     assigned_at,
                     assigned_by,
                     created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
             riderName,
             displayName,
