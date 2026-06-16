@@ -37,7 +37,7 @@
       <view class="order-head">
         <view>
           <view class="section-label">{{item.title}}</view>
-          <view class="subpage-subtitle">{{item.createdAt}}</view>
+          <view class="subpage-subtitle">{{item.displayCreatedAt || item.createdAt}}</view>
         </view>
         <view class="wallet-delta {{item.mealDelta > 0 ? 'plus' : 'minus'}}">{{item.deltaText}} 餐</view>
       </view>

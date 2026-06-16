@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import {
   assignDispatch,
@@ -53,7 +53,7 @@ import {
   resolveManualCreateMenuOptions,
   shouldShowManualCustomerEmptyState
 } from "./manualCreateOrder.helpers";
-import { Printer, CheckCircle, Search, RotateCcw, UserPlus, X, Bot, MapPin, ChevronLeft, ChevronRight, AlertTriangle, Trash2, MoreHorizontal } from "lucide-react";
+import { Printer, CheckCircle, Search, RotateCcw, UserPlus, X, Bot, MapPin, ChevronLeft, ChevronRight, AlertTriangle, Trash2 } from "lucide-react";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { AdminDialog } from "../../shared/components/AdminDialog";
 import { RemarkField } from "../../shared/components/RemarkField";
@@ -144,11 +144,6 @@ export function OrderPrepPage() {
   const [editForm, setEditForm] = useState({ mealPeriod: "LUNCH", quantity: "1", deliveryAddress: "", merchantRemark: "", priorityCustomer: false, status: "PENDING_DISPATCH" });
   const [assignRiders, setAssignRiders] = useState<DispatchManagedRiderResponse[]>([]);
   const [assignAreaBindings, setAssignAreaBindings] = useState<DispatchAreaBindingResponse[]>([]);
-  
-  // Dropdown Menu state
-  const [openDropdownId, setOpenDropdownId] = useState<number | null>(null);
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
-
   function getErrorMessage(error: any, fallback: string) {
     return error?.response?.data?.message || error?.message || fallback;
   }
@@ -164,15 +159,23 @@ export function OrderPrepPage() {
     setIsOrderDetailOpen(true);
   }
 
-  useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setOpenDropdownId(null);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  function openEditModal(item: OrderPrepItemResponse) {
+    setActiveItem(item);
+    setEditForm({
+      mealPeriod: resolveMealPeriod(item),
+      quantity: String(item.quantity || 1),
+      deliveryAddress: item.deliveryAddress || "",
+      merchantRemark: item.merchantRemark || "",
+      priorityCustomer: Boolean(item.priorityCustomer),
+      status: item.status || "PENDING_DISPATCH"
+    });
+    setIsEditOpen(true);
+  }
+
+  function openDeleteConfirm(item: OrderPrepItemResponse) {
+    setActiveItem(item);
+    setIsDeleteConfirmOpen(true);
+  }
 
   useEffect(() => {
     reloadOrders(DEFAULT_FILTER_DATE).catch(() => undefined);
@@ -557,9 +560,9 @@ export function OrderPrepPage() {
           reasonCode: orderAftersaleForm.intent === "COMPENSATION" ? "ADMIN_COMPENSATION" : "ADMIN_EXCEPTION",
           reasonText,
           operatorName: "后台客服",
-          remark: remark || (orderAftersaleForm.intent === "REGISTER_ONLY" ? "已登记异常，等待后续处理" : "请前往统一售后中心继续处理")
+          remark: remark || (orderAftersaleForm.intent === "REGISTER_ONLY" ? "已登记异常，等待后续处理" : "请前往售后台账继续处理")
         });
-        toast(orderAftersaleForm.intent === "REGISTER_ONLY" ? "异常已登记到售后中心" : "补偿售后已创建");
+        toast(orderAftersaleForm.intent === "REGISTER_ONLY" ? "异常已登记到售后台账" : "补偿售后已创建");
       }
       closeOrderAftersaleModal();
       await reloadOrders();
@@ -750,8 +753,7 @@ export function OrderPrepPage() {
 
   const renderActions = (item: OrderPrepItemResponse) => {
     const displayStatus = resolveOrderDisplayStatus(item);
-    const isDropdownOpen = openDropdownId === item.id;
-    
+
     return (
       <div className="action-cell-container">
         {displayStatus === "PENDING_DISPATCH" && (
@@ -773,43 +775,12 @@ export function OrderPrepPage() {
           </button>
         )}
 
-        <div className="dropdown-container" ref={isDropdownOpen ? dropdownRef : null}>
-          <button 
-            className="btn btn-secondary btn-sm btn-icon"
-            onClick={() => setOpenDropdownId(isDropdownOpen ? null : item.id)}
-          >
-            <MoreHorizontal size={16} />
-          </button>
-          
-          {isDropdownOpen && (
-            <div className="dropdown-menu">
-              <button
-                className="dropdown-item"
-                onClick={() => { openOrderDetail(item); setOpenDropdownId(null); }}
-              >
-                查看详情
-              </button>
-              <button
-                className="dropdown-item"
-                onClick={() => {
-                  openReceiptModal(item);
-                  setOpenDropdownId(null);
-                }}
-              >
-                核销回执
-              </button>
-              <button
-                className="dropdown-item"
-                onClick={() => {
-                  handleCopyCustomerPhone(item).catch(() => undefined);
-                  setOpenDropdownId(null);
-                }}
-              >
-                联系客户
-              </button>
-            </div>
-          )}
-        </div>
+        <button
+          className="btn btn-secondary btn-sm"
+          onClick={() => { openOrderDetail(item); }}
+        >
+          查看详情
+        </button>
       </div>
     );
   };
@@ -1790,6 +1761,24 @@ export function OrderPrepPage() {
               </div>
               <div className="order-detail-modal__meta">来源：{resolveOrderSourceLabel(activeItem)}</div>
               <div className="order-detail-modal__meta">钱包：{activeItem.walletStatusLabel}</div>
+              <button
+                className="btn btn-outline"
+                onClick={() => {
+                  setIsOrderDetailOpen(false);
+                  openEditModal(activeItem);
+                }}
+              >
+                编辑订单
+              </button>
+              <button
+                className="btn btn-outline"
+                onClick={() => {
+                  setIsOrderDetailOpen(false);
+                  openOrderAftersaleModal(activeItem);
+                }}
+              >
+                售后处理
+              </button>
               <button className="btn btn-outline" onClick={() => handleCopyCustomerPhone(activeItem).catch(() => undefined)}>
                 复制手机号
               </button>
@@ -1801,6 +1790,15 @@ export function OrderPrepPage() {
                 }}
               >
                 核销回执
+              </button>
+              <button
+                className="btn-delete"
+                onClick={() => {
+                  setIsOrderDetailOpen(false);
+                  openDeleteConfirm(activeItem);
+                }}
+              >
+                删除订单
               </button>
             </aside>
           </div>

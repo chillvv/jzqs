@@ -21,6 +21,7 @@ export type CustomerAssetResponse = {
   priorityCustomer: boolean;
   priorityTag: string | null;
   merchantRemark: string | null;
+  openedAt: string | null;
   packageExpiredAt: string | null;
   remainingValidityDays: number;
   packageAlertCode: string;
@@ -64,6 +65,7 @@ export type CustomerDetailResponse = {
     reservedMeals?: number;
     consumedMeals?: number;
     remainingMeals?: number;
+    openedAt?: string | null;
     expiredAt?: string | null;
     remainingValidityDays?: number;
     packageAlertCode?: string;
@@ -267,12 +269,30 @@ export type AdminAftersaleItemResponse = {
   type: string;
   status: string;
   source: string;
+  sourceCategory: string;
   reasonCode: string;
   reasonText: string;
+  issueParamSummary: string;
+  estimatedLossMeals: number;
+  settledLossMeals: number;
+  walletDelta: number;
+  giftZeroMealCount: number;
+  giftVeggieJuiceCount: number;
+  resolutionAction: string;
   refundBlocking: boolean;
   adminRemark: string;
   requestedAt: string;
   processedAt: string | null;
+};
+
+export type AdminAftersaleOrderOptionResponse = {
+  orderId: number;
+  customerName: string;
+  customerPhone: string;
+  serveDate: string;
+  mealPeriod: string;
+  orderStatus: string;
+  addressSummary: string;
 };
 
 export type AdminAftersaleResolveResponse = {

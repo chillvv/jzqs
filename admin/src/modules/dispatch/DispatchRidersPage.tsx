@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { PlusCircle, Search, Trash2, UserCog } from "lucide-react";
 import {
   activateDispatchRider,
@@ -43,6 +43,7 @@ function getErrorMessage(error: any, fallback: string) {
 }
 
 export function DispatchRidersPage() {
+  const nameInputRef = useRef<HTMLInputElement | null>(null);
   const [riders, setRiders] = useState<DispatchManagedRiderResponse[]>([]);
   const [bindings, setBindings] = useState<DispatchAreaBindingResponse[]>([]);
   const [search, setSearch] = useState("");
@@ -60,6 +61,17 @@ export function DispatchRidersPage() {
   useEffect(() => {
     reload().catch((err) => toast(getErrorMessage(err, "加载骑手列表失败"), "error"));
   }, []);
+
+  useEffect(() => {
+    if (!showAddModal || !editRiderId) {
+      return;
+    }
+    const frameId = window.requestAnimationFrame(() => {
+      nameInputRef.current?.focus();
+      nameInputRef.current?.select();
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [showAddModal, editRiderId]);
 
   const riderAreas = useMemo(() => {
     const map = new Map<number, string[]>();
@@ -141,11 +153,13 @@ export function DispatchRidersPage() {
           updatedBy: DEFAULT_OPERATOR
         };
         await updateDispatchRiderProfile(editRiderId, payload);
+        setShowAddModal(false);
+        await reload();
       } else {
         await createDispatchRider(buildCreateRiderPayload(draft));
+        setShowAddModal(false);
+        await reload();
       }
-      setShowAddModal(false);
-      await reload();
       toast(editRiderId ? "骑手信息已更新" : "骑手已创建");
     } catch (err: any) {
       toast(getErrorMessage(err, editRiderId ? "保存骑手失败" : "创建骑手失败"), "error");
@@ -323,6 +337,7 @@ export function DispatchRidersPage() {
         <label className="admin-field">
           <span className="admin-field-label">姓名</span>
           <input
+            ref={nameInputRef}
             className={fieldErrors.riderName ? "admin-input admin-input--error" : "admin-input"}
             value={draft.riderName}
             onChange={(e) => setDraft((d) => ({ ...d, riderName: e.target.value }))}

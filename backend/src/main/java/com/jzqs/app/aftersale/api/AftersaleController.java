@@ -26,9 +26,19 @@ public class AftersaleController {
     public ApiResponse<List<AdminAftersaleListItemResponse>> list(
         @RequestParam(required = false) String status,
         @RequestParam(required = false) String type,
-        @RequestParam(required = false) String serveDate
+        @RequestParam(required = false) String startDate,
+        @RequestParam(required = false) String endDate,
+        @RequestParam(required = false) String view,
+        @RequestParam(required = false) Boolean hideAutoRefund
     ) {
-        return ApiResponse.success(aftersaleService.listCases(status, type, serveDate));
+        return ApiResponse.success(
+            aftersaleService.listCases(status, type, startDate, endDate, view, hideAutoRefund)
+        );
+    }
+
+    @GetMapping("/order-options")
+    public ApiResponse<List<AdminAftersaleOrderOptionResponse>> orderOptions(@RequestParam String serveDate) {
+        return ApiResponse.success(aftersaleService.orderOptions(serveDate));
     }
 
     @PostMapping

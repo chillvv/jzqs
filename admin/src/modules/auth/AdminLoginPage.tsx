@@ -110,6 +110,11 @@ export function AdminLoginPage() {
             <span>记住账号和密码</span>
           </label>
 
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", fontSize: "13px", color: "var(--text-sub)" }}>
+            <span>忘记密码</span>
+            <span>请联系管理员协助重置</span>
+          </div>
+
           {error ? <div className="auth-form__error">{error}</div> : null}
 
           <button className="btn btn-primary auth-form__submit" type="submit" disabled={submitting}>

@@ -48,6 +48,8 @@ function maskPhone(phone) {
 
 function transactionLabel(type) {
   switch (type) {
+    case 'OPEN':
+      return '开卡';
     case 'GRANT':
       return '后台发放';
     case 'RESERVE':

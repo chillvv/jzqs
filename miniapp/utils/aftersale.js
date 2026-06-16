@@ -46,6 +46,9 @@ function submitAftersaleApplication(orderId, payload) {
 }
 
 function resolveWalletTransactionTitle(item) {
+  if (item.transactionType === "OPEN") {
+    return "开卡";
+  }
   if (item.transactionType === "REFUND_RETURN") {
     return "退款退回";
   }
@@ -63,6 +66,9 @@ function resolveWalletTransactionStatusText(item) {
 }
 
 function resolveWalletTransactionRemark(item) {
+  if (item.transactionType === "OPEN") {
+    return item.remark || "餐包开通";
+  }
   if (item.transactionType === "REFUND_RETURN" && item.refundReasonText) {
     return `退款原因：${item.refundReasonText}`;
   }
@@ -75,13 +81,28 @@ function resolveWalletTransactionRemark(item) {
   return item.remark || "";
 }
 
+function formatChineseDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) {
+    return "";
+  }
+  const normalized = raw.replace("T", " ");
+  const datePart = normalized.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) {
+    return raw;
+  }
+  const [year, month, day] = datePart.split("-");
+  return `${year}年${Number(month)}月${Number(day)}日`;
+}
+
 function formatWalletTransaction(item) {
   return {
     ...item,
     title: resolveWalletTransactionTitle(item),
     deltaText: `${item.mealDelta > 0 ? "+" : ""}${item.mealDelta}`,
     statusText: resolveWalletTransactionStatusText(item),
-    remarkText: resolveWalletTransactionRemark(item)
+    remarkText: resolveWalletTransactionRemark(item),
+    displayCreatedAt: formatChineseDate(item.createdAt)
   };
 }
 

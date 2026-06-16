@@ -273,11 +273,13 @@ export function DispatchProgressPage() {
                         </div>
                         {item.missingRider ? (
                           <span className="tag tag-red">缺骑手</span>
-                        ) : item.exceptionCount > 0 ? (
-                          <span className="tag tag-red">异常 {item.exceptionCount}</span>
-                        ) : (
-                          <span className="tag tag-green">正常</span>
-                        )}
+        ) : item.exceptionCount > 0 ? (
+          <span className="tag tag-red">异常 {item.exceptionCount}</span>
+        ) : item.totalCount > 1 ? (
+          <span className="tag tag-blue">{item.totalCount} 单</span>
+        ) : (
+          <span className="tag tag-green">正常</span>
+        )}
                       </div>
                       <div className="dispatch-chip-list">
                         <span className="tag tag-gray">总 {item.totalCount}</span>

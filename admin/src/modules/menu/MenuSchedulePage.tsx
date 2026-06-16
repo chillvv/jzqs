@@ -105,6 +105,7 @@ export function MenuSchedulePage() {
     setPublishing(true);
     try {
       setIsPublishConfirmOpen(false);
+      await persistDraftDaysBeforePublish(week.weekId);
       await publishMenuWeek(week.weekId);
       await reloadMenu();
       toast(`${week.weekStartDate} ~ ${week.weekEndDate} 菜单已发布`, "success");
@@ -213,6 +214,16 @@ export function MenuSchedulePage() {
     } finally {
       setSavingDay(null);
     }
+  }
+
+  async function persistDraftDaysBeforePublish(weekId: number) {
+    const draftEntries = Object.entries(drafts);
+    if (draftEntries.length === 0) {
+      return;
+    }
+    await Promise.all(
+      draftEntries.map(([serveDate, draft]) => saveMenuWeekDay(weekId, serveDate, draft))
+    );
   }
 
   async function handlePickWeek(targetDate: string) {

@@ -215,19 +215,33 @@ Page({
       return true;
     });
     const selectedSet = new Set(selectedReferenceItemIds);
-    const normalizedItems = items.map(item => ({
-      ...item,
-      specialSummary: item.specialSummary || [item.specialTag, item.note && item.note !== '-' ? '用户备注' : '', item.adminNote ? '商家备注' : '']
-        .filter(Boolean)
-        .join(' / '),
-      hasRemark: Boolean(
+    const normalizedItems = items.map(item => {
+      const attentionSources = Array.isArray(item.attentionSources)
+        ? item.attentionSources.filter(Boolean)
+        : [];
+      const fallbackNeedAttention = Boolean(
         (item.note && item.note !== '-')
         || (item.adminNote && item.adminNote !== '-')
         || (item.customerNote && item.customerNote !== '-')
         || (item.merchantNote && item.merchantNote !== '-')
-      ),
-      batchSelected: selectedSet.has(item.batchItemId)
-    }));
+        || (item.receiptNote && item.receiptNote !== '-')
+      );
+      const needAttention = typeof item.hasAttentionMark === 'boolean'
+        ? item.hasAttentionMark
+        : fallbackNeedAttention;
+
+      return {
+        ...item,
+        attentionSources,
+        attentionLabel: item.attentionLabel || (needAttention ? '需留意' : ''),
+        needAttention,
+        specialSummary: item.specialSummary || [item.specialTag, item.note && item.note !== '-' ? '用户备注' : '', item.adminNote ? '商家备注' : '', attentionSources[0] || '']
+          .filter(Boolean)
+          .join(' / '),
+        hasRemark: needAttention,
+        batchSelected: selectedSet.has(item.batchItemId)
+      };
+    });
     const visibleIds = new Set(normalizedItems.map(item => item.batchItemId));
     this.setData({
       currentMealItems: normalizedItems,

@@ -148,7 +148,7 @@
                 <view class="order-name {{item.itemStatus === 'DELIVERED' ? 'order-name-completed' : ''}}">
                   {{item.customerName}}
                 </view>
-                <view wx:if="{{item.hasRemark}}" class="special-tag-inline">有备注</view>
+                <view wx:if="{{item.needAttention}}" class="special-tag-inline">{{item.attentionLabel || '需留意'}}</view>
                 <view wx:if="{{item.quantity > 1}}" class="quantity-badge">
                   ×{{item.quantity}}
                 </view>

@@ -1,10 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { LifeBuoy, RotateCcw, Search } from "lucide-react";
-import { fetchAftersales, resolveAftersaleCase } from "../../shared/api/http";
-import type { AdminAftersaleItemResponse } from "../../shared/api/types";
+import { LifeBuoy, Plus, RotateCcw, Search } from "lucide-react";
+import {
+  createAftersaleCase,
+  fetchAftersaleOrderOptions,
+  fetchAftersales,
+  resolveAftersaleCase
+} from "../../shared/api/http";
+import type {
+  AdminAftersaleItemResponse,
+  AdminAftersaleOrderOptionResponse
+} from "../../shared/api/types";
 import { toast } from "../../shared/components/Toast";
 import { AppSelect } from "../../shared/components/AppSelect";
-import { DatePicker } from "../../shared/components/DatePicker";
 import {
   buildAftersaleResolveFormState,
   buildAftersaleTabs,
@@ -13,7 +20,7 @@ import {
   resolveAftersaleAvailableActions,
   resolveAftersaleCompactStatusLabel,
   resolveAftersaleSourceLabel,
-  resolveAftersaleStatusLabel,
+  resolveSettlementSummary,
   resolveAftersaleTone,
   resolveAftersaleTypeLabel,
   resolveMealPeriodLabel,
@@ -21,7 +28,11 @@ import {
   type AftersaleStatusKey
 } from "./aftersalePage.helpers";
 
-const DEFAULT_DATE = "";
+const DEFAULT_OPERATOR = "后台客服";
+
+function getToday() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 function resolveToneTagClass(status: string, type: string) {
   const tone = resolveAftersaleTone(status, type);
@@ -41,23 +52,50 @@ function resolveToneTagClass(status: string, type: string) {
 }
 
 export function AftersalePage() {
+  const [viewMode, setViewMode] = useState<"ledger" | "settlement">("settlement");
   const [items, setItems] = useState<AdminAftersaleItemResponse[]>([]);
+  const [orderOptions, setOrderOptions] = useState<AdminAftersaleOrderOptionResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [keyword, setKeyword] = useState("");
-  const [serveDate, setServeDate] = useState(DEFAULT_DATE);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
   const [activeStatus, setActiveStatus] = useState<AftersaleStatusKey | "ALL">("PENDING");
+  const [hideAutoRefund, setHideAutoRefund] = useState(true);
   const [selectedCase, setSelectedCase] = useState<AdminAftersaleItemResponse | null>(null);
   const [resolveForm, setResolveForm] = useState(() => buildAftersaleResolveFormState("REFUND"));
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [savingCreate, setSavingCreate] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    serveDate: getToday(),
+    orderId: "",
+    type: "COMPENSATION",
+    reasonCode: "ADMIN_DIRECT",
+    reasonText: "",
+    issueParamSummary: "",
+    estimatedLossMeals: 0,
+    remark: ""
+  });
 
-  async function reloadList(nextServeDate = serveDate, nextType = typeFilter) {
+  async function reloadList(
+    nextView = viewMode,
+    nextStatus: AftersaleStatusKey | "ALL" = activeStatus,
+    nextType = typeFilter,
+    nextStartDate = startDate,
+    nextEndDate = endDate,
+    nextHideAutoRefund = hideAutoRefund
+  ) {
     setLoading(true);
     try {
       const response = await fetchAftersales({
-        serveDate: nextServeDate || undefined,
-        type: nextType === "ALL" ? undefined : nextType
+        status: nextStatus === "ALL" ? undefined : nextStatus,
+        type: nextType === "ALL" ? undefined : nextType,
+        startDate: nextStartDate || undefined,
+        endDate: nextEndDate || undefined,
+        view: nextView,
+        hideAutoRefund: nextHideAutoRefund
       });
       setItems(response);
       setError(null);
@@ -70,7 +108,18 @@ export function AftersalePage() {
 
   useEffect(() => {
     reloadList().catch(() => undefined);
-  }, []);
+  }, [viewMode]);
+
+  useEffect(() => {
+    if (!showCreateModal) {
+      return;
+    }
+    fetchAftersaleOrderOptions(createForm.serveDate)
+      .then((response) => setOrderOptions(response))
+      .catch((err: any) => {
+        toast(err?.response?.data?.message || err?.message || "加载订单选项失败", "error");
+      });
+  }, [createForm.serveDate, showCreateModal]);
 
   const tabs = useMemo(
     () =>
@@ -88,9 +137,10 @@ export function AftersalePage() {
       buildAftersaleView(items, {
         status: activeStatus,
         type: typeFilter,
-        keyword
+        keyword,
+        hideAutoRefund
       }),
-    [activeStatus, items, keyword, typeFilter]
+    [activeStatus, hideAutoRefund, items, keyword, typeFilter]
   );
 
   const availableActions = selectedCase
@@ -107,12 +157,61 @@ export function AftersalePage() {
     setResolveForm(buildAftersaleResolveFormState("REFUND"));
   }
 
+  function openCreateModal() {
+    setCreateForm({
+      serveDate: getToday(),
+      orderId: "",
+      type: "COMPENSATION",
+      reasonCode: "ADMIN_DIRECT",
+      reasonText: "",
+      issueParamSummary: "",
+      estimatedLossMeals: 0,
+      remark: ""
+    });
+    setOrderOptions([]);
+    setShowCreateModal(true);
+  }
+
   function selectResolveAction(action: AftersaleResolveAction) {
     setResolveForm((current) => ({
       ...current,
       action,
       walletDelta: action === "REJECT" || action === "REGISTER_ONLY" ? 0 : Math.max(current.walletDelta, 1)
     }));
+  }
+
+  async function handleCreateSubmit() {
+    if (!createForm.orderId) {
+      toast("请选择订单", "error");
+      return;
+    }
+    if (!createForm.reasonText.trim()) {
+      toast("请填写售后原因", "error");
+      return;
+    }
+    setSavingCreate(true);
+    try {
+      await createAftersaleCase({
+        orderId: Number(createForm.orderId),
+        type: createForm.type,
+        reasonCode: createForm.reasonCode,
+        reasonText: createForm.reasonText.trim(),
+        issueParamSummary: createForm.issueParamSummary.trim(),
+        estimatedLossMeals: Math.max(0, Number(createForm.estimatedLossMeals) || 0),
+        sourceCategory: "NORMAL",
+        remark: createForm.remark.trim(),
+        operatorName: DEFAULT_OPERATOR
+      });
+      toast("售后已登记");
+      setShowCreateModal(false);
+      await reloadList("ledger", "ALL");
+      setViewMode("ledger");
+      setActiveStatus("ALL");
+    } catch (err: any) {
+      toast(err?.response?.data?.message || err?.message || "售后登记失败", "error");
+    } finally {
+      setSavingCreate(false);
+    }
   }
 
   async function handleResolveSubmit() {
@@ -129,8 +228,11 @@ export function AftersalePage() {
         resolutionAction: resolveForm.action,
         refundBlocking: resolveForm.refundBlocking,
         walletDelta: resolveForm.action === "REJECT" || resolveForm.action === "REGISTER_ONLY" ? 0 : Math.max(resolveForm.walletDelta, 1),
+        settledLossMeals: Math.max(0, Number(resolveForm.settledLossMeals) || 0),
+        giftZeroMealCount: Math.max(0, Number(resolveForm.giftZeroMealCount) || 0),
+        giftVeggieJuiceCount: Math.max(0, Number(resolveForm.giftVeggieJuiceCount) || 0),
         adminRemark: resolveForm.adminRemark.trim(),
-        operatorName: "后台客服"
+        operatorName: DEFAULT_OPERATOR
       });
       toast("售后已处理");
       closeResolveModal();
@@ -146,9 +248,14 @@ export function AftersalePage() {
     <div className="customer-asset-page">
       <div className="page-header">
         <div>
-          <h2 className="page-title">统一售后中心</h2>
+          <h2 className="page-title">售后台账</h2>
+          <p className="page-subtitle">按登记和处理双视图管理售后台账、秒退款与补偿结算</p>
         </div>
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <button className="btn btn-primary" onClick={openCreateModal}>
+            <Plus size={16} />
+            登记售后
+          </button>
           <button className="btn btn-outline" onClick={() => reloadList().catch(() => undefined)}>
             <LifeBuoy size={16} />
             刷新
@@ -157,6 +264,38 @@ export function AftersalePage() {
       </div>
 
       <div className="stat-row">
+        <button
+          type="button"
+          className="stat-card"
+          onClick={() => {
+            setViewMode("ledger");
+            setActiveStatus("ALL");
+          }}
+          style={{
+            textAlign: "left",
+            borderColor: viewMode === "ledger" ? "rgba(37, 99, 235, 0.35)" : undefined,
+            boxShadow: viewMode === "ledger" ? "0 0 0 2px rgba(37, 99, 235, 0.08)" : undefined
+          }}
+        >
+          <div className="stat-title">售后登记</div>
+          <div className="stat-val">{items.length}</div>
+        </button>
+        <button
+          type="button"
+          className="stat-card"
+          onClick={() => {
+            setViewMode("settlement");
+            setActiveStatus("PENDING");
+          }}
+          style={{
+            textAlign: "left",
+            borderColor: viewMode === "settlement" ? "rgba(37, 99, 235, 0.35)" : undefined,
+            boxShadow: viewMode === "settlement" ? "0 0 0 2px rgba(37, 99, 235, 0.08)" : undefined
+          }}
+        >
+          <div className="stat-title">售后处理</div>
+          <div className="stat-val">{countAftersalesByStatus(items, "PENDING") + countAftersalesByStatus(items, "PROCESSING")}</div>
+        </button>
         {tabs.map((tab) => (
           <button
             key={tab.key}
@@ -178,8 +317,12 @@ export function AftersalePage() {
       <div className="toolbar">
         <div className="filter-row">
           <div className="filter-item">
-            <span className="filter-label">日期:</span>
-            <DatePicker value={serveDate} onChange={(value) => setServeDate(value)} showTomorrowShortcut={false} />
+            <span className="filter-label">开始:</span>
+            <input type="date" className="input-box" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+          </div>
+          <div className="filter-item">
+            <span className="filter-label">结束:</span>
+            <input type="date" className="input-box" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
           </div>
           <div className="filter-item">
             <span className="filter-label">类型:</span>
@@ -195,6 +338,14 @@ export function AftersalePage() {
               onChange={(value) => setTypeFilter(value)}
             />
           </div>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "13px", fontWeight: 600 }}>
+            <input
+              type="checkbox"
+              checked={hideAutoRefund}
+              onChange={(event) => setHideAutoRefund(event.target.checked)}
+            />
+            隐藏秒退款
+          </label>
           <div className="filter-item">
             <span className="filter-label">搜索:</span>
             <input
@@ -206,18 +357,21 @@ export function AftersalePage() {
               onChange={(event) => setKeyword(event.target.value)}
             />
           </div>
-          <button className="btn btn-primary" onClick={() => reloadList(serveDate, typeFilter).catch(() => undefined)}>
+          <button className="btn btn-primary" onClick={() => reloadList().catch(() => undefined)}>
             <Search size={16} />
             查询
           </button>
           <button
             className="btn btn-outline"
             onClick={() => {
-              setServeDate(DEFAULT_DATE);
+              setStartDate("");
+              setEndDate("");
               setTypeFilter("ALL");
               setKeyword("");
-              setActiveStatus("PENDING");
-              reloadList(DEFAULT_DATE, "ALL").catch(() => undefined);
+              setHideAutoRefund(true);
+              const nextStatus = viewMode === "settlement" ? "PENDING" : "ALL";
+              setActiveStatus(nextStatus);
+              reloadList(viewMode, nextStatus, "ALL", "", "", true).catch(() => undefined);
             }}
           >
             <RotateCcw size={16} />
@@ -232,7 +386,7 @@ export function AftersalePage() {
       <div className="table-container">
         <div className="table-header-toolbar">
           <div style={{ display: "grid", gap: "8px" }}>
-            <span>售后单</span>
+            <span>{viewMode === "ledger" ? "登记台账" : "处理台账"}</span>
           </div>
         </div>
 
@@ -253,7 +407,8 @@ export function AftersalePage() {
                     <th>客户</th>
                     <th>售后类型</th>
                     <th>用餐时间</th>
-                    <th>原因</th>
+                    <th>问题摘要</th>
+                    <th>损耗 / 结算</th>
                     <th>申请时间</th>
                     <th>状态</th>
                     <th>操作</th>
@@ -276,7 +431,7 @@ export function AftersalePage() {
                             {resolveAftersaleTypeLabel(item.type)}
                           </span>
                           <span style={{ color: "var(--text-sub)", fontSize: "12px" }}>
-                            {resolveAftersaleSourceLabel(item.source)}
+                            {resolveAftersaleSourceLabel(item.sourceCategory === "AUTO_REFUND" ? "AUTO_REFUND" : item.source)}
                           </span>
                         </div>
                       </td>
@@ -291,7 +446,18 @@ export function AftersalePage() {
                       <td>
                         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: "6px", maxWidth: "200px" }}>
                           <span>{item.reasonText || "-"}</span>
+                          {item.issueParamSummary ? (
+                            <span style={{ color: "var(--text-sub)", fontSize: "12px" }}>{item.issueParamSummary}</span>
+                          ) : null}
                           {item.refundBlocking && <span className="tag tag-red">退款拦单</span>}
+                        </div>
+                      </td>
+                      <td>
+                        <div style={{ display: "grid", gap: "4px" }}>
+                          <span>预估损耗 {item.estimatedLossMeals}</span>
+                          <span style={{ color: "var(--text-sub)", fontSize: "12px" }}>
+                            {resolveSettlementSummary(item)}
+                          </span>
                         </div>
                       </td>
                       <td>
@@ -351,11 +517,20 @@ export function AftersalePage() {
                   </div>
                   <div className="mobile-card-row">
                     <div className="mobile-card-label">原因</div>
-                    <div className="mobile-card-value">{item.reasonText || "-"}</div>
+                    <div className="mobile-card-value">
+                      {item.reasonText || "-"}
+                      {item.issueParamSummary ? ` / ${item.issueParamSummary}` : ""}
+                    </div>
+                  </div>
+                  <div className="mobile-card-row">
+                    <div className="mobile-card-label">结算</div>
+                    <div className="mobile-card-value">{resolveSettlementSummary(item)}</div>
                   </div>
                   <div className="mobile-card-row">
                     <div className="mobile-card-label">申请</div>
-                    <div className="mobile-card-value">{resolveAftersaleSourceLabel(item.source)} · {item.requestedAt || "-"}</div>
+                    <div className="mobile-card-value">
+                      {resolveAftersaleSourceLabel(item.sourceCategory === "AUTO_REFUND" ? "AUTO_REFUND" : item.source)} · {item.requestedAt || "-"}
+                    </div>
                   </div>
                   {item.processedAt ? (
                     <div className="mobile-card-row">
@@ -379,11 +554,132 @@ export function AftersalePage() {
         )}
       </div>
 
+      {showCreateModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ maxWidth: "760px" }}>
+            <div className="modal-header">
+              <span>登记售后</span>
+              <button type="button" className="modal-close" onClick={savingCreate ? undefined : () => setShowCreateModal(false)} disabled={savingCreate}>
+                ×
+              </button>
+            </div>
+            <div className="modal-body" style={{ display: "grid", gap: "18px" }}>
+              <div className="auth-panel">
+                <div className="auth-panel__title">选择订单</div>
+                <div className="auth-panel__grid">
+                  <div>
+                    <strong>配送日期</strong>
+                    <span>
+                      <input
+                        type="date"
+                        className="form-control"
+                        value={createForm.serveDate}
+                        onChange={(event) => setCreateForm((current) => ({ ...current, serveDate: event.target.value, orderId: "" }))}
+                      />
+                    </span>
+                  </div>
+                  <div>
+                    <strong>订单</strong>
+                    <span>
+                      <AppSelect
+                        className="app-select--filter"
+                        style={{ width: "100%" }}
+                        value={createForm.orderId}
+                        options={orderOptions.map((item) => ({
+                          label: `#${item.orderId} ${item.customerName} ${resolveMealPeriodLabel(item.mealPeriod)} ${item.addressSummary || ""}`.trim(),
+                          value: String(item.orderId)
+                        }))}
+                        onChange={(value) => setCreateForm((current) => ({ ...current, orderId: value }))}
+                        showSearch
+                      />
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">售后类型</label>
+                <div className="action-chip-row">
+                  <button
+                    type="button"
+                    className={`action-chip ${createForm.type === "COMPENSATION" ? "active" : ""}`}
+                    onClick={() => setCreateForm((current) => ({ ...current, type: "COMPENSATION" }))}
+                  >
+                    补偿
+                  </button>
+                  <button
+                    type="button"
+                    className={`action-chip ${createForm.type === "REFUND" ? "active" : ""}`}
+                    onClick={() => setCreateForm((current) => ({ ...current, type: "REFUND" }))}
+                  >
+                    退款
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">售后原因</label>
+                <textarea
+                  className="form-control"
+                  value={createForm.reasonText}
+                  onChange={(event) => setCreateForm((current) => ({ ...current, reasonText: event.target.value }))}
+                  rows={3}
+                  placeholder="请输入售后问题描述"
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">问题参数摘要</label>
+                <input
+                  className="form-control"
+                  value={createForm.issueParamSummary}
+                  onChange={(event) => setCreateForm((current) => ({ ...current, issueParamSummary: event.target.value }))}
+                  placeholder="例如：午餐 / 少饭 / 漏送"
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">预估损耗餐数</label>
+                <input
+                  className="form-control"
+                  type="number"
+                  min="0"
+                  value={createForm.estimatedLossMeals}
+                  onChange={(event) => setCreateForm((current) => ({
+                    ...current,
+                    estimatedLossMeals: Math.max(0, Number(event.target.value) || 0)
+                  }))}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">登记备注</label>
+                <textarea
+                  className="form-control"
+                  value={createForm.remark}
+                  onChange={(event) => setCreateForm((current) => ({ ...current, remark: event.target.value }))}
+                  rows={3}
+                  placeholder="补充处理背景或对账说明"
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline" onClick={() => setShowCreateModal(false)} disabled={savingCreate}>
+                取消
+              </button>
+              <button className="btn btn-primary" onClick={() => handleCreateSubmit().catch(() => undefined)} disabled={savingCreate}>
+                {savingCreate ? "提交中..." : "确认登记"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {selectedCase && (
         <div className="modal-overlay">
           <div className="modal-content" style={{ maxWidth: "720px" }}>
             <div className="modal-header">
-              <span>处理售后</span>
+              <span>售后处理</span>
               <button type="button" className="modal-close" onClick={submitting ? undefined : closeResolveModal} disabled={submitting}>
                 ×
               </button>
@@ -397,7 +693,8 @@ export function AftersalePage() {
                   <div><strong>售后类型</strong><span>{resolveAftersaleTypeLabel(selectedCase.type)}</span></div>
                   <div><strong>当前状态</strong><span>{resolveAftersaleCompactStatusLabel(selectedCase.status)}</span></div>
                   <div><strong>原因</strong><span>{selectedCase.reasonText || "-"}</span></div>
-                  <div><strong>申请来源</strong><span>{resolveAftersaleSourceLabel(selectedCase.source)}</span></div>
+                  <div><strong>问题摘要</strong><span>{selectedCase.issueParamSummary || "-"}</span></div>
+                  <div><strong>申请来源</strong><span>{resolveAftersaleSourceLabel(selectedCase.sourceCategory === "AUTO_REFUND" ? "AUTO_REFUND" : selectedCase.source)}</span></div>
                 </div>
               </div>
 
@@ -417,19 +714,65 @@ export function AftersalePage() {
                 </div>
               </div>
 
-              {resolveForm.action === "COMPENSATE_MEALS" && (
+              {resolveForm.action !== "REJECT" && (
                 <div className="form-group" style={{ marginBottom: 0 }}>
-                  <label className="form-label">餐次数量</label>
-                  <input
-                    className="form-control"
-                    type="number"
-                    min="1"
-                    value={resolveForm.walletDelta}
-                    onChange={(event) => setResolveForm((current) => ({
-                      ...current,
-                      walletDelta: Math.max(1, Number(event.target.value) || 1)
-                    }))}
-                  />
+                  <label className="form-label">结算信息</label>
+                  <div style={{ display: "grid", gap: "12px", gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">餐次数量</label>
+                      <input
+                        className="form-control"
+                        type="number"
+                        min={resolveForm.action === "REGISTER_ONLY" ? "0" : "1"}
+                        value={resolveForm.walletDelta}
+                        onChange={(event) => setResolveForm((current) => ({
+                          ...current,
+                          walletDelta: resolveForm.action === "REGISTER_ONLY"
+                            ? Math.max(0, Number(event.target.value) || 0)
+                            : Math.max(1, Number(event.target.value) || 1)
+                        }))}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">结算损耗餐数</label>
+                      <input
+                        className="form-control"
+                        type="number"
+                        min="0"
+                        value={resolveForm.settledLossMeals}
+                        onChange={(event) => setResolveForm((current) => ({
+                          ...current,
+                          settledLossMeals: Math.max(0, Number(event.target.value) || 0)
+                        }))}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">补零餐</label>
+                      <input
+                        className="form-control"
+                        type="number"
+                        min="0"
+                        value={resolveForm.giftZeroMealCount}
+                        onChange={(event) => setResolveForm((current) => ({
+                          ...current,
+                          giftZeroMealCount: Math.max(0, Number(event.target.value) || 0)
+                        }))}
+                      />
+                    </div>
+                    <div className="form-group" style={{ marginBottom: 0 }}>
+                      <label className="form-label">果蔬汁</label>
+                      <input
+                        className="form-control"
+                        type="number"
+                        min="0"
+                        value={resolveForm.giftVeggieJuiceCount}
+                        onChange={(event) => setResolveForm((current) => ({
+                          ...current,
+                          giftVeggieJuiceCount: Math.max(0, Number(event.target.value) || 0)
+                        }))}
+                      />
+                    </div>
+                  </div>
                 </div>
               )}
 

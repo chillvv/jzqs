@@ -58,23 +58,29 @@ export function startAdminRealtime() {
   }
   manuallyStopped = false;
   clearReconnectTimer();
-  socket = new WebSocket(resolveRealtimeUrl());
-  socket.addEventListener("open", () => {
-    socket?.send(JSON.stringify({ type: "AUTH", token, client: "admin" }));
+  const createdSocket = new WebSocket(resolveRealtimeUrl());
+  socket = createdSocket;
+  createdSocket.addEventListener("open", () => {
+    if (createdSocket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    createdSocket.send(JSON.stringify({ type: "AUTH", token, client: "admin" }));
   });
-  socket.addEventListener("message", (event) => {
+  createdSocket.addEventListener("message", (event) => {
     try {
       notify(JSON.parse(String(event.data || "{}")));
     } catch {
       notify({ type: "PARSE_ERROR" });
     }
   });
-  socket.addEventListener("close", () => {
-    socket = null;
+  createdSocket.addEventListener("close", () => {
+    if (socket === createdSocket) {
+      socket = null;
+    }
     scheduleReconnect();
   });
-  socket.addEventListener("error", () => {
-    socket?.close();
+  createdSocket.addEventListener("error", () => {
+    createdSocket.close();
   });
 }
 

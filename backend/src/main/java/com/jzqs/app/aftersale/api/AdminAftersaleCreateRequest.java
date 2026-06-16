@@ -8,6 +8,9 @@ public record AdminAftersaleCreateRequest(
     @NotBlank String type,
     @NotBlank String reasonCode,
     @NotBlank String reasonText,
+    String issueParamSummary,
+    @Min(0) int estimatedLossMeals,
+    String sourceCategory,
     String remark,
     String operatorName
 ) {

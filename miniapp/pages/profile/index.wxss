@@ -1,7 +1,7 @@
 .profile-header {
   display: flex;
   align-items: center;
-  padding: 60rpx 40rpx;
+  padding: 40rpx 40rpx 12rpx;
   gap: 32rpx;
 }
 
@@ -18,7 +18,7 @@
 }
 
 .profile-sub {
-  margin-top: 8rpx;
+  margin-top: 6rpx;
   font-size: 26rpx;
   color: var(--text-sub);
   word-break: break-all;
@@ -60,7 +60,7 @@
 }
 
 .vip-card {
-  margin: 24rpx;
+  margin: 8rpx 24rpx 24rpx;
   border-radius: 32rpx;
   padding: 40rpx;
   background: linear-gradient(135deg, #2C2C2C 0%, #1A1A1A 100%);
@@ -242,6 +242,38 @@
   line-height: 1.6;
   color: var(--text-sub);
   word-break: break-all;
+}
+
+.member-copy--compact {
+  margin-top: 0;
+}
+
+.vip-submeta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24rpx;
+  margin-top: 8rpx;
+  position: relative;
+  z-index: 1;
+}
+
+.vip-validity-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  text-align: right;
+  flex-shrink: 0;
+  color: rgba(238, 220, 154, 0.82);
+}
+
+.vip-validity-days {
+  color: #fff0bf;
+  font-size: 28rpx;
+  font-weight: 700;
+  line-height: 1;
+  margin: 0 2rpx;
 }
 
 .vip-alert {

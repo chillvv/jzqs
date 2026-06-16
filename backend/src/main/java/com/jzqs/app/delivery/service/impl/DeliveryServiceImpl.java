@@ -1,10 +1,15 @@
 package com.jzqs.app.delivery.service.impl;
 
+import com.jzqs.app.common.error.BusinessException;
+import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.delivery.service.DeliveryService;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.format.DateTimeParseException;
 import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -34,9 +39,9 @@ public class DeliveryServiceImpl implements DeliveryService {
         if (exists == null || exists == 0) {
             return Map.of("mealSlotOrderId", orderId, "status", "NOT_FOUND");
         }
-        Timestamp deliveredTimestamp = Timestamp.valueOf(LocalDateTime.parse(deliveredAt));
-        Timestamp visibleTimestamp = visibleAt == null ? null : Timestamp.valueOf(LocalDateTime.parse(visibleAt));
-        Timestamp expiresTimestamp = expiresAt == null ? null : Timestamp.valueOf(LocalDateTime.parse(expiresAt));
+        Timestamp deliveredTimestamp = parseTimestamp(deliveredAt, "送达时间格式不正确");
+        Timestamp visibleTimestamp = parseTimestamp(visibleAt, "可见时间格式不正确");
+        Timestamp expiresTimestamp = parseTimestamp(expiresAt, "过期时间格式不正确");
         insertAndReturnId(
             "INSERT INTO delivery_receipts (meal_slot_order_id, receipt_url, receipt_note, delivered_at, visible_at, expires_at, visible_to_customer) VALUES (?, ?, ?, ?, ?, ?, ?)",
             orderId, receiptUrl, receiptNote, deliveredTimestamp, visibleTimestamp, expiresTimestamp,
@@ -67,6 +72,27 @@ public class DeliveryServiceImpl implements DeliveryService {
             "visibleAt", visibleAt,
             "expiresAt", expiresAt
         );
+    }
+
+    private Timestamp parseTimestamp(String rawValue, String errorMessage) {
+        if (rawValue == null || rawValue.isBlank()) {
+            return null;
+        }
+        try {
+            return Timestamp.valueOf(LocalDateTime.parse(rawValue));
+        } catch (DateTimeParseException ignored) {
+            // Fallback to ISO-8601 timestamps from browser/client code, e.g. 2026-06-15T12:34:56.789Z.
+        }
+        try {
+            return Timestamp.from(Instant.parse(rawValue));
+        } catch (DateTimeParseException ignored) {
+            // Some clients may send offset timestamps without trailing Z.
+        }
+        try {
+            return Timestamp.from(OffsetDateTime.parse(rawValue).toInstant());
+        } catch (DateTimeParseException ignored) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, errorMessage);
+        }
     }
 
     private void insertWalletTransaction(long walletId, String transactionType, int mealDelta, String operatorName, String remark, Long relatedOrderId) {

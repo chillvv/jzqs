@@ -32,8 +32,8 @@ import {
 const items = [
   { key: "/dashboard", label: "看板数据", shortLabel: "看板", description: "核心经营指标与趋势", icon: <LayoutDashboard size={18} /> },
   { key: "/orders", label: "订单运营", shortLabel: "运营", description: "备餐、固定订餐、订单处理", icon: <ClipboardList size={18} /> },
+  { key: "/aftersales", label: "售后台账", shortLabel: "售后", description: "登记、结算、补偿与退款对账", icon: <LifeBuoy size={18} /> },
   { key: "/dispatch", label: "骑手中心", shortLabel: "骑手", description: "派单、轨迹、回执与通知", icon: <Bike size={18} /> },
-  { key: "/aftersales", label: "售后中心", shortLabel: "售后", description: "退款、异常、补偿处理", icon: <LifeBuoy size={18} /> },
   { key: "/customers", label: "客户资产", shortLabel: "客户", description: "余额、流水、重点客户", icon: <CreditCard size={18} /> },
   { key: "/menu", label: "菜单配置", shortLabel: "菜单", description: "周菜单、排菜与发布", icon: <CalendarDays size={18} /> },
   { key: "/analysis", label: "经营分析", shortLabel: "分析", description: "营收、成本、毛利洞察", icon: <LineChart size={18} /> },

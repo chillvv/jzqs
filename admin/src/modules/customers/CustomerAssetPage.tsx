@@ -524,6 +524,7 @@ export function CustomerAssetPage() {
   }
 
   function resolveWalletTransactionTypeLabel(type: string) {
+    if (type === "OPEN") return "开卡";
     if (type === "GRANT") return "后台发放";
     if (type === "RESERVE") return "下单占用";
     if (type === "RELEASE") return "取消释放";
@@ -648,6 +649,7 @@ export function CustomerAssetPage() {
               <th>联系电话</th>
               <th>客户状态</th>
               <th>商家备注</th>
+              <th>餐包有效期</th>
               <th>餐次余额</th>
               <th>操作</th>
             </tr>
@@ -676,7 +678,9 @@ export function CustomerAssetPage() {
                   <td><span className="customer-status-text" style={{ whiteSpace: "nowrap" }}>{statusLabel}</span></td>
                   <td>
                     <div className="customer-table-note">{item.merchantRemark || "暂无备注"}</div>
-                    <div className="customer-table-note">{`有效期：${packageSummary}`}</div>
+                  </td>
+                  <td>
+                    <div className="customer-table-note">{packageSummary}</div>
                     {item.packageAlertLabel ? <div className="customer-table-note">{`提醒：${item.packageAlertLabel}`}</div> : null}
                   </td>
                   <td>
@@ -690,7 +694,7 @@ export function CustomerAssetPage() {
             })}
             {filteredItems.length === 0 && (
               <tr>
-                <td colSpan={6}>
+                <td colSpan={7}>
                   <div className="empty-state">暂无符合条件的客户记录</div>
                 </td>
               </tr>
@@ -790,6 +794,12 @@ export function CustomerAssetPage() {
                   <div className="customer-detail-kpi__label">餐包有效期</div>
                   <div className="customer-detail-kpi__value">
                     {String(detail?.wallet?.expiredAt || activeItem.packageExpiredAt || "未设置")}
+                  </div>
+                </div>
+                <div className="customer-detail-kpi">
+                  <div className="customer-detail-kpi__label">开卡时间</div>
+                  <div className="customer-detail-kpi__value">
+                    {String(detail?.wallet?.openedAt || activeItem.openedAt || "未设置")}
                   </div>
                 </div>
                 <div className="customer-detail-kpi">

@@ -14,6 +14,9 @@ export type AftersaleResolveAction = "REFUND_TO_WALLET" | "COMPENSATE_MEALS" | "
 export type AftersaleResolveFormState = {
   action: AftersaleResolveAction;
   walletDelta: number;
+  settledLossMeals: number;
+  giftZeroMealCount: number;
+  giftVeggieJuiceCount: number;
   adminRemark: string;
   refundBlocking: boolean;
 };
@@ -22,6 +25,7 @@ export type AftersaleViewFilters = {
   status: AftersaleStatusKey | "ALL";
   type: string;
   keyword: string;
+  hideAutoRefund: boolean;
 };
 
 const AFTERSALE_STATUS_LABELS: Record<AftersaleStatusKey, string> = {
@@ -77,15 +81,17 @@ export function buildAftersaleView(items: AdminAftersaleItemResponse[], filters:
   return items.filter((item) => {
     const matchesStatus = filters.status === "ALL" || item.status === filters.status;
     const matchesType = filters.type === "ALL" || item.type === filters.type;
+    const matchesAutoRefund = !filters.hideAutoRefund || item.sourceCategory !== "AUTO_REFUND";
     const matchesKeyword =
       keyword.length === 0
       || item.customerName.includes(keyword)
       || item.customerPhone.includes(keyword)
       || item.reasonText.includes(keyword)
       || item.reasonCode.includes(keyword)
+      || item.issueParamSummary.includes(keyword)
       || String(item.orderId).includes(keyword);
 
-    return matchesStatus && matchesType && matchesKeyword;
+    return matchesStatus && matchesType && matchesAutoRefund && matchesKeyword;
   });
 }
 
@@ -100,6 +106,9 @@ export function resolveAftersaleTypeLabel(type: string) {
 }
 
 export function resolveAftersaleSourceLabel(source: string) {
+  if (source === "AUTO_REFUND") {
+    return "秒退款";
+  }
   if (source === "USER_APPLY") {
     return "用户申请";
   }
@@ -141,7 +150,31 @@ export function buildAftersaleResolveFormState(type: string): AftersaleResolveFo
   return {
     action: type === "REFUND" ? "REFUND_TO_WALLET" : "COMPENSATE_MEALS",
     walletDelta: 1,
+    settledLossMeals: 0,
+    giftZeroMealCount: 0,
+    giftVeggieJuiceCount: 0,
     adminRemark: "",
     refundBlocking: false
   };
+}
+
+export function resolveSettlementSummary(item: Pick<
+  AdminAftersaleItemResponse,
+  "resolutionAction" | "walletDelta" | "giftZeroMealCount" | "giftVeggieJuiceCount"
+>) {
+  const parts: string[] = [];
+  if (item.resolutionAction === "REGISTER_ONLY") {
+    parts.push("仅登记");
+  } else if (item.resolutionAction === "REFUND_TO_WALLET") {
+    parts.push(`退餐次 ${item.walletDelta}`);
+  } else if (item.resolutionAction === "COMPENSATE_MEALS") {
+    parts.push(`补餐次 ${item.walletDelta}`);
+  }
+  if (item.giftZeroMealCount > 0) {
+    parts.push(`补零餐 ${item.giftZeroMealCount}`);
+  }
+  if (item.giftVeggieJuiceCount > 0) {
+    parts.push(`果蔬汁 ${item.giftVeggieJuiceCount}`);
+  }
+  return parts.length > 0 ? parts.join(" / ") : "-";
 }

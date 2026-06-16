@@ -211,6 +211,15 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "客户不存在");
         }
 
+        Integer ownedAddressCount = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM customer_addresses WHERE customer_id = ?",
+            Integer.class,
+            request.customerId()
+        );
+        if (ownedAddressCount == null || ownedAddressCount == 0) {
+            throw new BusinessException(ErrorCode.ADDRESS_NOT_FOUND, "该客户暂无地址，请先去客户地址管理补充");
+        }
+
         // 检查日期范围
         if (request.startDate().isAfter(request.endDate())) {
             throw new BusinessException(ErrorCode.INVALID_DATE_RANGE, "开始日期不能晚于结束日期");

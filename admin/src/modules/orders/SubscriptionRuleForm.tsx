@@ -11,6 +11,13 @@ type AddressOption = {
   isDefault: boolean;
 };
 
+function resolveSelectableAddressId(addresses: AddressOption[], preferredAddressId?: number | null) {
+  if (preferredAddressId && addresses.some((address) => address.id === preferredAddressId)) {
+    return preferredAddressId;
+  }
+  return addresses.find((address) => address.isDefault)?.id ?? addresses[0]?.id ?? null;
+}
+
 type Props = {
   item: SubscriptionRuleResponse | null;
   onClose: () => void;
@@ -102,12 +109,13 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
         isDefault: a.isDefault
       }));
       setAddresses(list);
-      if (!item) {
-        const def = list.find((a) => a.isDefault);
-        if (def) setForm((prev) => ({ ...prev, defaultAddressId: def.id }));
-      }
+      setForm((prev) => ({
+        ...prev,
+        defaultAddressId: resolveSelectableAddressId(list, item ? prev.defaultAddressId : null)
+      }));
     } catch {
       setAddresses([]);
+      setForm((prev) => ({ ...prev, defaultAddressId: null }));
     } finally {
       setLoadingAddresses(false);
     }
@@ -136,6 +144,14 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
     }
     if (!form.lunchEnabled && !form.dinnerEnabled) {
       toast("至少启用午餐或晚餐之一", "error");
+      return;
+    }
+    if (addresses.length === 0) {
+      toast("该客户暂无地址，请先去客户地址管理补充", "error");
+      return;
+    }
+    if (!form.defaultAddressId) {
+      toast("请选择该客户自己的配送地址", "error");
       return;
     }
 
@@ -406,7 +422,7 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
                 color: "var(--text-sub)",
                 fontSize: "13px"
               }}>
-                该客户暂无地址
+                该客户暂无地址，请先去客户地址管理补充
               </div>
             ) : (
               <div style={{
@@ -414,25 +430,6 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
                 borderRadius: "12px",
                 overflow: "hidden"
               }}>
-                {/* 不指定选项 */}
-                <label style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px",
-                  padding: "11px 14px",
-                  cursor: "pointer",
-                  borderBottom: "1px solid rgba(226,232,240,0.7)",
-                  background: form.defaultAddressId === null ? "rgba(239,246,255,0.6)" : "transparent"
-                }}>
-                  <input
-                    type="radio"
-                    name="address"
-                    checked={form.defaultAddressId === null}
-                    onChange={() => setForm({ ...form, defaultAddressId: null })}
-                    style={{ accentColor: "var(--primary-color)" }}
-                  />
-                  <span style={{ fontSize: "13px", color: "var(--text-sub)" }}>不指定（使用客户默认地址）</span>
-                </label>
                 {addresses.map((addr, i) => (
                   <label
                     key={addr.id}
@@ -465,6 +462,11 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
                 ))}
               </div>
             )}
+            {form.customerId && addresses.length > 0 ? (
+              <div style={{ marginTop: "8px", color: "var(--text-sub)", fontSize: "12px" }}>
+                固定订餐只会使用该客户已保存的地址，不再走后台兜底默认地址。
+              </div>
+            ) : null}
           </div>
 
           {/* 商家备注 */}

@@ -2,6 +2,7 @@ import axios from "axios";
 import type {
   AdminAftersaleResolveResponse,
   AdminAftersaleItemResponse,
+  AdminAftersaleOrderOptionResponse,
   AdminAuthLoginResponse,
   AdminAuthProfileResponse,
   ApiResponse,
@@ -119,13 +120,48 @@ export async function fetchOrderPrepList(serveDate?: string) {
   return response.data.data;
 }
 
-export async function fetchAftersales(params?: { status?: string; type?: string; serveDate?: string }) {
+export async function fetchAftersales(params?: {
+  status?: string;
+  type?: string;
+  startDate?: string;
+  endDate?: string;
+  view?: string;
+  hideAutoRefund?: boolean;
+}) {
   const query = new URLSearchParams();
   if (params?.status) query.set("status", params.status);
   if (params?.type) query.set("type", params.type);
-  if (params?.serveDate) query.set("serveDate", params.serveDate);
+  if (params?.startDate) query.set("startDate", params.startDate);
+  if (params?.endDate) query.set("endDate", params.endDate);
+  if (params?.view) query.set("view", params.view);
+  if (params?.hideAutoRefund !== undefined) query.set("hideAutoRefund", String(params.hideAutoRefund));
   const suffix = query.toString() ? `?${query.toString()}` : "";
   const response = await http.get<ApiResponse<AdminAftersaleItemResponse[]>>(`/api/admin/aftersales${suffix}`);
+  return response.data.data;
+}
+
+export async function fetchAftersaleOrderOptions(serveDate: string) {
+  const response = await http.get<ApiResponse<AdminAftersaleOrderOptionResponse[]>>(
+    `/api/admin/aftersales/order-options?serveDate=${encodeURIComponent(serveDate)}`
+  );
+  return response.data.data;
+}
+
+export async function createAftersaleCase(payload: {
+  orderId: number;
+  type: string;
+  reasonCode: string;
+  reasonText: string;
+  issueParamSummary?: string;
+  estimatedLossMeals?: number;
+  sourceCategory?: string;
+  remark?: string;
+  operatorName: string;
+}) {
+  const response = await http.post<ApiResponse<{ afterSaleId: number; status: string }>>(
+    "/api/admin/aftersales",
+    payload
+  );
   return response.data.data;
 }
 
@@ -133,6 +169,9 @@ export async function resolveAftersaleCase(caseId: number, payload: {
   resolutionAction: string;
   refundBlocking: boolean;
   walletDelta: number;
+  settledLossMeals: number;
+  giftZeroMealCount: number;
+  giftVeggieJuiceCount: number;
   adminRemark: string;
   operatorName: string;
 }) {

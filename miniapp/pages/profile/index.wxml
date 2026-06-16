@@ -16,7 +16,6 @@
         <text wx:if="{{!onboarding}}" class="edit-icon">✎</text>
       </view>
       <view class="profile-sub" wx:if="{{!onboarding}}">{{maskedPhone}}</view>
-      <view class="profile-badge member" wx:if="{{!onboarding}}">简知会员</view>
       <view class="profile-guest-action" wx:if="{{onboarding}}" bindtap="goLoginPage">
         去登录 <text class="arrow">›</text>
       </view>
@@ -26,8 +25,15 @@
   <view class="vip-card" wx:if="{{!onboarding}}">
     <view class="vip-title">当前剩余餐数</view>
     <view class="vip-balance"><text class="num">{{home ? home.remainingMeals : '--'}}</text><text class="unit">餐</text></view>
-    <view class="member-copy">{{home && home.packageExpiredAt ? ('到期日：' + home.packageExpiredAt) : '会员预订专享'}}</view>
-    <view class="member-copy" wx:if="{{home && home.packageExpiredAt}}">剩余天数：{{home.remainingValidityDays}} 天</view>
+    <view class="vip-submeta" wx:if="{{home && home.packageExpiredAt}}">
+      <view class="member-copy member-copy--compact">到期日：{{home.packageExpiredAt}}</view>
+      <view class="vip-validity-line">
+        <text class="member-copy member-copy--compact">剩余 </text>
+        <text class="vip-validity-days">{{home.remainingValidityDays}}</text>
+        <text class="member-copy member-copy--compact"> 天</text>
+      </view>
+    </view>
+    <view class="member-copy" wx:else>会员预订专享</view>
     <view class="vip-alert" wx:if="{{home && home.packageAlertMessage}}">{{home.packageAlertMessage}}</view>
     <view class="vip-footer">
       <view class="vip-status">会员预订专享</view>

@@ -133,6 +133,9 @@ public class OrderPrepController {
             body.getOrDefault("type", "COMPENSATION"),
             body.getOrDefault("reasonCode", "ADMIN_DIRECT"),
             body.getOrDefault("reasonText", ""),
+            body.getOrDefault("issueParamSummary", ""),
+            0,
+            "NORMAL",
             body.getOrDefault("remark", ""),
             body.getOrDefault("operatorName", "后台客服")
         )));
@@ -146,6 +149,9 @@ public class OrderPrepController {
             body.getOrDefault("reasonCode", "ADMIN_DIRECT_REFUND"),
             body.getOrDefault("reasonText", "商家后台直接退款"),
             body.getOrDefault("reasonText", "商家后台直接退款"),
+            0,
+            "NORMAL",
+            body.getOrDefault("reasonText", "商家后台直接退款"),
             body.getOrDefault("operatorName", "后台客服")
         ));
         Number afterSaleId = (Number) created.get("afterSaleId");
@@ -153,6 +159,9 @@ public class OrderPrepController {
             "REFUND_TO_WALLET",
             true,
             1,
+            1,
+            0,
+            0,
             body.getOrDefault("reasonText", "商家后台直接退款"),
             body.getOrDefault("operatorName", "后台客服")
         )));

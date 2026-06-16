@@ -2,6 +2,7 @@ package com.jzqs.app.aftersale.service.impl;
 
 import com.jzqs.app.aftersale.api.AdminAftersaleCreateRequest;
 import com.jzqs.app.aftersale.api.AdminAftersaleListItemResponse;
+import com.jzqs.app.aftersale.api.AdminAftersaleOrderOptionResponse;
 import com.jzqs.app.aftersale.api.AdminAftersaleResolveRequest;
 import com.jzqs.app.aftersale.service.AftersaleService;
 import com.jzqs.app.common.error.BusinessException;
@@ -33,7 +34,14 @@ public class AftersaleServiceImpl implements AftersaleService {
     }
 
     @Override
-    public List<AdminAftersaleListItemResponse> listCases(String status, String type, String serveDate) {
+    public List<AdminAftersaleListItemResponse> listCases(
+        String status,
+        String type,
+        String startDate,
+        String endDate,
+        String view,
+        Boolean hideAutoRefund
+    ) {
         return jdbcTemplate.query(
             """
                 SELECT
@@ -48,8 +56,16 @@ public class AftersaleServiceImpl implements AftersaleService {
                     ac.issue_type,
                     ac.status,
                     ac.source,
+                    ac.source_category,
                     COALESCE(ac.reason_code, '') AS reason_code,
                     COALESCE(ac.issue_desc, '') AS reason_text,
+                    COALESCE(ac.issue_param_summary, '') AS issue_param_summary,
+                    ac.estimated_loss_meals,
+                    ac.settled_loss_meals,
+                    ac.wallet_delta,
+                    ac.gift_zero_meal_count,
+                    ac.gift_veggie_juice_count,
+                    COALESCE(ac.resolution_action, '') AS resolution_action,
                     ac.refund_blocking,
                     COALESCE(ac.admin_remark, '') AS admin_remark,
                     ac.requested_at,
@@ -60,7 +76,13 @@ public class AftersaleServiceImpl implements AftersaleService {
                 JOIN daily_orders do ON do.id = mso.daily_order_id
                 WHERE (? IS NULL OR ? = '' OR ac.status = ?)
                   AND (? IS NULL OR ? = '' OR ac.issue_type = ?)
-                  AND (? IS NULL OR ? = '' OR CAST(do.serve_date AS CHAR) = ?)
+                  AND (? IS NULL OR ? = '' OR CAST(do.serve_date AS CHAR) >= ?)
+                  AND (? IS NULL OR ? = '' OR CAST(do.serve_date AS CHAR) <= ?)
+                  AND (
+                      ? IS NULL OR ? = '' OR ? = 'ledger'
+                      OR (? = 'settlement' AND ac.status IN ('PENDING', 'PROCESSING'))
+                  )
+                  AND (? IS NULL OR ? = FALSE OR ac.source_category <> 'AUTO_REFUND')
                 ORDER BY ac.requested_at DESC, ac.id DESC
                 """,
             (rs, rowNum) -> new AdminAftersaleListItemResponse(
@@ -75,8 +97,16 @@ public class AftersaleServiceImpl implements AftersaleService {
                 rs.getString("issue_type"),
                 rs.getString("status"),
                 rs.getString("source"),
+                rs.getString("source_category"),
                 rs.getString("reason_code"),
                 rs.getString("reason_text"),
+                rs.getString("issue_param_summary"),
+                rs.getInt("estimated_loss_meals"),
+                rs.getInt("settled_loss_meals"),
+                rs.getInt("wallet_delta"),
+                rs.getInt("gift_zero_meal_count"),
+                rs.getInt("gift_veggie_juice_count"),
+                rs.getString("resolution_action"),
                 rs.getBoolean("refund_blocking"),
                 rs.getString("admin_remark"),
                 formatTimestamp(rs.getTimestamp("requested_at")),
@@ -84,7 +114,42 @@ public class AftersaleServiceImpl implements AftersaleService {
             ),
             status, status, status,
             type, type, type,
-            serveDate, serveDate, serveDate
+            startDate, startDate, startDate,
+            endDate, endDate, endDate,
+            view, view, view, view,
+            hideAutoRefund, hideAutoRefund
+        );
+    }
+
+    @Override
+    public List<AdminAftersaleOrderOptionResponse> orderOptions(String serveDate) {
+        return jdbcTemplate.query(
+            """
+                SELECT
+                    mso.id,
+                    c.name AS customer_name,
+                    c.phone AS customer_phone,
+                    do.serve_date,
+                    mso.meal_period,
+                    mso.status AS order_status,
+                    COALESCE(da.detail_address, '') AS address_summary
+                FROM meal_slot_orders mso
+                JOIN daily_orders do ON do.id = mso.daily_order_id
+                JOIN customers c ON c.id = do.customer_id
+                LEFT JOIN delivery_addresses da ON da.id = do.delivery_address_id
+                WHERE CAST(do.serve_date AS CHAR) = ?
+                ORDER BY c.name, mso.id DESC
+                """,
+            (rs, rowNum) -> new AdminAftersaleOrderOptionResponse(
+                rs.getLong("id"),
+                rs.getString("customer_name"),
+                rs.getString("customer_phone"),
+                String.valueOf(rs.getObject("serve_date")),
+                rs.getString("meal_period"),
+                rs.getString("order_status"),
+                rs.getString("address_summary")
+            ),
+            serveDate
         );
     }
 
@@ -101,6 +166,9 @@ public class AftersaleServiceImpl implements AftersaleService {
             request.type(),
             request.reasonCode(),
             request.reasonText(),
+            normalizeText(request.issueParamSummary()),
+            Math.max(request.estimatedLossMeals(), 0),
+            normalizeSourceCategory(request.sourceCategory()),
             null,
             normalizeText(request.remark()),
             "ADMIN_DIRECT",
@@ -118,12 +186,16 @@ public class AftersaleServiceImpl implements AftersaleService {
         ensureOrderAllowsAftersale(order.status());
         ensureNoOpenCase(orderId);
         String operatorName = "小程序用户";
+        boolean autoRefund = shouldAutoCompleteRefund(request.type(), order.status(), order.serveDate());
         long caseId = insertCase(
             orderId,
             customerId,
             request.type(),
             request.reasonCode(),
             request.reasonText(),
+            "",
+            0,
+            autoRefund ? "AUTO_REFUND" : "NORMAL",
             normalizeText(request.remark()),
             "",
             "USER_APPLY",
@@ -131,7 +203,7 @@ public class AftersaleServiceImpl implements AftersaleService {
             operatorName
         );
         insertAction(caseId, "CREATE", request.reasonText(), operatorName);
-        if (shouldAutoCompleteRefund(request.type(), order.status(), order.serveDate())) {
+        if (autoRefund) {
             completeRefundCase(
                 caseId,
                 customerId,
@@ -158,8 +230,8 @@ public class AftersaleServiceImpl implements AftersaleService {
         String action = request.resolutionAction();
         int walletDelta = request.walletDelta() > 0 ? request.walletDelta() : 1;
 
-        if ("COMPLETED".equals(existingCase.status()) && walletTransactionExists(caseId, "REFUND_RETURN")) {
-            return Map.of("caseId", caseId, "status", "COMPLETED");
+        if ("COMPLETED".equals(existingCase.status()) || "REJECTED".equals(existingCase.status())) {
+            return Map.of("caseId", caseId, "status", existingCase.status());
         }
 
         if ("REJECT".equals(action)) {
@@ -168,6 +240,9 @@ public class AftersaleServiceImpl implements AftersaleService {
                     UPDATE aftersale_cases
                     SET resolution_type = ?,
                         resolution_action = ?,
+                        settled_loss_meals = 0,
+                        gift_zero_meal_count = 0,
+                        gift_veggie_juice_count = 0,
                         status = 'REJECTED',
                         admin_remark = ?,
                         refund_blocking = FALSE,
@@ -232,6 +307,9 @@ public class AftersaleServiceImpl implements AftersaleService {
                 SET resolution_type = ?,
                     resolution_action = ?,
                     wallet_delta = ?,
+                    settled_loss_meals = ?,
+                    gift_zero_meal_count = ?,
+                    gift_veggie_juice_count = ?,
                     refund_blocking = ?,
                     status = 'COMPLETED',
                     admin_remark = ?,
@@ -244,6 +322,9 @@ public class AftersaleServiceImpl implements AftersaleService {
             action,
             action,
             Math.max(request.walletDelta(), 0),
+            Math.max(request.settledLossMeals(), 0),
+            Math.max(request.giftZeroMealCount(), 0),
+            Math.max(request.giftVeggieJuiceCount(), 0),
             request.refundBlocking(),
             normalizeText(request.adminRemark()),
             operatorName,
@@ -377,6 +458,9 @@ public class AftersaleServiceImpl implements AftersaleService {
         String type,
         String reasonCode,
         String reasonText,
+        String issueParamSummary,
+        int estimatedLossMeals,
+        String sourceCategory,
         String userRemark,
         String adminRemark,
         String source,
@@ -398,7 +482,10 @@ public class AftersaleServiceImpl implements AftersaleService {
                     status,
                     operator_name,
                     source,
+                    source_category,
                     reason_code,
+                    issue_param_summary,
+                    estimated_loss_meals,
                     user_remark,
                     admin_remark,
                     resolution_action,
@@ -409,7 +496,7 @@ public class AftersaleServiceImpl implements AftersaleService {
                     processed_by,
                     created_at,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
             orderId,
             customerId,
@@ -422,7 +509,10 @@ public class AftersaleServiceImpl implements AftersaleService {
             "PENDING",
             operatorName,
             source,
+            sourceCategory,
             normalizeText(reasonCode),
+            normalizeText(issueParamSummary),
+            Math.max(estimatedLossMeals, 0),
             normalizeText(userRemark),
             normalizeText(adminRemark),
             null,
@@ -566,6 +656,9 @@ public class AftersaleServiceImpl implements AftersaleService {
                         resolution_action = ?,
                         rollback_meal = TRUE,
                         wallet_delta = ?,
+                        settled_loss_meals = ?,
+                        gift_zero_meal_count = 0,
+                        gift_veggie_juice_count = 0,
                         refund_blocking = TRUE,
                         status = 'COMPLETED',
                         admin_remark = ?,
@@ -578,6 +671,7 @@ public class AftersaleServiceImpl implements AftersaleService {
                 action,
                 action,
                 effectiveDelta,
+                Math.max(request.settledLossMeals(), 0),
                 normalizeText(adminRemark),
                 operatorName,
                 operatorName,
@@ -707,6 +801,13 @@ public class AftersaleServiceImpl implements AftersaleService {
 
     private String normalizeText(String value) {
         return value == null ? "" : value.trim();
+    }
+
+    private String normalizeSourceCategory(String value) {
+        if ("AUTO_REFUND".equalsIgnoreCase(normalizeText(value))) {
+            return "AUTO_REFUND";
+        }
+        return "NORMAL";
     }
 
     private String formatTimestamp(Timestamp value) {

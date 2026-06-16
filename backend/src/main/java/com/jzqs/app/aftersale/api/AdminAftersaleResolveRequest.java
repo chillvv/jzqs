@@ -6,6 +6,9 @@ public record AdminAftersaleResolveRequest(
     @NotBlank String resolutionAction,
     boolean refundBlocking,
     int walletDelta,
+    int settledLossMeals,
+    int giftZeroMealCount,
+    int giftVeggieJuiceCount,
     String adminRemark,
     String operatorName
 ) {
