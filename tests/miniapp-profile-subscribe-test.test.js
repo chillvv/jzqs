@@ -24,5 +24,6 @@ assert.match(controller, /@PostMapping\(\"\/subscribe-message\/test-send\"\)/, '
 assert.match(serviceImpl, /pages\/profile\/index/, '测试消息跳转页应回到“我的”页');
 assert.match(serviceImpl, /acceptWithAudio/, '后端应接受 acceptWithAudio');
 assert.match(serviceImpl, /acceptWithAlert/, '后端应接受 acceptWithAlert');
+assert.match(serviceImpl, /请查看取餐测试提醒/, '测试消息内容应适配“取餐提醒”模板字段');
 
 console.log('PASS: 我的页订阅消息测试入口链路已接入');

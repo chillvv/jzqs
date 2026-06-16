@@ -617,7 +617,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             context.openid(),
             "pages/profile/index",
             "简知轻食",
-            "这是订阅消息测试，请确认已收到微信官方提醒"
+            "请查看取餐测试提醒"
         );
         return Map.of(
             "status", "SENT",

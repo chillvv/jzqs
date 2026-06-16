@@ -165,8 +165,8 @@ public class WeChatService {
             payload.put("template_id", deliveryTemplateId);
             payload.put("page", page);
             payload.put("data", Map.of(
-                "thing2", Map.of("value", merchantName),
-                "thing11", Map.of("value", hint)
+                "thing2", Map.of("value", normalizeThingValue(merchantName)),
+                "thing11", Map.of("value", normalizeThingValue(hint))
             ));
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
@@ -257,6 +257,11 @@ public class WeChatService {
             }
         }
         return value;
+    }
+
+    private String normalizeThingValue(String value) {
+        String normalized = value == null ? "" : value.trim();
+        return normalized.length() <= 20 ? normalized : normalized.substring(0, 20);
     }
 
     /**
