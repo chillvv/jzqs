@@ -1,8 +1,9 @@
 function request({ url, method = 'GET', data, header, requireAuth = true }) {
   const app = getApp();
   return new Promise((resolve, reject) => {
+    const resolveToken = () => app.globalData.token || wx.getStorageSync('auth_token');
     const sendRequest = () => {
-      const token = app.globalData.token;
+      const token = resolveToken();
       if (requireAuth && !token) {
         reject(new Error('请先完成手机号验证'));
         return;
@@ -44,11 +45,11 @@ function request({ url, method = 'GET', data, header, requireAuth = true }) {
     };
 
     // 等待认证就绪
-    if (requireAuth && !app.globalData.token) {
+    if (requireAuth && !resolveToken()) {
       app.waitForAuth()
         .then(() => {
           // 认证就绪后再次检查 token
-          if (app.globalData.token) {
+          if (resolveToken()) {
             sendRequest();
           } else {
             reject(new Error('请先完成手机号验证'));

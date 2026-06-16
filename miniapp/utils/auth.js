@@ -6,6 +6,8 @@
  * @since 2026-05-23
  */
 
+const { DEFAULT_API_BASE_URL, resolveApiBaseUrl } = require('./api-base');
+
 const AUTH_TOKEN_KEY = 'auth_token';
 const AUTH_STATE_KEY = 'auth_state';
 
@@ -258,8 +260,12 @@ class Auth {
   async request(url, method, data, customToken) {
     const token = customToken || this.globalData.token;
     return new Promise((resolve, reject) => {
+      const app = typeof getApp === 'function' ? getApp() : null;
+      const apiBaseUrl = app && app.globalData
+        ? resolveApiBaseUrl(app.globalData.apiBaseUrl)
+        : resolveApiBaseUrl(wx.getStorageSync('apiBaseUrl') || DEFAULT_API_BASE_URL);
       wx.request({
-        url: getApp().globalData.apiBaseUrl + url,
+        url: apiBaseUrl + url,
         method,
         data,
         header: token ? { Authorization: 'Bearer ' + token } : {},

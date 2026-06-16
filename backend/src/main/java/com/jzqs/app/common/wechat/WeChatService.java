@@ -168,13 +168,26 @@ public class WeChatService {
                 "thing2", Map.of("value", merchantName),
                 "thing11", Map.of("value", hint)
             ));
-            String response = restTemplate.postForObject(url, payload, String.class);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+            String requestBody = objectMapper.writeValueAsString(payload);
+            HttpEntity<String> requestEntity = new HttpEntity<>(requestBody, headers);
+            String response = restTemplate.postForObject(url, requestEntity, String.class);
             JsonNode json = objectMapper.readTree(response);
             if (json.has("errcode") && json.get("errcode").asInt() != 0) {
                 String errmsg = json.path("errmsg").asText();
                 log.error("微信订阅消息发送失败：{}", errmsg);
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "发送订阅消息失败：" + errmsg);
             }
+        } catch (HttpStatusCodeException e) {
+            log.error(
+                "发送微信订阅消息 HTTP 异常：status={}, body={}",
+                e.getStatusCode().value(),
+                e.getResponseBodyAsString(),
+                e
+            );
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "发送订阅消息失败：" + e.getResponseBodyAsString());
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
