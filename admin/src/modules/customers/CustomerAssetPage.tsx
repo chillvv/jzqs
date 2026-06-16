@@ -44,9 +44,7 @@ const emptyEditForm = {
   customerStatus: "FORMAL",
   initialMeals: "0",
   initialValidityDays: "30",
-  addressLine: "",
-  contactName: "",
-  contactPhone: ""
+  addressLine: ""
 };
 const defaultGrantForm = { mealDelta: "5", validityDays: "30", remark: "补餐" };
 const defaultDeductForm = { mealDelta: "1", remark: "手工扣减" };
@@ -129,10 +127,19 @@ function buildEditForm(
     customerStatus: String(detail?.customerStatus || fallback?.customerStatus || "FORMAL"),
     initialMeals: "0",
     initialValidityDays: "30",
-    addressLine: "",
-    contactName: "",
-    contactPhone: ""
+    addressLine: ""
   };
+}
+
+function buildPackageExpiryLabel(expiredAt?: string | null) {
+  return expiredAt || "未设置";
+}
+
+function buildRemainingValidityLabel(expiredAt?: string | null, remainingValidityDays?: number | null) {
+  if (!expiredAt) {
+    return "-";
+  }
+  return `剩余 ${remainingValidityDays ?? 0} 天`;
 }
 
 function resolveCustomerAddresses(detail: CustomerDetailResponse | null) {
@@ -649,7 +656,8 @@ export function CustomerAssetPage() {
               <th>联系电话</th>
               <th>客户状态</th>
               <th>商家备注</th>
-              <th>餐包有效期</th>
+              <th>到期日</th>
+              <th>剩余天数</th>
               <th>餐次余额</th>
               <th>操作</th>
             </tr>
@@ -658,9 +666,8 @@ export function CustomerAssetPage() {
             {filteredItems.map((item) => {
               const exhausted = item.status === "EXHAUSTED";
               const statusLabel = resolveCustomerStatusLabel(item.customerStatus);
-              const packageSummary = item.packageExpiredAt
-                ? `${item.packageExpiredAt} / 剩余 ${item.remainingValidityDays} 天`
-                : "未设置";
+              const packageExpiryLabel = buildPackageExpiryLabel(item.packageExpiredAt);
+              const remainingValidityLabel = buildRemainingValidityLabel(item.packageExpiredAt, item.remainingValidityDays);
               return (
                 <tr key={item.id}>
                   <td>
@@ -680,7 +687,10 @@ export function CustomerAssetPage() {
                     <div className="customer-table-note">{item.merchantRemark || "暂无备注"}</div>
                   </td>
                   <td>
-                    <div className="customer-table-note">{packageSummary}</div>
+                    <div className="customer-table-note">{packageExpiryLabel}</div>
+                  </td>
+                  <td>
+                    <div className="customer-table-note">{remainingValidityLabel}</div>
                     {item.packageAlertLabel ? <div className="customer-table-note">{`提醒：${item.packageAlertLabel}`}</div> : null}
                   </td>
                   <td>
@@ -694,7 +704,7 @@ export function CustomerAssetPage() {
             })}
             {filteredItems.length === 0 && (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <div className="empty-state">暂无符合条件的客户记录</div>
                 </td>
               </tr>
@@ -708,9 +718,8 @@ export function CustomerAssetPage() {
           {filteredItems.map((item) => {
             const exhausted = item.status === "EXHAUSTED";
             const statusLabel = resolveCustomerStatusLabel(item.customerStatus);
-            const packageSummary = item.packageExpiredAt
-              ? `${item.packageExpiredAt} / ${item.remainingValidityDays} 天`
-              : "未设置";
+            const packageExpiryLabel = buildPackageExpiryLabel(item.packageExpiredAt);
+            const remainingValidityLabel = buildRemainingValidityLabel(item.packageExpiredAt, item.remainingValidityDays);
             return (
               <div className="mobile-card" key={item.id}>
                 <div className="mobile-card-header">
@@ -734,7 +743,11 @@ export function CustomerAssetPage() {
                 </div>
                 <div className="mobile-card-row">
                   <div className="mobile-card-label">餐包有效期</div>
-                  <div className="mobile-card-value">{packageSummary}</div>
+                  <div className="mobile-card-value">{packageExpiryLabel}</div>
+                </div>
+                <div className="mobile-card-row">
+                  <div className="mobile-card-label">剩余天数</div>
+                  <div className="mobile-card-value">{remainingValidityLabel}</div>
                 </div>
                 {item.packageAlertLabel ? (
                   <div className="mobile-card-row">
@@ -791,9 +804,18 @@ export function CustomerAssetPage() {
                   </div>
                 </div>
                 <div className="customer-detail-kpi">
-                  <div className="customer-detail-kpi__label">餐包有效期</div>
+                  <div className="customer-detail-kpi__label">到期日</div>
                   <div className="customer-detail-kpi__value">
-                    {String(detail?.wallet?.expiredAt || activeItem.packageExpiredAt || "未设置")}
+                    {buildPackageExpiryLabel(detail?.wallet?.expiredAt || activeItem.packageExpiredAt)}
+                  </div>
+                </div>
+                <div className="customer-detail-kpi">
+                  <div className="customer-detail-kpi__label">剩余天数</div>
+                  <div className="customer-detail-kpi__value">
+                    {buildRemainingValidityLabel(
+                      detail?.wallet?.expiredAt || activeItem.packageExpiredAt,
+                      detail?.wallet?.remainingValidityDays ?? activeItem.remainingValidityDays
+                    )}
                   </div>
                 </div>
                 <div className="customer-detail-kpi">
@@ -994,7 +1016,7 @@ export function CustomerAssetPage() {
                         </div>
                         <div className="customer-edit-form-grid">
                           <div className="form-group">
-                            <label className="form-label"><span className="required">*</span>联系人（绑定客户）</label>
+                            <label className="form-label"><span className="required">*</span>客户姓名（自动同步）</label>
                             <input
                               className="form-control"
                               value={String(detail?.name || activeItem?.name || "")}
@@ -1002,7 +1024,7 @@ export function CustomerAssetPage() {
                             />
                           </div>
                           <div className="form-group">
-                            <label className="form-label"><span className="required">*</span>联系电话（绑定客户）</label>
+                            <label className="form-label"><span className="required">*</span>客户手机号（自动同步）</label>
                             <input
                               className="form-control"
                               value={String(detail?.phone || activeItem?.phone || "")}
@@ -1189,15 +1211,8 @@ export function CustomerAssetPage() {
                         <input className="form-control" value={(editForm as any).addressLine} onChange={(e) => setEditForm({ ...editForm, addressLine: e.target.value } as any)} placeholder="请输入详细收货地址" />
                     </div>
                 </div>
-                <div className="customer-edit-form-grid">
-                    <div className="form-group">
-                        <label className="form-label"><span className="required">*</span>联系人（绑定客户）</label>
-                        <input className="form-control" value={editForm.name} readOnly />
-                    </div>
-                    <div className="form-group">
-                        <label className="form-label"><span className="required">*</span>联系电话（绑定客户）</label>
-                        <input className="form-control" value={normalizeCustomerPhone(editForm.phone)} readOnly />
-                    </div>
+                <div className="admin-panel-note" style={{ marginTop: "12px" }}>
+                    首个收货地址会自动绑定当前客户姓名和手机号，后续在后台修改客户资料时会同步更新地址联系人与电话。
                 </div>
                 <div className="customer-create-remark-field">
                     <RemarkField

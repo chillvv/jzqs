@@ -24,6 +24,7 @@ import { AppSelect } from "../../shared/components/AppSelect";
 import { AdminDialog } from "../../shared/components/AdminDialog";
 import { toast } from "../../shared/components/Toast";
 import { useAdminRealtime } from "../../shared/realtime/adminRealtime";
+import { isPromiseFulfilledResult } from "../../shared/utils/promise";
 import {
   buildDispatchAreaStats,
   DEFAULT_OPERATOR,
@@ -206,8 +207,8 @@ export function DispatchAreasPage() {
       fetchDispatchManagedRiders()
     ]);
     const [bindingResult, riderResult] = results;
-    if (bindingResult.status === "fulfilled") setBindings(normalizeDispatchAreaBindings(bindingResult.value));
-    if (riderResult.status === "fulfilled") setRiders(riderResult.value);
+    if (isPromiseFulfilledResult(bindingResult)) setBindings(normalizeDispatchAreaBindings(bindingResult.value));
+    if (isPromiseFulfilledResult(riderResult)) setRiders(riderResult.value);
   }, [mealPeriod, serveDate]);
 
   useEffect(() => {

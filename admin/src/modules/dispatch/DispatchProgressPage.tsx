@@ -5,6 +5,7 @@ import { AdminDialog } from "../../shared/components/AdminDialog";
 import { toast } from "../../shared/components/Toast";
 import { useAdminRealtime } from "../../shared/realtime/adminRealtime";
 import type { DispatchAreaBindingResponse, DispatchRiderProgressResponse } from "../../shared/api/types";
+import { getRejectedReason, isPromiseFulfilledResult, isPromiseRejectedResult } from "../../shared/utils/promise";
 import { hasDisplayValue, hasOrderAttention, normalizeDispatchAreaBindings } from "./dispatchCenterLayout.helpers";
 import { useDispatchContext } from "./DispatchContext";
 
@@ -71,12 +72,12 @@ export function DispatchProgressPage() {
         fetchDispatchAreaBindings(mealPeriod, serveDate),
       ]);
       const [progressResult, bindingsResult] = results;
-      if (progressResult.status === "fulfilled") setRiderProgress(progressResult.value);
-      if (bindingsResult.status === "fulfilled") {
+      if (isPromiseFulfilledResult(progressResult)) setRiderProgress(progressResult.value);
+      if (isPromiseFulfilledResult(bindingsResult)) {
         setAreaBindings(normalizeDispatchAreaBindings(bindingsResult.value));
       }
-      if (!silent && (progressResult.status === "rejected" || bindingsResult.status === "rejected")) {
-        const error = progressResult.status === "rejected" ? progressResult.reason : bindingsResult.reason;
+      if (!silent && (isPromiseRejectedResult(progressResult) || isPromiseRejectedResult(bindingsResult))) {
+        const error = getRejectedReason(progressResult) ?? getRejectedReason(bindingsResult);
         throw error;
       }
     } finally {

@@ -19,6 +19,7 @@ import { AppSelect } from "../../shared/components/AppSelect";
 import { AdminDialog } from "../../shared/components/AdminDialog";
 import { toast } from "../../shared/components/Toast";
 import { useAdminRealtime } from "../../shared/realtime/adminRealtime";
+import { isPromiseFulfilledResult } from "../../shared/utils/promise";
 import {
   buildDispatchBoardViewModel,
   buildDispatchPendingSearchText,
@@ -120,9 +121,9 @@ export function DispatchHomePage() {
       fetchDispatchPendingItems(mealPeriod, serveDate)
     ]);
     const [ovResult, bindingsResult, pendingResult] = results;
-    if (ovResult.status === "fulfilled") setOverview(normalizeDispatchOverview(ovResult.value));
-    if (bindingsResult.status === "fulfilled") setAreaBindings(normalizeDispatchAreaBindings(bindingsResult.value));
-    if (pendingResult.status === "fulfilled") {
+    if (isPromiseFulfilledResult(ovResult)) setOverview(normalizeDispatchOverview(ovResult.value));
+    if (isPromiseFulfilledResult(bindingsResult)) setAreaBindings(normalizeDispatchAreaBindings(bindingsResult.value));
+    if (isPromiseFulfilledResult(pendingResult)) {
       setPendingItems(pendingResult.value);
       setSelectedPendingIds((prev) => prev.filter((id) => pendingResult.value.some((item: DispatchPendingItemResponse) => item.orderId === id)));
       setInlineAreas((prev) => Object.fromEntries(
