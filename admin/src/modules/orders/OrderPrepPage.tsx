@@ -752,29 +752,8 @@ export function OrderPrepPage() {
   }
 
   const renderActions = (item: OrderPrepItemResponse) => {
-    const displayStatus = resolveOrderDisplayStatus(item);
-
     return (
       <div className="action-cell-container">
-        {displayStatus === "PENDING_DISPATCH" && (
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={() => { setActiveItem(item); setIsAssignOpen(true); }}
-            style={{ marginRight: "8px" }}
-          >
-            分配骑手
-          </button>
-        )}
-        {displayStatus === "DISPATCHING" && (
-          <button
-            className="btn btn-success btn-sm"
-            onClick={() => openReceiptModal(item)}
-            style={{ marginRight: "8px" }}
-          >
-            核销回执
-          </button>
-        )}
-
         <button
           className="btn btn-secondary btn-sm"
           onClick={() => { openOrderDetail(item); }}

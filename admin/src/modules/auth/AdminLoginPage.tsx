@@ -27,6 +27,10 @@ export function AdminLoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
+  function handleForgotPassword() {
+    toast("忘记密码请联系管理员协助重置", "error");
+  }
+
   if (typeof window !== "undefined") {
     const existingSession = parseAdminAuthSession(window.localStorage.getItem(ADMIN_AUTH_STORAGE_KEY));
     if (existingSession) {
@@ -111,7 +115,13 @@ export function AdminLoginPage() {
           </label>
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", fontSize: "13px", color: "var(--text-sub)" }}>
-            <span>忘记密码</span>
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              style={{ border: "none", background: "transparent", padding: 0, color: "var(--brand-primary)", cursor: "pointer", fontSize: "13px" }}
+            >
+              忘记密码
+            </button>
             <span>请联系管理员协助重置</span>
           </div>
 
