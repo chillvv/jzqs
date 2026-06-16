@@ -9,6 +9,16 @@ interface DatePickerProps {
   showTomorrowShortcut?: boolean;
 }
 
+function normalizeDateString(value: string | Date | null | undefined) {
+  if (typeof value === "string") {
+    return value;
+  }
+  if (value instanceof String) {
+    return value.valueOf();
+  }
+  return "";
+}
+
 export function DatePicker({ value, onChange, showTomorrowShortcut = true }: DatePickerProps) {
   // 解析日期字符串，避免时区问题
   const selectedDate = React.useMemo(() => {
@@ -18,11 +28,13 @@ export function DatePicker({ value, onChange, showTomorrowShortcut = true }: Dat
     if (value instanceof Date) {
       return Number.isNaN(value.getTime()) ? new Date() : value;
     }
-    if (typeof value === "string") {
-      const [year, month, day] = value.split("-").map(Number);
-      if ([year, month, day].every((item) => Number.isFinite(item))) {
-        return new Date(year, month - 1, day);
-      }
+    const normalizedValue = normalizeDateString(value);
+    if (!normalizedValue) {
+      return new Date();
+    }
+    const [year, month, day] = normalizedValue.split("-").map(Number);
+    if ([year, month, day].every((item) => Number.isFinite(item))) {
+      return new Date(year, month - 1, day);
     }
     return new Date();
   }, [value]);

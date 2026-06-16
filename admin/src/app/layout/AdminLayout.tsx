@@ -18,7 +18,6 @@ import { changeAdminPassword, fetchAdminProfile, logoutAdmin } from "../../share
 import { toast } from "../../shared/components/Toast";
 import { useScale } from "../../shared/hooks/useScale";
 import { ToastContainer } from "../../shared/components/Toast";
-import { startAdminRealtime, stopAdminRealtime } from "../../shared/realtime/adminRealtime";
 import {
   ADMIN_AUTH_STORAGE_KEY,
   ADMIN_CREDENTIALS_STORAGE_KEY,
@@ -99,17 +98,6 @@ export function AdminLayout() {
       cancelled = true;
     };
   }, [navigate, sessionToken]);
-
-  useEffect(() => {
-    if (!sessionToken) {
-      stopAdminRealtime();
-      return;
-    }
-    startAdminRealtime();
-    return () => {
-      stopAdminRealtime();
-    };
-  }, [sessionToken]);
 
   useEffect(() => {
     setMobileSidebarOpen(false);

@@ -17,4 +17,10 @@ assert.match(
   "DatePicker 应兼容直接传入 Date 对象"
 );
 
+assert.doesNotMatch(
+  source,
+  /value\.split\("-"\)/,
+  "DatePicker 不应再直接对传入值调用 split，应先归一化为安全字符串"
+);
+
 console.log("PASS: DatePicker 已对非字符串 value 做防御处理");

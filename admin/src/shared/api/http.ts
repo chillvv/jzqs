@@ -213,6 +213,7 @@ export async function updateOrderMerchantRemark(orderId: number, merchantRemark:
 
 export async function updateOrderProfile(orderId: number, payload: {
   mealPeriod: "LUNCH" | "DINNER";
+  deliveryMealPeriod?: "LUNCH" | "DINNER";
   quantity: number;
   deliveryAddress: string;
   merchantRemark: string;

@@ -12,6 +12,8 @@ type AddressOption = {
   isDefault: boolean;
 };
 
+type SelectedCustomerSummary = Pick<CustomerAssetResponse, "id" | "name" | "phone" | "remainingMeals">;
+
 function resolveSelectableAddressId(addresses: AddressOption[], preferredAddressId?: number | null) {
   if (preferredAddressId && addresses.some((address) => address.id === preferredAddressId)) {
     return preferredAddressId;
@@ -44,7 +46,7 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
   const [customerKeyword, setCustomerKeyword] = useState("");
   const [allCustomers, setAllCustomers] = useState<CustomerAssetResponse[]>([]);
   const [filteredCustomers, setFilteredCustomers] = useState<CustomerAssetResponse[]>([]);
-  const [selectedCustomer, setSelectedCustomer] = useState<CustomerAssetResponse | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<SelectedCustomerSummary | null>(null);
   const [showDropdown, setShowDropdown] = useState(false);
   const [loadingCustomers, setLoadingCustomers] = useState(false);
 
@@ -68,15 +70,8 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
       id: item.customerId,
       name: item.customerName,
       phone: item.customerPhone,
-      remainingMeals: item.remainingMeals,
-      totalMeals: item.remainingMeals,
-      packageStatus: item.status,
-      packageLabel: item.status,
-      packageStartDate: item.startDate,
-      packageEndDate: item.endDate,
-      remainingValidityDays: 0,
-      addresses: []
-    } as CustomerAssetResponse);
+      remainingMeals: item.remainingMeals
+    });
     setForm({
       customerId: item.customerId,
       startDate: item.startDate,

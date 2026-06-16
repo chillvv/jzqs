@@ -20,11 +20,15 @@ test('admin vite dev server proxies realtime websocket traffic', () => {
   assert.match(viteConfig, /target:\s*"http:\/\/localhost:8081"/);
 });
 
-test('admin uses shared realtime client from layout shell', () => {
+test('admin layout no longer starts realtime globally', () => {
   const layout = read('admin/src/app/layout/AdminLayout.tsx');
-  assert.match(layout, /connectAdminRealtime|useAdminRealtime|startAdminRealtime/);
-  assert.doesNotMatch(layout, /\}, \[navigate, session\]\);/);
-  assert.match(layout, /startAdminRealtime\(\);[\s\S]*\}, \[sessionToken\]\);/);
+  assert.doesNotMatch(layout, /startAdminRealtime\(\)/);
+  assert.doesNotMatch(layout, /stopAdminRealtime\(\)/);
+});
+
+test('admin realtime client only keeps socket while listeners exist', () => {
+  const realtime = read('admin/src/shared/realtime/adminRealtime.ts');
+  assert.match(realtime, /if \(listeners\.size === 0\) \{\s*stopAdminRealtime\(\);/s);
 });
 
 test('admin realtime client guards early-close websocket noise', () => {

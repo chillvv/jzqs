@@ -52,6 +52,10 @@ export function startAdminRealtime() {
   if (typeof window === "undefined") {
     return;
   }
+  if (listeners.size === 0) {
+    stopAdminRealtime();
+    return;
+  }
   const token = currentToken();
   if (!token) {
     stopAdminRealtime();
@@ -115,5 +119,8 @@ export function useAdminRealtime(listener: RealtimeListener) {
   startAdminRealtime();
   return () => {
     listeners.delete(listener);
+    if (listeners.size === 0) {
+      stopAdminRealtime();
+    }
   };
 }
