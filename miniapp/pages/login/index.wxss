@@ -9,6 +9,7 @@ page {
 
 .auth-page-shell {
   min-height: 100vh;
+  max-height: 86vh;
   overflow-y: auto;
   box-sizing: border-box;
   display: flex;

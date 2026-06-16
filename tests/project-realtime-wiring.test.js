@@ -23,6 +23,14 @@ test('admin vite dev server proxies realtime websocket traffic', () => {
 test('admin uses shared realtime client from layout shell', () => {
   const layout = read('admin/src/app/layout/AdminLayout.tsx');
   assert.match(layout, /connectAdminRealtime|useAdminRealtime|startAdminRealtime/);
+  assert.doesNotMatch(layout, /\}, \[navigate, session\]\);/);
+  assert.match(layout, /startAdminRealtime\(\);[\s\S]*\}, \[sessionToken\]\);/);
+});
+
+test('admin realtime client guards early-close websocket noise', () => {
+  const realtime = read('admin/src/shared/realtime/adminRealtime.ts');
+  assert.match(realtime, /readyState === WebSocket\.CONNECTING|wasConnectingBeforeClose|suppress/i);
+  assert.doesNotMatch(realtime, /createdSocket\.addEventListener\("error", \(\) => \{\s*createdSocket\.close\(\);\s*\}\)/);
 });
 
 test('admin sidebar uses updated labels and shows aftersale ledger before rider center', () => {

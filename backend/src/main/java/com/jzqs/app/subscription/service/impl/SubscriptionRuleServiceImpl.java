@@ -40,8 +40,10 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
                 sr.end_date,
                 sr.lunch_enabled,
                 sr.lunch_quantity,
+                sr.lunch_delivery_meal_period,
                 sr.dinner_enabled,
                 sr.dinner_quantity,
+                sr.dinner_delivery_meal_period,
                 sr.default_address_id,
                 COALESCE(ca.address_line, '') AS default_address,
                 COALESCE(sr.merchant_remark, '') AS merchant_remark,
@@ -85,7 +87,7 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
 
         sql += " ORDER BY sr.id DESC";
 
-        return jdbcTemplate.query(sql, params.toArray(), (rs, rowNum) -> {
+        return jdbcTemplate.query(sql, (rs, rowNum) -> {
             LocalDate startDate = rs.getDate("start_date").toLocalDate();
             LocalDate endDate = rs.getDate("end_date").toLocalDate();
             boolean active = rs.getBoolean("active");
@@ -101,8 +103,10 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
                 endDate,
                 rs.getBoolean("lunch_enabled"),
                 rs.getInt("lunch_quantity"),
+                normalizeDeliveryMealPeriod(rs.getString("lunch_delivery_meal_period"), "LUNCH"),
                 rs.getBoolean("dinner_enabled"),
                 rs.getInt("dinner_quantity"),
+                normalizeDeliveryMealPeriod(rs.getString("dinner_delivery_meal_period"), "DINNER"),
                 rs.getLong("default_address_id") == 0 ? null : rs.getLong("default_address_id"),
                 rs.getString("default_address"),
                 rs.getString("merchant_remark"),
@@ -114,7 +118,7 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
                 rs.getTimestamp("created_at").toLocalDateTime(),
                 rs.getTimestamp("updated_at").toLocalDateTime()
             );
-        });
+        }, params.toArray());
     }
 
     @Override
@@ -128,8 +132,10 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
         entity.setEndDate(request.endDate());
         entity.setLunchEnabled(request.lunchEnabled());
         entity.setLunchQuantity(request.lunchQuantity());
+        entity.setLunchDeliveryMealPeriod(normalizeDeliveryMealPeriod(request.lunchDeliveryMealPeriod(), "LUNCH"));
         entity.setDinnerEnabled(request.dinnerEnabled());
         entity.setDinnerQuantity(request.dinnerQuantity());
+        entity.setDinnerDeliveryMealPeriod(normalizeDeliveryMealPeriod(request.dinnerDeliveryMealPeriod(), "DINNER"));
         entity.setDefaultAddressId(request.defaultAddressId());
         entity.setMerchantRemark(request.merchantRemark());
         entity.setIsPriorityFollow(request.isPriorityFollow());
@@ -158,8 +164,10 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
         entity.setEndDate(request.endDate());
         entity.setLunchEnabled(request.lunchEnabled());
         entity.setLunchQuantity(request.lunchQuantity());
+        entity.setLunchDeliveryMealPeriod(normalizeDeliveryMealPeriod(request.lunchDeliveryMealPeriod(), "LUNCH"));
         entity.setDinnerEnabled(request.dinnerEnabled());
         entity.setDinnerQuantity(request.dinnerQuantity());
+        entity.setDinnerDeliveryMealPeriod(normalizeDeliveryMealPeriod(request.dinnerDeliveryMealPeriod(), "DINNER"));
         entity.setDefaultAddressId(request.defaultAddressId());
         entity.setMerchantRemark(request.merchantRemark());
         entity.setIsPriorityFollow(request.isPriorityFollow());
@@ -178,11 +186,8 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
             throw new BusinessException(ErrorCode.SUBSCRIPTION_RULE_NOT_FOUND, "固定订餐计划不存在");
         }
 
-        entity.setActive(false);
-        entity.setUpdatedAt(LocalDateTime.now());
-        subscriptionRuleMapper.updateById(entity);
-
-        return Map.of("id", id, "status", "DELETED");
+        subscriptionRuleMapper.deleteById(id);
+        return Map.of("id", id, "deleted", true);
     }
 
     @Override
@@ -258,5 +263,16 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
         if (today.isAfter(endDate)) return "EXPIRED";
         if (today.isBefore(startDate)) return "PENDING";
         return "ACTIVE";
+    }
+
+    private String normalizeDeliveryMealPeriod(String value, String fallback) {
+        String normalized = value == null ? "" : value.trim().toUpperCase();
+        if ("DINNER".equals(normalized)) {
+            return "DINNER";
+        }
+        if ("LUNCH".equals(normalized)) {
+            return "LUNCH";
+        }
+        return fallback;
     }
 }

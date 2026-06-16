@@ -39,7 +39,6 @@ import type {
   WalletTransactionResponse,
   SubscriptionPreviewItem,
   SubscriptionImportItem,
-  SpecialOrderItem,
   AnalysisOverviewResponse,
   CostEntryItem,
   SubscriptionRuleResponse,
@@ -176,11 +175,6 @@ export async function resolveAftersaleCase(caseId: number, payload: {
   operatorName: string;
 }) {
   const response = await http.post<ApiResponse<AdminAftersaleResolveResponse>>(`/api/admin/aftersales/${caseId}/resolve`, payload);
-  return response.data.data;
-}
-
-export async function fetchSpecialOrders(serveDate: string) {
-  const response = await http.get<ApiResponse<SpecialOrderItem[]>>(`/api/admin/orders/special-orders?serveDate=${serveDate}`);
   return response.data.data;
 }
 
@@ -772,6 +766,7 @@ export async function createManualOrder(payload: {
   customerId: number;
   addressId: number;
   mealPeriod: "LUNCH" | "DINNER";
+  deliveryMealPeriod?: "LUNCH" | "DINNER";
   merchantRemark: string;
   deliveryAddress: string;
   source: string;

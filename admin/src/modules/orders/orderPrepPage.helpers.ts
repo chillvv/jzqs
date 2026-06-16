@@ -33,7 +33,15 @@ export function formatOrderNote(value: string | null | undefined) {
   return trimmed || "-";
 }
 
+export function isMeaningfulRemark(value: string | null | undefined) {
+  const trimmed = value?.trim() ?? "";
+  return trimmed.length > 0 && trimmed !== "-";
+}
+
 export function resolveMealPeriod(item: OrderPrepItemResponse): Exclude<OrderPrepMealPeriodFilter, "ALL"> {
+  if (item.mealPeriod === "DINNER" || item.mealPeriod === "LUNCH") {
+    return item.mealPeriod;
+  }
   return item.mealSummary.includes("晚餐") ? "DINNER" : "LUNCH";
 }
 
@@ -127,7 +135,7 @@ export function buildOrderPrepView(
       || (filters.source === "SUBSCRIPTION" && sourceLabel === "固定订餐");
 
     const matchesStatus = filters.status === "ALL" || resolveOrderDisplayStatus(item) === filters.status;
-    const hasRemark = Boolean(item.userNote?.trim() || item.merchantRemark?.trim());
+    const hasRemark = isMeaningfulRemark(item.userNote) || isMeaningfulRemark(item.merchantRemark);
     const matchesRemark = filters.remark === "ALL"
       || (filters.remark === "HAS_REMARK" && hasRemark)
       || (filters.remark === "NO_REMARK" && !hasRemark);
@@ -152,8 +160,7 @@ export function buildOrderPrepView(
 
 export function buildOrderPrepSummary(
   items: OrderPrepItemResponse[],
-  confirmationItems: Array<{ priority?: boolean }>,
-  specialOrders: Array<{ priorityCustomer?: boolean }>
+  confirmationItems: Array<{ priority?: boolean }>
 ) {
   const totalMeals = items.reduce((sum, item) => sum + item.quantity, 0);
   const lunchCount = items
@@ -163,25 +170,6 @@ export function buildOrderPrepSummary(
     .filter(item => resolveMealPeriod(item) === "DINNER")
     .reduce((sum, item) => sum + item.quantity, 0);
 
-  const specialKeywordCounts = new Map<string, number>();
-  items.forEach((item) => {
-    [item.userNote, item.merchantRemark].forEach((value) => {
-      const normalized = formatOrderNote(value);
-      if (normalized === "-") {
-        return;
-      }
-      specialKeywordCounts.set(normalized, (specialKeywordCounts.get(normalized) || 0) + 1);
-    });
-  });
-  const specialKeywordSummary = Array.from(specialKeywordCounts.entries())
-    .sort((a, b) => {
-      if (b[1] !== a[1]) {
-        return b[1] - a[1];
-      }
-      return a[0].localeCompare(b[0], "zh-CN");
-    })
-    .map(([keyword, count]) => `${keyword} +${count}`);
-
   return {
     totalOrders: items.length,
     totalMeals,
@@ -189,11 +177,9 @@ export function buildOrderPrepSummary(
     dinnerCount,
     pendingDispatchCount: items.filter((item) => item.status === "PENDING_DISPATCH").length,
     priorityOrderCount: items.filter((item) => item.priorityCustomer).length,
+    remarkedOrderCount: items.filter((item) => hasRemark(item)).length,
     confirmationCount: confirmationItems.length,
-    priorityConfirmationCount: confirmationItems.filter((item) => Boolean(item.priority)).length,
-    specialOrderCount: specialOrders.length,
-    prioritySpecialCount: specialOrders.filter((item) => Boolean(item.priorityCustomer)).length,
-    specialKeywordSummary
+    priorityConfirmationCount: confirmationItems.filter((item) => Boolean(item.priority)).length
   };
 }
 
@@ -232,4 +218,8 @@ export function buildSubscriptionConfirmationPanelState(confirmationCount: numbe
     visible: confirmationCount > 0,
     expanded: confirmationCount > 0
   };
+}
+
+function hasRemark(item: OrderPrepItemResponse) {
+  return isMeaningfulRemark(item.userNote) || isMeaningfulRemark(item.merchantRemark);
 }

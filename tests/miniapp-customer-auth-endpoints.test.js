@@ -6,7 +6,7 @@ const repoRoot = path.resolve(__dirname, '..');
 const filesToCheck = [
   path.join(repoRoot, 'miniapp', 'utils', 'auth.js'),
   path.join(repoRoot, 'miniapp', 'pages', 'profile', 'index.js'),
-  path.join(repoRoot, 'miniapp', 'pages', 'register', 'index.js'),
+  path.join(repoRoot, 'miniapp', 'pages', 'login', 'index.js'),
   path.join(repoRoot, 'miniapp', 'pages', 'auth-demo', 'index.js')
 ];
 
@@ -28,6 +28,7 @@ const requiredEndpointChecks = [
 
 const forbiddenPhoneFieldFiles = [
   path.join(repoRoot, 'miniapp', 'pages', 'profile', 'index.js'),
+  path.join(repoRoot, 'miniapp', 'pages', 'login', 'index.js'),
   path.join(repoRoot, 'miniapp', 'pages', 'auth-demo', 'index.js'),
   path.join(repoRoot, 'miniapp', 'utils', 'profile-auth.js')
 ];

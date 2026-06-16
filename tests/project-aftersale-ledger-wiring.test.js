@@ -77,6 +77,8 @@ test("admin aftersale page has ledger and settlement views with order options fe
   assert.match(page, /补零餐/);
   assert.match(page, /果蔬汁/);
   assert.match(http, /order-options\?serveDate=/);
+  assert.match(page, /<DatePicker/, "售后台账应复用统一 DatePicker 组件");
+  assert.doesNotMatch(page, /type="date"/, "售后台账不应继续使用原生 date input");
 });
 
 test("admin layout uses settlement naming and places aftersale before dispatch", () => {

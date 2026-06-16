@@ -64,11 +64,6 @@ public class OrderPrepController {
         return ApiResponse.success(orderPrepService.cancelSubscription(confirmationId, body.getOrDefault("cancelReason", "")));
     }
 
-    @GetMapping("/special-orders")
-    public ApiResponse<List<SpecialOrderItem>> specialOrders(@RequestParam String serveDate) {
-        return ApiResponse.success(orderPrepService.specialOrders(serveDate));
-    }
-
     @GetMapping("/manual-create/customers")
     public ApiResponse<List<ManualCreateCustomerSearchResponse>> searchManualCreateCustomers(@RequestParam String keyword) {
         return ApiResponse.success(orderPrepService.searchManualCreateCustomers(keyword));
@@ -113,6 +108,7 @@ public class OrderPrepController {
             request.customerId(),
             request.addressId(),
             request.mealPeriod(),
+            request.deliveryMealPeriod(),
             request.merchantRemark(),
             request.deliveryAddress(),
             request.source(),

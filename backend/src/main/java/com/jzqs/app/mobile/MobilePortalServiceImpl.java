@@ -605,6 +605,29 @@ public class MobilePortalServiceImpl implements MobilePortalService {
 
     @Override
     @Transactional
+    public Map<String, Object> sendSubscribeMessageTest(long customerId, String templateId, String acceptResult) {
+        if (!isAcceptedSubscribeResult(acceptResult)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "仅支持发送已同意的订阅测试消息");
+        }
+        DeliverySubscriptionSendContext context = findCustomerSubscribeMessageTestContext(customerId);
+        if (context == null || isBlank(context.openid())) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前账号缺少可用的微信接收标识");
+        }
+        weChatService.sendDeliverySubscribeMessage(
+            context.openid(),
+            "pages/profile/index",
+            "简知轻食",
+            "这是订阅消息测试，请确认已收到微信官方提醒"
+        );
+        return Map.of(
+            "status", "SENT",
+            "templateId", safeString(templateId).trim(),
+            "page", "pages/profile/index"
+        );
+    }
+
+    @Override
+    @Transactional
     public int sendScheduledDeliverySubscribeMessages(String mealPeriod) {
         String normalizedMealPeriod = safeString(mealPeriod).trim().toUpperCase();
         if (!"LUNCH".equals(normalizedMealPeriod) && !"DINNER".equals(normalizedMealPeriod)) {
@@ -938,7 +961,8 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 c.name AS customer_name,
                 c.phone AS customer_phone,
                 ca.address_line AS delivery_address,
-                mso.meal_period,
+                mso.meal_period AS production_meal_period,
+                COALESCE(mso.delivery_meal_period, mso.meal_period) AS delivery_meal_period,
                 COALESCE(ms.meal_name, CASE WHEN mso.meal_period = 'LUNCH' THEN '待配置午餐' ELSE '待配置晚餐' END) AS meal_name,
                 COALESCE(mso.user_note, mso.note, '-') AS note,
                 da.status AS delivery_status,
@@ -956,7 +980,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             LEFT JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
             WHERE da.rider_name = ?
               AND do.serve_date = ?
-            ORDER BY CASE WHEN mso.meal_period = 'LUNCH' THEN 1 ELSE 2 END,
+            ORDER BY CASE WHEN COALESCE(mso.delivery_meal_period, mso.meal_period) = 'LUNCH' THEN 1 ELSE 2 END,
                      COALESCE(da.sequence_number, 2147483647),
                      da.id
             """, (rs, rowNum) -> new RiderTaskItemResponse(
@@ -965,7 +989,9 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             rs.getString("customer_name"),
             rs.getString("customer_phone"),
             rs.getString("delivery_address"),
-            rs.getString("meal_period"),
+            rs.getString("delivery_meal_period"),
+            rs.getString("production_meal_period"),
+            rs.getString("delivery_meal_period"),
             rs.getString("meal_name"),
             rs.getString("note"),
             rs.getString("delivery_status"),
@@ -1043,7 +1069,8 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 c.name AS customer_name,
                 c.phone AS customer_phone,
                 ca.address_line AS delivery_address,
-                mso.meal_period,
+                mso.meal_period AS production_meal_period,
+                COALESCE(mso.delivery_meal_period, mso.meal_period) AS delivery_meal_period,
                 COALESCE(ms.meal_name, CASE WHEN mso.meal_period = 'LUNCH' THEN '待配置午餐' ELSE '待配置晚餐' END) AS meal_name,
                 mso.quantity,
                 COALESCE(mso.user_note, mso.note, '-') AS note,
@@ -1072,7 +1099,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             WHERE rp.rider_name = ?
               AND db.serve_date = ?
               AND doo.serve_date = ?
-            ORDER BY CASE WHEN db.meal_period = 'LUNCH' THEN 1 ELSE 2 END, dbi.current_sequence ASC
+            ORDER BY CASE WHEN COALESCE(mso.delivery_meal_period, mso.meal_period) = 'LUNCH' THEN 1 ELSE 2 END, dbi.current_sequence ASC
             """, (rs, rowNum) -> {
             String note = rs.getString("note");
             String merchantRemark = rs.getString("merchant_remark");
@@ -1087,7 +1114,9 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 rs.getString("customer_name"),
                 rs.getString("customer_phone"),
                 rs.getString("delivery_address"),
-                rs.getString("meal_period"),
+                rs.getString("delivery_meal_period"),
+                rs.getString("production_meal_period"),
+                rs.getString("delivery_meal_period"),
                 rs.getString("meal_name"),
                 rs.getInt("quantity"),
                 note,
@@ -1118,7 +1147,8 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 c.name AS customer_name,
                 c.phone AS customer_phone,
                 ca.address_line AS delivery_address,
-                mso.meal_period,
+                mso.meal_period AS production_meal_period,
+                COALESCE(mso.delivery_meal_period, mso.meal_period) AS delivery_meal_period,
                 COALESCE(ms.meal_name, CASE WHEN mso.meal_period = 'LUNCH' THEN '待配置午餐' ELSE '待配置晚餐' END) AS meal_name,
                 mso.quantity,
                 COALESCE(mso.user_note, mso.note, '-') AS note,
@@ -1162,7 +1192,9 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 rs.getString("customer_name"),
                 rs.getString("customer_phone"),
                 rs.getString("delivery_address"),
-                rs.getString("meal_period"),
+                rs.getString("delivery_meal_period"),
+                rs.getString("production_meal_period"),
+                rs.getString("delivery_meal_period"),
                 rs.getString("meal_name"),
                 rs.getInt("quantity"),
                 note,
@@ -1847,6 +1879,24 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         );
     }
 
+    private DeliverySubscriptionSendContext findCustomerSubscribeMessageTestContext(long customerId) {
+        return jdbcTemplate.query(
+            """
+            SELECT COALESCE(current_openid, openid, '') AS current_openid
+            FROM customers
+            WHERE id = ? AND active = TRUE
+            """,
+            ps -> ps.setLong(1, customerId),
+            rs -> rs.next()
+                ? new DeliverySubscriptionSendContext(
+                    0L,
+                    rs.getString("current_openid"),
+                    ""
+                )
+                : null
+        );
+    }
+
     private DeliveryMealSlotContext findDeliveryMealSlotContext(long mealSlotOrderId) {
         return jdbcTemplate.query(
             """
@@ -1870,6 +1920,13 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             return false;
         }
         return !now.isBefore(resolveDeliveryNotifyThreshold(serveDate, mealPeriod));
+    }
+
+    private boolean isAcceptedSubscribeResult(String acceptResult) {
+        String normalized = safeString(acceptResult).trim();
+        return "accept".equalsIgnoreCase(normalized)
+            || "acceptWithAudio".equalsIgnoreCase(normalized)
+            || "acceptWithAlert".equalsIgnoreCase(normalized);
     }
 
     private record DeliverySubscriptionSendContext(
@@ -2602,7 +2659,9 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             rs.getString("customer_name"),
             rs.getString("customer_phone"),
             rs.getString("delivery_address"),
-            rs.getString("meal_period"),
+            rs.getString("delivery_meal_period"),
+            rs.getString("production_meal_period"),
+            rs.getString("delivery_meal_period"),
             rs.getString("meal_name"),
             rs.getString("note"),
             rs.getString("delivery_status"),

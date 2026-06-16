@@ -185,9 +185,7 @@ Page({
         mealLabel: getMealPeriodLabel(order.mealPeriod),
         customerNote: normalizeOptionalText(order.customerNote || order.note),
         merchantNote: normalizeOptionalText(order.merchantNote || order.adminNote),
-        receiptNote: normalizeOptionalText(order.receiptNote),
-        specialTag: normalizeOptionalText(order.specialTag),
-        specialSummary: normalizeOptionalText(order.specialSummary)
+        receiptNote: normalizeOptionalText(order.receiptNote)
       };
 
       let isEditingReceipt = false;

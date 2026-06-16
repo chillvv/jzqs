@@ -4607,36 +4607,112 @@ tbody tr:last-child td {
   color: var(--text-main);
 }
 
-.order-detail-modal {
-  display: grid;
-  grid-template-columns: minmax(0, 1.7fr) minmax(220px, 1fr);
-  gap: 16px;
+/* =========================================
+   Order Detail View
+   ========================================= */
+.order-detail-view {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
 
-.order-detail-modal__info {
-  min-width: 0;
+.order-detail-view__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.order-detail-modal__actions {
-  display: grid;
-  align-content: start;
-  gap: 12px;
-  padding: 16px;
-  border-radius: 12px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.95) 0%, rgba(255, 255, 255, 0.98) 100%);
+.order-detail-view__id {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-main);
 }
 
-.order-detail-modal__status {
+.order-detail-view__status {
   display: flex;
   align-items: center;
 }
 
-.order-detail-modal__meta {
-  color: var(--text-sub);
-  font-size: 13px;
-  line-height: 1.6;
+.order-detail-view__grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
 }
+
+.order-detail-view__section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  padding: 16px;
+}
+
+.order-detail-view__section--full {
+  grid-column: 1 / -1;
+}
+
+.order-detail-view__section-title {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.order-detail-view__section-title::before {
+  content: "";
+  display: block;
+  width: 4px;
+  height: 14px;
+  background: var(--primary-color);
+  border-radius: 2px;
+}
+
+.order-detail-view__list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.order-detail-view__item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.order-detail-view__item--full {
+  grid-column: 1 / -1;
+}
+
+.order-detail-view__label {
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+.order-detail-view__value {
+  font-size: 14px;
+  color: var(--text-main);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.order-detail-view__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.tag-outline {
+  background: rgba(248, 250, 252, 0.92);
+  color: var(--text-sub);
+  border: 1px solid var(--border-color);
+}
+
 /* =========================================
    设置页 - 卡片式布局
    ========================================= */

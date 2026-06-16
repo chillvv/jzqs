@@ -40,8 +40,8 @@ assert.equal(
 
 assert.equal(
   orderPrepPage.includes("submittingConsumeDelivered"),
-  true,
-  "批量核销扣餐按钮应有 submitting 状态，避免重复核销"
+  false,
+  "订单页应移除批量核销扣餐逻辑"
 );
 
 assert.equal(

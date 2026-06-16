@@ -138,7 +138,6 @@ export type OrderPrepStatsResponse = {
   selfOrderCount: number;
   staffOrderCount: number;
   subscriptionCount: number;
-  specialOrderCount: number;
   adminRemarkCount: number;
   labelRequiredCount: number;
 };
@@ -172,7 +171,6 @@ export type DashboardOverviewResponse = {
   lowBalanceCustomers: number;
   expiringSoonCustomers: number;
   openAftersaleCount: number;
-  specialOrdersToday: number;
   menuRiskDays: number;
   orderTrend: Array<{
     label: string;
@@ -191,6 +189,7 @@ export type SubscriptionPreviewItem = {
   customerName: string;
   customerPhone: string;
   mealPeriod: string;
+  deliveryMealPeriod: string;
   addressId: number;
   deliveryAddress: string;
   merchantRemark: string;
@@ -202,6 +201,7 @@ export type SubscriptionPreviewItem = {
 export type SubscriptionImportItem = {
   customerId: number;
   mealPeriod: string;
+  deliveryMealPeriod?: string;
   addressId: number;
   merchantRemark: string;
 };
@@ -240,6 +240,8 @@ export type OrderPrepItemResponse = {
   id: number;
   customerName: string;
   customerPhone: string;
+  mealPeriod?: string;
+  deliveryMealPeriod?: string;
   mealSummary: string;
   quantity: number;
   userNote: string;
@@ -300,18 +302,6 @@ export type AdminAftersaleResolveResponse = {
   status: string;
 };
 
-export type SpecialOrderItem = {
-  id: number;
-  customerName: string;
-  customerPhone: string;
-  addressLine: string;
-  mealPeriod: string;
-  quantity: number;
-  userNote: string;
-  merchantRemark: string;
-  priorityCustomer: boolean;
-};
-
 export type AnalysisOverviewResponse = {
   date: string;
   totalSales: number | string;
@@ -319,7 +309,6 @@ export type AnalysisOverviewResponse = {
   totalProfit: number | string;
   totalOrders: number;
   totalMeals: number;
-  specialOrders: number;
   aftersaleCount: number;
 };
 
@@ -569,8 +558,10 @@ export type SubscriptionRuleResponse = {
   endDate: string;
   lunchEnabled: boolean;
   lunchQuantity: number;
+  lunchDeliveryMealPeriod: string;
   dinnerEnabled: boolean;
   dinnerQuantity: number;
+  dinnerDeliveryMealPeriod: string;
   defaultAddressId: number | null;
   defaultAddress: string;
   merchantRemark: string;
@@ -589,8 +580,10 @@ export type SubscriptionRuleFormData = {
   endDate: string;
   lunchEnabled: boolean;
   lunchQuantity: number;
+  lunchDeliveryMealPeriod: string;
   dinnerEnabled: boolean;
   dinnerQuantity: number;
+  dinnerDeliveryMealPeriod: string;
   defaultAddressId: number | null;
   merchantRemark: string;
   isPriorityFollow: boolean;

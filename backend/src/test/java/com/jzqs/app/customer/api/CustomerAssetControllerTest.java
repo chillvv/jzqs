@@ -71,8 +71,8 @@ class CustomerAssetControllerTest {
     @Test
     void shouldReturnPagedCustomerAssets() throws Exception {
         given(customerAssetService.listAssets("张", "FORMAL", true, null, true)).willReturn(PageResponse.of(List.of(
-            new CustomerAssetResponse(1L, "张先生", "13800000001", "FORMAL", 33, 12, true, true, true, "新开卡优先", "重点关注", "2026-06-20 00:00:00", 5, "EXPIRING_SOON", "即将到期", "2026-05-13 11:30:00", "2026-05-01 08:00:00", "ACTIVE"),
-            new CustomerAssetResponse(2L, "张女士", "13900000002", "FORMAL", 7, 1, true, false, true, "重点照顾", "", "2026-05-25 00:00:00", -1, "EXPIRED", "已过期", "2026-05-12 18:00:00", "2026-05-02 09:00:00", "ACTIVE")
+            new CustomerAssetResponse(1L, "张先生", "13800000001", "FORMAL", 33, 12, true, true, true, "新开卡优先", "重点关注", "2026-05-01 09:00:00", "2026-06-20 00:00:00", 5, "EXPIRING_SOON", "即将到期", "2026-05-13 11:30:00", "2026-05-01 08:00:00", "ACTIVE"),
+            new CustomerAssetResponse(2L, "张女士", "13900000002", "FORMAL", 7, 1, true, false, true, "重点照顾", "", "2026-04-25 09:00:00", "2026-05-25 00:00:00", -1, "EXPIRED", "已过期", "2026-05-12 18:00:00", "2026-05-02 09:00:00", "ACTIVE")
         ), 1, 20, 3));
         mockMvc.perform(get("/api/admin/customers/assets")
                 .param("keyword", "张")

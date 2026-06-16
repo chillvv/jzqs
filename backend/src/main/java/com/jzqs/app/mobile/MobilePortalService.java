@@ -46,6 +46,8 @@ public interface MobilePortalService {
 
     Map<String, Object> authorizeDeliverySubscription(long customerId, long orderId, String templateId, String acceptResult);
 
+    Map<String, Object> sendSubscribeMessageTest(long customerId, String templateId, String acceptResult);
+
     int sendScheduledDeliverySubscribeMessages(String mealPeriod);
 
     Map<String, Object> cancelMiniappOrder(String phone, long orderId);

@@ -7,6 +7,7 @@ public record ManualCreateOrderRequest(
     @Min(1) long customerId,
     @Min(1) Long addressId,
     @NotBlank String mealPeriod,
+    String deliveryMealPeriod,
     String merchantRemark,
     String deliveryAddress,
     @NotBlank String source,

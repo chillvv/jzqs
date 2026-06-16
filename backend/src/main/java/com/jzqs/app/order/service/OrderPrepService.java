@@ -9,7 +9,6 @@ import com.jzqs.app.order.api.OrderPrepStatsResponse;
 import com.jzqs.app.order.api.ManualCreateCustomerSearchResponse;
 import com.jzqs.app.order.api.SubscriptionPreviewItem;
 import com.jzqs.app.order.api.SubscriptionConfirmationItem;
-import com.jzqs.app.order.api.SpecialOrderItem;
 import com.jzqs.app.order.api.SubscriptionImportItem;
 import com.jzqs.app.subscription.api.SubscriptionPreviewCheckResponse;
 import java.util.List;
@@ -40,11 +39,9 @@ public interface OrderPrepService {
 
     Map<String, Object> addOrderNote(long orderId, OrderNoteCreateRequest request);
 
-    List<SpecialOrderItem> specialOrders(String serveDate);
-
     List<ManualCreateCustomerSearchResponse> searchManualCreateCustomers(String keyword);
 
-    Map<String, Object> manualCreate(long customerId, Long addressId, String mealSummary, String merchantRemark, String deliveryAddress, String source, int quantity, String serveDate);
+    Map<String, Object> manualCreate(long customerId, Long addressId, String mealPeriod, String deliveryMealPeriod, String merchantRemark, String deliveryAddress, String source, int quantity, String serveDate);
 
     Map<String, Object> cancelOrder(long orderId);
 

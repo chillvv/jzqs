@@ -7,6 +7,8 @@ public record RiderTaskItemResponse(
     String customerPhone,
     String deliveryAddress,
     String mealPeriod,
+    String productionMealPeriod,
+    String deliveryMealPeriod,
     String mealName,
     String note,
     String deliveryStatus,

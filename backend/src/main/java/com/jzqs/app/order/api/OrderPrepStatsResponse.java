@@ -6,7 +6,6 @@ public record OrderPrepStatsResponse(
     int selfOrderCount,
     int staffOrderCount,
     int subscriptionCount,
-    int specialOrderCount,
     int adminRemarkCount,
     int labelRequiredCount
 ) {

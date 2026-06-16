@@ -45,11 +45,6 @@ public class OperationsAnalysisServiceImpl implements OperationsAnalysisService 
             Integer.class,
             java.sql.Date.valueOf(targetDate)
         );
-        Integer specialOrders = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE do.serve_date = ? AND (mso.user_note IS NOT NULL OR mso.merchant_remark IS NOT NULL OR mso.is_priority = TRUE)",
-            Integer.class,
-            java.sql.Date.valueOf(targetDate)
-        );
         Integer aftersaleCount = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM aftersale_cases WHERE DATE(created_at) = ?",
             Integer.class,
@@ -67,7 +62,6 @@ public class OperationsAnalysisServiceImpl implements OperationsAnalysisService 
             totalProfit,
             totalOrders == null ? 0 : totalOrders,
             totalMeals == null ? 0 : totalMeals,
-            specialOrders == null ? 0 : specialOrders,
             aftersaleCount == null ? 0 : aftersaleCount
         );
     }

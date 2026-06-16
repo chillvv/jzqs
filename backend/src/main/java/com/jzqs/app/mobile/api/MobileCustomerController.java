@@ -108,6 +108,20 @@ public class MobileCustomerController {
         );
     }
 
+    @PostMapping("/subscribe-message/test-send")
+    public ApiResponse<Map<String, Object>> sendSubscribeMessageTest(
+        @RequestHeader("Authorization") String authorization,
+        @Valid @RequestBody MobileSubscribeMessageTestRequest request
+    ) {
+        return ApiResponse.success(
+            mobilePortalService.sendSubscribeMessageTest(
+                extractCustomerId(authorization),
+                request.templateId(),
+                request.acceptResult()
+            )
+        );
+    }
+
     @PostMapping("/orders/{orderId}/cancel")
     public ApiResponse<Map<String, Object>> cancelOrder(
         @PathVariable long orderId,

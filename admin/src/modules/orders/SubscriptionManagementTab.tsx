@@ -163,6 +163,8 @@ export function SubscriptionManagementTab() {
               {items.map((item) => {
                 const statusInfo = getStatusLabel(item.status);
                 const isLowBalance = item.remainingMeals <= 3;
+                const canToggle = item.status === "ACTIVE" || item.status === "PAUSED";
+                const isPaused = item.status === "PAUSED" || item.paused;
                 return (
                   <tr key={item.id}>
                     <td>{item.customerName}</td>
@@ -209,14 +211,19 @@ export function SubscriptionManagementTab() {
                         >
                           <Edit size={14} />
                         </button>
-                        {item.status === "ACTIVE" && (
+                        {canToggle && (
                           <button
                             className="btn btn-sm btn-outline"
                             onClick={() => handleToggle(item.id)}
                             disabled={togglingRuleId === item.id}
-                            title={item.paused ? "恢复" : "暂停"}
+                            title={isPaused ? "重新启用" : "暂停计划"}
                           >
-                            {togglingRuleId === item.id ? "处理中..." : item.paused ? <Play size={14} /> : <Pause size={14} />}
+                            {togglingRuleId === item.id ? "处理中..." : (
+                              <>
+                                {isPaused ? <Play size={14} /> : <Pause size={14} />}
+                                <span style={{ marginLeft: "4px" }}>{isPaused ? "重新启用" : "暂停"}</span>
+                              </>
+                            )}
                           </button>
                         )}
                         <button

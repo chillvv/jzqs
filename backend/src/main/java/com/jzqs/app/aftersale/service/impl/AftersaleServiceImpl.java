@@ -50,7 +50,7 @@ public class AftersaleServiceImpl implements AftersaleService {
                     ac.customer_id,
                     c.name AS customer_name,
                     c.phone AS customer_phone,
-                    do.serve_date AS serve_date,
+                    ord.serve_date AS serve_date,
                     mso.meal_period,
                     mso.status AS order_status,
                     ac.issue_type,
@@ -73,11 +73,11 @@ public class AftersaleServiceImpl implements AftersaleService {
                 FROM aftersale_cases ac
                 JOIN customers c ON c.id = ac.customer_id
                 JOIN meal_slot_orders mso ON mso.id = ac.meal_slot_order_id
-                JOIN daily_orders do ON do.id = mso.daily_order_id
+                JOIN daily_orders ord ON ord.id = mso.daily_order_id
                 WHERE (? IS NULL OR ? = '' OR ac.status = ?)
                   AND (? IS NULL OR ? = '' OR ac.issue_type = ?)
-                  AND (? IS NULL OR ? = '' OR CAST(do.serve_date AS CHAR) >= ?)
-                  AND (? IS NULL OR ? = '' OR CAST(do.serve_date AS CHAR) <= ?)
+                  AND (? IS NULL OR ? = '' OR CAST(ord.serve_date AS CHAR) >= ?)
+                  AND (? IS NULL OR ? = '' OR CAST(ord.serve_date AS CHAR) <= ?)
                   AND (
                       ? IS NULL OR ? = '' OR ? = 'ledger'
                       OR (? = 'settlement' AND ac.status IN ('PENDING', 'PROCESSING'))
@@ -129,15 +129,15 @@ public class AftersaleServiceImpl implements AftersaleService {
                     mso.id,
                     c.name AS customer_name,
                     c.phone AS customer_phone,
-                    do.serve_date,
+                    ord.serve_date,
                     mso.meal_period,
                     mso.status AS order_status,
                     COALESCE(da.detail_address, '') AS address_summary
                 FROM meal_slot_orders mso
-                JOIN daily_orders do ON do.id = mso.daily_order_id
-                JOIN customers c ON c.id = do.customer_id
-                LEFT JOIN delivery_addresses da ON da.id = do.delivery_address_id
-                WHERE CAST(do.serve_date AS CHAR) = ?
+                JOIN daily_orders ord ON ord.id = mso.daily_order_id
+                JOIN customers c ON c.id = ord.customer_id
+                LEFT JOIN delivery_addresses da ON da.id = ord.delivery_address_id
+                WHERE CAST(ord.serve_date AS CHAR) = ?
                 ORDER BY c.name, mso.id DESC
                 """,
             (rs, rowNum) -> new AdminAftersaleOrderOptionResponse(

@@ -12,6 +12,7 @@ import type {
 } from "../../shared/api/types";
 import { toast } from "../../shared/components/Toast";
 import { AppSelect } from "../../shared/components/AppSelect";
+import { DatePicker } from "../../shared/components/DatePicker";
 import {
   buildAftersaleResolveFormState,
   buildAftersaleTabs,
@@ -318,11 +319,11 @@ export function AftersalePage() {
         <div className="filter-row">
           <div className="filter-item">
             <span className="filter-label">开始:</span>
-            <input type="date" className="input-box" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+            <DatePicker value={startDate} onChange={(value) => setStartDate(value)} showTomorrowShortcut={false} />
           </div>
           <div className="filter-item">
             <span className="filter-label">结束:</span>
-            <input type="date" className="input-box" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+            <DatePicker value={endDate} onChange={(value) => setEndDate(value)} showTomorrowShortcut={false} />
           </div>
           <div className="filter-item">
             <span className="filter-label">类型:</span>
@@ -570,11 +571,10 @@ export function AftersalePage() {
                   <div>
                     <strong>配送日期</strong>
                     <span>
-                      <input
-                        type="date"
-                        className="form-control"
+                      <DatePicker
                         value={createForm.serveDate}
-                        onChange={(event) => setCreateForm((current) => ({ ...current, serveDate: event.target.value, orderId: "" }))}
+                        onChange={(value) => setCreateForm((current) => ({ ...current, serveDate: value, orderId: "" }))}
+                        showTomorrowShortcut={false}
                       />
                     </span>
                   </div>

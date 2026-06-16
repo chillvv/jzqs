@@ -3,6 +3,8 @@ public record OrderPrepItemResponse(
     long id,
     String customerName,
     String customerPhone,
+    String mealPeriod,
+    String deliveryMealPeriod,
     String mealSummary,
     int quantity,
     String userNote,

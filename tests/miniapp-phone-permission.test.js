@@ -30,7 +30,7 @@ const files = {
   dispatchService: path.join(repoRoot, 'backend', 'src', 'main', 'java', 'com', 'jzqs', 'app', 'dispatch', 'service', 'DispatchService.java'),
   dispatchServiceImpl: path.join(repoRoot, 'backend', 'src', 'main', 'java', 'com', 'jzqs', 'app', 'dispatch', 'service', 'impl', 'DispatchServiceImpl.java'),
   riderAdminServiceImpl: path.join(repoRoot, 'backend', 'src', 'main', 'java', 'com', 'jzqs', 'app', 'rider', 'service', 'impl', 'RiderAdminServiceImpl.java'),
-  riderDropPasswordMigration: path.join(repoRoot, 'backend', 'src', 'main', 'resources', 'db', 'migration', 'V34__drop_rider_password_hash.sql')
+  riderDropPasswordMigration: path.join(repoRoot, 'backend', 'src', 'main', 'resources', 'db', 'migration', 'V40__drop_rider_password_hash.sql')
 };
 
 for (const [label, file] of Object.entries(files)) {
@@ -274,14 +274,14 @@ assert.equal(
 
 assert.equal(
   riderQueueJs.includes('specialSummary'),
-  true,
-  'miniapp-rider/pages/queue/index.js 应预处理特殊单摘要'
+  false,
+  'miniapp-rider/pages/queue/index.js 不应继续保留特殊单摘要'
 );
 
 assert.equal(
   riderQueueWxml.includes('special-tag-row'),
-  true,
-  'miniapp-rider/pages/queue/index.wxml 缺少特殊单前置提醒区域'
+  false,
+  'miniapp-rider/pages/queue/index.wxml 不应继续保留特殊单前置提醒区域'
 );
 
 assert.equal(

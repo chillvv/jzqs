@@ -15,7 +15,6 @@ const emptyOverview: AnalysisOverviewResponse = {
   totalProfit: 0,
   totalOrders: 0,
   totalMeals: 0,
-  specialOrders: 0,
   aftersaleCount: 0
 };
 
@@ -130,9 +129,9 @@ export function OperationsAnalysisPage() {
             <div className="stat-footer">毛利率 {insights.grossMarginRate}</div>
           </div>
           <div className="stat-card">
-            <div className="stat-title">特殊单 / 售后单</div>
-            <div className="stat-val">{overview.specialOrders} <span style={{ fontSize: 18, margin: "0 8px" }}>/</span> {overview.aftersaleCount}</div>
-            <div className="stat-footer">特殊单占比 {insights.specialOrderRate}</div>
+            <div className="stat-title">总餐数 / 售后单</div>
+            <div className="stat-val">{overview.totalMeals} <span style={{ fontSize: 18, margin: "0 8px" }}>/</span> {overview.aftersaleCount}</div>
+            <div className="stat-footer">售后率 {insights.aftersaleRate}</div>
           </div>
         </div>
 
@@ -143,6 +142,15 @@ export function OperationsAnalysisPage() {
                 <div className="address-title">平均客单价</div>
                 <div className="metric-card-value">¥ {insights.avgOrderValue}</div>
                 <div className="address-detail">总销售额 / 总订单数</div>
+              </div>
+            </div>
+            <div className="address-card" style={{ cursor: "default", minHeight: "100px" }}>
+              <div className="address-content">
+                <div className="address-title">平均餐数</div>
+                <div className="metric-card-value stat-val--warning">
+                  {(overview.totalMeals / Math.max(overview.totalOrders, 1)).toFixed(1)}
+                </div>
+                <div className="address-detail">总餐数 / 总订单数</div>
               </div>
             </div>
             <div className="address-card" style={{ cursor: "default", minHeight: "100px" }}>

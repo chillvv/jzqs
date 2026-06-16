@@ -72,6 +72,15 @@
       </view>
       <text class="list-arrow">›</text>
     </view>
+    <view class="list-item {{onboarding ? 'disabled' : ''}}" bindtap="testSubscribeMessage">
+      <view class="list-icon-wrap">
+        <text class="list-icon">🔔</text>
+        <view class="list-copy">
+          <view class="list-title">测试订阅消息</view>
+        </view>
+      </view>
+      <text class="list-arrow">›</text>
+    </view>
     <button class="list-item list-item-btn {{onboarding ? 'disabled' : ''}}" bindtap="contactService" open-type="{{onboarding ? '' : 'contact'}}">
       <view class="list-icon-wrap">
         <text class="list-icon">💬</text>

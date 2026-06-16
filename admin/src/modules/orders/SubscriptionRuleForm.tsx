@@ -3,6 +3,7 @@ import { X, Search, MapPin, User, Calendar, UtensilsCrossed } from "lucide-react
 import { createSubscriptionRule, updateSubscriptionRule, fetchCustomerAssets, fetchCustomerDetail } from "../../shared/api/http";
 import type { SubscriptionRuleResponse, SubscriptionRuleFormData, CustomerAssetResponse } from "../../shared/api/types";
 import { DatePicker } from "../../shared/components/DatePicker";
+import { AppSelect } from "../../shared/components/AppSelect";
 import { toast } from "../../shared/components/Toast";
 
 type AddressOption = {
@@ -24,14 +25,17 @@ type Props = {
 };
 
 export function SubscriptionRuleForm({ item, onClose }: Props) {
+  const isEdit = Boolean(item);
   const [form, setForm] = useState<SubscriptionRuleFormData>({
     customerId: 0,
     startDate: "",
     endDate: "",
     lunchEnabled: false,
     lunchQuantity: 1,
+    lunchDeliveryMealPeriod: "LUNCH",
     dinnerEnabled: false,
     dinnerQuantity: 1,
+    dinnerDeliveryMealPeriod: "DINNER",
     defaultAddressId: null,
     merchantRemark: "",
     isPriorityFollow: false
@@ -60,14 +64,29 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
 
   useEffect(() => {
     if (!item) return;
+    setSelectedCustomer({
+      id: item.customerId,
+      name: item.customerName,
+      phone: item.customerPhone,
+      remainingMeals: item.remainingMeals,
+      totalMeals: item.remainingMeals,
+      packageStatus: item.status,
+      packageLabel: item.status,
+      packageStartDate: item.startDate,
+      packageEndDate: item.endDate,
+      remainingValidityDays: 0,
+      addresses: []
+    } as CustomerAssetResponse);
     setForm({
       customerId: item.customerId,
       startDate: item.startDate,
       endDate: item.endDate,
       lunchEnabled: item.lunchEnabled,
       lunchQuantity: item.lunchQuantity,
+      lunchDeliveryMealPeriod: item.lunchDeliveryMealPeriod,
       dinnerEnabled: item.dinnerEnabled,
       dinnerQuantity: item.dinnerQuantity,
+      dinnerDeliveryMealPeriod: item.dinnerDeliveryMealPeriod,
       defaultAddressId: item.defaultAddressId,
       merchantRemark: item.merchantRemark || "",
       isPriorityFollow: item.isPriorityFollow
@@ -104,7 +123,7 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
     try {
       const detail = await fetchCustomerDetail(customerId) as any;
       const list: AddressOption[] = (detail.addresses || []).map((a: any) => ({
-        id: a.id,
+        id: Number(a.addressId ?? a.id),
         addressLine: a.addressLine,
         isDefault: a.isDefault
       }));
@@ -170,8 +189,6 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
       setSubmitting(false);
     }
   }
-
-  const isEdit = !!item;
 
   return (
     <div className="modal-overlay" onClick={submitting ? undefined : onClose}>
@@ -350,6 +367,15 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
                       style={{ width: "64px", textAlign: "center" }}
                     />
                     <span style={{ fontSize: "13px", color: "var(--text-sub)" }}>份</span>
+                    <AppSelect
+                      value={form.lunchDeliveryMealPeriod}
+                      options={[
+                        { label: "午餐配送", value: "LUNCH" },
+                        { label: "晚餐配送", value: "DINNER" }
+                      ]}
+                      onChange={(value) => setForm({ ...form, lunchDeliveryMealPeriod: value as "LUNCH" | "DINNER" })}
+                      style={{ minWidth: "112px" }}
+                    />
                   </div>
                 )}
               </div>
@@ -387,6 +413,15 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
                       style={{ width: "64px", textAlign: "center" }}
                     />
                     <span style={{ fontSize: "13px", color: "var(--text-sub)" }}>份</span>
+                    <AppSelect
+                      value={form.dinnerDeliveryMealPeriod}
+                      options={[
+                        { label: "午餐配送", value: "LUNCH" },
+                        { label: "晚餐配送", value: "DINNER" }
+                      ]}
+                      onChange={(value) => setForm({ ...form, dinnerDeliveryMealPeriod: value as "LUNCH" | "DINNER" })}
+                      style={{ minWidth: "112px" }}
+                    />
                   </div>
                 )}
               </div>

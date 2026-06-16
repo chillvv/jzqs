@@ -47,20 +47,6 @@ public class DashboardServiceImpl implements DashboardService {
         int lowBalanceCustomers = countLowBalanceCustomers(settings.lowBalanceThreshold());
         int expiringSoonCustomers = countExpiringSoonCustomers(settings.expiryReminderDays());
         int openAftersaleCount = countOpenAftersales();
-        int specialOrdersToday = countByBusinessDate(
-            """
-            SELECT COUNT(*)
-            FROM meal_slot_orders mso
-            JOIN daily_orders do ON do.id = mso.daily_order_id
-            WHERE CAST(do.created_at AS DATE) = ?
-              AND (
-                COALESCE(NULLIF(TRIM(mso.user_note), ''), NULL) IS NOT NULL
-                OR COALESCE(NULLIF(TRIM(mso.merchant_remark), ''), NULL) IS NOT NULL
-                OR mso.is_priority = TRUE
-              )
-            """,
-            businessDate
-        );
         int menuRiskDays = countMenuRiskDays(upcomingServeDate);
 
         return new DashboardOverviewResponse(
@@ -80,7 +66,6 @@ public class DashboardServiceImpl implements DashboardService {
             lowBalanceCustomers,
             expiringSoonCustomers,
             openAftersaleCount,
-            specialOrdersToday,
             menuRiskDays,
             buildOrderTrend(businessDate),
             buildGrowthTrend(businessDate)

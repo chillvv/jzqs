@@ -17,7 +17,6 @@ export function buildAnalysisInsights(overview: AnalysisOverviewResponse) {
   return {
     grossMarginRate: `${((totalProfit / Math.max(totalSales, 1)) * 100).toFixed(1)}%`,
     avgOrderValue: (totalSales / totalOrders).toFixed(1),
-    specialOrderRate: `${((overview.specialOrders / totalOrders) * 100).toFixed(1)}%`,
     aftersaleRate: `${((overview.aftersaleCount / totalOrders) * 100).toFixed(1)}%`
   };
 }

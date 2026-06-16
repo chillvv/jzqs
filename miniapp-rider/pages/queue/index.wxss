@@ -321,37 +321,6 @@
   position: relative;
 }
 
-.special-tag-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10rpx;
-  margin-bottom: 10rpx;
-}
-
-.special-tag {
-  display: inline-flex;
-  align-items: center;
-  padding: 6rpx 14rpx;
-  border-radius: 999rpx;
-  background: #eef2ff;
-  color: #4338ca;
-  font-size: 22rpx;
-  font-weight: 700;
-  line-height: 1.2;
-}
-
-.special-tag-warning {
-  background: #fff1f2;
-  color: #be123c;
-}
-
-.order-note-preview {
-  margin-top: 8rpx;
-  font-size: 22rpx;
-  line-height: 1.5;
-  color: #64748b;
-}
-
 /* 拖拽提示 */
 .drag-hint {
   display: flex;

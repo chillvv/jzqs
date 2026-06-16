@@ -9,7 +9,6 @@ public record AnalysisOverviewResponse(
     BigDecimal totalProfit,
     int totalOrders,
     int totalMeals,
-    int specialOrders,
     int aftersaleCount
 ) {
 }

@@ -9,8 +9,10 @@ public record SubscriptionRuleRequest(
     @NotNull LocalDate endDate,
     boolean lunchEnabled,
     int lunchQuantity,
+    String lunchDeliveryMealPeriod,
     boolean dinnerEnabled,
     int dinnerQuantity,
+    String dinnerDeliveryMealPeriod,
     Long defaultAddressId,
     String merchantRemark,
     boolean isPriorityFollow

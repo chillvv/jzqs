@@ -17,7 +17,6 @@ public record DashboardOverviewResponse(
     int lowBalanceCustomers,
     int expiringSoonCustomers,
     int openAftersaleCount,
-    int specialOrdersToday,
     int menuRiskDays,
     List<OrderTrendPoint> orderTrend,
     List<GrowthTrendPoint> growthTrend

@@ -4,7 +4,7 @@ import "react-datepicker/dist/react-datepicker.css";
 import "./DatePicker.css";
 
 interface DatePickerProps {
-  value: string;
+  value?: string | Date | null;
   onChange: (date: string) => void;
   showTomorrowShortcut?: boolean;
 }
@@ -12,9 +12,19 @@ interface DatePickerProps {
 export function DatePicker({ value, onChange, showTomorrowShortcut = true }: DatePickerProps) {
   // 解析日期字符串，避免时区问题
   const selectedDate = React.useMemo(() => {
-    if (!value) return new Date();
-    const [year, month, day] = value.split('-').map(Number);
-    return new Date(year, month - 1, day);
+    if (!value) {
+      return new Date();
+    }
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? new Date() : value;
+    }
+    if (typeof value === "string") {
+      const [year, month, day] = value.split("-").map(Number);
+      if ([year, month, day].every((item) => Number.isFinite(item))) {
+        return new Date(year, month - 1, day);
+      }
+    }
+    return new Date();
   }, [value]);
 
   const handleChange = (date: Date | null) => {

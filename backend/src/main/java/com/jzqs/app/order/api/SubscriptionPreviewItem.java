@@ -5,6 +5,7 @@ public record SubscriptionPreviewItem(
     String customerName,
     String customerPhone,
     String mealPeriod,
+    String deliveryMealPeriod,
     long addressId,
     String deliveryAddress,
     String merchantRemark,

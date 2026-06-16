@@ -5,14 +5,12 @@ import {
   deleteOrder,
   cancelSubscriptionConfirmation,
   confirmSubscription,
-  consumeOrders,
   createManualOrder,
   fetchDispatchAreaBindings,
   fetchDispatchManagedRiders,
   fetchCurrentMenuWeek,
   fetchOrderPrepList,
   fetchOrderPrepStats,
-  fetchSpecialOrders,
   fetchSubscriptionConfirmations,
   recordDeliveryReceipt,
   fetchSubscriptionPreview,
@@ -24,7 +22,7 @@ import {
   directRefund,
   searchManualCreateCustomers
 } from "../../shared/api/http";
-import type { AdminMenuWeekResponse, DispatchAreaBindingResponse, DispatchManagedRiderResponse, ManualCreateCustomerSearchResponse, OrderPrepItemResponse, OrderPrepStatsResponse, SubscriptionConfirmationItem, SubscriptionPreviewItem, SpecialOrderItem, SubscriptionPreviewCheckResponse } from "../../shared/api/types";
+import type { AdminMenuWeekResponse, DispatchAreaBindingResponse, DispatchManagedRiderResponse, ManualCreateCustomerSearchResponse, OrderPrepItemResponse, OrderPrepStatsResponse, SubscriptionConfirmationItem, SubscriptionPreviewItem, SubscriptionPreviewCheckResponse } from "../../shared/api/types";
 import {
   buildOrderPrepCompactSummary,
   buildOrderPrepDefaultTab,
@@ -53,7 +51,7 @@ import {
   resolveManualCreateMenuOptions,
   shouldShowManualCustomerEmptyState
 } from "./manualCreateOrder.helpers";
-import { Printer, CheckCircle, Search, RotateCcw, UserPlus, X, Bot, MapPin, ChevronLeft, ChevronRight, AlertTriangle, Trash2 } from "lucide-react";
+import { Printer, CheckCircle, Search, RotateCcw, UserPlus, X, Bot, MapPin, ChevronLeft, ChevronRight, Trash2, AlertTriangle } from "lucide-react";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { AdminDialog } from "../../shared/components/AdminDialog";
 import { RemarkField } from "../../shared/components/RemarkField";
@@ -69,6 +67,10 @@ function defaultFilterDate() {
 const DEFAULT_FILTER_DATE = defaultFilterDate();
 const PAGE_SIZE = 10;
 
+function mealPeriodLabel(value: string | null | undefined) {
+  return value === "DINNER" ? "晚餐" : "午餐";
+}
+
 export function OrderPrepPage() {
   const [stats, setStats] = useState<OrderPrepStatsResponse>({
     totalMeals: 105,
@@ -77,13 +79,11 @@ export function OrderPrepPage() {
     selfOrderCount: 85,
     staffOrderCount: 20,
     subscriptionCount: 0,
-    specialOrderCount: 0,
     adminRemarkCount: 0,
     labelRequiredCount: 0
   });
   const [items, setItems] = useState<OrderPrepItemResponse[]>([]);
   const [confirmationItems, setConfirmationItems] = useState<SubscriptionConfirmationItem[]>([]);
-  const [specialOrders, setSpecialOrders] = useState<SpecialOrderItem[]>([]);
 
   // Modals state
   const [isManualCreateOpen, setIsManualCreateOpen] = useState(false);
@@ -91,10 +91,8 @@ export function OrderPrepPage() {
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSubscriptionPreviewOpen, setIsSubscriptionPreviewOpen] = useState(false);
-  const [isSpecialOrdersOpen, setIsSpecialOrdersOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isOrderDetailOpen, setIsOrderDetailOpen] = useState(false);
-  const [isBulkConsumeConfirmOpen, setIsBulkConsumeConfirmOpen] = useState(false);
   const [activeItem, setActiveItem] = useState<OrderPrepItemResponse | null>(null);
   const [orderAftersaleItem, setOrderAftersaleItem] = useState<OrderPrepItemResponse | null>(null);
   const [orderAftersaleForm, setOrderAftersaleForm] = useState({
@@ -136,12 +134,19 @@ export function OrderPrepPage() {
   const [submittingReceipt, setSubmittingReceipt] = useState(false);
   const [submittingEdit, setSubmittingEdit] = useState(false);
   const [submittingDelete, setSubmittingDelete] = useState(false);
-  const [submittingConsumeDelivered, setSubmittingConsumeDelivered] = useState(false);
   const [processingConfirmationId, setProcessingConfirmationId] = useState<number | null>(null);
   const [processingConfirmationAction, setProcessingConfirmationAction] = useState<"confirm" | "cancel" | null>(null);
   const [assignForm, setAssignForm] = useState({ riderName: "", areaCode: "" });
   const [receiptForm, setReceiptForm] = useState({ receiptUrl: "", receiptNote: "" });
-  const [editForm, setEditForm] = useState({ mealPeriod: "LUNCH", quantity: "1", deliveryAddress: "", merchantRemark: "", priorityCustomer: false, status: "PENDING_DISPATCH" });
+  const [editForm, setEditForm] = useState({
+    mealPeriod: "LUNCH",
+    deliveryMealPeriod: "LUNCH",
+    quantity: "1",
+    deliveryAddress: "",
+    merchantRemark: "",
+    priorityCustomer: false,
+    status: "PENDING_DISPATCH"
+  });
   const [assignRiders, setAssignRiders] = useState<DispatchManagedRiderResponse[]>([]);
   const [assignAreaBindings, setAssignAreaBindings] = useState<DispatchAreaBindingResponse[]>([]);
   function getErrorMessage(error: any, fallback: string) {
@@ -163,6 +168,7 @@ export function OrderPrepPage() {
     setActiveItem(item);
     setEditForm({
       mealPeriod: resolveMealPeriod(item),
+      deliveryMealPeriod: item.deliveryMealPeriod === "DINNER" ? "DINNER" : "LUNCH",
       quantity: String(item.quantity || 1),
       deliveryAddress: item.deliveryAddress || "",
       merchantRemark: item.merchantRemark || "",
@@ -297,8 +303,8 @@ export function OrderPrepPage() {
   const emptyOrderText = hasOrderFilters ? "未找到相关数据" : "暂无订单";
 
   const summary = useMemo(
-    () => buildOrderPrepSummary(items, confirmationItems, specialOrders),
-    [items, confirmationItems, specialOrders]
+    () => buildOrderPrepSummary(items, confirmationItems),
+    [items, confirmationItems]
   );
 
   const compactSummary = useMemo(
@@ -353,16 +359,14 @@ export function OrderPrepPage() {
     setLoadingOrders(true);
     setOrdersError("");
     try {
-      const [statsResponse, listResponse, confirmationsResponse, specialOrdersResponse] = await Promise.all([
+      const [statsResponse, listResponse, confirmationsResponse] = await Promise.all([
         fetchOrderPrepStats(),
         fetchOrderPrepList(serveDate),
-        fetchSubscriptionConfirmations(serveDate),
-        fetchSpecialOrders(serveDate)
+        fetchSubscriptionConfirmations(serveDate)
       ]);
       setStats(statsResponse);
       setItems(listResponse.items);
       setConfirmationItems(confirmationsResponse);
-      setSpecialOrders(specialOrdersResponse);
       setCurrentPage(1);
     } catch (err: any) {
       const message = getErrorMessage(err, "加载订单失败");
@@ -625,6 +629,7 @@ export function OrderPrepPage() {
     try {
       await updateOrderProfile(activeItem.id, {
         mealPeriod: editForm.mealPeriod as "LUNCH" | "DINNER",
+        deliveryMealPeriod: editForm.deliveryMealPeriod as "LUNCH" | "DINNER",
         quantity: Number(editForm.quantity) || 1,
         deliveryAddress: trimmedAddress,
         merchantRemark: editForm.merchantRemark,
@@ -640,36 +645,6 @@ export function OrderPrepPage() {
     } finally {
       setSubmittingEdit(false);
     }
-  }
-
-  async function handleConsumeDelivered() {
-    const deliveredIds = items.filter((item) => item.status === "DELIVERED").map((item) => item.id);
-    if (deliveredIds.length === 0) {
-      toast("当前没有可核销的已送达订单", "error");
-      return;
-    }
-    if (submittingConsumeDelivered) return;
-    setSubmittingConsumeDelivered(true);
-    try {
-      const result = await consumeOrders(deliveredIds);
-      setIsBulkConsumeConfirmOpen(false);
-      toast(`核销完成：成功 ${result.successCount} 条，失败 ${result.failureCount} 条`);
-      await reloadOrders();
-    } catch (err: any) {
-      toast(getErrorMessage(err, "批量核销失败"), "error");
-      throw err;
-    } finally {
-      setSubmittingConsumeDelivered(false);
-    }
-  }
-
-  function handleOpenConsumeDeliveredConfirm() {
-    const deliveredIds = items.filter((item) => item.status === "DELIVERED").map((item) => item.id);
-    if (deliveredIds.length === 0) {
-      toast("当前没有可核销的已送达订单", "error");
-      return;
-    }
-    setIsBulkConsumeConfirmOpen(true);
   }
 
   async function handleConfirmConfirmation(id: number) {
@@ -737,19 +712,7 @@ export function OrderPrepPage() {
     return "";
   }
 
-  async function handleCopyCustomerPhone(item: OrderPrepItemResponse) {
-    const phone = item.customerPhone?.trim();
-    if (!phone) {
-      toast("未找到客户手机号", "error");
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(phone);
-      toast("复制手机号成功");
-    } catch (error) {
-      toast(getErrorMessage(error, "复制手机号失败"), "error");
-    }
-  }
+
 
   const renderActions = (item: OrderPrepItemResponse) => {
     return (
@@ -772,9 +735,9 @@ export function OrderPrepPage() {
           <p className="page-subtitle">备餐、确认、派单与订单处理</p>
         </div>
         <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-          <button className="btn btn-outline" onClick={() => setIsSpecialOrdersOpen(true)}>
-            <AlertTriangle size={16} />
-            特殊单 {specialOrders.length}
+          <button className="btn btn-outline" onClick={openManualCreateModal}>
+            <UserPlus size={16} />
+            录入代客订单
           </button>
           <button className="btn btn-primary" onClick={() => handleAutoImportClick().catch(() => undefined)}>
             <Bot size={16} />
@@ -789,8 +752,8 @@ export function OrderPrepPage() {
             <div className="stat-title">{item.label}</div>
             <div className="stat-val">{item.value}</div>
             <div className="stat-footer">
-              {item.label === "明日待出餐"
-                ? `特殊单 ${summary.specialOrderCount} 份`
+              {item.label === "当前待出餐"
+                ? `有备注 ${summary.remarkedOrderCount} 单`
                 : item.label === "餐次结构"
                   ? "按午餐 / 晚餐拆分"
                   : `重点客户待确认 ${summary.priorityConfirmationCount} 人`}
@@ -800,7 +763,6 @@ export function OrderPrepPage() {
       </div>
       <div className="admin-panel-note" style={{ marginBottom: "16px" }}>
         顾客端下单后会先进入待配送，取消和售后结果会同步回订单页与钱包页。
-        {summary.specialKeywordSummary.length > 0 ? ` 当前特殊摘要：${summary.specialKeywordSummary.slice(0, 4).join(" / ")}` : ""}
       </div>
 
       <div className="toolbar">
@@ -948,13 +910,7 @@ export function OrderPrepPage() {
             </div>
           </div>
           {activeTab === "ORDERS" ? (
-            <div style={{ display: "flex", gap: "8px" }}>
-              <button className="btn btn-outline" onClick={openManualCreateModal}><UserPlus size={16} /> 录入代客订单</button>
-              <button className="btn btn-outline" onClick={handleExportMealPrep}><Printer size={16} /> 导出备餐单</button>
-              <button className="btn btn-primary" disabled={submittingConsumeDelivered} onClick={handleOpenConsumeDeliveredConfirm}>
-                <CheckCircle size={16} /> {submittingConsumeDelivered ? "核销中..." : "批量核销扣餐"}
-              </button>
-            </div>
+            <button className="btn btn-outline" onClick={handleExportMealPrep}><Printer size={16} /> 导出备餐单</button>
           ) : (
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <span className="tag tag-red">待确认 {confirmationItems.length} 份</span>
@@ -1259,47 +1215,6 @@ export function OrderPrepPage() {
         </div>
       )}
 
-      {isSpecialOrdersOpen && (
-        <div className="modal-overlay">
-          <div className="modal-content" style={{ maxWidth: "860px" }}>
-            <div className="modal-header">
-              <span>特殊单明细 ({specialOrders.length})</span>
-              <span className="modal-close" onClick={() => setIsSpecialOrdersOpen(false)}><X size={20} /></span>
-            </div>
-            <div className="modal-body" style={{ padding: 0 }}>
-              {specialOrders.length === 0 ? (
-                <div className="empty-state">当前没有特殊单</div>
-              ) : (
-                <div className="table-responsive">
-                  <table style={{ margin: 0, border: "none" }}>
-                    <thead>
-                      <tr>
-                        <th>客户</th>
-                        <th>餐次</th>
-                        <th>地址</th>
-                        <th>用户备注</th>
-                        <th>商家备注</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {specialOrders.map((item) => (
-                        <tr key={item.id}>
-                          <td>{item.customerName} / {item.customerPhone}</td>
-                          <td>{item.mealPeriod === "LUNCH" ? "午餐" : "晚餐"}</td>
-                          <td>{item.addressLine}</td>
-                          <td>{item.userNote || "-"}</td>
-                          <td>{item.merchantRemark || "-"}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
       {isManualCreateOpen && (
         <div className="modal-overlay">
           <div className="modal-content">
@@ -1446,6 +1361,21 @@ export function OrderPrepPage() {
                 )}
               </div>
               <div className="form-group">
+                <label className="form-label"><span className="required">*</span>配送餐次</label>
+                <AppSelect
+                  value={manualForm.deliveryMealPeriod || manualForm.mealPeriod}
+                  options={[
+                    { label: "按午餐配送", value: "LUNCH" },
+                    { label: "按晚餐配送", value: "DINNER" }
+                  ]}
+                  onChange={(val) => setManualForm((current) => ({ ...current, deliveryMealPeriod: val as "LUNCH" | "DINNER" }))}
+                  style={{ width: "100%" }}
+                />
+                <div style={{ color: "var(--text-sub)", fontSize: "12px", marginTop: "8px" }}>
+                  例如可以设置为“午餐出餐，晚餐配送”。
+                </div>
+              </div>
+              <div className="form-group">
                 <label className="form-label"><span className="required">*</span>份数</label>
                 <input 
                   className="form-control" 
@@ -1487,7 +1417,7 @@ export function OrderPrepPage() {
                 <div className="auth-panel__grid">
                   <div><strong>订单</strong><span>#{orderAftersaleItem.id}</span></div>
                   <div><strong>客户</strong><span>{orderAftersaleItem.customerName} / {orderAftersaleItem.customerPhone}</span></div>
-                  <div><strong>餐次</strong><span>{resolveMealPeriod(orderAftersaleItem) === "DINNER" ? "晚餐" : "午餐"} ×{orderAftersaleItem.quantity}</span></div>
+                  <div><strong>出餐 / 配送</strong><span>{mealPeriodLabel(orderAftersaleItem.mealPeriod)} / {mealPeriodLabel(orderAftersaleItem.deliveryMealPeriod)} ×{orderAftersaleItem.quantity}</span></div>
                   <div><strong>当前状态</strong><span>{orderAftersaleItem.displayStatusLabel || resolveOrderDisplayStatusLabel(resolveOrderDisplayStatus(orderAftersaleItem))}</span></div>
                 </div>
               </div>
@@ -1627,6 +1557,18 @@ export function OrderPrepPage() {
                 />
               </div>
               <div className="form-group">
+                <label className="form-label"><span className="required">*</span>配送餐次</label>
+                <AppSelect
+                  value={editForm.deliveryMealPeriod}
+                  options={[
+                    { label: "按午餐配送", value: "LUNCH" },
+                    { label: "按晚餐配送", value: "DINNER" }
+                  ]}
+                  onChange={(val) => setEditForm({ ...editForm, deliveryMealPeriod: val })}
+                  style={{ width: "100%" }}
+                />
+              </div>
+              <div className="form-group">
                 <label className="form-label"><span className="required">*</span>份数</label>
                 <input className="form-control" type="number" min="1" value={editForm.quantity} onChange={e => setEditForm({ ...editForm, quantity: e.target.value })} />
               </div>
@@ -1680,66 +1622,80 @@ export function OrderPrepPage() {
       <AdminDialog
         open={isOrderDetailOpen}
         title={activeItem ? `订单详情 - ${activeItem.customerName}` : "订单详情"}
-        width={560}
+        width={640}
         onClose={() => setIsOrderDetailOpen(false)}
-        footer={
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <button className="btn btn-outline" onClick={() => setIsOrderDetailOpen(false)}>关闭</button>
-          </div>
-        }
+        footer={null}
       >
         {activeItem ? (
-          <div className="order-detail-modal">
-            <section className="order-detail-modal__info">
-              <div className="delete-confirm-details">
-                <div className="delete-confirm-details__item">
-                  <span className="delete-confirm-details__label">订单号：</span>
-                  <span className="delete-confirm-details__value">#{activeItem.id}</span>
-                </div>
-                <div className="delete-confirm-details__item">
-                  <span className="delete-confirm-details__label">客户：</span>
-                  <span className="delete-confirm-details__value">{activeItem.customerName}</span>
-                </div>
-                <div className="delete-confirm-details__item">
-                  <span className="delete-confirm-details__label">电话：</span>
-                  <span className="delete-confirm-details__value">{activeItem.customerPhone}</span>
-                </div>
-                <div className="delete-confirm-details__item">
-                  <span className="delete-confirm-details__label">餐次：</span>
-                  <span className="delete-confirm-details__value">{resolveMealPeriod(activeItem) === "DINNER" ? "晚餐" : "午餐"} ×{activeItem.quantity}</span>
-                </div>
-                <div className="delete-confirm-details__item">
-                  <span className="delete-confirm-details__label">来源：</span>
-                  <span className="delete-confirm-details__value">{resolveOrderSourceLabel(activeItem)}</span>
-                </div>
-                <div className="delete-confirm-details__item">
-                  <span className="delete-confirm-details__label">订单状态：</span>
-                  <span className="delete-confirm-details__value">{activeItem.displayStatusLabel || resolveOrderDisplayStatusLabel(resolveOrderDisplayStatus(activeItem))}</span>
-                </div>
-                <div className="delete-confirm-details__item">
-                  <span className="delete-confirm-details__label">钱包状态：</span>
-                  <span className="delete-confirm-details__value">{activeItem.walletStatusLabel}</span>
-                </div>
-                <div className="delete-confirm-details__item">
-                  <span className="delete-confirm-details__label">配送地址：</span>
-                  <span className="delete-confirm-details__value">{activeItem.deliveryAddress || "-"}</span>
-                </div>
-                <div className="delete-confirm-details__item">
-                  <span className="delete-confirm-details__label">用户备注：</span>
-                  <span className="delete-confirm-details__value">{formatOrderNote(activeItem.userNote)}</span>
-                </div>
-                <div className="delete-confirm-details__item">
-                  <span className="delete-confirm-details__label">商家备注：</span>
-                  <span className="delete-confirm-details__value">{formatOrderNote(activeItem.merchantRemark)}</span>
-                </div>
-              </div>
-            </section>
-            <aside className="order-detail-modal__actions">
-              <div className="order-detail-modal__status">
+          <div className="order-detail-view">
+            <div className="order-detail-view__header">
+              <div className="order-detail-view__id">订单号：#{activeItem.id}</div>
+              <div className="order-detail-view__status">
                 {renderStatus(activeItem)}
               </div>
-              <div className="order-detail-modal__meta">来源：{resolveOrderSourceLabel(activeItem)}</div>
-              <div className="order-detail-modal__meta">钱包：{activeItem.walletStatusLabel}</div>
+            </div>
+
+            <div className="order-detail-view__grid">
+              <div className="order-detail-view__section">
+                <h4 className="order-detail-view__section-title">客户信息</h4>
+                <div className="order-detail-view__list">
+                  <div className="order-detail-view__item">
+                    <span className="order-detail-view__label">客户</span>
+                    <span className="order-detail-view__value">{activeItem.customerName}</span>
+                  </div>
+                  <div className="order-detail-view__item">
+                    <span className="order-detail-view__label">电话</span>
+                    <span className="order-detail-view__value">{activeItem.customerPhone}</span>
+                  </div>
+                  <div className="order-detail-view__item">
+                    <span className="order-detail-view__label">钱包状态</span>
+                    <span className="order-detail-view__value">{activeItem.walletStatusLabel}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="order-detail-view__section">
+                <h4 className="order-detail-view__section-title">订单信息</h4>
+                <div className="order-detail-view__list">
+                  <div className="order-detail-view__item">
+                    <span className="order-detail-view__label">出餐 / 配送</span>
+                    <span className="order-detail-view__value">
+                      <span className={`tag ${mealPeriodLabel(activeItem.mealPeriod) === "晚餐" ? "tag-green" : "tag-orange"}`} style={{ marginRight: "4px" }}>
+                        {mealPeriodLabel(activeItem.mealPeriod)}
+                      </span>
+                      <span className={`tag ${mealPeriodLabel(activeItem.deliveryMealPeriod) === "晚餐" ? "tag-green" : "tag-orange"}`} style={{ marginRight: "4px" }}>
+                        送 {mealPeriodLabel(activeItem.deliveryMealPeriod)}
+                      </span>
+                      {activeItem.quantity > 1 ? ` ×${activeItem.quantity}` : ""}
+                    </span>
+                  </div>
+                  <div className="order-detail-view__item">
+                    <span className="order-detail-view__label">来源</span>
+                    <span className="order-detail-view__value">{resolveOrderSourceLabel(activeItem)}</span>
+                  </div>
+                  <div className="order-detail-view__item order-detail-view__item--full">
+                    <span className="order-detail-view__label">配送地址</span>
+                    <span className="order-detail-view__value">{activeItem.deliveryAddress || "-"}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="order-detail-view__section order-detail-view__section--full">
+                <h4 className="order-detail-view__section-title">备注信息</h4>
+                <div className="order-detail-view__list">
+                  <div className="order-detail-view__item order-detail-view__item--full">
+                    <span className="order-detail-view__label">用户备注</span>
+                    <span className="order-detail-view__value" style={{ color: formatOrderNote(activeItem.userNote) === "-" ? "inherit" : "var(--error-color)" }}>{formatOrderNote(activeItem.userNote)}</span>
+                  </div>
+                  <div className="order-detail-view__item order-detail-view__item--full">
+                    <span className="order-detail-view__label">商家备注</span>
+                    <span className="order-detail-view__value">{formatOrderNote(activeItem.merchantRemark)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="order-detail-view__actions">
               <button
                 className="btn btn-outline"
                 onClick={() => {
@@ -1757,9 +1713,6 @@ export function OrderPrepPage() {
                 }}
               >
                 售后处理
-              </button>
-              <button className="btn btn-outline" onClick={() => handleCopyCustomerPhone(activeItem).catch(() => undefined)}>
-                复制手机号
               </button>
               <button
                 className="btn btn-primary"
@@ -1779,32 +1732,11 @@ export function OrderPrepPage() {
               >
                 删除订单
               </button>
-            </aside>
+            </div>
           </div>
         ) : null}
       </AdminDialog>
 
-      <AdminDialog
-        open={isBulkConsumeConfirmOpen}
-        title="确认批量核销"
-        description={`即将核销 ${items.filter((item) => item.status === "DELIVERED").length} 笔已送达订单，请确认是否继续。`}
-        width={520}
-        onClose={submittingConsumeDelivered ? () => undefined : () => setIsBulkConsumeConfirmOpen(false)}
-        footer={
-          <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-            <button className="btn btn-outline" disabled={submittingConsumeDelivered} onClick={() => setIsBulkConsumeConfirmOpen(false)}>取消</button>
-            <button className="btn btn-primary" disabled={submittingConsumeDelivered} onClick={() => handleConsumeDelivered().catch(() => undefined)}>
-              {submittingConsumeDelivered ? "核销中..." : "确认批量核销"}
-            </button>
-          </div>
-        }
-      >
-        <div style={{ color: "var(--text-sub)", fontSize: "14px", lineHeight: 1.7 }}>
-          批量核销会统一处理当前列表中的已送达订单，请确认数量无误后再执行。
-        </div>
-      </AdminDialog>
-
-      {/* 删除确认对话框 */}
       <AdminDialog
         open={isDeleteConfirmOpen}
         title="⚠️ 删除订单"
@@ -1837,7 +1769,7 @@ export function OrderPrepPage() {
               </div>
               <div className="delete-confirm-details__item">
                 <span className="delete-confirm-details__label">餐次：</span>
-                <span className="delete-confirm-details__value">{resolveMealPeriod(activeItem) === "DINNER" ? "晚餐" : "午餐"}</span>
+                <span className="delete-confirm-details__value">{mealPeriodLabel(activeItem.mealPeriod)} / {mealPeriodLabel(activeItem.deliveryMealPeriod)}</span>
               </div>
               <div className="delete-confirm-details__item">
                 <span className="delete-confirm-details__label">地址：</span>

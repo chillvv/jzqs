@@ -61,7 +61,7 @@ public class DispatchServiceImpl implements DispatchService {
                 da.area_code,
                 da.status AS delivery_status,
                 CASE WHEN dr.id IS NULL THEN 'PENDING' ELSE 'UPLOADED' END AS receipt_status,
-                CASE WHEN dr.id IS NULL THEN '等待上传' ELSE '[查看回执图片]' END AS receipt_label,
+                CASE WHEN dr.id IS NULL THEN '绛夊緟涓婁紶' ELSE '[鏌ョ湅鍥炴墽鍥剧墖]' END AS receipt_label,
                 CASE WHEN da.status = 'DELIVERED' THEN FALSE ELSE TRUE END AS can_notify_customer
             FROM dispatch_assignments da
             JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
@@ -91,7 +91,7 @@ public class DispatchServiceImpl implements DispatchService {
                 LEFT JOIN rider_address_bindings rab ON rab.customer_id = doo.customer_id AND rab.address_id = mso.address_id
                 WHERE mso.status = 'PENDING_DISPATCH'
                   AND doo.serve_date = ?
-                  AND (? IS NULL OR mso.meal_period = ?)
+                  AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
                   AND da.id IS NULL
                   AND rab.id IS NULL
                 """,
@@ -107,7 +107,7 @@ public class DispatchServiceImpl implements DispatchService {
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
                 WHERE da.status = 'DISPATCHING'
                   AND doo.serve_date = ?
-                  AND (? IS NULL OR mso.meal_period = ?)
+                  AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
                 """,
             targetDate,
             normalizedMealPeriod(mealPeriod),
@@ -122,7 +122,7 @@ public class DispatchServiceImpl implements DispatchService {
                 WHERE da.status = 'AREA_ASSIGNED'
                   AND da.rider_name IS NULL
                   AND doo.serve_date = ?
-                  AND (? IS NULL OR mso.meal_period = ?)
+                  AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
                 """,
             targetDate,
             normalizedMealPeriod(mealPeriod),
@@ -216,7 +216,7 @@ public class DispatchServiceImpl implements DispatchService {
                 WHERE doo.serve_date = ?
                   AND da.rider_name IS NOT NULL
                   AND da.rider_name <> ''
-                  AND (? IS NULL OR mso.meal_period = ?)
+                  AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
                 ORDER BY da.rider_name, da.area_code, da.sequence_number, da.id
                 """,
             (rs, rowNum) -> new RiderProgressRow(
@@ -269,10 +269,10 @@ public class DispatchServiceImpl implements DispatchService {
                     ELSE 'CONFLICT_REQUIRES_CONFIRM'
                 END AS exception_type,
                 CASE
-                    WHEN rab.id IS NULL THEN '新地址，尚未确认区域'
-                    WHEN dab.id IS NULL THEN '该区域未设置默认骑手'
-                    WHEN rp_default.id IS NULL THEN '默认骑手当前不可派单'
-                    ELSE '该地址需要重新确认区域归属'
+                    WHEN rab.id IS NULL THEN '鏂板湴鍧€锛屽皻鏈‘璁ゅ尯鍩?
+                    WHEN dab.id IS NULL THEN '璇ュ尯鍩熸湭璁剧疆榛樿楠戞墜'
+                    WHEN rp_default.id IS NULL THEN '榛樿楠戞墜褰撳墠涓嶅彲娲惧崟'
+                    ELSE '璇ュ湴鍧€闇€瑕侀噸鏂扮‘璁ゅ尯鍩熷綊灞?
                 END AS reason,
                 CASE WHEN rab.id IS NULL THEN FALSE ELSE TRUE END AS remembered_address
             FROM meal_slot_orders mso
@@ -322,7 +322,7 @@ public class DispatchServiceImpl implements DispatchService {
             LEFT JOIN dispatch_assignments da ON da.meal_slot_order_id = mso.id
             WHERE mso.status = 'PENDING_DISPATCH'
               AND doo.serve_date = ?
-              AND (? IS NULL OR mso.meal_period = ?)
+              AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
               AND da.id IS NULL
               AND rab.id IS NULL
             ORDER BY mso.id
@@ -363,7 +363,7 @@ public class DispatchServiceImpl implements DispatchService {
         for (Long orderId : orderIds) {
             try {
                 if (orderId == null) {
-                    throw new BusinessException(ErrorCode.VALIDATION_ERROR, "订单编号不能为空");
+                    throw new BusinessException(ErrorCode.VALIDATION_ERROR, "璁㈠崟缂栧彿涓嶈兘涓虹┖");
                 }
                 if (defaultRiderName != null) {
                     dispatchOrder(orderId, defaultRiderName, normalizedAreaCode, true);
@@ -416,7 +416,7 @@ public class DispatchServiceImpl implements DispatchService {
                 failures.add(Map.of(
                     "targetId", orderId,
                     "code", "BATCH_ASSIGN_FAILED",
-                    "message", ex.getMessage() == null ? "批量处理失败" : ex.getMessage()
+                    "message", ex.getMessage() == null ? "鎵归噺澶勭悊澶辫触" : ex.getMessage()
                 ));
             }
         }
@@ -1074,7 +1074,7 @@ public class DispatchServiceImpl implements DispatchService {
                 JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
                 WHERE da.area_code = ?
                   AND da.status IN ('AREA_ASSIGNED', 'DISPATCHING')
-                  AND (? IS NULL OR mso.meal_period = ?)
+                  AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
                 ORDER BY da.sequence_number, da.id
                 """,
             (rs, rowNum) -> rs.getLong("meal_slot_order_id"),
@@ -1370,7 +1370,7 @@ public class DispatchServiceImpl implements DispatchService {
                 JOIN dispatch_area_bindings dab ON dab.area_code = rab.area_code
                 LEFT JOIN dispatch_assignments da ON da.meal_slot_order_id = mso.id
                 WHERE mso.status = 'PENDING_DISPATCH'
-                  AND (? IS NULL OR mso.meal_period = ?)
+                  AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
                   AND da.id IS NULL
                 ORDER BY mso.id
                 """,
@@ -1425,7 +1425,7 @@ public class DispatchServiceImpl implements DispatchService {
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
                 WHERE da.area_code = ?
                   AND doo.serve_date = ?
-                  AND mso.meal_period = ?
+                  AND COALESCE(mso.delivery_meal_period, mso.meal_period) = ?
                 """,
             Integer.class,
             areaCode,
@@ -1560,7 +1560,7 @@ public class DispatchServiceImpl implements DispatchService {
                 ) dr ON dr.meal_slot_order_id = mso.id
                 WHERE da.area_code = ?
                   AND doo.serve_date = ?
-                  AND (? IS NULL OR mso.meal_period = ?)
+                  AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
                 ORDER BY 
                     CASE WHEN da.status = 'DELIVERED' THEN 1 ELSE 0 END,
                     COALESCE(NULLIF(da.sequence_number, 0), dbi.current_sequence, 0),
@@ -1633,7 +1633,7 @@ public class DispatchServiceImpl implements DispatchService {
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
                 WHERE de.resolved = FALSE
                   AND doo.serve_date = ?
-                  AND (? IS NULL OR mso.meal_period = ?)
+                  AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
                 GROUP BY de.rider_name, da.area_code
                 """,
             serveDate,
@@ -1717,7 +1717,7 @@ public class DispatchServiceImpl implements DispatchService {
     }
 
     private String buildAttentionLabel(List<String> attentionSources) {
-        return attentionSources.isEmpty() ? "" : "需留意";
+        return attentionSources.isEmpty() ? "" : "闇€鐣欐剰";
     }
 
     private String riderProgressKey(String riderName, String areaCode) {
@@ -1781,7 +1781,7 @@ public class DispatchServiceImpl implements DispatchService {
 
     private String requireAreaCode(String areaCode) {
         if (areaCode == null || areaCode.isBlank()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请选择区域");
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "璇烽€夋嫨鍖哄煙");
         }
         return areaCode.trim();
     }
@@ -1821,7 +1821,7 @@ public class DispatchServiceImpl implements DispatchService {
         if (!riderNames.isEmpty()) {
             return riderNames.get(0);
         }
-        throw new BusinessException(ErrorCode.VALIDATION_ERROR, "所选区域暂未绑定可派单骑手，请先指定骑手或只归区域");
+        throw new BusinessException(ErrorCode.VALIDATION_ERROR, "鎵€閫夊尯鍩熸殏鏈粦瀹氬彲娲惧崟楠戞墜锛岃鍏堟寚瀹氶獞鎵嬫垨鍙綊鍖哄煙");
     }
 
     private String resolveRiderName(long riderProfileId) {
@@ -1833,7 +1833,7 @@ public class DispatchServiceImpl implements DispatchService {
         if (!riderNames.isEmpty()) {
             return riderNames.get(0);
         }
-        throw new BusinessException(ErrorCode.VALIDATION_ERROR, "未找到可用于归区域的骑手档案");
+        throw new BusinessException(ErrorCode.VALIDATION_ERROR, "鏈壘鍒板彲鐢ㄤ簬褰掑尯鍩熺殑楠戞墜妗ｆ");
     }
 
     private long ensureRiderProfile(String riderName, String areaCode) {
@@ -1893,7 +1893,7 @@ public class DispatchServiceImpl implements DispatchService {
 
     private int ensureBatchItem(long orderId, long riderProfileId, String areaCode) {
         Map<String, Object> row = jdbcTemplate.queryForMap("""
-            SELECT doo.serve_date AS serve_date, mso.meal_period
+            SELECT doo.serve_date AS serve_date, COALESCE(mso.delivery_meal_period, mso.meal_period) AS meal_period
             FROM meal_slot_orders mso
             JOIN daily_orders doo ON doo.id = mso.daily_order_id
             WHERE mso.id = ?
@@ -2039,7 +2039,7 @@ public class DispatchServiceImpl implements DispatchService {
         List<Object> args = new ArrayList<>();
         args.add(LocalDate.parse(serveDate));
         if (mealPeriod != null && !mealPeriod.isBlank()) {
-            sql.append(" AND mso.meal_period = ?");
+            sql.append(" AND COALESCE(mso.delivery_meal_period, mso.meal_period) = ?");
             args.add(mealPeriod);
         }
         if (areaCode != null && !areaCode.isBlank()) {
@@ -2229,3 +2229,4 @@ public class DispatchServiceImpl implements DispatchService {
     private record DispatchMatchResult(boolean matched, String riderName, String areaCode) {
     }
 }
+

@@ -59,33 +59,57 @@ export function AdminLayout() {
     confirmPassword: ""
   });
   const [savingPassword, setSavingPassword] = useState(false);
+  const sessionToken = session?.token ?? "";
 
   useEffect(() => {
-    if (!session) {
-      stopAdminRealtime();
+    if (!sessionToken) {
       navigate("/login", { replace: true });
       return;
     }
-    startAdminRealtime();
+
+    let cancelled = false;
     fetchAdminProfile()
       .then((profile) => {
-        const nextSession = buildAdminAuthSession({
-          ...session,
-          ...profile
+        if (cancelled) {
+          return;
+        }
+        setSession((current) => {
+          if (!current) {
+            return current;
+          }
+          const nextSession = buildAdminAuthSession({
+            ...current,
+            ...profile,
+            token: sessionToken
+          });
+          window.localStorage.setItem(ADMIN_AUTH_STORAGE_KEY, JSON.stringify(nextSession));
+          return nextSession;
         });
-        setSession(nextSession);
-        window.localStorage.setItem(ADMIN_AUTH_STORAGE_KEY, JSON.stringify(nextSession));
       })
       .catch(() => {
+        if (cancelled) {
+          return;
+        }
         window.localStorage.removeItem(ADMIN_AUTH_STORAGE_KEY);
         setSession(null);
         toast("登录已失效，请重新登录", "error");
         navigate("/login", { replace: true });
       });
     return () => {
+      cancelled = true;
+    };
+  }, [navigate, sessionToken]);
+
+  useEffect(() => {
+    if (!sessionToken) {
+      stopAdminRealtime();
+      return;
+    }
+    startAdminRealtime();
+    return () => {
       stopAdminRealtime();
     };
-  }, [navigate, session]);
+  }, [sessionToken]);
 
   useEffect(() => {
     setMobileSidebarOpen(false);

@@ -23,11 +23,17 @@ public class SubscriptionRuleEntity {
     @TableField("lunch_quantity")
     private Integer lunchQuantity;
 
+    @TableField("lunch_delivery_meal_period")
+    private String lunchDeliveryMealPeriod;
+
     @TableField("dinner_enabled")
     private Boolean dinnerEnabled;
 
     @TableField("dinner_quantity")
     private Integer dinnerQuantity;
+
+    @TableField("dinner_delivery_meal_period")
+    private String dinnerDeliveryMealPeriod;
 
     @TableField("start_date")
     private LocalDate startDate;
@@ -94,6 +100,14 @@ public class SubscriptionRuleEntity {
         this.lunchQuantity = lunchQuantity;
     }
 
+    public String getLunchDeliveryMealPeriod() {
+        return lunchDeliveryMealPeriod;
+    }
+
+    public void setLunchDeliveryMealPeriod(String lunchDeliveryMealPeriod) {
+        this.lunchDeliveryMealPeriod = lunchDeliveryMealPeriod;
+    }
+
     public Boolean getDinnerEnabled() {
         return dinnerEnabled;
     }
@@ -108,6 +122,14 @@ public class SubscriptionRuleEntity {
 
     public void setDinnerQuantity(Integer dinnerQuantity) {
         this.dinnerQuantity = dinnerQuantity;
+    }
+
+    public String getDinnerDeliveryMealPeriod() {
+        return dinnerDeliveryMealPeriod;
+    }
+
+    public void setDinnerDeliveryMealPeriod(String dinnerDeliveryMealPeriod) {
+        this.dinnerDeliveryMealPeriod = dinnerDeliveryMealPeriod;
     }
 
     public LocalDate getStartDate() {

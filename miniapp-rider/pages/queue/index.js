@@ -235,9 +235,6 @@ Page({
         attentionSources,
         attentionLabel: item.attentionLabel || (needAttention ? '需留意' : ''),
         needAttention,
-        specialSummary: item.specialSummary || [item.specialTag, item.note && item.note !== '-' ? '用户备注' : '', item.adminNote ? '商家备注' : '', attentionSources[0] || '']
-          .filter(Boolean)
-          .join(' / '),
         hasRemark: needAttention,
         batchSelected: selectedSet.has(item.batchItemId)
       };

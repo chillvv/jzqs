@@ -12,6 +12,8 @@ public record RiderQueueItemResponse(
     String customerPhone,
     String deliveryAddress,
     String mealPeriod,
+    String productionMealPeriod,
+    String deliveryMealPeriod,
     String mealName,
     int quantity,
     String note,

@@ -21,6 +21,8 @@ public final class AdminRowMappers {
             rs.getLong("id"),
             rs.getString("customer_name"),
             rs.getString("customer_phone"),
+            rs.getString("meal_period"),
+            rs.getString("delivery_meal_period"),
             rs.getString("meal_summary"),
             rs.getInt("quantity"),
             rs.getString("user_note"),

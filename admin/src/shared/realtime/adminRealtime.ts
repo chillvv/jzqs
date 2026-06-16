@@ -11,6 +11,7 @@ type RealtimeListener = (message: RealtimeMessage) => void;
 let socket: WebSocket | null = null;
 let reconnectTimer: number | null = null;
 let manuallyStopped = false;
+let suppressSocketNoiseUntil = 0;
 const listeners = new Set<RealtimeListener>();
 
 function resolveRealtimeUrl() {
@@ -34,10 +35,13 @@ function scheduleReconnect() {
   if (manuallyStopped || reconnectTimer != null) {
     return;
   }
+  const delay = suppressSocketNoiseUntil > Date.now()
+    ? Math.max(3000, suppressSocketNoiseUntil - Date.now())
+    : 3000;
   reconnectTimer = window.setTimeout(() => {
     reconnectTimer = null;
     startAdminRealtime();
-  }, 3000);
+  }, delay);
 }
 
 function notify(message: RealtimeMessage) {
@@ -60,15 +64,22 @@ export function startAdminRealtime() {
   clearReconnectTimer();
   const createdSocket = new WebSocket(resolveRealtimeUrl());
   socket = createdSocket;
+  let authenticated = false;
+  let everOpened = false;
   createdSocket.addEventListener("open", () => {
     if (createdSocket.readyState !== WebSocket.OPEN) {
       return;
     }
+    everOpened = true;
     createdSocket.send(JSON.stringify({ type: "AUTH", token, client: "admin" }));
   });
   createdSocket.addEventListener("message", (event) => {
     try {
-      notify(JSON.parse(String(event.data || "{}")));
+      const parsed = JSON.parse(String(event.data || "{}"));
+      if (parsed?.type === "AUTH_OK" || parsed?.eventType === "AUTH_OK") {
+        authenticated = true;
+      }
+      notify(parsed);
     } catch {
       notify({ type: "PARSE_ERROR" });
     }
@@ -80,7 +91,13 @@ export function startAdminRealtime() {
     scheduleReconnect();
   });
   createdSocket.addEventListener("error", () => {
-    createdSocket.close();
+    if (!everOpened && !authenticated) {
+      suppressSocketNoiseUntil = Date.now() + 5000;
+      return;
+    }
+    if (createdSocket.readyState === WebSocket.OPEN || createdSocket.readyState === WebSocket.CONNECTING) {
+      createdSocket.close();
+    }
   });
 }
 
