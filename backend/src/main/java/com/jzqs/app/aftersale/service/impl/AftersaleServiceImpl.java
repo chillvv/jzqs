@@ -671,7 +671,7 @@ public class AftersaleServiceImpl implements AftersaleService {
                 action,
                 action,
                 effectiveDelta,
-                Math.max(request.settledLossMeals(), 0),
+                effectiveDelta,
                 normalizeText(adminRemark),
                 operatorName,
                 operatorName,

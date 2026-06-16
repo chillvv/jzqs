@@ -25,14 +25,14 @@ test('admin uses shared realtime client from layout shell', () => {
   assert.match(layout, /connectAdminRealtime|useAdminRealtime|startAdminRealtime/);
 });
 
-test('admin sidebar uses four-character labels and shows rider center before aftersales', () => {
+test('admin sidebar uses updated labels and shows aftersale ledger before rider center', () => {
   const layout = read('admin/src/app/layout/AdminLayout.tsx');
   assert.match(layout, /label:\s*"骑手中心"/);
-  assert.match(layout, /label:\s*"售后中心"/);
+  assert.match(layout, /label:\s*"售后台账"/);
   assert.match(layout, /label:\s*"客户资产"/);
   assert.match(layout, /label:\s*"菜单配置"/);
   assert.match(layout, /label:\s*"系统设置"/);
-  assert.ok(layout.indexOf('label: "骑手中心"') < layout.indexOf('label: "售后中心"'));
+  assert.ok(layout.indexOf('label: "售后台账"') < layout.indexOf('label: "骑手中心"'));
 });
 
 test('dispatch area bindings do not filter out newly created empty areas', () => {
@@ -78,7 +78,8 @@ test('rider queue page refreshes when dispatch realtime events arrive', () => {
 test('customer miniapp profile shows package validity summary', () => {
   const profileWxml = read('miniapp/pages/profile/index.wxml');
   assert.match(profileWxml, /到期日/);
-  assert.match(profileWxml, /剩余天数/);
+  assert.match(profileWxml, /remainingValidityDays|剩余 \{\{home\.remainingValidityDays\}\} 天/);
+  assert.doesNotMatch(profileWxml, /简知会员|vip-expiry-pill/);
 });
 
 test('customer wallet page shows package validity summary', () => {
@@ -87,9 +88,9 @@ test('customer wallet page shows package validity summary', () => {
   assert.match(walletWxml, /提醒：/);
 });
 
-test('customer miniapp order page explains timed delivery subscription behavior', () => {
+test('customer miniapp order page requests official subscribe message flow', () => {
   const orderJs = read('miniapp/pages/order/index.js');
-  assert.match(orderJs, /11:30/);
-  assert.match(orderJs, /17:00/);
-  assert.match(orderJs, /立即补发通知/);
+  assert.match(orderJs, /wx\.requestSubscribeMessage/);
+  assert.match(orderJs, /acceptWithAudio/);
+  assert.doesNotMatch(orderJs, /showDeliverySubscriptionHint/);
 });

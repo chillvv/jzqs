@@ -9,7 +9,7 @@ const {
 } = require('../../utils/order-remark');
 
 const DELIVERY_TEMPLATE_ID = 'DCpNx6852oVCXO83CKuR-uO8WsgvVEDdAaUgwkLNi3s';
-const DELIVERY_SUBSCRIPTION_HINT_KEY = 'deliverySubscriptionHintShown';
+const ACCEPTED_DELIVERY_SUBSCRIPTION_RESULTS = ['accept', 'acceptWithAudio', 'acceptWithAlert'];
 
 function tomorrowDate() {
   const date = new Date();
@@ -40,37 +40,9 @@ function openInlineAuth(page, source) {
   });
 }
 
-function showDeliverySubscriptionHint() {
-  return new Promise((resolve) => {
-    wx.showModal({
-      title: '送达后提醒你',
-      content: '用于在午餐 11:30 / 晚餐 17:00 送达后提醒你查看，若超过时间点才送达会立即补发通知。',
-      confirmText: '继续',
-      cancelText: '跳过',
-      success(res) {
-        wx.setStorageSync(DELIVERY_SUBSCRIPTION_HINT_KEY, true);
-        resolve(Boolean(res.confirm));
-      },
-      fail() {
-        resolve(false);
-      }
-    });
-  });
-}
-
-async function requestDeliverySubscription(orderIds) {
-  if (!Array.isArray(orderIds) || !orderIds.length) {
-    return;
-  }
+async function requestDeliverySubscription() {
   if (typeof wx.requestSubscribeMessage !== 'function') {
-    return;
-  }
-  const shouldExplain = !wx.getStorageSync(DELIVERY_SUBSCRIPTION_HINT_KEY);
-  if (shouldExplain) {
-    const confirmed = await showDeliverySubscriptionHint();
-    if (!confirmed) {
-      return;
-    }
+    return '';
   }
   const subscribeResult = await new Promise((resolve) => {
     wx.requestSubscribeMessage({
@@ -81,7 +53,17 @@ async function requestDeliverySubscription(orderIds) {
       }
     });
   });
-  if (subscribeResult[DELIVERY_TEMPLATE_ID] !== 'accept') {
+  const acceptResult = typeof subscribeResult[DELIVERY_TEMPLATE_ID] === 'string'
+    ? subscribeResult[DELIVERY_TEMPLATE_ID]
+    : '';
+  if (!ACCEPTED_DELIVERY_SUBSCRIPTION_RESULTS.includes(acceptResult)) {
+    return '';
+  }
+  return acceptResult;
+}
+
+async function saveDeliverySubscription(orderIds, acceptResult) {
+  if (!Array.isArray(orderIds) || !orderIds.length || !acceptResult) {
     return;
   }
   await Promise.all(orderIds.map((orderId) => request({
@@ -90,7 +72,7 @@ async function requestDeliverySubscription(orderIds) {
     header: { 'content-type': 'application/json' },
     data: {
       templateId: DELIVERY_TEMPLATE_ID,
-      acceptResult: 'accept'
+      acceptResult
     }
   }).catch(() => null)));
 }
@@ -427,11 +409,13 @@ Page({
     }
     this.setData({ submitting: true });
     try {
+      const subscriptionResult = await requestDeliverySubscription();
       const orderResults = await Promise.all(requests);
       const mergedCount = orderResults.filter((item) => item && item.status === 'MERGED').length;
       const orderIds = [...new Set(orderResults
         .map((item) => item && item.orderId)
         .filter(Boolean))];
+      await saveDeliverySubscription(orderIds, subscriptionResult);
 
       // Save remark to history
       if (this.data.remark) {
@@ -456,7 +440,6 @@ Page({
           });
           this.syncCheckoutState();
           this.loadOrderData();
-          await requestDeliverySubscription(orderIds);
           wx.navigateTo({
             url: orderIds.length
               ? `/pages/orders/index?orderId=${orderIds[0]}`

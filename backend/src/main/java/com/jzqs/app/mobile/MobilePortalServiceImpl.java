@@ -569,7 +569,10 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     @Override
     @Transactional
     public Map<String, Object> authorizeDeliverySubscription(long customerId, long orderId, String templateId, String acceptResult) {
-        if (!"accept".equalsIgnoreCase(safeString(acceptResult).trim())) {
+        String normalizedAcceptResult = safeString(acceptResult).trim();
+        if (!"accept".equalsIgnoreCase(normalizedAcceptResult)
+            && !"acceptWithAudio".equalsIgnoreCase(normalizedAcceptResult)
+            && !"acceptWithAlert".equalsIgnoreCase(normalizedAcceptResult)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "仅支持保存已同意的订阅授权");
         }
         Integer count = jdbcTemplate.queryForObject("""
