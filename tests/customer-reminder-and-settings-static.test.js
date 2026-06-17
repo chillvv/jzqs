@@ -176,6 +176,12 @@ assert.match(
 );
 
 assert.match(
+  mobilePortalService,
+  /INSERT INTO meal_slot_orders[\s\S]*delivery_meal_period[\s\S]*VALUES \(\?, \?, \?, \?, \?, \?, \?, \?, \?, \?\)/,
+  '小程序正式下单写入 meal_slot_orders 时必须显式落库 delivery_meal_period，避免线上 MySQL 因 NOT NULL 字段缺失报 500'
+);
+
+assert.match(
   maintenancePage,
   /订单历史|配送批次|回执记录|通知日志|区域调整记录|地址绑定|钱包流水/,
   '系统维护页应展示可配置的数据清理模块卡片'

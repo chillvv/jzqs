@@ -601,13 +601,13 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         long mealSlotOrderId = insertAndReturnId(
                 """
                     INSERT INTO meal_slot_orders (
-                        daily_order_id, meal_period, quantity, address_id, note, user_note, merchant_remark, status, source_type
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        daily_order_id, meal_period, delivery_meal_period, quantity, address_id, note, user_note, merchant_remark, status, source_type
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                dailyOrderId, normalizedMealPeriod, 1, addressId, finalUserNote, finalUserNote, merchantRemark, "PENDING_DISPATCH", "MINIAPP"
+                dailyOrderId, normalizedMealPeriod, normalizedMealPeriod, 1, addressId, finalUserNote, finalUserNote, merchantRemark, "PENDING_DISPATCH", "MINIAPP"
             );
         if (mealSlotOrderId <= 0) {
-            mealSlotOrderId = resolveLatestMiniappOrderId(dailyOrderId, normalizedMealPeriod, addressId);
+            mealSlotOrderId = resolveLatestMiniappOrderId(dailyOrderId, normalizedMealPeriod, normalizedMealPeriod, addressId);
         }
             jdbcTemplate.update(
                 "UPDATE daily_orders SET status = 'PENDING_DISPATCH', source = 'MINIAPP' WHERE id = ?",
@@ -2578,13 +2578,14 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         return resolvedId;
     }
 
-    private long resolveLatestMiniappOrderId(long dailyOrderId, String mealPeriod, long addressId) {
+    private long resolveLatestMiniappOrderId(long dailyOrderId, String mealPeriod, String deliveryMealPeriod, long addressId) {
         Long resolvedId = jdbcTemplate.query(
             """
                 SELECT id
                 FROM meal_slot_orders
                 WHERE daily_order_id = ?
                   AND meal_period = ?
+                  AND delivery_meal_period = ?
                   AND address_id = ?
                   AND source_type = 'MINIAPP'
                 ORDER BY id DESC
@@ -2593,7 +2594,8 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             ps -> {
                 ps.setLong(1, dailyOrderId);
                 ps.setString(2, mealPeriod);
-                ps.setLong(3, addressId);
+                ps.setString(3, deliveryMealPeriod);
+                ps.setLong(4, addressId);
             },
             rs -> rs.next() ? rs.getLong(1) : null
         );
