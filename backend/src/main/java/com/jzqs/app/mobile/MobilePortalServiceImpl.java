@@ -33,6 +33,9 @@ import com.jzqs.app.mobile.api.RiderQueueItemResponse;
 import com.jzqs.app.mobile.api.RiderTaskItemResponse;
 import java.io.IOException;
 import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import com.jzqs.app.order.service.OrderPrepService;
 import com.jzqs.app.order.service.OrderNoteSnapshotService;
 import java.sql.PreparedStatement;
@@ -65,6 +68,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final int DELIVERY_SUBSCRIPTION_RETENTION_DAYS = 30;
     private static final long MAX_RECEIPT_UPLOAD_SIZE = 5L * 1024 * 1024;
+    private static final String DEBUG_MINIAPP_ORDER_ENV_FILE = ".dbg/miniapp-order-500.env";
     private static final Logger log = LoggerFactory.getLogger(MobilePortalServiceImpl.class);
     private final JdbcTemplate jdbcTemplate;
     private final OrderPrepService orderPrepService;
@@ -454,153 +458,207 @@ public class MobilePortalServiceImpl implements MobilePortalService {
 
     @Transactional
     public Map<String, Object> createMiniappOrder(long customerId, String serveDate, String mealPeriod, String deliveryAddress, String note) {
-        ensureOrderingEnabled();
-        ensureSelfOrderAllowed(serveDate, mealPeriod);
-        requirePublishedMenu(serveDate, mealPeriod);
+        String debugTraceId = UUID.randomUUID().toString();
+        try {
+            // #region debug-point A:entry
+            reportMiniappOrderDebug("pre-fix", "A", debugTraceId, "createMiniappOrder:entry", Map.of(
+                "customerId", customerId,
+                "serveDate", safeString(serveDate),
+                "mealPeriod", safeString(mealPeriod),
+                "deliveryAddress", safeString(deliveryAddress),
+                "noteLength", safeString(note).length()
+            ));
+            // #endregion
+            ensureOrderingEnabled();
+            ensureSelfOrderAllowed(serveDate, mealPeriod);
+            requirePublishedMenu(serveDate, mealPeriod);
 
-        LocalDate orderDate = LocalDate.parse(serveDate);
-        String normalizedMealPeriod = normalizeMealPeriod(mealPeriod);
+            LocalDate orderDate = LocalDate.parse(serveDate);
+            String normalizedMealPeriod = normalizeMealPeriod(mealPeriod);
 
-        long walletId = activeWalletId(customerId);
-        int remainingMeals = remainingMealsForUpdate(walletId);
-        if (remainingMeals <= 0) {
-            throw new BusinessException(ErrorCode.INSUFFICIENT_MEALS, "剩余餐次不足，无法下单");
-        }
-        long addressId = ensureCustomerAddress(customerId, deliveryAddress);
-        String finalUserNote = normalizeNote(note);
-        String merchantRemark = normalizeCustomerMerchantRemark(customerId);
-        Long mergeTargetOrderId = findMergeTargetOrderId(customerId, orderDate, normalizedMealPeriod, addressId);
-        if (mergeTargetOrderId != null) {
-            Map<String, Object> existingOrder = jdbcTemplate.queryForMap(
+            long walletId = activeWalletId(customerId);
+            int remainingMeals = remainingMealsForUpdate(walletId);
+            // #region debug-point B:wallet
+            reportMiniappOrderDebug("pre-fix", "B", debugTraceId, "createMiniappOrder:wallet", Map.of(
+                "customerId", customerId,
+                "walletId", walletId,
+                "remainingMeals", remainingMeals,
+                "normalizedMealPeriod", normalizedMealPeriod
+            ));
+            // #endregion
+            if (remainingMeals <= 0) {
+                throw new BusinessException(ErrorCode.INSUFFICIENT_MEALS, "剩余餐次不足，无法下单");
+            }
+            long addressId = ensureCustomerAddress(customerId, deliveryAddress);
+            String finalUserNote = normalizeNote(note);
+            String merchantRemark = normalizeCustomerMerchantRemark(customerId);
+            Long mergeTargetOrderId = findMergeTargetOrderId(customerId, orderDate, normalizedMealPeriod, addressId);
+            // #region debug-point C:address-merge
+            reportMiniappOrderDebug("pre-fix", "C", debugTraceId, "createMiniappOrder:address-merge", Map.of(
+                "customerId", customerId,
+                "addressId", addressId,
+                "mergeTargetOrderId", mergeTargetOrderId == null ? 0L : mergeTargetOrderId,
+                "hasMerchantRemark", !isBlank(merchantRemark)
+            ));
+            // #endregion
+            if (mergeTargetOrderId != null) {
+                Map<String, Object> existingOrder = jdbcTemplate.queryForMap(
+                    """
+                        SELECT COALESCE(note, '-') AS note,
+                               COALESCE(user_note, '-') AS user_note
+                        FROM meal_slot_orders
+                        WHERE id = ?
+                        """,
+                    mergeTargetOrderId
+                );
+                String mergedUserNote = mergeOrderNote(
+                    preferredOrderNote(existingOrder.get("user_note"), existingOrder.get("note")),
+                    finalUserNote
+                );
+                LocalDateTime mergeTime = LocalDateTime.now();
+                jdbcTemplate.update(
+                    """
+                        UPDATE meal_slot_orders
+                        SET quantity = quantity + 1,
+                            note = ?,
+                            user_note = ?,
+                            merchant_remark = CASE
+                                WHEN (merchant_remark IS NULL OR TRIM(merchant_remark) = '' OR merchant_remark = '-') AND ? <> '' THEN ?
+                                ELSE merchant_remark
+                            END
+                        WHERE id = ?
+                        """,
+                    mergedUserNote,
+                    mergedUserNote,
+                    merchantRemark,
+                    merchantRemark,
+                    mergeTargetOrderId
+                );
+                jdbcTemplate.update(
+                    "UPDATE customers SET last_order_at = ? WHERE id = ?",
+                    Timestamp.valueOf(mergeTime),
+                    customerId
+                );
+                jdbcTemplate.update("UPDATE meal_wallets SET reserved_meals = reserved_meals + 1 WHERE id = ?", walletId);
+                insertWalletTransaction(walletId, "RESERVE", -1, "小程序", "用户自主下单加餐占用餐次", mergeTime, mergeTargetOrderId);
+                // #region debug-point D:merge-snapshot
+                reportMiniappOrderDebug("pre-fix", "D", debugTraceId, "createMiniappOrder:merge-before-snapshot", Map.of(
+                    "orderId", mergeTargetOrderId,
+                    "mode", "MERGE"
+                ));
+                // #endregion
+                attemptWriteOrderSnapshot(
+                    mergeTargetOrderId,
+                    customerId,
+                    "小程序",
+                    normalizeSnapshotNote(mergedUserNote),
+                    null,
+                    List.of(),
+                    mergeTime
+                );
+                jdbcTemplate.execute("/* force flush */ SELECT 1");
+                attemptAutoAssignPendingOrders(normalizedMealPeriod, mergeTargetOrderId, customerId);
+                Map<String, Object> result = Map.of(
+                    "orderId", mergeTargetOrderId,
+                    "status", "MERGED",
+                    "walletAction", "RESERVED"
+                );
+                // #region debug-point E:merge-return
+                reportMiniappOrderDebug("pre-fix", "E", debugTraceId, "createMiniappOrder:merge-return", result);
+                // #endregion
+                attemptPublishCustomerEvent("customer.order.changed", customerId, mergeTargetOrderId);
+                attemptPublishCustomerEvent("customer.wallet.changed", customerId, mergeTargetOrderId);
+                return result;
+            }
+            LocalDateTime now = LocalDateTime.now();
+            Long existingDailyOrderId = jdbcTemplate.query(
                 """
-                    SELECT COALESCE(note, '-') AS note,
-                           COALESCE(user_note, '-') AS user_note
-                    FROM meal_slot_orders
-                    WHERE id = ?
+                    SELECT id
+                    FROM daily_orders
+                    WHERE customer_id = ? AND serve_date = ?
+                    ORDER BY id DESC
+                    LIMIT 1
                     """,
-                mergeTargetOrderId
+                ps -> {
+                    ps.setLong(1, customerId);
+                    ps.setObject(2, orderDate);
+                },
+                rs -> rs.next() ? rs.getLong(1) : null
             );
-            String mergedUserNote = mergeOrderNote(
-                preferredOrderNote(existingOrder.get("user_note"), existingOrder.get("note")),
-                finalUserNote
+            long dailyOrderId = existingDailyOrderId == null
+                ? insertAndReturnId(
+                    "INSERT INTO daily_orders (customer_id, serve_date, source, status, locked, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    customerId, orderDate, "MINIAPP", "PENDING_DISPATCH", false, Timestamp.valueOf(now)
+                )
+                : existingDailyOrderId;
+            LocalDateTime snapshotTime = LocalDateTime.now();
+            long mealSlotOrderId = insertAndReturnId(
+                """
+                    INSERT INTO meal_slot_orders (
+                        daily_order_id, meal_period, quantity, address_id, note, user_note, merchant_remark, status, source_type
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                dailyOrderId, normalizedMealPeriod, 1, addressId, finalUserNote, finalUserNote, merchantRemark, "PENDING_DISPATCH", "MINIAPP"
             );
-            LocalDateTime mergeTime = LocalDateTime.now();
             jdbcTemplate.update(
-                """
-                    UPDATE meal_slot_orders
-                    SET quantity = quantity + 1,
-                        note = ?,
-                        user_note = ?,
-                        merchant_remark = CASE
-                            WHEN (merchant_remark IS NULL OR TRIM(merchant_remark) = '' OR merchant_remark = '-') AND ? <> '' THEN ?
-                            ELSE merchant_remark
-                        END
-                    WHERE id = ?
-                    """,
-                mergedUserNote,
-                mergedUserNote,
-                merchantRemark,
-                merchantRemark,
-                mergeTargetOrderId
+                "UPDATE daily_orders SET status = 'PENDING_DISPATCH', source = 'MINIAPP' WHERE id = ?",
+                dailyOrderId
             );
             jdbcTemplate.update(
                 "UPDATE customers SET last_order_at = ? WHERE id = ?",
-                Timestamp.valueOf(mergeTime),
+                Timestamp.valueOf(now),
                 customerId
             );
             jdbcTemplate.update("UPDATE meal_wallets SET reserved_meals = reserved_meals + 1 WHERE id = ?", walletId);
-            insertWalletTransaction(walletId, "RESERVE", -1, "小程序", "用户自主下单加餐占用餐次", mergeTime, mergeTargetOrderId);
+            insertWalletTransaction(walletId, "RESERVE", -1, "小程序", "用户自主下单占用餐次", now, mealSlotOrderId);
+            // #region debug-point D:new-order-snapshot
+            reportMiniappOrderDebug("pre-fix", "D", debugTraceId, "createMiniappOrder:new-before-snapshot", Map.of(
+                "dailyOrderId", dailyOrderId,
+                "mealSlotOrderId", mealSlotOrderId,
+                "mode", "NEW"
+            ));
+            // #endregion
             attemptWriteOrderSnapshot(
-                mergeTargetOrderId,
+                mealSlotOrderId,
                 customerId,
                 "小程序",
-                normalizeSnapshotNote(mergedUserNote),
+                finalUserNote,
                 null,
                 List.of(),
-                mergeTime
+                snapshotTime
             );
+
             jdbcTemplate.execute("/* force flush */ SELECT 1");
-            attemptAutoAssignPendingOrders(normalizedMealPeriod, mergeTargetOrderId, customerId);
+            attemptAutoAssignPendingOrders(normalizedMealPeriod, mealSlotOrderId, customerId);
+            String currentStatus = jdbcTemplate.queryForObject(
+                "SELECT status FROM meal_slot_orders WHERE id = ?",
+                String.class,
+                mealSlotOrderId
+            );
+
             Map<String, Object> result = Map.of(
-                "orderId", mergeTargetOrderId,
-                "status", "MERGED",
+                "orderId", mealSlotOrderId,
+                "status", currentStatus != null ? currentStatus : "PENDING_DISPATCH",
                 "walletAction", "RESERVED"
             );
-            attemptPublishCustomerEvent("customer.order.changed", customerId, mergeTargetOrderId);
-            attemptPublishCustomerEvent("customer.wallet.changed", customerId, mergeTargetOrderId);
+            // #region debug-point E:new-return
+            reportMiniappOrderDebug("pre-fix", "E", debugTraceId, "createMiniappOrder:new-return", result);
+            // #endregion
+            attemptPublishCustomerEvent("customer.order.changed", customerId, mealSlotOrderId);
+            attemptPublishCustomerEvent("customer.wallet.changed", customerId, mealSlotOrderId);
             return result;
+        } catch (RuntimeException ex) {
+            // #region debug-point F:error
+            reportMiniappOrderDebug("pre-fix", "F", debugTraceId, "createMiniappOrder:error", Map.of(
+                "customerId", customerId,
+                "serveDate", safeString(serveDate),
+                "mealPeriod", safeString(mealPeriod),
+                "errorType", ex.getClass().getName(),
+                "errorMessage", safeString(ex.getMessage())
+            ));
+            // #endregion
+            throw ex;
         }
-        LocalDateTime now = LocalDateTime.now();
-        Long existingDailyOrderId = jdbcTemplate.query(
-            """
-                SELECT id
-                FROM daily_orders
-                WHERE customer_id = ? AND serve_date = ?
-                ORDER BY id DESC
-                LIMIT 1
-                """,
-            ps -> {
-                ps.setLong(1, customerId);
-                ps.setObject(2, orderDate);
-            },
-            rs -> rs.next() ? rs.getLong(1) : null
-        );
-        long dailyOrderId = existingDailyOrderId == null
-            ? insertAndReturnId(
-                "INSERT INTO daily_orders (customer_id, serve_date, source, status, locked, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                customerId, orderDate, "MINIAPP", "PENDING_DISPATCH", false, Timestamp.valueOf(now)
-            )
-            : existingDailyOrderId;
-        LocalDateTime snapshotTime = LocalDateTime.now();
-        long mealSlotOrderId = insertAndReturnId(
-            """
-                INSERT INTO meal_slot_orders (
-                    daily_order_id, meal_period, quantity, address_id, note, user_note, merchant_remark, status, source_type
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-            dailyOrderId, normalizedMealPeriod, 1, addressId, finalUserNote, finalUserNote, merchantRemark, "PENDING_DISPATCH", "MINIAPP"
-        );
-        jdbcTemplate.update(
-            "UPDATE daily_orders SET status = 'PENDING_DISPATCH', source = 'MINIAPP' WHERE id = ?",
-            dailyOrderId
-        );
-        jdbcTemplate.update(
-            "UPDATE customers SET last_order_at = ? WHERE id = ?",
-            Timestamp.valueOf(now),
-            customerId
-        );
-        jdbcTemplate.update("UPDATE meal_wallets SET reserved_meals = reserved_meals + 1 WHERE id = ?", walletId);
-        insertWalletTransaction(walletId, "RESERVE", -1, "小程序", "用户自主下单占用餐次", now, mealSlotOrderId);
-        attemptWriteOrderSnapshot(
-            mealSlotOrderId,
-            customerId,
-            "小程序",
-            finalUserNote,
-            null,
-            List.of(),
-            snapshotTime
-        );
-
-        // 尝试自动派单（如果有记忆地址绑定）
-        // 在同一个事务中，JdbcTemplate 应该能看到刚插入的订单
-        jdbcTemplate.execute("/* force flush */ SELECT 1");
-        attemptAutoAssignPendingOrders(normalizedMealPeriod, mealSlotOrderId, customerId);
-
-        // 重新查询状态以返回准确结果
-        String currentStatus = jdbcTemplate.queryForObject(
-            "SELECT status FROM meal_slot_orders WHERE id = ?",
-            String.class,
-            mealSlotOrderId
-        );
-
-        Map<String, Object> result = Map.of(
-            "orderId", mealSlotOrderId,
-            "status", currentStatus != null ? currentStatus : "PENDING_DISPATCH",
-            "walletAction", "RESERVED"
-        );
-        attemptPublishCustomerEvent("customer.order.changed", customerId, mealSlotOrderId);
-        attemptPublishCustomerEvent("customer.wallet.changed", customerId, mealSlotOrderId);
-        return result;
     }
 
     @Override
@@ -1866,6 +1924,12 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         LocalDateTime snapshotTime
     ) {
         try {
+            // #region debug-point D:snapshot-attempt
+            reportMiniappOrderDebug("pre-fix", "D", String.valueOf(mealSlotOrderId), "attemptWriteOrderSnapshot:attempt", Map.of(
+                "mealSlotOrderId", mealSlotOrderId,
+                "customerId", customerId
+            ));
+            // #endregion
             orderNoteSnapshotService.writeOrderSnapshot(
                 mealSlotOrderId,
                 customerId,
@@ -1875,7 +1939,21 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 orderOnceMerchantNotes,
                 snapshotTime
             );
+            // #region debug-point D:snapshot-success
+            reportMiniappOrderDebug("pre-fix", "D", String.valueOf(mealSlotOrderId), "attemptWriteOrderSnapshot:success", Map.of(
+                "mealSlotOrderId", mealSlotOrderId,
+                "customerId", customerId
+            ));
+            // #endregion
         } catch (RuntimeException ex) {
+            // #region debug-point D:snapshot-error
+            reportMiniappOrderDebug("pre-fix", "D", String.valueOf(mealSlotOrderId), "attemptWriteOrderSnapshot:error", Map.of(
+                "mealSlotOrderId", mealSlotOrderId,
+                "customerId", customerId,
+                "errorType", ex.getClass().getName(),
+                "errorMessage", safeString(ex.getMessage())
+            ));
+            // #endregion
             log.warn(
                 "miniapp create order snapshot skipped customerId={} orderId={} reason={}",
                 customerId,
@@ -2483,11 +2561,29 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 customerId
             );
             if (remarks.isEmpty()) {
+                // #region debug-point C:merchant-remark-empty
+                reportMiniappOrderDebug("pre-fix", "C", String.valueOf(customerId), "normalizeCustomerMerchantRemark:empty", Map.of(
+                    "customerId", customerId
+                ));
+                // #endregion
                 return "";
             }
             String normalized = remarks.get(0) == null ? "" : remarks.get(0).trim();
+            // #region debug-point C:merchant-remark-success
+            reportMiniappOrderDebug("pre-fix", "C", String.valueOf(customerId), "normalizeCustomerMerchantRemark:success", Map.of(
+                "customerId", customerId,
+                "hasMerchantRemark", !normalized.isEmpty()
+            ));
+            // #endregion
             return "-".equals(normalized) ? "" : normalized;
         } catch (RuntimeException ex) {
+            // #region debug-point C:merchant-remark-error
+            reportMiniappOrderDebug("pre-fix", "C", String.valueOf(customerId), "normalizeCustomerMerchantRemark:error", Map.of(
+                "customerId", customerId,
+                "errorType", ex.getClass().getName(),
+                "errorMessage", safeString(ex.getMessage())
+            ));
+            // #endregion
             log.warn(
                 "miniapp create order merchant remark skipped customerId={} reason={}",
                 customerId,
@@ -2535,6 +2631,50 @@ public class MobilePortalServiceImpl implements MobilePortalService {
 
     private boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
+    }
+
+    private void reportMiniappOrderDebug(String runId, String hypothesisId, String traceId, String msg, Map<String, Object> data) {
+        try {
+            Map<String, String> debugEnv = readMiniappOrderDebugEnv();
+            String debugServerUrl = debugEnv.getOrDefault("DEBUG_SERVER_URL", "");
+            String debugSessionId = debugEnv.getOrDefault("DEBUG_SESSION_ID", "miniapp-order-500");
+            if (isBlank(debugServerUrl)) {
+                return;
+            }
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("sessionId", debugSessionId);
+            payload.put("runId", runId);
+            payload.put("hypothesisId", hypothesisId);
+            payload.put("location", "MobilePortalServiceImpl");
+            payload.put("msg", "[DEBUG] " + msg);
+            payload.put("data", data == null ? Map.of() : data);
+            payload.put("traceId", traceId);
+            payload.put("ts", System.currentTimeMillis());
+            HttpRequest request = HttpRequest.newBuilder(URI.create(debugServerUrl))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload)))
+                .build();
+            HttpClient.newHttpClient().sendAsync(request, HttpResponse.BodyHandlers.discarding());
+        } catch (Exception ignored) {
+            // ignore debug reporting failures
+        }
+    }
+
+    private Map<String, String> readMiniappOrderDebugEnv() {
+        Map<String, String> result = new HashMap<>();
+        try {
+            List<String> lines = Files.readAllLines(Path.of(DEBUG_MINIAPP_ORDER_ENV_FILE));
+            for (String line : lines) {
+                int index = line.indexOf('=');
+                if (index <= 0) {
+                    continue;
+                }
+                result.put(line.substring(0, index).trim(), line.substring(index + 1).trim());
+            }
+        } catch (IOException ignored) {
+            // ignore debug env read failures
+        }
+        return result;
     }
 
     private String sanitizeFileKey(String riderName) {
