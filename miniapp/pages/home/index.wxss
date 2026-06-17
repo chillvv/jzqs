@@ -265,55 +265,11 @@
   border: none;
 }
 
-.hero-banner-copy {
-  position: absolute;
-  left: 24rpx;
-  right: 24rpx;
-  bottom: 34rpx;
-  padding: 24rpx 24rpx 20rpx;
-  border-radius: 24rpx;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.08) 0%, rgba(15, 23, 42, 0.72) 100%);
-  color: #ffffff;
-  z-index: 2;
-}
-
-.hero-banner-copy__title {
-  font-size: 34rpx;
-  font-weight: 800;
-  line-height: 1.35;
-}
-
-.hero-banner-copy__action {
-  display: inline-flex;
-  align-items: center;
-  margin-bottom: 12rpx;
-  padding: 8rpx 18rpx;
-  border-radius: 999rpx;
-  background: rgba(255, 255, 255, 0.18);
-  font-size: 20rpx;
-  font-weight: 700;
-  letter-spacing: 1rpx;
-}
-
-.hero-banner-copy__desc {
-  margin-top: 10rpx;
-  font-size: 24rpx;
-  line-height: 1.6;
-  opacity: 0.92;
-}
-
-.hero-banner-copy__hint {
-  margin-top: 12rpx;
-  font-size: 22rpx;
-  font-weight: 600;
-  opacity: 0.86;
-}
-
 /* =========================================
    轮播图指示器美化
    ========================================= */
 .hero-swiper .wx-swiper-dots {
-  bottom: 16rpx !important;
+  bottom: 30rpx !important;
 }
 
 .hero-swiper .wx-swiper-dot {

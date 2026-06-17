@@ -81,16 +81,35 @@ view, text, scroll-view, image, button, input {
 #tab-home { background: #FAFAF8; min-height: 100vh; padding-bottom: calc(136rpx + env(safe-area-inset-bottom)); }
 
 .hero-banner {
-  width: 100%; height: 400rpx;
+  width: 100%; height: 500rpx;
   position: relative;
   transition: height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
+  background: linear-gradient(180deg, #eef2e2 0%, #f7f8f2 100%);
+  border-bottom-left-radius: 40rpx;
+  border-bottom-right-radius: 40rpx;
 }
 .hero-banner.expanded {
   height: 560rpx;
 }
 .hero-swiper { width: 100%; height: 100%; }
-.hero-banner-img { width: 100%; height: 100%; display: block; background-color: #e8e8e8; transition: all 0.35s ease; }
+.hero-banner-card { position: relative; width: 100%; height: 100%; }
+.hero-banner-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transform: scale(1.08);
+  opacity: 0.32;
+}
+.hero-banner-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  transition: all 0.35s ease;
+}
 
 /* 辅助样式 */
 .menu-top-row { display: flex; align-items: center; gap: 16rpx; margin-top: 8rpx; }
@@ -102,12 +121,10 @@ view, text, scroll-view, image, button, input {
 .btn-logout { width: 100% !important; box-sizing: border-box; background: #fff; color: #ff4d4f; border: 1rpx solid #ff4d4f; border-radius: 40rpx; font-size: 28rpx; height: 88rpx; display: flex; justify-content: center; align-items: center; text-align: center; padding: 0; margin: 0; }
 .related-order-hint { margin-top: 16rpx; font-size: 24rpx; color: #92AA40; font-weight: 600; display: flex; align-items: center; }
 .related-order-hint .arrow { margin-left: 4rpx; }
-.hero-banner-mask { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 100rpx; background: linear-gradient(to top, #FAFAF8, transparent); transition: opacity 0.3s; }
-.hero-banner-mask.hidden { opacity: 0; }
 
 /* 展开提示 - 已移除 */
 
-.menu-section { position: relative; margin-top: -40rpx; z-index: 2; padding-bottom: 40rpx; }
+.menu-section { position: relative; margin-top: 24rpx; z-index: 2; padding-bottom: 40rpx; }
 .poster-header { padding: 0 32rpx 24rpx; display: flex; justify-content: space-between; align-items: flex-end; }
 .poster-title { font-size: 44rpx; font-weight: 800; color: var(--text-main); letter-spacing: 2rpx; }
 .poster-subtitle { font-size: 22rpx; color: var(--brand-dark); font-weight: 700; letter-spacing: 3rpx; text-transform: uppercase; margin-bottom: 8rpx; }
