@@ -31,13 +31,11 @@
     <swiper class="hero-swiper" circular autoplay interval="{{home.bannerIntervalMs || 3000}}" indicator-dots="{{home.bannerImages.length > 1}}" wx:if="{{home && home.bannerImages && home.bannerImages.length > 0}}">
       <swiper-item wx:for="{{home.bannerImages}}" wx:key="imageUrl" bindtap="handleBannerTap" data-index="{{index}}">
         <view class="hero-banner-card">
-          <image class="hero-banner-bg" src="{{item.imageUrl}}" mode="aspectFill"></image>
           <image class="hero-banner-img" src="{{item.imageUrl}}" mode="aspectFit"></image>
         </view>
       </swiper-item>
     </swiper>
     <view wx:else class="hero-banner-card">
-      <image class="hero-banner-bg" src="../../assets/green-intro.jpg" mode="aspectFill"></image>
       <image class="hero-banner-img" src="../../assets/green-intro.jpg" mode="aspectFit"></image>
     </view>
   </view>
