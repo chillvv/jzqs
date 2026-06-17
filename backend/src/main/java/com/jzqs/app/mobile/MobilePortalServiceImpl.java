@@ -585,14 +585,20 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 },
                 rs -> rs.next() ? rs.getLong(1) : null
             );
-            long dailyOrderId = existingDailyOrderId == null
-                ? insertAndReturnId(
-                    "INSERT INTO daily_orders (customer_id, serve_date, source, status, locked, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-                    customerId, orderDate, "MINIAPP", "PENDING_DISPATCH", false, Timestamp.valueOf(now)
-                )
-                : existingDailyOrderId;
+        long dailyOrderId;
+        if (existingDailyOrderId == null) {
+            dailyOrderId = insertAndReturnId(
+                "INSERT INTO daily_orders (customer_id, serve_date, source, status, locked, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                customerId, orderDate, "MINIAPP", "PENDING_DISPATCH", false, Timestamp.valueOf(now)
+            );
+            if (dailyOrderId <= 0) {
+                dailyOrderId = resolveLatestDailyOrderId(customerId, orderDate);
+            }
+        } else {
+            dailyOrderId = existingDailyOrderId;
+        }
             LocalDateTime snapshotTime = LocalDateTime.now();
-            long mealSlotOrderId = insertAndReturnId(
+        long mealSlotOrderId = insertAndReturnId(
                 """
                     INSERT INTO meal_slot_orders (
                         daily_order_id, meal_period, quantity, address_id, note, user_note, merchant_remark, status, source_type
@@ -600,6 +606,9 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                     """,
                 dailyOrderId, normalizedMealPeriod, 1, addressId, finalUserNote, finalUserNote, merchantRemark, "PENDING_DISPATCH", "MINIAPP"
             );
+        if (mealSlotOrderId <= 0) {
+            mealSlotOrderId = resolveLatestMiniappOrderId(dailyOrderId, normalizedMealPeriod, addressId);
+        }
             jdbcTemplate.update(
                 "UPDATE daily_orders SET status = 'PENDING_DISPATCH', source = 'MINIAPP' WHERE id = ?",
                 dailyOrderId
@@ -2485,7 +2494,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         if (customer == null) {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "未找到对应客户");
         }
-            return insertAndReturnId(
+            long insertedAddressId = insertAndReturnId(
                 "INSERT INTO customer_addresses (customer_id, contact_name, contact_phone, address_line, area_code, is_default) VALUES (?, ?, ?, ?, ?, FALSE)",
                 customerId,
                 String.valueOf(customer.get("name")),
@@ -2493,6 +2502,10 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 deliveryAddress,
                 deliveryAddress.contains("高新区") ? "高新区" : "老城区"
             );
+            if (insertedAddressId > 0) {
+                return insertedAddressId;
+            }
+            return resolveLatestCustomerAddressId(customerId, deliveryAddress);
         }
         Long defaultAddressId = jdbcTemplate.query(
             "SELECT id FROM customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, id ASC",
@@ -2542,6 +2555,74 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             return key.longValue();
         }
         return 0L;
+    }
+
+    private long resolveLatestDailyOrderId(long customerId, LocalDate serveDate) {
+        Long resolvedId = jdbcTemplate.query(
+            """
+                SELECT id
+                FROM daily_orders
+                WHERE customer_id = ? AND serve_date = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+            ps -> {
+                ps.setLong(1, customerId);
+                ps.setObject(2, serveDate);
+            },
+            rs -> rs.next() ? rs.getLong(1) : null
+        );
+        if (resolvedId == null || resolvedId <= 0) {
+            throw new IllegalStateException("无法定位刚创建的日订单");
+        }
+        return resolvedId;
+    }
+
+    private long resolveLatestMiniappOrderId(long dailyOrderId, String mealPeriod, long addressId) {
+        Long resolvedId = jdbcTemplate.query(
+            """
+                SELECT id
+                FROM meal_slot_orders
+                WHERE daily_order_id = ?
+                  AND meal_period = ?
+                  AND address_id = ?
+                  AND source_type = 'MINIAPP'
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+            ps -> {
+                ps.setLong(1, dailyOrderId);
+                ps.setString(2, mealPeriod);
+                ps.setLong(3, addressId);
+            },
+            rs -> rs.next() ? rs.getLong(1) : null
+        );
+        if (resolvedId == null || resolvedId <= 0) {
+            throw new IllegalStateException("无法定位刚创建的明细订单");
+        }
+        return resolvedId;
+    }
+
+    private long resolveLatestCustomerAddressId(long customerId, String deliveryAddress) {
+        Long resolvedId = jdbcTemplate.query(
+            """
+                SELECT id
+                FROM customer_addresses
+                WHERE customer_id = ?
+                  AND address_line = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+            ps -> {
+                ps.setLong(1, customerId);
+                ps.setString(2, deliveryAddress);
+            },
+            rs -> rs.next() ? rs.getLong(1) : null
+        );
+        if (resolvedId == null || resolvedId <= 0) {
+            throw new IllegalStateException("无法定位刚创建的客户地址");
+        }
+        return resolvedId;
     }
 
     private String normalizeNote(String note) {
