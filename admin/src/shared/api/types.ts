@@ -257,6 +257,10 @@ export type OrderPrepItemResponse = {
   canCancel: boolean;
   canReceipt: boolean;
   walletStatusLabel: string;
+  referenceImageUrl?: string;
+  receiptUrl?: string;
+  receiptNote?: string;
+  deliveredAt?: string | null;
 };
 
 export type AdminAftersaleItemResponse = {
@@ -338,6 +342,7 @@ export type WalletTransactionResponse = {
 export type MaintenanceLogItemResponse = {
   id: number;
   jobType: string;
+  moduleKey: string | null;
   triggerSource: string;
   status: string;
   timeRangeLabel: string;
@@ -349,12 +354,34 @@ export type MaintenanceLogItemResponse = {
   failedCount: number;
   message: string;
   errorDetail: string | null;
+  moduleSummaries: MaintenanceCleanupModuleSummaryResponse[];
+};
+export type MaintenanceCleanupModuleSummaryResponse = {
+  moduleKey: string;
+  moduleLabel: string;
+  scannedCount: number;
+  deletedCount: number;
+  failedCount: number;
+  timeRangeLabel: string;
+  summary: string;
+};
+export type MaintenanceCleanupRuleResponse = {
+  moduleKey: string;
+  moduleLabel: string;
+  retentionValue: number;
+  retentionUnit: string;
+  autoEnabled: boolean;
+  lastResultSummary: string;
+  lastRunAt: string | null;
+  lastStatus: string | null;
 };
 export type MaintenanceOverviewResponse = {
   latestManual: MaintenanceLogItemResponse | null;
   latestAuto: MaintenanceLogItemResponse | null;
   latestCloudReceipt: MaintenanceLogItemResponse | null;
   latestCloudStorage: MaintenanceLogItemResponse | null;
+  cleanupRules: MaintenanceCleanupRuleResponse[];
+  nextAutoRunLabel: string;
 };
 export type MaintenanceCleanupTriggerResponse = {
   status: string;
@@ -539,11 +566,21 @@ export type OperationSettingsResponse = {
   bannerIntervalSeconds: number;
   packageExpiryReminderDays: number;
   packageLowBalanceThreshold: number;
+  mealReminderPopupEnabled: boolean;
+  deliverySubscribeEnabled: boolean;
+  deliverySubscribeLunchTime: string;
+  deliverySubscribeDinnerTime: string;
   popupAnnouncementEnabled: boolean;
   popupAnnouncementContent: string;
 };
 
 export type BannerImageUploadResponse = {
+  url: string;
+  fileKey: string;
+  size: number;
+};
+
+export type DeliveryReceiptUploadResponse = {
   url: string;
   fileKey: string;
   size: number;

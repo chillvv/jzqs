@@ -50,6 +50,8 @@ import java.util.Map;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -61,7 +63,9 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class MobilePortalServiceImpl implements MobilePortalService {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final int DELIVERY_SUBSCRIPTION_RETENTION_DAYS = 30;
     private static final long MAX_RECEIPT_UPLOAD_SIZE = 5L * 1024 * 1024;
+    private static final Logger log = LoggerFactory.getLogger(MobilePortalServiceImpl.class);
     private final JdbcTemplate jdbcTemplate;
     private final OrderPrepService orderPrepService;
     private final OrderNoteSnapshotService orderNoteSnapshotService;
@@ -110,7 +114,18 @@ public class MobilePortalServiceImpl implements MobilePortalService {
 
     public MobileHomeResponse guestHome() {
         Map<String, Object> settings = jdbcTemplate.queryForMap(
-            "SELECT ordering_enabled, holiday_notice_title, holiday_notice_desc, banner_images, banner_interval_seconds, popup_announcement_enabled, popup_announcement_content FROM admin_settings WHERE id = 1"
+            """
+                SELECT ordering_enabled,
+                       holiday_notice_title,
+                       holiday_notice_desc,
+                       banner_images,
+                       banner_interval_seconds,
+                       popup_announcement_enabled,
+                       popup_announcement_content,
+                       meal_reminder_popup_enabled
+                FROM admin_settings
+                WHERE id = 1
+                """
         );
         boolean orderingEnabled = Boolean.TRUE.equals(settings.get("ordering_enabled"));
         return new MobileHomeResponse(
@@ -134,7 +149,11 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             parseBannerImages(settings.get("banner_images")),
             resolveBannerIntervalMs(settings.get("banner_interval_seconds")),
             Boolean.TRUE.equals(settings.get("popup_announcement_enabled")),
-            safeString(settings.get("popup_announcement_content"))
+            safeString(settings.get("popup_announcement_content")),
+            false,
+            "",
+            "",
+            ""
         );
     }
 
@@ -191,7 +210,20 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "未找到对应客户");
         }
         Map<String, Object> settings = jdbcTemplate.queryForMap(
-            "SELECT ordering_enabled, holiday_notice_title, holiday_notice_desc, banner_images, banner_interval_seconds, package_expiry_reminder_days, package_low_balance_threshold, popup_announcement_enabled, popup_announcement_content FROM admin_settings WHERE id = 1"
+            """
+                SELECT ordering_enabled,
+                       holiday_notice_title,
+                       holiday_notice_desc,
+                       banner_images,
+                       banner_interval_seconds,
+                       package_expiry_reminder_days,
+                       package_low_balance_threshold,
+                       popup_announcement_enabled,
+                       popup_announcement_content,
+                       meal_reminder_popup_enabled
+                FROM admin_settings
+                WHERE id = 1
+                """
         );
         boolean orderingEnabled = Boolean.TRUE.equals(settings.get("ordering_enabled"));
         LocalDateTime expiredAt = (LocalDateTime) customer.get("expired_at");
@@ -203,6 +235,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             intSetting(settings.get("package_expiry_reminder_days"), 7),
             intSetting(settings.get("package_low_balance_threshold"), 3)
         );
+        boolean mealReminderPopupEnabled = shouldShowMealReminderPopup(settings.get("meal_reminder_popup_enabled"), packageAlertCode);
         return new MobileHomeResponse(
             ((Number) customer.get("id")).longValue(),
             String.valueOf(customer.get("name")),
@@ -224,7 +257,11 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             parseBannerImages(settings.get("banner_images")),
             resolveBannerIntervalMs(settings.get("banner_interval_seconds")),
             Boolean.TRUE.equals(settings.get("popup_announcement_enabled")),
-            safeString(settings.get("popup_announcement_content"))
+            safeString(settings.get("popup_announcement_content")),
+            mealReminderPopupEnabled,
+            mealReminderPopupEnabled ? buildMealReminderTitle(packageAlertCode) : "",
+            mealReminderPopupEnabled ? buildMealReminderMessage(packageAlertCode, remainingMeals, remainingValidityDays) : "",
+            mealReminderPopupEnabled ? buildMealReminderKey(packageAlertCode, remainingMeals, expiredAt) : ""
         );
     }
 
@@ -483,14 +520,14 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 mergeTime
             );
             jdbcTemplate.execute("/* force flush */ SELECT 1");
-            dispatchService.autoAssignPendingOrders(normalizedMealPeriod);
+            attemptAutoAssignPendingOrders(normalizedMealPeriod, mergeTargetOrderId, customerId);
             Map<String, Object> result = Map.of(
                 "orderId", mergeTargetOrderId,
                 "status", "MERGED",
                 "walletAction", "RESERVED"
             );
-            publishCustomerEvent("customer.order.changed", customerId, mergeTargetOrderId);
-            publishCustomerEvent("customer.wallet.changed", customerId, mergeTargetOrderId);
+            attemptPublishCustomerEvent("customer.order.changed", customerId, mergeTargetOrderId);
+            attemptPublishCustomerEvent("customer.wallet.changed", customerId, mergeTargetOrderId);
             return result;
         }
         LocalDateTime now = LocalDateTime.now();
@@ -547,7 +584,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         // 尝试自动派单（如果有记忆地址绑定）
         // 在同一个事务中，JdbcTemplate 应该能看到刚插入的订单
         jdbcTemplate.execute("/* force flush */ SELECT 1");
-        dispatchService.autoAssignPendingOrders(normalizedMealPeriod);
+        attemptAutoAssignPendingOrders(normalizedMealPeriod, mealSlotOrderId, customerId);
 
         // 重新查询状态以返回准确结果
         String currentStatus = jdbcTemplate.queryForObject(
@@ -561,18 +598,15 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             "status", currentStatus != null ? currentStatus : "PENDING_DISPATCH",
             "walletAction", "RESERVED"
         );
-        publishCustomerEvent("customer.order.changed", customerId, mealSlotOrderId);
-        publishCustomerEvent("customer.wallet.changed", customerId, mealSlotOrderId);
+        attemptPublishCustomerEvent("customer.order.changed", customerId, mealSlotOrderId);
+        attemptPublishCustomerEvent("customer.wallet.changed", customerId, mealSlotOrderId);
         return result;
     }
 
     @Override
     @Transactional
     public Map<String, Object> authorizeDeliverySubscription(long customerId, long orderId, String templateId, String acceptResult) {
-        String normalizedAcceptResult = safeString(acceptResult).trim();
-        if (!"accept".equalsIgnoreCase(normalizedAcceptResult)
-            && !"acceptWithAudio".equalsIgnoreCase(normalizedAcceptResult)
-            && !"acceptWithAlert".equalsIgnoreCase(normalizedAcceptResult)) {
+        if (!isAcceptedSubscribeResult(acceptResult)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "仅支持保存已同意的订阅授权");
         }
         Integer count = jdbcTemplate.queryForObject("""
@@ -597,6 +631,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 sent_at = NULL,
                 last_error_message = NULL
             """, customerId, orderId, templateId);
+        pruneOldDeliverySubscriptions();
         return Map.of(
             "orderId", orderId,
             "status", "AUTHORIZED"
@@ -1791,6 +1826,36 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         realtimeEventPublisher.publish(builder.build());
     }
 
+    private void attemptAutoAssignPendingOrders(String mealPeriod, long orderId, long customerId) {
+        try {
+            dispatchService.autoAssignPendingOrders(mealPeriod);
+        } catch (RuntimeException ex) {
+            log.warn(
+                "miniapp create order auto-assign skipped customerId={} orderId={} mealPeriod={} reason={}",
+                customerId,
+                orderId,
+                mealPeriod,
+                ex.getMessage(),
+                ex
+            );
+        }
+    }
+
+    private void attemptPublishCustomerEvent(String eventType, long customerId, Object orderId) {
+        try {
+            publishCustomerEvent(eventType, customerId, orderId);
+        } catch (RuntimeException ex) {
+            log.warn(
+                "miniapp create order realtime publish skipped eventType={} customerId={} orderId={} reason={}",
+                eventType,
+                customerId,
+                orderId,
+                ex.getMessage(),
+                ex
+            );
+        }
+    }
+
     private void sendDeliverySubscriptionAfterCutoffIfReached(long mealSlotOrderId, LocalDateTime deliveredDateTime) {
         DeliveryMealSlotContext context = findDeliveryMealSlotContext(mealSlotOrderId);
         if (context == null || !hasReachedDeliveryNotifyCutoff(context.mealPeriod(), context.serveDate(), deliveredDateTime)) {
@@ -1842,6 +1907,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 Timestamp.valueOf(triggerTime),
                 context.id()
             );
+            pruneOldDeliverySubscriptions();
             return true;
         } catch (Exception ex) {
             jdbcTemplate.update(
@@ -1849,7 +1915,22 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 ex.getMessage(),
                 context.id()
             );
+            pruneOldDeliverySubscriptions();
             throw ex;
+        }
+    }
+
+    private void pruneOldDeliverySubscriptions() {
+        LocalDateTime cutoffTime = LocalDateTime.now().minusDays(DELIVERY_SUBSCRIPTION_RETENTION_DAYS);
+        int deletedCount = jdbcTemplate.update(
+            """
+            DELETE FROM customer_delivery_subscriptions
+            WHERE COALESCE(sent_at, authorized_at) < ?
+            """,
+            Timestamp.valueOf(cutoffTime)
+        );
+        if (deletedCount > 0) {
+            log.info("清理配送订阅状态记录: {}", deletedCount);
         }
     }
 
@@ -2193,11 +2274,40 @@ public class MobilePortalServiceImpl implements MobilePortalService {
 
     private String resolvePackageAlertMessage(String alertCode, int remainingMeals, int remainingValidityDays) {
         return switch (alertCode) {
-            case "EXPIRED" -> "餐包已过期，请联系客服续餐";
-            case "EXPIRING_SOON" -> "餐包将于 " + Math.max(0, remainingValidityDays) + " 天后到期，请及时续餐";
-            case "LOW_BALANCE" -> "剩余 " + remainingMeals + " 餐，请及时续餐";
+            case "EXPIRED" -> "餐包已到期，建议尽快联系商家续卡";
+            case "EXPIRING_SOON" -> "餐包还有 " + Math.max(0, remainingValidityDays) + " 天到期，建议优先安排近期餐食或联系商家续卡";
+            case "LOW_BALANCE" -> "当前仅剩 " + Math.max(0, remainingMeals) + " 餐，建议提前联系商家续卡或补餐";
             default -> "";
         };
+    }
+
+    private boolean shouldShowMealReminderPopup(Object settingValue, String alertCode) {
+        return Boolean.TRUE.equals(settingValue) && !isBlank(alertCode);
+    }
+
+    private String buildMealReminderTitle(String alertCode) {
+        return switch (alertCode) {
+            case "EXPIRED" -> "餐包已到期，建议尽快续卡";
+            case "EXPIRING_SOON" -> "餐包即将到期，记得提前安排";
+            case "LOW_BALANCE" -> "餐次余额不多了，建议提前补足";
+            default -> "";
+        };
+    }
+
+    private String buildMealReminderMessage(String alertCode, int remainingMeals, int remainingValidityDays) {
+        return switch (alertCode) {
+            case "EXPIRED" -> "你的餐包已到期，建议尽快联系商家续卡；如果还想继续按时用餐，也可以提前和商家确认后续安排。";
+            case "EXPIRING_SOON" -> "当前餐包还有 " + Math.max(0, remainingValidityDays) + " 天到期，建议优先安排近期餐食或联系商家续卡，避免影响接下来的配送。";
+            case "LOW_BALANCE" -> "当前仅剩 " + Math.max(0, remainingMeals) + " 餐，建议提前联系商家续卡或补餐，避免临近用餐时余额不足。";
+            default -> "";
+        };
+    }
+
+    private String buildMealReminderKey(String alertCode, int remainingMeals, LocalDateTime expiredAt) {
+        if (isBlank(alertCode)) {
+            return "";
+        }
+        return alertCode + "|" + remainingMeals + "|" + formatDate(expiredAt);
     }
 
     private int remainingMealsForUpdate(long walletId) {
@@ -2251,7 +2361,22 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             if (!existingIds.isEmpty()) {
                 return existingIds.get(0);
             }
-            Map<String, Object> customer = jdbcTemplate.queryForMap("SELECT name, phone FROM customers WHERE id = ?", customerId);
+        Map<String, Object> customer = jdbcTemplate.query(
+            "SELECT name, phone FROM customers WHERE id = ?",
+            ps -> ps.setLong(1, customerId),
+            rs -> {
+                if (!rs.next()) {
+                    return null;
+                }
+                Map<String, Object> row = new HashMap<>();
+                row.put("name", rs.getString("name"));
+                row.put("phone", rs.getString("phone"));
+                return row;
+            }
+        );
+        if (customer == null) {
+            throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "未找到对应客户");
+        }
             return insertAndReturnId(
                 "INSERT INTO customer_addresses (customer_id, contact_name, contact_phone, address_line, area_code, is_default) VALUES (?, ?, ?, ?, ?, FALSE)",
                 customerId,

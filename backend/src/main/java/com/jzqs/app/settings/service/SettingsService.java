@@ -16,7 +16,14 @@ public interface SettingsService {
 
     OperationSettingsResponse updatePopupAnnouncement(String title, String desc, boolean enabled, String content);
 
-    OperationSettingsResponse updatePackageReminderSettings(int packageExpiryReminderDays, int packageLowBalanceThreshold);
+    OperationSettingsResponse updatePackageReminderSettings(
+        int packageExpiryReminderDays,
+        int packageLowBalanceThreshold,
+        boolean mealReminderPopupEnabled,
+        boolean deliverySubscribeEnabled,
+        String deliverySubscribeLunchTime,
+        String deliverySubscribeDinnerTime
+    );
 
     BannerImageUploadResponse uploadBannerImage(MultipartFile file);
 

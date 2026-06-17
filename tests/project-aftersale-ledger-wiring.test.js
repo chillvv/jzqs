@@ -71,8 +71,13 @@ test("aftersale parameterized queries avoid deprecated rowMapper-first overload 
 test("admin aftersale page has ledger and settlement views with order options fetch", () => {
   const page = read("admin/src/modules/aftersales/AftersalePage.tsx");
   const http = read("admin/src/shared/api/http.ts");
+  const ledgerViewMatches = page.match(/登记台账/g) ?? [];
+  const settlementViewMatches = page.match(/处理台账/g) ?? [];
   assert.match(page, /售后登记/);
-  assert.match(page, /售后处理/);
+  assert.match(page, /处理台账/);
+  assert.doesNotMatch(page, /<div className="stat-title">售后处理<\/div>/, "售后台账顶部不应再保留重复的售后处理卡片标题");
+  assert.equal(ledgerViewMatches.length, 1, "售后台账不应重复展示登记台账切换入口");
+  assert.equal(settlementViewMatches.length, 1, "售后台账不应重复展示处理台账切换入口");
   assert.match(page, /隐藏秒退款/);
   assert.match(page, /补零餐/);
   assert.match(page, /果蔬汁/);

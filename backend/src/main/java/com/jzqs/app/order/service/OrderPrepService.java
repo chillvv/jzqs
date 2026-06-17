@@ -45,6 +45,8 @@ public interface OrderPrepService {
 
     Map<String, Object> cancelOrder(long orderId);
 
+    Map<String, Object> deleteDeliveryReceipt(long orderId);
+
     Map<String, Object> deleteOrder(long orderId);
 
     BatchOperationResponse consumeOrders(List<Long> orderIds);

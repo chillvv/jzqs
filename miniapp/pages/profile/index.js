@@ -6,11 +6,13 @@ const {
   getPhonePrivacyErrorMessage,
   openPrivacyContract
 } = require('../../utils/privacy-auth');
+const {
+  requestDeliverySubscribeAuthorization,
+  sendDeliverySubscribeMessageTest
+} = require('../../utils/delivery-subscription');
 const auth = require('../../utils/auth');
 
 const AGREEMENT_ACCEPTED_KEY = 'miniapp_customer_auth_agreement_accepted_v1';
-const DELIVERY_TEMPLATE_ID = 'DCpNx6852oVCXO83CKuR-uO8WsgvVEDdAaUgwkLNi3s';
-const ACCEPTED_DELIVERY_SUBSCRIPTION_RESULTS = ['accept', 'acceptWithAudio', 'acceptWithAlert'];
 
 function displayName(name) {
   if (!name || name.startsWith('微信用户-') || name.startsWith('待完善-')) {
@@ -50,37 +52,6 @@ function persistAgreementAccepted() {
   try {
     wx.setStorageSync(AGREEMENT_ACCEPTED_KEY, true);
   } catch (_) {}
-}
-
-async function requestProfileSubscribeMessageTest() {
-  if (typeof wx.requestSubscribeMessage !== 'function') {
-    throw new Error('当前微信版本不支持订阅消息测试');
-  }
-  const subscribeResult = await new Promise((resolve) => {
-    wx.requestSubscribeMessage({
-      tmplIds: [DELIVERY_TEMPLATE_ID],
-      success: resolve,
-      fail() {
-        resolve({});
-      }
-    });
-  });
-  const acceptResult = typeof subscribeResult[DELIVERY_TEMPLATE_ID] === 'string'
-    ? subscribeResult[DELIVERY_TEMPLATE_ID]
-    : '';
-  return ACCEPTED_DELIVERY_SUBSCRIPTION_RESULTS.includes(acceptResult) ? acceptResult : '';
-}
-
-async function sendProfileSubscribeMessageTest(acceptResult) {
-  return request({
-    url: '/api/mobile/customer/subscribe-message/test-send',
-    method: 'POST',
-    header: { 'content-type': 'application/json' },
-    data: {
-      templateId: DELIVERY_TEMPLATE_ID,
-      acceptResult
-    }
-  });
 }
 
 Page({
@@ -627,12 +598,12 @@ Page({
     }
     this.setData({ sendingSubscribeMessageTest: true });
     try {
-      const acceptResult = await requestProfileSubscribeMessageTest();
+      const acceptResult = await requestDeliverySubscribeAuthorization({ throwOnUnsupported: true });
       if (!acceptResult) {
         wx.showToast({ title: '你还没有同意订阅消息授权', icon: 'none' });
         return;
       }
-      await sendProfileSubscribeMessageTest(acceptResult);
+      await sendDeliverySubscribeMessageTest(acceptResult);
       wx.showToast({ title: '测试消息已发送', icon: 'success' });
     } catch (error) {
       wx.showToast({ title: error.message || '测试发送失败', icon: 'none' });

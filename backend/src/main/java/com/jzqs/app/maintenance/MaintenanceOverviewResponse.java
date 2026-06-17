@@ -4,6 +4,8 @@ public record MaintenanceOverviewResponse(
     MaintenanceLogItemResponse latestManual,
     MaintenanceLogItemResponse latestAuto,
     MaintenanceLogItemResponse latestCloudReceipt,
-    MaintenanceLogItemResponse latestCloudStorage
+    MaintenanceLogItemResponse latestCloudStorage,
+    java.util.List<MaintenanceCleanupRuleResponse> cleanupRules,
+    String nextAutoRunLabel
 ) {
 }

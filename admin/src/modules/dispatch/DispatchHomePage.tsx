@@ -77,7 +77,6 @@ export function DispatchHomePage() {
   const [areaBindings, setAreaBindings] = useState<DispatchAreaBindingResponse[]>([]);
   const [search, setSearch] = useState("");
   const [selectedPendingIds, setSelectedPendingIds] = useState<number[]>([]);
-  const [inlineAreas, setInlineAreas] = useState<Record<number, string>>({});
   const [batchAreaCode, setBatchAreaCode] = useState("");
   const [batchAssigning, setBatchAssigning] = useState(false);
   const [batchResult, setBatchResult] = useState<BatchOperationResponse | null>(null);
@@ -126,9 +125,6 @@ export function DispatchHomePage() {
     if (isPromiseFulfilledResult(pendingResult)) {
       setPendingItems(pendingResult.value);
       setSelectedPendingIds((prev) => prev.filter((id) => pendingResult.value.some((item: DispatchPendingItemResponse) => item.orderId === id)));
-      setInlineAreas((prev) => Object.fromEntries(
-        Object.entries(prev).filter(([key]) => pendingResult.value.some((item) => item.orderId === Number(key)))
-      ));
     }
   }
 
@@ -173,34 +169,6 @@ export function DispatchHomePage() {
       toast(`已归入区域 ${result.successCount} 单`);
     } catch (err: any) {
       toast(getErrorMessage(err, "批量归入区域失败"), "error");
-    } finally {
-      setBatchAssigning(false);
-    }
-  }
-
-  async function handleSingleAssign(orderId: number) {
-    const areaCode = inlineAreas[orderId];
-    if (!areaCode) {
-      toast("请先选择区域", "error");
-      return;
-    }
-    setBatchAssigning(true);
-    try {
-      const result = await batchAssignDispatchPendingOrders({
-        orderIds: [orderId],
-        areaCode,
-        updatedBy: DEFAULT_OPERATOR
-      });
-      setBatchResult(result);
-      await reloadAll();
-      setInlineAreas((prev) => {
-        const next = { ...prev };
-        delete next[orderId];
-        return next;
-      });
-      toast(`订单 #${orderId} 已归入 ${areaCode}`);
-    } catch (err: any) {
-      toast(getErrorMessage(err, "归入区域失败"), "error");
     } finally {
       setBatchAssigning(false);
     }
@@ -272,62 +240,62 @@ export function DispatchHomePage() {
           <span className="tag tag-amber">{pendingItems.length} 单</span>
         </div>
 
-        <div className={`dispatch-bulk-bar${selectedPendingIds.length === 0 ? " is-idle" : ""}`}>
-          <div className="dispatch-bulk-bar__summary">
-            <div className="dispatch-bulk-bar__title">批量归入区域</div>
-            <div className="dispatch-bulk-bar__note">
-              {selectedPendingIds.length > 0
-                ? `已选 ${selectedPendingIds.length} 单，选择区域后即可统一归入。`
-                : "先勾选待分配订单，再统一归入区域。"}
-            </div>
-          </div>
-          <div className="dispatch-bulk-bar__controls">
-            <div className="dispatch-bulk-bar__field">
-              <AppSelect
-                value={batchAreaCode}
-                options={[{ label: "分配区域 ▾", value: "" }, ...areaOptions]}
-                onChange={setBatchAreaCode}
-                style={selectStyle}
-              />
-            </div>
-            <button
-              className="btn btn-primary"
-              disabled={!selectedPendingIds.length || !batchAreaCode.trim() || batchAssigning}
-              onClick={() => handleBatchAssign()}
-            >
-              归入区域
-            </button>
-          </div>
-        </div>
-
-        {batchResult ? (
-          <div className="dispatch-batch-result">
-            <div className="dispatch-batch-result__header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div className="dispatch-batch-result__title">批量处理结果</div>
-              <button className="btn btn-outline btn-compact" onClick={() => setBatchResult(null)}>清除</button>
-            </div>
-            <div className="dispatch-batch-result__summary">
-              成功 {batchResult.successCount} 单，失败 {batchResult.failureCount} 单
-            </div>
-            {batchResult.failures.length > 0 ? (
-              <div className="dispatch-batch-result__list">
-                {batchResult.failures.map((failure) => (
-                  <div key={`${failure.targetId}-${failure.code}`} className="dispatch-batch-result__item">
-                    订单 #{failure.targetId}：{failure.message}
-                  </div>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
         {pendingSearchItems.length === 0 ? (
           <div className="dispatch-empty">
             {pendingItems.length === 0 ? "当前没有待分配订单，工作台已归整完成。" : "当前搜索条件下没有匹配的待分配订单。"}
           </div>
         ) : (
-          <div className="dispatch-pending-shell">
-            <div className="dispatch-pending-meta">
+          <div className="dispatch-pending-shell dispatch-pending-shell--sticky">
+            <div className={`dispatch-bulk-bar dispatch-bulk-bar--sticky${selectedPendingIds.length === 0 ? " is-idle" : ""}`}>
+              <div className="dispatch-bulk-bar__summary">
+                <div className="dispatch-bulk-bar__title">批量归入区域</div>
+                <div className="dispatch-bulk-bar__note">
+                  {selectedPendingIds.length > 0
+                    ? `已选 ${selectedPendingIds.length} 单，选择区域后即可统一归入。`
+                    : "先勾选待分配订单，再统一归入区域。"}
+                </div>
+              </div>
+              <div className="dispatch-bulk-bar__controls">
+                <div className="dispatch-bulk-bar__actions">
+                  <div className="dispatch-bulk-bar__field">
+                    <AppSelect
+                      value={batchAreaCode}
+                      options={[{ label: "分配区域 ▾", value: "" }, ...areaOptions]}
+                      onChange={setBatchAreaCode}
+                      style={selectStyle}
+                    />
+                  </div>
+                  <button
+                    className="btn btn-primary"
+                    disabled={!selectedPendingIds.length || !batchAreaCode.trim() || batchAssigning}
+                    onClick={() => handleBatchAssign()}
+                  >
+                    归区
+                  </button>
+                </div>
+              </div>
+            </div>
+            {batchResult ? (
+              <div className="dispatch-batch-result">
+                <div className="dispatch-batch-result__header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div className="dispatch-batch-result__title">批量处理结果</div>
+                  <button className="btn btn-outline btn-compact" onClick={() => setBatchResult(null)}>清除</button>
+                </div>
+                <div className="dispatch-batch-result__summary">
+                  成功 {batchResult.successCount} 单，失败 {batchResult.failureCount} 单
+                </div>
+                {batchResult.failures.length > 0 ? (
+                  <div className="dispatch-batch-result__list">
+                    {batchResult.failures.map((failure) => (
+                      <div key={`${failure.targetId}-${failure.code}`} className="dispatch-batch-result__item">
+                        订单 #{failure.targetId}：{failure.message}
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="dispatch-pending-meta dispatch-pending-meta--sticky">
               <div className="dispatch-inline-note">已展示 {pendingSearchItems.length} / {pendingItems.length} 单，可跨区域连续勾选处理。</div>
               <button className="btn btn-outline btn-compact" onClick={toggleAllVisible}>
                 {allVisibleSelected ? "取消当前结果" : "全选当前结果"}
@@ -342,7 +310,6 @@ export function DispatchHomePage() {
                     </th>
                     <th>客户</th>
                     <th>配送地址</th>
-                    <th>分配区域</th>
                     <th>操作</th>
                   </tr>
                 </thead>
@@ -369,35 +336,15 @@ export function DispatchHomePage() {
                       </td>
                       <td className="dispatch-pending-address">{item.deliveryAddress}</td>
                       <td onClick={(e) => e.stopPropagation()}>
-                        <AppSelect
-                          value={inlineAreas[item.orderId] || ""}
-                          options={[{ label: "选择区域 ▾", value: "" }, ...areaOptions]}
-                          onChange={(val) => setInlineAreas(prev => ({ ...prev, [item.orderId]: val }))}
-                          style={{ minWidth: '140px' }}
-                        />
-                      </td>
-                      <td onClick={(e) => e.stopPropagation()}>
                         <div className="dispatch-pending-actions">
-                          {selectedPendingSet.has(item.orderId) ? (
-                            <>
-                              <button
-                                className="btn btn-primary btn-compact"
-                                disabled={!inlineAreas[item.orderId] || batchAssigning}
-                                onClick={() => handleSingleAssign(item.orderId)}
-                              >
-                                确认归属
-                              </button>
-                              <button
-                                className="btn-delete btn-compact"
-                                onClick={() => handleDeleteOrder(item.orderId, item.customerName)}
-                              >
-                                <Trash2 size={14} />
-                                删除
-                              </button>
-                            </>
-                          ) : (
-                            <span className="dispatch-pending-action-hint">先勾选此单后再确认归属</span>
-                          )}
+                          {selectedPendingSet.has(item.orderId) ? <span className="dispatch-pending-action-hint">已勾选，使用顶部批量归区</span> : null}
+                          <button
+                            className="btn-delete btn-compact"
+                            onClick={() => handleDeleteOrder(item.orderId, item.customerName)}
+                          >
+                            <Trash2 size={14} />
+                            删除
+                          </button>
                         </div>
                       </td>
                     </tr>

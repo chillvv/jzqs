@@ -2,6 +2,33 @@ const { request } = require('../../utils/request');
 const { resolveMediaUrl } = require('../../utils/media-url');
 const realtime = require('../../utils/realtime');
 
+const MEAL_REMINDER_DISMISSED_PREFIX = 'miniapp_meal_reminder_dismissed_';
+
+function readMealReminderDismissed(key) {
+  if (!key) {
+    return false;
+  }
+  try {
+    return !!wx.getStorageSync(`${MEAL_REMINDER_DISMISSED_PREFIX}${key}`);
+  } catch (_) {
+    return false;
+  }
+}
+
+function persistMealReminderDismissed(key, dismissed) {
+  if (!key) {
+    return;
+  }
+  try {
+    const storageKey = `${MEAL_REMINDER_DISMISSED_PREFIX}${key}`;
+    if (dismissed) {
+      wx.setStorageSync(storageKey, true);
+      return;
+    }
+    wx.removeStorageSync(storageKey);
+  } catch (_) {}
+}
+
 Page({
   data: {
     home: null,
@@ -9,6 +36,9 @@ Page({
     weekCards: [],
     loading: false,
     fullscreenAnnouncementLines: [],
+    showMealReminderPopup: false,
+    mealReminderChecked: false,
+    mealReminderKey: '',
     statusBarHeight: 0,
     navBarHeight: 44
   },
@@ -81,6 +111,7 @@ Page({
         this.stopAnnouncementPolling();
         this.setData({ fullscreenAnnouncementLines: [] });
       }
+      this.syncMealReminderPopup(resolvedHome);
     } catch (error) {
       wx.showToast({ title: error.message || '加载失败', icon: 'none' });
     } finally {
@@ -142,6 +173,37 @@ Page({
       this._unsubscribeRealtime();
       this._unsubscribeRealtime = null;
     }
+  },
+
+  syncMealReminderPopup(home) {
+    const mealReminderKey = String(home && home.mealReminderKey || '').trim();
+    const shouldShow = Boolean(
+      home
+      && home.mealReminderPopupEnabled
+      && mealReminderKey
+      && home.mealReminderMessage
+      && !readMealReminderDismissed(mealReminderKey)
+      && !(home.popupAnnouncementEnabled && home.popupAnnouncementContent)
+    );
+    this.setData({
+      showMealReminderPopup: shouldShow,
+      mealReminderChecked: false,
+      mealReminderKey
+    });
+  },
+
+  toggleMealReminderChecked() {
+    this.setData({ mealReminderChecked: !this.data.mealReminderChecked });
+  },
+
+  closeMealReminderPopup() {
+    if (this.data.mealReminderChecked && this.data.mealReminderKey) {
+      persistMealReminderDismissed(this.data.mealReminderKey, true);
+    }
+    this.setData({
+      showMealReminderPopup: false,
+      mealReminderChecked: false
+    });
   },
 
   handleBannerTap(e) {

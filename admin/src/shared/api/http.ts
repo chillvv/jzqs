@@ -28,6 +28,7 @@ import type {
   PendingRiderResponse,
   AdminMenuWeekResponse,
   BannerImageUploadResponse,
+  DeliveryReceiptUploadResponse,
   MenuScheduleResponse,
   OperationSettingsResponse,
   OrderPrepItemResponse,
@@ -803,6 +804,28 @@ export async function recordDeliveryReceipt(payload: {
   return response.data.data;
 }
 
+export async function deleteDeliveryReceipt(orderId: number) {
+  const response = await http.post<ApiResponse<{ orderStatus: string; receiptUrl: string; deleted: boolean }>>(
+    `/api/admin/orders/${orderId}/receipt/delete`
+  );
+  return response.data.data;
+}
+
+export async function uploadDeliveryReceiptImage(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await http.post<ApiResponse<DeliveryReceiptUploadResponse>>(
+    "/api/admin/deliveries/receipt/upload",
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data"
+      }
+    }
+  );
+  return response.data.data;
+}
+
 export async function grantWalletMeals(customerId: number, mealDelta: number, validityDays: number, operatorName: string, remark: string) {
   const response = await http.post<ApiResponse<{ remainingMeals: number }>>(`/api/admin/customers/${customerId}/wallet/grant`, {
     mealDelta,
@@ -813,10 +836,21 @@ export async function grantWalletMeals(customerId: number, mealDelta: number, va
   return response.data.data;
 }
 
-export async function updatePackageReminderSettings(packageExpiryReminderDays: number, packageLowBalanceThreshold: number) {
+export async function updatePackageReminderSettings(payload: {
+  packageExpiryReminderDays: number;
+  packageLowBalanceThreshold: number;
+  mealReminderPopupEnabled: boolean;
+  deliverySubscribeEnabled: boolean;
+  deliverySubscribeLunchTime: string;
+  deliverySubscribeDinnerTime: string;
+}) {
   const response = await http.post<ApiResponse<OperationSettingsResponse>>("/api/admin/settings/package-reminders", {
-    packageExpiryReminderDays,
-    packageLowBalanceThreshold
+    packageExpiryReminderDays: payload.packageExpiryReminderDays,
+    packageLowBalanceThreshold: payload.packageLowBalanceThreshold,
+    mealReminderPopupEnabled: payload.mealReminderPopupEnabled,
+    deliverySubscribeEnabled: payload.deliverySubscribeEnabled,
+    deliverySubscribeLunchTime: payload.deliverySubscribeLunchTime,
+    deliverySubscribeDinnerTime: payload.deliverySubscribeDinnerTime
   });
   return response.data.data;
 }
@@ -890,6 +924,28 @@ export async function disableMenuSchedule(id: number) {
 
 export async function triggerDataCleanup() {
   const response = await http.post<ApiResponse<import('./types').MaintenanceCleanupTriggerResponse>>("/api/admin/maintenance/cleanup");
+  return response.data.data;
+}
+
+export async function triggerMaintenanceModuleCleanup(moduleKey: string) {
+  const response = await http.post<ApiResponse<import('./types').MaintenanceCleanupTriggerResponse>>(
+    `/api/admin/maintenance/cleanup/${encodeURIComponent(moduleKey)}`
+  );
+  return response.data.data;
+}
+
+export async function updateMaintenanceCleanupSettings(payload: {
+  rules: Array<{
+    moduleKey: string;
+    retentionValue: number;
+    retentionUnit: string;
+    autoEnabled: boolean;
+  }>;
+}) {
+  const response = await http.post<ApiResponse<import('./types').MaintenanceOverviewResponse>>(
+    "/api/admin/maintenance/settings",
+    payload
+  );
   return response.data.data;
 }
 

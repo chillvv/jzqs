@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import {
   assignDispatch,
+  deleteDeliveryReceipt,
   deleteOrder,
   cancelSubscriptionConfirmation,
   confirmSubscription,
@@ -13,6 +14,7 @@ import {
   fetchOrderPrepStats,
   fetchSubscriptionConfirmations,
   recordDeliveryReceipt,
+  uploadDeliveryReceiptImage,
   fetchSubscriptionPreview,
   bulkImportSubscription,
   fetchRemarkSuggestions,
@@ -66,9 +68,22 @@ function defaultFilterDate() {
 
 const DEFAULT_FILTER_DATE = defaultFilterDate();
 const PAGE_SIZE = 10;
+const ORDER_PREP_MEAL_PERIOD_STORAGE_KEY = "admin-order-prep-meal-period";
 
 function mealPeriodLabel(value: string | null | undefined) {
   return value === "DINNER" ? "晚餐" : "午餐";
+}
+
+function hasImageValue(value: string | null | undefined) {
+  return Boolean(value && value.trim());
+}
+
+function resolveStoredOrderMealPeriod() {
+  if (typeof window === "undefined") {
+    return "LUNCH" as OrderPrepMealPeriodFilter;
+  }
+  const storedValue = window.localStorage.getItem(ORDER_PREP_MEAL_PERIOD_STORAGE_KEY);
+  return storedValue === "DINNER" ? "DINNER" : "LUNCH";
 }
 
 export function OrderPrepPage() {
@@ -114,7 +129,7 @@ export function OrderPrepPage() {
   const [activeTab, setActiveTab] = useState<OrderPrepTab>("ORDERS");
   const [hasManualTabSelection, setHasManualTabSelection] = useState(false);
   const [filterDate, setFilterDate] = useState(DEFAULT_FILTER_DATE);
-  const [mealPeriodFilter, setMealPeriodFilter] = useState<OrderPrepMealPeriodFilter>("ALL");
+  const [mealPeriodFilter, setMealPeriodFilter] = useState<OrderPrepMealPeriodFilter>(() => resolveStoredOrderMealPeriod());
   const [sourceFilter, setSourceFilter] = useState<OrderPrepSourceFilter>("ALL");
   const [statusFilter, setStatusFilter] = useState<OrderPrepStatusFilter>("ALL");
   const [remarkFilter, setRemarkFilter] = useState<OrderPrepRemarkFilter>("ALL");
@@ -132,6 +147,7 @@ export function OrderPrepPage() {
   const [submittingManualCreate, setSubmittingManualCreate] = useState(false);
   const [submittingAssign, setSubmittingAssign] = useState(false);
   const [submittingReceipt, setSubmittingReceipt] = useState(false);
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [submittingEdit, setSubmittingEdit] = useState(false);
   const [submittingDelete, setSubmittingDelete] = useState(false);
   const [processingConfirmationId, setProcessingConfirmationId] = useState<number | null>(null);
@@ -155,7 +171,7 @@ export function OrderPrepPage() {
 
   function openReceiptModal(item: OrderPrepItemResponse) {
     setActiveItem(item);
-    setReceiptForm({ receiptUrl: "", receiptNote: "" });
+    setReceiptForm({ receiptUrl: item.receiptUrl || "", receiptNote: item.receiptNote || "" });
     setIsReceiptOpen(true);
   }
 
@@ -296,7 +312,6 @@ export function OrderPrepPage() {
     [items, keywordFilter, mealPeriodFilter, sourceFilter, statusFilter, remarkFilter, currentPage]
   );
   const hasOrderFilters = keywordFilter.trim().length > 0
-    || mealPeriodFilter !== "ALL"
     || sourceFilter !== "ALL"
     || statusFilter !== "ALL"
     || remarkFilter !== "ALL";
@@ -339,6 +354,12 @@ export function OrderPrepPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [items, keywordFilter, mealPeriodFilter, sourceFilter, statusFilter, remarkFilter]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(ORDER_PREP_MEAL_PERIOD_STORAGE_KEY, mealPeriodFilter);
+    }
+  }, [mealPeriodFilter]);
 
   useEffect(() => {
     setActiveTab((currentTab) => {
@@ -597,7 +618,7 @@ export function OrderPrepPage() {
   async function handleReceiptSubmit() {
     const receiptUrl = receiptForm.receiptUrl.trim();
     if (!activeItem || !receiptUrl) {
-      toast("请填写回执图片 URL", "error");
+      toast("请先上传回执图片", "error");
       return;
     }
     if (submittingReceipt) return;
@@ -618,6 +639,43 @@ export function OrderPrepPage() {
       throw err;
     } finally {
       setSubmittingReceipt(false);
+    }
+  }
+
+  async function handleReceiptDelete() {
+    if (!activeItem || submittingReceipt) {
+      return;
+    }
+    setSubmittingReceipt(true);
+    try {
+      await deleteDeliveryReceipt(activeItem.id);
+      setReceiptForm((current) => ({ ...current, receiptUrl: "" }));
+      setActiveItem((current) => (current ? { ...current, receiptUrl: "", receiptNote: "" } : current));
+      await reloadOrders();
+      toast("回执已删除");
+    } catch (err: any) {
+      toast(getErrorMessage(err, "删除回执失败"), "error");
+      throw err;
+    } finally {
+      setSubmittingReceipt(false);
+    }
+  }
+
+  async function handleReceiptFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    setUploadingReceipt(true);
+    try {
+      const uploaded = await uploadDeliveryReceiptImage(file);
+      setReceiptForm((current) => ({ ...current, receiptUrl: uploaded.url }));
+      toast("回执图片已上传");
+    } catch (error: any) {
+      toast(getErrorMessage(error, "上传回执图片失败"), "error");
+    } finally {
+      setUploadingReceipt(false);
+      event.target.value = "";
     }
   }
 
@@ -701,6 +759,27 @@ export function OrderPrepPage() {
     return <span className={`pill pill-${tone}`}>{label}</span>;
   };
 
+  const renderMealPanel = (item: OrderPrepItemResponse) => {
+    const mealPeriod = resolveMealPeriod(item);
+    const deliveryMealPeriod = item.deliveryMealPeriod === "DINNER" ? "DINNER" : "LUNCH";
+    const isLunch = mealPeriod === "LUNCH";
+    return (
+      <div className="order-meal-panel">
+        <div className="order-meal-panel__row">
+          <span className={`tag ${isLunch ? "tag-orange" : "tag-green"}`}>{isLunch ? "午餐" : "晚餐"}</span>
+          <span className="order-meal-panel__text">出餐</span>
+        </div>
+        <div className="order-meal-panel__row">
+          <span className={`tag ${deliveryMealPeriod === "DINNER" ? "tag-green" : "tag-orange"}`}>
+            {mealPeriodLabel(deliveryMealPeriod)}
+          </span>
+          <span className="order-meal-panel__text">配送</span>
+        </div>
+        <div className="order-meal-panel__count">{item.quantity} 餐</div>
+      </div>
+    );
+  };
+
   function getRowHighlightClass(item: OrderPrepItemResponse) {
     const displayStatus = resolveOrderDisplayStatus(item);
     if (displayStatus === "AFTERSALE" || displayStatus === "REFUNDED") {
@@ -773,19 +852,20 @@ export function OrderPrepPage() {
           </div>
           {activeTab === "ORDERS" && (
             <>
-              <div className="filter-item">
-                <span className="filter-label">餐次:</span>
-                <AppSelect
-                  className="app-select--filter"
-                  style={{ width: "100px" }}
-                  value={mealPeriodFilter}
-                  options={[
-                    { label: "全部", value: "ALL" },
-                    { label: "午餐", value: "LUNCH" },
-                    { label: "晚餐", value: "DINNER" }
-                  ]}
-                  onChange={(value) => setMealPeriodFilter(value as OrderPrepMealPeriodFilter)}
-                />
+              <div className="filter-item order-meal-toggle">
+                <span className="filter-label">查看餐次:</span>
+                <div className="segmented-control" role="tablist" aria-label="订单餐次切换">
+                  {(["LUNCH", "DINNER"] as OrderPrepMealPeriodFilter[]).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`segmented-control__item ${mealPeriodFilter === value ? "is-active" : ""}`}
+                      onClick={() => setMealPeriodFilter(value)}
+                    >
+                      {mealPeriodLabel(value)}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div className="filter-item">
                 <span className="filter-label">来源:</span>
@@ -847,13 +927,12 @@ export function OrderPrepPage() {
               </div>
             </>
           )}
-          {activeTab === "ORDERS" ? <span className="dispatch-table-toolbar__count">筛选出 {view.filteredItems.length} 条</span> : null}
+          {activeTab === "ORDERS" ? <span className="dispatch-table-toolbar__count">{mealPeriodLabel(mealPeriodFilter)}筛选出 {view.filteredItems.length} 条</span> : null}
           <button className="btn btn-primary" disabled={loadingOrders} onClick={() => reloadOrders(filterDate).catch(() => undefined)}><Search size={16} /> {loadingOrders ? "查询中..." : "查询"}</button>
           <button
             className="btn btn-outline"
             onClick={() => {
               setFilterDate(DEFAULT_FILTER_DATE);
-              setMealPeriodFilter("ALL");
               setSourceFilter("ALL");
               setStatusFilter("ALL");
               setRemarkFilter("ALL");
@@ -879,7 +958,7 @@ export function OrderPrepPage() {
                 ? `待确认订单 (${confirmationItems.length})` 
                 : activeTab === "SUBSCRIPTION_MANAGEMENT"
                   ? "固定订餐管理"
-                  : `普通订单列表 (${view.totalItems})`}
+                  : `${mealPeriodLabel(mealPeriodFilter)}订单列表 (${view.totalItems})`}
             </span>
             <div className="segmented-control" role="tablist" aria-label="订单视图切换">
               {confirmationPanel.visible && (
@@ -984,8 +1063,6 @@ export function OrderPrepPage() {
                   ) : (
                     view.pageItems.map((item) => {
                       const sourceLabel = resolveOrderSourceLabel(item);
-                      const mealPeriod = resolveMealPeriod(item);
-                      const isLunch = mealPeriod === "LUNCH";
                       const rowClass = getRowHighlightClass(item);
                       return (
                         <tr key={item.id} className={rowClass}>
@@ -1001,7 +1078,7 @@ export function OrderPrepPage() {
                           </td>
                           <td><span style={{ color: "var(--text-sub)" }}>{item.customerPhone}</span></td>
                           <td>
-                            <span className={`tag ${isLunch ? "tag-orange" : "tag-green"}`}>{isLunch ? "午餐" : "晚餐"}</span>{item.quantity > 1 ? ` ×${item.quantity}` : ""}
+                            {renderMealPanel(item)}
                           </td>
                           <td style={{ color: formatOrderNote(item.userNote) === "-" ? undefined : "var(--error-color)", maxWidth: "160px" }}>{formatOrderNote(item.userNote)}</td>
                           <td style={{ maxWidth: "160px" }}>{formatOrderNote(item.merchantRemark)}</td>
@@ -1030,8 +1107,6 @@ export function OrderPrepPage() {
             <div className="mobile-card-list">
               {view.pageItems.map((item) => {
                 const sourceLabel = resolveOrderSourceLabel(item);
-                const mealPeriod = resolveMealPeriod(item);
-                const isLunch = mealPeriod === "LUNCH";
                 const rowClass = getRowHighlightClass(item);
                 return (
                   <div className={`mobile-card ${rowClass}`} key={item.id}>
@@ -1054,7 +1129,7 @@ export function OrderPrepPage() {
                     <div className="mobile-card-row">
                       <div className="mobile-card-label">餐次</div>
                       <div className="mobile-card-value">
-                        <span className={`tag ${isLunch ? "tag-orange" : "tag-green"}`} style={{ marginRight: "4px" }}>{isLunch ? "午餐" : "晚餐"}</span>{item.quantity > 1 ? ` ×${item.quantity}` : ""}
+                        {renderMealPanel(item)}
                       </div>
                     </div>
                     <div className="mobile-card-row">
@@ -1514,8 +1589,30 @@ export function OrderPrepPage() {
             </div>
             <div className="modal-body">
               <div className="form-group">
-                <label className="form-label"><span className="required">*</span>回执图片 URL</label>
-                <input className="form-control" value={receiptForm.receiptUrl} onChange={e => setReceiptForm({...receiptForm, receiptUrl: e.target.value})} placeholder="请输入图片 URL" />
+                <label className="form-label"><span className="required">*</span>回执图片</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="form-control"
+                  onChange={(event) => handleReceiptFileChange(event).catch(() => undefined)}
+                  disabled={uploadingReceipt || submittingReceipt}
+                />
+                <div className="admin-panel-note" style={{ marginTop: "8px" }}>
+                  {uploadingReceipt ? "图片上传中..." : "电脑端选择图片文件，手机端可直接拍照上传。"}
+                </div>
+                {hasImageValue(receiptForm.receiptUrl) ? (
+                  <div className="order-detail-image-grid" style={{ marginTop: "12px" }}>
+                    <div className="order-detail-image-card">
+                      <div className="order-detail-image-card__title">当前回执图</div>
+                      <img
+                        src={receiptForm.receiptUrl}
+                        alt="当前回执图"
+                        className="order-detail-image-card__image"
+                      />
+                    </div>
+                  </div>
+                ) : null}
               </div>
               <RemarkField
                 label="回执备注"
@@ -1528,6 +1625,11 @@ export function OrderPrepPage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-outline" onClick={() => setIsReceiptOpen(false)} disabled={submittingReceipt}>取消</button>
+              {hasImageValue(activeItem.receiptUrl) ? (
+                <button className="btn-delete" disabled={submittingReceipt} onClick={() => handleReceiptDelete().catch(() => undefined)}>
+                  {submittingReceipt ? "处理中..." : "删除回执"}
+                </button>
+              ) : null}
               <button className="btn btn-primary" disabled={submittingReceipt} onClick={() => handleReceiptSubmit().catch(() => undefined)}>
                 {submittingReceipt ? "提交中..." : "提交回执"}
               </button>
@@ -1659,15 +1761,9 @@ export function OrderPrepPage() {
                 <div className="order-detail-view__list">
                   <div className="order-detail-view__item">
                     <span className="order-detail-view__label">出餐 / 配送</span>
-                    <span className="order-detail-view__value">
-                      <span className={`tag ${mealPeriodLabel(activeItem.mealPeriod) === "晚餐" ? "tag-green" : "tag-orange"}`} style={{ marginRight: "4px" }}>
-                        {mealPeriodLabel(activeItem.mealPeriod)}
-                      </span>
-                      <span className={`tag ${mealPeriodLabel(activeItem.deliveryMealPeriod) === "晚餐" ? "tag-green" : "tag-orange"}`} style={{ marginRight: "4px" }}>
-                        送 {mealPeriodLabel(activeItem.deliveryMealPeriod)}
-                      </span>
-                      {activeItem.quantity > 1 ? ` ×${activeItem.quantity}` : ""}
-                    </span>
+                    <div className="order-detail-view__value">
+                      {renderMealPanel(activeItem)}
+                    </div>
                   </div>
                   <div className="order-detail-view__item">
                     <span className="order-detail-view__label">来源</span>
@@ -1677,6 +1773,43 @@ export function OrderPrepPage() {
                     <span className="order-detail-view__label">配送地址</span>
                     <span className="order-detail-view__value">{activeItem.deliveryAddress || "-"}</span>
                   </div>
+                </div>
+              </div>
+
+              <div className="order-detail-view__section order-detail-view__section--full">
+                <h4 className="order-detail-view__section-title">图片信息</h4>
+                <div className="order-detail-image-grid">
+                  <section className="order-detail-image-card">
+                    <div className="order-detail-image-card__title">参照图</div>
+                    {hasImageValue(activeItem.referenceImageUrl) ? (
+                      <img
+                        src={activeItem.referenceImageUrl}
+                        alt="地址参照图"
+                        className="order-detail-image-card__image"
+                        onClick={() => window.open(activeItem.referenceImageUrl, "_blank")}
+                      />
+                    ) : (
+                      <div className="dispatch-image-empty">暂无参照图</div>
+                    )}
+                  </section>
+
+                  <section className="order-detail-image-card">
+                    <div className="order-detail-image-card__title">核销回执</div>
+                    {hasImageValue(activeItem.receiptUrl) ? (
+                      <img
+                        src={activeItem.receiptUrl}
+                        alt="核销回执"
+                        className="order-detail-image-card__image"
+                        onClick={() => window.open(activeItem.receiptUrl, "_blank")}
+                      />
+                    ) : (
+                      <div className="dispatch-image-empty">暂无回执图</div>
+                    )}
+                    <div className="order-detail-image-card__meta">
+                      <span>骑手备注：{activeItem.receiptNote?.trim() || "-"}</span>
+                      <span>送达时间：{activeItem.deliveredAt || "-"}</span>
+                    </div>
+                  </section>
                 </div>
               </div>
 
@@ -1721,8 +1854,19 @@ export function OrderPrepPage() {
                   openReceiptModal(activeItem);
                 }}
               >
-                核销回执
+                {hasImageValue(activeItem.receiptUrl) ? "修改回执" : "核销回执"}
               </button>
+              {hasImageValue(activeItem.receiptUrl) ? (
+                <button
+                  className="btn-delete"
+                  onClick={() => {
+                    setIsOrderDetailOpen(false);
+                    openReceiptModal(activeItem);
+                  }}
+                >
+                  删除回执
+                </button>
+              ) : null}
               <button
                 className="btn-delete"
                 onClick={() => {

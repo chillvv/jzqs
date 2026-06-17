@@ -281,22 +281,6 @@ export function AftersalePage() {
           <div className="stat-title">售后登记</div>
           <div className="stat-val">{items.length}</div>
         </button>
-        <button
-          type="button"
-          className="stat-card"
-          onClick={() => {
-            setViewMode("settlement");
-            setActiveStatus("PENDING");
-          }}
-          style={{
-            textAlign: "left",
-            borderColor: viewMode === "settlement" ? "rgba(37, 99, 235, 0.35)" : undefined,
-            boxShadow: viewMode === "settlement" ? "0 0 0 2px rgba(37, 99, 235, 0.08)" : undefined
-          }}
-        >
-          <div className="stat-title">售后处理</div>
-          <div className="stat-val">{countAftersalesByStatus(items, "PENDING") + countAftersalesByStatus(items, "PROCESSING")}</div>
-        </button>
         {tabs.map((tab) => (
           <button
             key={tab.key}
@@ -305,6 +289,7 @@ export function AftersalePage() {
             onClick={() => setActiveStatus(tab.key)}
             style={{
               textAlign: "left",
+              opacity: viewMode === "settlement" || tab.key === "ALL" ? 1 : 0.92,
               borderColor: activeStatus === tab.key ? "rgba(37, 99, 235, 0.35)" : undefined,
               boxShadow: activeStatus === tab.key ? "0 0 0 2px rgba(37, 99, 235, 0.08)" : undefined
             }}
@@ -388,6 +373,7 @@ export function AftersalePage() {
         <div className="table-header-toolbar">
           <div style={{ display: "grid", gap: "8px" }}>
             <span>{viewMode === "ledger" ? "登记台账" : "处理台账"}</span>
+            <span style={{ color: "var(--text-sub)", fontSize: "13px" }}>顶部卡片可直接切换登记视图和处理视图</span>
           </div>
         </div>
 

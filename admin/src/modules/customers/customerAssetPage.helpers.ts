@@ -7,6 +7,7 @@ import type {
 
 export type CustomerBalanceState = "ALL" | "HAS_BALANCE" | "NO_BALANCE" | "LOW_BALANCE";
 export type CustomerOrderModeFilter = "ALL" | "NORMAL" | "SUBSCRIPTION";
+export type CustomerRemainingValidityState = "ALL" | "VALID" | "EXPIRING_SOON" | "EXPIRED" | "NO_EXPIRY";
 
 export type CustomerOverviewSummaryItem = {
   label: string;
@@ -19,6 +20,7 @@ export type CustomerAssetFilters = {
   customerStatus: string;
   balanceState: CustomerBalanceState;
   orderMode: CustomerOrderModeFilter;
+  remainingValidityState: CustomerRemainingValidityState;
 };
 
 export function buildCustomerAssetStats(items: CustomerAssetResponse[]) {
@@ -49,7 +51,18 @@ export function filterCustomerAssets(items: CustomerAssetResponse[], filters: Cu
       || (filters.orderMode === "NORMAL" && !item.fixedSubscriptionEnabled)
       || (filters.orderMode === "SUBSCRIPTION" && item.fixedSubscriptionEnabled);
 
-    return matchesKeyword && matchesStatus && matchesBalance && matchesOrderMode;
+    const matchesRemainingValidity = filters.remainingValidityState === "ALL"
+      || (filters.remainingValidityState === "NO_EXPIRY" && !item.packageExpiredAt)
+      || (filters.remainingValidityState === "EXPIRED" && Boolean(item.packageExpiredAt) && item.remainingValidityDays < 0)
+      || (filters.remainingValidityState === "EXPIRING_SOON" && item.packageAlertCode === "EXPIRING_SOON")
+      || (
+        filters.remainingValidityState === "VALID"
+        && Boolean(item.packageExpiredAt)
+        && item.remainingValidityDays >= 0
+        && item.packageAlertCode !== "EXPIRING_SOON"
+      );
+
+    return matchesKeyword && matchesStatus && matchesBalance && matchesOrderMode && matchesRemainingValidity;
   });
 }
 

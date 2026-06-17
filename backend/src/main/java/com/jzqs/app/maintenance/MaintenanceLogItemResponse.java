@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 public record MaintenanceLogItemResponse(
     Long id,
     String jobType,
+    String moduleKey,
     String triggerSource,
     String status,
     String timeRangeLabel,
@@ -15,6 +16,7 @@ public record MaintenanceLogItemResponse(
     Integer deletedCount,
     Integer failedCount,
     String message,
-    String errorDetail
+    String errorDetail,
+    java.util.List<MaintenanceCleanupModuleSummaryResponse> moduleSummaries
 ) {
 }

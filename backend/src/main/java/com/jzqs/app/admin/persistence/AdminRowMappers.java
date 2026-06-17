@@ -37,7 +37,11 @@ public final class AdminRowMappers {
             rs.getBoolean("can_assign"),
             rs.getBoolean("can_cancel"),
             rs.getBoolean("can_receipt"),
-            rs.getString("wallet_status_label")
+            rs.getString("wallet_status_label"),
+            rs.getString("reference_image_url"),
+            rs.getString("receipt_url"),
+            rs.getString("receipt_note"),
+            rs.getString("delivered_at")
         );
     }
 

@@ -46,14 +46,50 @@ assert.equal(
 
 assert.equal(
   dispatchHomePage.includes("先勾选此单后再确认归属"),
-  true,
-  "分单工作台未勾选订单时应明确提示先勾选后再确认归属"
+  false,
+  "分单工作台不应再保留单条确认归属提示"
 );
 
 assert.equal(
   dispatchHomePage.includes("确认归属"),
+  false,
+  "分单工作台不应再保留单条确认归属按钮"
+);
+
+assert.equal(
+  dispatchHomePage.includes("handleSingleAssign"),
+  false,
+  "分单工作台不应再保留单条归区处理逻辑"
+);
+
+assert.equal(
+  dispatchHomePage.includes("inlineAreas"),
+  false,
+  "分单工作台不应再保留每行单独区域选择状态"
+);
+
+assert.equal(
+  dispatchHomePage.includes("批量归入区域"),
   true,
-  "分单工作台勾选订单后应提供确认归属按钮"
+  "分单工作台应继续保留批量归区入口"
+);
+
+assert.equal(
+  dispatchHomePage.includes("归区"),
+  true,
+  "分单工作台批量操作按钮应使用更短的归区文案"
+);
+
+assert.equal(
+  adminStyles.includes(".dispatch-pending-shell--sticky"),
+  true,
+  "后台样式应定义分单工作台框内滚动布局"
+);
+
+assert.equal(
+  adminStyles.includes(".dispatch-bulk-bar--sticky"),
+  true,
+  "后台样式应定义分单工作台吸顶批量工具栏"
 );
 
 assert.equal(

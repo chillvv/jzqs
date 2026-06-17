@@ -70,4 +70,17 @@
     </view>
   </view>
 </view>
+<view wx:if="{{showMealReminderPopup}}" class="meal-reminder-popup">
+  <view class="meal-reminder-popup__mask" bindtap="closeMealReminderPopup"></view>
+  <view class="meal-reminder-popup__panel">
+    <view class="meal-reminder-popup__badge">餐包提醒</view>
+    <view class="meal-reminder-popup__title">{{home.mealReminderTitle}}</view>
+    <view class="meal-reminder-popup__message">{{home.mealReminderMessage}}</view>
+    <view class="meal-reminder-popup__check" bindtap="toggleMealReminderChecked">
+      <view class="meal-reminder-popup__checkbox {{mealReminderChecked ? 'is-checked' : ''}}">{{mealReminderChecked ? '✓' : ''}}</view>
+      <text>这个状态今天不再提醒</text>
+    </view>
+    <button class="meal-reminder-popup__button" bindtap="closeMealReminderPopup">我知道了</button>
+  </view>
+</view>
 </block>

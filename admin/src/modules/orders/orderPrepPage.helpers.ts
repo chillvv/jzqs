@@ -1,6 +1,6 @@
 import type { OrderPrepItemResponse } from "../../shared/api/types";
 
-export type OrderPrepMealPeriodFilter = "ALL" | "LUNCH" | "DINNER";
+export type OrderPrepMealPeriodFilter = "LUNCH" | "DINNER";
 export type OrderPrepSourceFilter = "ALL" | "MINIAPP" | "BACKEND" | "SUBSCRIPTION";
 export type OrderPrepRemarkFilter = "ALL" | "HAS_REMARK" | "NO_REMARK";
 export type OrderPrepStatusFilter =
@@ -38,7 +38,7 @@ export function isMeaningfulRemark(value: string | null | undefined) {
   return trimmed.length > 0 && trimmed !== "-";
 }
 
-export function resolveMealPeriod(item: OrderPrepItemResponse): Exclude<OrderPrepMealPeriodFilter, "ALL"> {
+export function resolveMealPeriod(item: OrderPrepItemResponse): OrderPrepMealPeriodFilter {
   if (item.mealPeriod === "DINNER" || item.mealPeriod === "LUNCH") {
     return item.mealPeriod;
   }
@@ -126,7 +126,7 @@ export function buildOrderPrepView(
       || formatOrderNote(item.userNote).includes(keyword)
       || formatOrderNote(item.merchantRemark).includes(keyword);
 
-    const matchesMealPeriod = filters.mealPeriod === "ALL" || resolveMealPeriod(item) === filters.mealPeriod;
+    const matchesMealPeriod = resolveMealPeriod(item) === filters.mealPeriod;
 
     const sourceLabel = resolveOrderSourceLabel(item);
     const matchesSource = filters.source === "ALL"

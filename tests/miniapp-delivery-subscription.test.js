@@ -4,6 +4,11 @@ const path = require('node:path');
 
 const repoRoot = path.resolve(__dirname, '..');
 const orderPage = fs.readFileSync(path.join(repoRoot, 'miniapp', 'pages', 'order', 'index.js'), 'utf8');
+const profilePage = fs.readFileSync(path.join(repoRoot, 'miniapp', 'pages', 'profile', 'index.js'), 'utf8');
+const deliverySubscriptionUtilsPath = path.join(repoRoot, 'miniapp', 'utils', 'delivery-subscription.js');
+const deliverySubscriptionUtils = fs.existsSync(deliverySubscriptionUtilsPath)
+  ? fs.readFileSync(deliverySubscriptionUtilsPath, 'utf8')
+  : '';
 const mobilePortalService = fs.readFileSync(
   path.join(
     repoRoot,
@@ -21,9 +26,9 @@ const mobilePortalService = fs.readFileSync(
 );
 
 assert.equal(
-  orderPage.includes('wx.requestSubscribeMessage'),
+  deliverySubscriptionUtils.includes('wx.requestSubscribeMessage'),
   true,
-  '下单成功后应请求微信订阅消息授权'
+  '统一订阅工具应继续请求微信订阅消息授权'
 );
 
 assert.equal(
@@ -38,7 +43,7 @@ assert.equal(
   '订阅授权前不应插入自定义说明弹窗替代微信官方弹窗'
 );
 
-const subscribeRequestIndex = orderPage.indexOf('const subscriptionResult = await requestDeliverySubscription();');
+const subscribeRequestIndex = orderPage.indexOf('subscriptionResult = await requestDeliverySubscribeAuthorization();');
 const orderSubmitIndex = orderPage.indexOf('const orderResults = await Promise.all(requests);');
 
 assert.notEqual(
@@ -60,9 +65,45 @@ assert.equal(
 );
 
 assert.equal(
-  orderPage.includes("DCpNx6852oVCXO83CKuR-uO8WsgvVEDdAaUgwkLNi3s"),
+  /let subscriptionResult = ''[\s\S]*requestDeliverySubscribeAuthorization\(\)[\s\S]*catch \(error\)/.test(orderPage),
   true,
-  '顾客端应使用最新的取餐提醒模板 ID'
+  '真实下单链路中订阅授权失败不应打断下单主流程'
+);
+
+assert.equal(
+  /saveOrderDeliverySubscription\(orderIds, subscriptionResult\);/.test(orderPage),
+  true,
+  '下单成功后仍应继续尝试保存订阅授权'
+);
+
+assert.equal(
+  deliverySubscriptionUtils.includes("DCpNx6852oVCXO83CKuR-uO8WsgvVEDdAaUgwkLNi3s"),
+  true,
+  '统一订阅工具应使用最新的取餐提醒模板 ID'
+);
+
+assert.equal(
+  deliverySubscriptionUtils.includes('requestDeliverySubscribeAuthorization'),
+  true,
+  '小程序应抽出正式下单与测试订阅共用的订阅授权工具'
+);
+
+assert.equal(
+  deliverySubscriptionUtils.includes('saveOrderDeliverySubscription'),
+  true,
+  '小程序应抽出正式下单保存订阅授权的共用工具'
+);
+
+assert.equal(
+  profilePage.includes("require('../../utils/delivery-subscription')"),
+  true,
+  '测试订阅页应改为复用统一的订阅工具'
+);
+
+assert.equal(
+  orderPage.includes("require('../../utils/delivery-subscription')"),
+  true,
+  '正式下单页应改为复用统一的订阅工具'
 );
 
 assert.equal(
@@ -72,9 +113,15 @@ assert.equal(
 );
 
 assert.equal(
-  orderPage.includes("'acceptWithAudio'"),
+  /title: '餐次余额不足'[\s\S]*confirmText: '联系商家'[\s\S]*cancelText: '稍后处理'/.test(orderPage),
   true,
-  '顾客端应兼容微信语音提醒订阅返回值 acceptWithAudio'
+  '下单页余额不足提示应统一为服务型续卡引导文案'
+);
+
+assert.equal(
+  deliverySubscriptionUtils.includes("'acceptWithAudio'"),
+  true,
+  '统一订阅工具应兼容微信语音提醒订阅返回值 acceptWithAudio'
 );
 
 assert.equal(

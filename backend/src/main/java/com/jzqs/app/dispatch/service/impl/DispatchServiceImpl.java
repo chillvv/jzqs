@@ -41,6 +41,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class DispatchServiceImpl implements DispatchService {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final int DISPATCH_EXCEPTION_RETENTION_DAYS = 30;
+    private static final int DISPATCH_REASSIGNMENT_RETENTION_DAYS = 30;
     private final JdbcTemplate jdbcTemplate;
     private final TransactionalRealtimePublisher realtimeEventPublisher;
 
@@ -439,14 +441,14 @@ public class DispatchServiceImpl implements DispatchService {
             JOIN customers c ON c.id = do.customer_id
             WHERE da.id = ?
             """, dispatchId);
-        insertNotification(((Number) row.get("customer_id")).longValue(), "DISPATCH_CONFIRM", "{\"content\":\"配送确认已发送\"}");
-        return Map.of("dispatchId", dispatchId, "notificationStatus", "SENT");
+        return Map.of("dispatchId", dispatchId, "notificationStatus", "SKIPPED");
     }
 
     @Override
     @Transactional
     public Map<String, Object> assignOrder(long orderId, String riderName, String areaCode) {
         dispatchOrder(orderId, riderName, areaCode, true);
+        markDispatchExceptionResolved(orderId, riderName);
         publishDispatchEvent("dispatch.assignment.changed", areaCode, riderName, orderId);
         return Map.of("mealSlotOrderId", orderId, "riderName", riderName, "status", "DISPATCHED");
     }
@@ -455,6 +457,7 @@ public class DispatchServiceImpl implements DispatchService {
     @Transactional
     public Map<String, Object> confirmExceptionArea(long mealSlotOrderId, String areaCode, String riderName, boolean rememberAddress, String updatedBy) {
         dispatchOrder(mealSlotOrderId, riderName, areaCode, rememberAddress);
+        markDispatchExceptionResolved(mealSlotOrderId, riderName);
         publishDispatchEvent("dispatch.assignment.changed", areaCode, riderName, mealSlotOrderId);
         return Map.of(
             "mealSlotOrderId", mealSlotOrderId,
@@ -1020,6 +1023,7 @@ public class DispatchServiceImpl implements DispatchService {
 
     @Override
     public List<DispatchReassignmentResponse> recentReassignments(String serveDate) {
+        LocalDateTime retentionCutoff = LocalDateTime.now().minusDays(DISPATCH_REASSIGNMENT_RETENTION_DAYS);
         StringBuilder sql = new StringBuilder(
             """
                 SELECT
@@ -1036,10 +1040,11 @@ public class DispatchServiceImpl implements DispatchService {
                     created_by,
                     created_at
                 FROM dispatch_reassignments
-                WHERE 1 = 1
+                WHERE created_at >= ?
                 """
         );
         List<Object> args = new ArrayList<>();
+        args.add(Timestamp.valueOf(retentionCutoff));
         if (serveDate != null && !serveDate.isBlank()) {
             sql.append(" AND serve_date = ?");
             args.add(LocalDate.parse(serveDate));
@@ -1241,6 +1246,7 @@ public class DispatchServiceImpl implements DispatchService {
             reason,
             createdBy
         );
+        pruneOldDispatchReassignments();
         if (syncDefaultBinding && finalAreaCode != null && !finalAreaCode.isBlank()) {
             Long riderId = findRiderProfileIdByName(toRiderName);
             if (riderId != null) {
@@ -1292,6 +1298,17 @@ public class DispatchServiceImpl implements DispatchService {
         return result;
     }
 
+    private void pruneOldDispatchReassignments() {
+        LocalDateTime cutoffTime = LocalDateTime.now().minusDays(DISPATCH_REASSIGNMENT_RETENTION_DAYS);
+        jdbcTemplate.update(
+            """
+            DELETE FROM dispatch_reassignments
+            WHERE created_at < ?
+            """,
+            Timestamp.valueOf(cutoffTime)
+        );
+    }
+
     @Override
     @Transactional
     public Map<String, Object> disableRider(long riderId, String assignedBy) {
@@ -1311,16 +1328,6 @@ public class DispatchServiceImpl implements DispatchService {
         return Map.of(
             "riderId", riderId,
             "riderStatus", "DISABLED"
-        );
-    }
-
-    private void insertNotification(long customerId, String templateCode, String payloadJson) {
-        jdbcTemplate.update(
-            "INSERT INTO notification_logs (customer_id, channel, template_code, payload_json, sent_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",
-            customerId,
-            "WECHAT",
-            templateCode,
-            payloadJson
         );
     }
 
@@ -1648,6 +1655,44 @@ public class DispatchServiceImpl implements DispatchService {
             );
         }
         return counts;
+    }
+
+    private void markDispatchExceptionResolved(long mealSlotOrderId, String resolvedBy) {
+        int updatedCount = jdbcTemplate.update(
+            """
+                UPDATE delivery_exceptions
+                SET resolved = TRUE,
+                    resolved_at = CURRENT_TIMESTAMP,
+                    resolved_by = ?,
+                    resolution_note = CASE
+                        WHEN resolution_note IS NULL OR resolution_note = '' THEN '已重新派单处理'
+                        ELSE resolution_note
+                    END
+                WHERE meal_slot_order_id = ?
+                  AND resolved = FALSE
+                """,
+            riderNameOrDefault(resolvedBy),
+            mealSlotOrderId
+        );
+        if (updatedCount > 0) {
+            pruneResolvedDispatchExceptions();
+        }
+    }
+
+    private void pruneResolvedDispatchExceptions() {
+        LocalDateTime cutoffTime = LocalDateTime.now().minusDays(DISPATCH_EXCEPTION_RETENTION_DAYS);
+        jdbcTemplate.update(
+            """
+                DELETE FROM delivery_exceptions
+                WHERE resolved = TRUE
+                  AND COALESCE(resolved_at, created_at) < ?
+                """,
+            Timestamp.valueOf(cutoffTime)
+        );
+    }
+
+    private String riderNameOrDefault(String riderName) {
+        return riderName == null || riderName.isBlank() ? "SYSTEM" : riderName.trim();
     }
 
     private Map<Long, OrderNoteProjection> loadOrderNoteProjections(List<Long> orderIds) {

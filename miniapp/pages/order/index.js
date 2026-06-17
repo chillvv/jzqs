@@ -2,14 +2,15 @@ const { request } = require('../../utils/request');
 const { formatMonthDay, periodLabel } = require('../../utils/mobile');
 const { getCheckoutMealLimitMessage } = require('../../utils/order-guards');
 const {
+  requestDeliverySubscribeAuthorization,
+  saveOrderDeliverySubscription
+} = require('../../utils/delivery-subscription');
+const {
   normalizeHistoryRemarkSuggestions,
   addHistoryRemark,
   composeRemark,
   resolveInitialRemark
 } = require('../../utils/order-remark');
-
-const DELIVERY_TEMPLATE_ID = 'DCpNx6852oVCXO83CKuR-uO8WsgvVEDdAaUgwkLNi3s';
-const ACCEPTED_DELIVERY_SUBSCRIPTION_RESULTS = ['accept', 'acceptWithAudio', 'acceptWithAlert'];
 
 function tomorrowDate() {
   const date = new Date();
@@ -38,43 +39,6 @@ function openInlineAuth(page, source) {
     showInlineAuth: true,
     pendingAction: source
   });
-}
-
-async function requestDeliverySubscription() {
-  if (typeof wx.requestSubscribeMessage !== 'function') {
-    return '';
-  }
-  const subscribeResult = await new Promise((resolve) => {
-    wx.requestSubscribeMessage({
-      tmplIds: [DELIVERY_TEMPLATE_ID],
-      success: resolve,
-      fail() {
-        resolve({});
-      }
-    });
-  });
-  const acceptResult = typeof subscribeResult[DELIVERY_TEMPLATE_ID] === 'string'
-    ? subscribeResult[DELIVERY_TEMPLATE_ID]
-    : '';
-  if (!ACCEPTED_DELIVERY_SUBSCRIPTION_RESULTS.includes(acceptResult)) {
-    return '';
-  }
-  return acceptResult;
-}
-
-async function saveDeliverySubscription(orderIds, acceptResult) {
-  if (!Array.isArray(orderIds) || !orderIds.length || !acceptResult) {
-    return;
-  }
-  await Promise.all(orderIds.map((orderId) => request({
-    url: `/api/mobile/customer/orders/${orderId}/delivery-subscription`,
-    method: 'POST',
-    header: { 'content-type': 'application/json' },
-    data: {
-      templateId: DELIVERY_TEMPLATE_ID,
-      acceptResult
-    }
-  }).catch(() => null)));
 }
 
 Page({
@@ -342,11 +306,11 @@ Page({
     });
     if (mealLimitMessage) {
       wx.showModal({
-        title: '套餐余额不足',
+        title: '餐次余额不足',
         content: mealLimitMessage,
-        confirmText: '联系顾问',
+        confirmText: '联系商家',
         confirmColor: '#B8D060',
-        cancelText: '暂不需要',
+        cancelText: '稍后处理',
         success: (res) => {
           if (res.confirm) {
             wx.switchTab({ url: '/pages/profile/index' });
@@ -409,13 +373,18 @@ Page({
     }
     this.setData({ submitting: true });
     try {
-      const subscriptionResult = await requestDeliverySubscription();
+      let subscriptionResult = '';
+      try {
+        subscriptionResult = await requestDeliverySubscribeAuthorization();
+      } catch (error) {
+        console.warn('下单订阅授权失败，跳过订阅保存', error);
+      }
       const orderResults = await Promise.all(requests);
       const mergedCount = orderResults.filter((item) => item && item.status === 'MERGED').length;
       const orderIds = [...new Set(orderResults
         .map((item) => item && item.orderId)
         .filter(Boolean))];
-      await saveDeliverySubscription(orderIds, subscriptionResult);
+      await saveOrderDeliverySubscription(orderIds, subscriptionResult);
 
       // Save remark to history
       if (this.data.remark) {

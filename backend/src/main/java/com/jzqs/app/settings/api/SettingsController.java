@@ -70,7 +70,11 @@ public class SettingsController {
     public ApiResponse<OperationSettingsResponse> updatePackageReminders(@Valid @RequestBody PackageReminderSettingsUpdateRequest request) {
         return ApiResponse.success(settingsService.updatePackageReminderSettings(
             request.packageExpiryReminderDays(),
-            request.packageLowBalanceThreshold()
+            request.packageLowBalanceThreshold(),
+            request.mealReminderPopupEnabled(),
+            request.deliverySubscribeEnabled(),
+            request.deliverySubscribeLunchTime(),
+            request.deliverySubscribeDinnerTime()
         ));
     }
 }

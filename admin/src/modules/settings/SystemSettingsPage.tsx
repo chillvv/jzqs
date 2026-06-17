@@ -26,7 +26,19 @@ import {
 } from "./systemSettingsPage.helpers";
 
 const EMPTY_POPUP = { title: "", description: "", enabled: false, content: "" };
-const EMPTY_PACKAGE_REMINDER = { packageExpiryReminderDays: "7", packageLowBalanceThreshold: "3" };
+const EMPTY_PACKAGE_REMINDER = {
+  packageExpiryReminderDays: "7",
+  packageLowBalanceThreshold: "3",
+  mealReminderPopupEnabled: true,
+  deliverySubscribeEnabled: true,
+  deliverySubscribeLunchTime: "11:30",
+  deliverySubscribeDinnerTime: "17:30"
+};
+
+function normalizeTriggerTime(value: string) {
+  const normalized = String(value || "").trim();
+  return /^([01]\d|2[0-3]):([0-5]\d)$/.test(normalized) ? normalized : "";
+}
 
 export function SystemSettingsPage() {
   const [settings, setSettings] = useState<OperationSettingsResponse>({
@@ -39,6 +51,10 @@ export function SystemSettingsPage() {
     bannerIntervalSeconds: 3,
     packageExpiryReminderDays: 7,
     packageLowBalanceThreshold: 3,
+    mealReminderPopupEnabled: true,
+    deliverySubscribeEnabled: true,
+    deliverySubscribeLunchTime: "11:30",
+    deliverySubscribeDinnerTime: "17:30",
     popupAnnouncementEnabled: false,
     popupAnnouncementContent: ""
   });
@@ -123,7 +139,11 @@ export function SystemSettingsPage() {
   function openPackageReminder() {
     setPackageReminderForm({
       packageExpiryReminderDays: String(settings.packageExpiryReminderDays || 7),
-      packageLowBalanceThreshold: String(settings.packageLowBalanceThreshold || 3)
+      packageLowBalanceThreshold: String(settings.packageLowBalanceThreshold || 3),
+      mealReminderPopupEnabled: settings.mealReminderPopupEnabled !== false,
+      deliverySubscribeEnabled: settings.deliverySubscribeEnabled !== false,
+      deliverySubscribeLunchTime: normalizeTriggerTime(settings.deliverySubscribeLunchTime || "11:30") || "11:30",
+      deliverySubscribeDinnerTime: normalizeTriggerTime(settings.deliverySubscribeDinnerTime || "17:30") || "17:30"
     });
     openModal("packageReminder");
   }
@@ -131,13 +151,22 @@ export function SystemSettingsPage() {
   async function submitPackageReminder() {
     const packageExpiryReminderDays = Math.max(1, Number(packageReminderForm.packageExpiryReminderDays) || 0);
     const packageLowBalanceThreshold = Math.max(1, Number(packageReminderForm.packageLowBalanceThreshold) || 0);
-    if (!packageExpiryReminderDays || !packageLowBalanceThreshold) {
-      toast("请填写有效的提醒阈值", "error");
+    const deliverySubscribeLunchTime = normalizeTriggerTime(packageReminderForm.deliverySubscribeLunchTime);
+    const deliverySubscribeDinnerTime = normalizeTriggerTime(packageReminderForm.deliverySubscribeDinnerTime);
+    if (!packageExpiryReminderDays || !packageLowBalanceThreshold || !deliverySubscribeLunchTime || !deliverySubscribeDinnerTime) {
+      toast("请填写有效的提醒阈值以及午餐、晚餐订阅时间", "error");
       return;
     }
     setPopupSubmitting(true);
     try {
-      setSettings(await updatePackageReminderSettings(packageExpiryReminderDays, packageLowBalanceThreshold));
+      setSettings(await updatePackageReminderSettings({
+        packageExpiryReminderDays,
+        packageLowBalanceThreshold,
+        mealReminderPopupEnabled: packageReminderForm.mealReminderPopupEnabled,
+        deliverySubscribeEnabled: packageReminderForm.deliverySubscribeEnabled,
+        deliverySubscribeLunchTime,
+        deliverySubscribeDinnerTime
+      }));
       closeModal();
       toast("餐包提醒已更新");
     } catch (err: any) {
@@ -250,7 +279,10 @@ export function SystemSettingsPage() {
         <div className="stat-card">
           <div className="stat-title">餐包提醒</div>
           <div className="stat-val">{settings.packageExpiryReminderDays} <span>天</span></div>
-          <div className="stat-footer">低餐量阈值 {settings.packageLowBalanceThreshold} 餐</div>
+          <div className="stat-footer">
+            低餐量阈值 {settings.packageLowBalanceThreshold} 餐 · 订阅
+            {settings.deliverySubscribeEnabled ? ` 午餐 ${settings.deliverySubscribeLunchTime} / 晚餐 ${settings.deliverySubscribeDinnerTime}` : " 已关闭"}
+          </div>
         </div>
       </div>
 
@@ -287,6 +319,10 @@ export function SystemSettingsPage() {
             <div className="settings-card__detail settings-card__detail--sub">
               剩余餐数小于等于 {settings.packageLowBalanceThreshold} 餐时标记为餐数不足
             </div>
+            <div className="settings-card__detail settings-card__detail--sub">
+              上线提醒弹窗{settings.mealReminderPopupEnabled ? "已开启" : "已关闭"}，订阅通知{settings.deliverySubscribeEnabled ? `午餐 ${settings.deliverySubscribeLunchTime}、晚餐 ${settings.deliverySubscribeDinnerTime} 按设置时间扫描发送` : "已关闭"}
+            </div>
+            <span className="settings-card__hint">{customerHints.reminderHint}</span>
           </div>
           <div className="settings-card__actions">
             <button className="btn btn-outline" style={{ width: "100%" }} onClick={openPackageReminder}>
@@ -403,7 +439,7 @@ export function SystemSettingsPage() {
         title="配置餐包提醒"
         onClose={closeModal}
         onSubmit={submitPackageReminder}
-        submitLabel="保存阈值"
+        submitLabel="保存策略"
         submitting={popupSubmitting}
       >
         <div className="form-group">
@@ -425,6 +461,52 @@ export function SystemSettingsPage() {
             value={packageReminderForm.packageLowBalanceThreshold}
             onChange={(e) => setPackageReminderForm({ ...packageReminderForm, packageLowBalanceThreshold: e.target.value })}
           />
+        </div>
+        <div className="form-group">
+          <label className="form-label">顾客上线弹窗提醒</label>
+          <div className="toggle-row">
+            <input
+              type="checkbox"
+              checked={packageReminderForm.mealReminderPopupEnabled}
+              onChange={(e) => setPackageReminderForm({ ...packageReminderForm, mealReminderPopupEnabled: e.target.checked })}
+            />
+            <span>{packageReminderForm.mealReminderPopupEnabled ? "开启后顾客打开小程序会收到一次温和提醒" : "关闭后顾客上线时不再主动弹出提醒"}</span>
+          </div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">订阅通知发送</label>
+          <div className="toggle-row">
+            <input
+              type="checkbox"
+              checked={packageReminderForm.deliverySubscribeEnabled}
+              onChange={(e) => setPackageReminderForm({ ...packageReminderForm, deliverySubscribeEnabled: e.target.checked })}
+            />
+            <span>{packageReminderForm.deliverySubscribeEnabled ? "开启后按午餐、晚餐各自时间扫描并发送顾客订阅通知" : "关闭后不发送顾客订阅通知"}</span>
+          </div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">午餐订阅时间</label>
+          <input
+            className="form-control"
+            type="time"
+            value={packageReminderForm.deliverySubscribeLunchTime}
+            onChange={(e) => setPackageReminderForm({ ...packageReminderForm, deliverySubscribeLunchTime: e.target.value })}
+          />
+          <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 8 }}>
+            仅午餐订阅消息在命中该时间时发送，例如 11:30。
+          </div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">晚餐订阅时间</label>
+          <input
+            className="form-control"
+            type="time"
+            value={packageReminderForm.deliverySubscribeDinnerTime}
+            onChange={(e) => setPackageReminderForm({ ...packageReminderForm, deliverySubscribeDinnerTime: e.target.value })}
+          />
+          <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 8 }}>
+            仅晚餐订阅消息在命中该时间时发送，例如 17:30。
+          </div>
         </div>
       </SettingsModal>
 

@@ -22,10 +22,16 @@ const raw = fs.readFileSync(filePath);
 const content = raw.toString('utf8');
 
 assert.notEqual(raw[0], 0xef, 'DispatchServiceImpl.java 不应包含 UTF-8 BOM');
+assert.doesNotMatch(
+  content,
+  /INSERT INTO notification_logs|insertNotification\(/,
+  'notifyCustomer 不应再通过 notification_logs 假装完成通知发送'
+);
+
 assert.match(
   content,
-  /insertNotification\(\(\(Number\) row\.get\("customer_id"\)\)\.longValue\(\), "DISPATCH_CONFIRM", "\{\\?"content\\?":\\?"[^"]*\\?"\}"\);/,
-  'notifyCustomer 中的通知内容字符串应保持为完整合法的 Java 字符串'
+  /"notificationStatus", "SKIPPED"/,
+  'notifyCustomer 未接入真实发送时应明确返回 SKIPPED'
 );
 
 assert.match(

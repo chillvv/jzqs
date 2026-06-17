@@ -29,7 +29,8 @@ import {
   shouldShowAddressExpandToggle,
   resolveCustomerStatusLabel,
   type CustomerBalanceState,
-  type CustomerOrderModeFilter
+  type CustomerOrderModeFilter,
+  type CustomerRemainingValidityState
 } from "./customerAssetPage.helpers";
 import { formatDateTimeLabel } from "../../shared/utils/dateTime";
 import { AppSelect } from "../../shared/components/AppSelect";
@@ -139,7 +140,17 @@ function buildRemainingValidityLabel(expiredAt?: string | null, remainingValidit
   if (!expiredAt) {
     return "-";
   }
+  if ((remainingValidityDays ?? 0) < 0) {
+    return "已过期";
+  }
+  if ((remainingValidityDays ?? 0) === 0) {
+    return "今日到期";
+  }
   return `剩余 ${remainingValidityDays ?? 0} 天`;
+}
+
+function shouldRenderPackageAlert(alertLabel?: string | null, alertCode?: string | null) {
+  return Boolean(alertLabel) && alertCode !== "EXPIRED";
 }
 
 function resolveCustomerAddresses(detail: CustomerDetailResponse | null) {
@@ -174,6 +185,7 @@ export function CustomerAssetPage() {
   const [customerStatusFilter, setCustomerStatusFilter] = useState("ALL");
   const [balanceStateFilter, setBalanceStateFilter] = useState<CustomerBalanceState>("ALL");
   const [orderModeFilter, setOrderModeFilter] = useState<CustomerOrderModeFilter>("ALL");
+  const [remainingValidityStateFilter, setRemainingValidityStateFilter] = useState<CustomerRemainingValidityState>("ALL");
   const [transactions, setTransactions] = useState<WalletTransactionResponse[]>([]);
   const [detail, setDetail] = useState<CustomerDetailResponse | null>(null);
   const [isAddressExpanded, setIsAddressExpanded] = useState(false);
@@ -519,15 +531,17 @@ export function CustomerAssetPage() {
       keyword: keywordFilter,
       customerStatus: customerStatusFilter,
       balanceState: balanceStateFilter,
-      orderMode: orderModeFilter
+      orderMode: orderModeFilter,
+      remainingValidityState: remainingValidityStateFilter
     }),
-    [items, keywordFilter, customerStatusFilter, balanceStateFilter, orderModeFilter]
+    [items, keywordFilter, customerStatusFilter, balanceStateFilter, orderModeFilter, remainingValidityStateFilter]
   );
   function resetCustomerFilters() {
     setKeywordFilter("");
     setCustomerStatusFilter("ALL");
     setBalanceStateFilter("ALL");
     setOrderModeFilter("ALL");
+    setRemainingValidityStateFilter("ALL");
   }
 
   function resolveWalletTransactionTypeLabel(type: string) {
@@ -624,6 +638,18 @@ export function CustomerAssetPage() {
             ]}
             onChange={(value) => setOrderModeFilter(value as CustomerOrderModeFilter)}
           />
+          <AppSelect
+            className="app-select--filter customer-filter-select"
+            value={remainingValidityStateFilter}
+            options={[
+              { label: "全部天数状态", value: "ALL" },
+              { label: "有效中", value: "VALID" },
+              { label: "即将到期", value: "EXPIRING_SOON" },
+              { label: "已过期", value: "EXPIRED" },
+              { label: "未设置", value: "NO_EXPIRY" }
+            ]}
+            onChange={(value) => setRemainingValidityStateFilter(value as CustomerRemainingValidityState)}
+          />
           <button className="btn btn-primary" onClick={() => reloadCustomers().catch((err) => toast(resolveErrorMessage(err, "刷新客户列表失败"), "error"))}><Search size={16} /> 刷新</button>
           <button
             className="btn btn-outline"
@@ -668,6 +694,7 @@ export function CustomerAssetPage() {
               const statusLabel = resolveCustomerStatusLabel(item.customerStatus);
               const packageExpiryLabel = buildPackageExpiryLabel(item.packageExpiredAt);
               const remainingValidityLabel = buildRemainingValidityLabel(item.packageExpiredAt, item.remainingValidityDays);
+              const shouldShowPackageAlert = shouldRenderPackageAlert(item.packageAlertLabel, item.packageAlertCode);
               return (
                 <tr key={item.id}>
                   <td>
@@ -691,7 +718,7 @@ export function CustomerAssetPage() {
                   </td>
                   <td>
                     <div className="customer-table-note">{remainingValidityLabel}</div>
-                    {item.packageAlertLabel ? <div className="customer-table-note">{`提醒：${item.packageAlertLabel}`}</div> : null}
+                    {shouldShowPackageAlert ? <div className="customer-table-note">{`当前提醒：${item.packageAlertLabel}`}</div> : null}
                   </td>
                   <td>
                     <div className="customer-balance-cell">
@@ -720,6 +747,7 @@ export function CustomerAssetPage() {
             const statusLabel = resolveCustomerStatusLabel(item.customerStatus);
             const packageExpiryLabel = buildPackageExpiryLabel(item.packageExpiredAt);
             const remainingValidityLabel = buildRemainingValidityLabel(item.packageExpiredAt, item.remainingValidityDays);
+            const shouldShowPackageAlert = shouldRenderPackageAlert(item.packageAlertLabel, item.packageAlertCode);
             return (
               <div className="mobile-card" key={item.id}>
                 <div className="mobile-card-header">
@@ -749,9 +777,9 @@ export function CustomerAssetPage() {
                   <div className="mobile-card-label">剩余天数</div>
                   <div className="mobile-card-value">{remainingValidityLabel}</div>
                 </div>
-                {item.packageAlertLabel ? (
+                {shouldShowPackageAlert ? (
                   <div className="mobile-card-row">
-                    <div className="mobile-card-label">提醒</div>
+                    <div className="mobile-card-label">当前提醒</div>
                     <div className="mobile-card-value">{item.packageAlertLabel}</div>
                   </div>
                 ) : null}
@@ -843,7 +871,10 @@ export function CustomerAssetPage() {
                   )}
                 </div>
               </div>
-              {(detail?.wallet?.packageAlertLabel || activeItem.packageAlertLabel) ? (
+              {shouldRenderPackageAlert(
+                detail?.wallet?.packageAlertLabel || activeItem.packageAlertLabel,
+                detail?.wallet?.packageAlertCode || activeItem.packageAlertCode
+              ) ? (
                 <div className="customer-detail-note-block" style={{ marginTop: 16 }}>
                   <div className="customer-detail-note-block__label">当前提醒</div>
                   <div className="customer-detail-note-block__value">{String(detail?.wallet?.packageAlertLabel || activeItem.packageAlertLabel)}</div>

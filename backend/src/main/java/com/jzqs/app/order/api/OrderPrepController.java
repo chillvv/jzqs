@@ -168,6 +168,11 @@ public class OrderPrepController {
         return ApiResponse.success(orderPrepService.deleteOrder(orderId));
     }
 
+    @PostMapping("/{orderId}/receipt/delete")
+    public ApiResponse<Map<String, Object>> deleteReceipt(@PathVariable long orderId) {
+        return ApiResponse.success(orderPrepService.deleteDeliveryReceipt(orderId));
+    }
+
     @PostMapping("/consume")
     public ApiResponse<BatchOperationResponse> consume(@Valid @RequestBody BatchConsumeOrdersRequest request) {
         return ApiResponse.success(orderPrepService.consumeOrders(request.orderIds()));

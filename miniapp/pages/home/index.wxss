@@ -171,6 +171,100 @@
   letter-spacing: 1rpx;
 }
 
+.meal-reminder-popup {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+}
+
+.meal-reminder-popup__mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.46);
+  backdrop-filter: blur(8rpx);
+}
+
+.meal-reminder-popup__panel {
+  position: absolute;
+  left: 32rpx;
+  right: 32rpx;
+  top: 50%;
+  transform: translateY(-50%);
+  padding: 40rpx 32rpx 32rpx;
+  border-radius: 32rpx;
+  background: linear-gradient(180deg, #fffdf6 0%, #ffffff 52%, #f8fbef 100%);
+  box-shadow: 0 30rpx 80rpx rgba(31, 41, 55, 0.18);
+}
+
+.meal-reminder-popup__badge {
+  display: inline-flex;
+  padding: 10rpx 24rpx;
+  border-radius: 999rpx;
+  background: rgba(146, 170, 64, 0.14);
+  color: #7f9533;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.meal-reminder-popup__title {
+  margin-top: 24rpx;
+  font-size: 38rpx;
+  font-weight: 800;
+  line-height: 1.35;
+  color: #1f2937;
+}
+
+.meal-reminder-popup__message {
+  margin-top: 20rpx;
+  font-size: 27rpx;
+  line-height: 1.8;
+  color: #4b5563;
+}
+
+.meal-reminder-popup__check {
+  margin-top: 28rpx;
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  color: #556274;
+  font-size: 24rpx;
+}
+
+.meal-reminder-popup__checkbox {
+  width: 34rpx;
+  height: 34rpx;
+  border-radius: 10rpx;
+  border: 2rpx solid rgba(146, 170, 64, 0.4);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: transparent;
+  background: #ffffff;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+
+.meal-reminder-popup__checkbox.is-checked {
+  background: #92aa40;
+  border-color: #92aa40;
+  color: #ffffff;
+}
+
+.meal-reminder-popup__button {
+  margin-top: 32rpx;
+  border: none;
+  border-radius: 999rpx;
+  background: linear-gradient(135deg, #cfe37a 0%, #b8d060 100%);
+  color: #243018;
+  font-size: 28rpx;
+  font-weight: 800;
+  line-height: 88rpx;
+}
+
+.meal-reminder-popup__button::after {
+  border: none;
+}
+
 .hero-banner-copy {
   position: absolute;
   left: 24rpx;

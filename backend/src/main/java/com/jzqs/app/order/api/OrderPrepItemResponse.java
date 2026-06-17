@@ -19,6 +19,10 @@ public record OrderPrepItemResponse(
     boolean canAssign,
     boolean canCancel,
     boolean canReceipt,
-    String walletStatusLabel
+    String walletStatusLabel,
+    String referenceImageUrl,
+    String receiptUrl,
+    String receiptNote,
+    String deliveredAt
 ) {
 }

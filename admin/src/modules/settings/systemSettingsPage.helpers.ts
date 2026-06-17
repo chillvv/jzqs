@@ -114,10 +114,16 @@ export function resolveAdminMediaUrl(value: string) {
 }
 
 export function buildCustomerFacingSettingHints(settings: OperationSettingsResponse) {
+  const subscribeHint = settings.deliverySubscribeEnabled
+    ? `午餐 ${settings.deliverySubscribeLunchTime}、晚餐 ${settings.deliverySubscribeDinnerTime}；命中设置时间后才会发送取餐提醒订阅消息。`
+    : "取餐提醒订阅已关闭，顾客不会在午餐或晚餐时段收到订阅消息。";
   return {
     bannerHint: `顾客首页将展示 ${countEnabledBannerImages(settings.bannerImages || "")} 张启用中的轮播图，并按 ${Math.max(1, settings.bannerIntervalSeconds || 3)} 秒轮播。`,
     popupHint: settings.popupAnnouncementEnabled
       ? "已开启锁定公告，用户进入小程序后只能查看公告。"
-      : "锁定公告已关闭，用户可正常使用小程序。"
+      : "锁定公告已关闭，用户可正常使用小程序。",
+    reminderHint: settings.mealReminderPopupEnabled
+      ? `顾客上线后，会按当前餐包状态弹出一次用餐提醒，并可勾选本次状态不再提示。${subscribeHint}`
+      : `已关闭顾客上线提醒弹窗，顾客进入小程序后不会主动看到餐包状态提醒。${subscribeHint}`
   };
 }

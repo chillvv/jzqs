@@ -23,6 +23,10 @@ public record MobileHomeResponse(
     List<MobileBannerItemResponse> bannerImages,
     int bannerIntervalMs,
     boolean popupAnnouncementEnabled,
-    String popupAnnouncementContent
+    String popupAnnouncementContent,
+    boolean mealReminderPopupEnabled,
+    String mealReminderTitle,
+    String mealReminderMessage,
+    String mealReminderKey
 ) {
 }

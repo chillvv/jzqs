@@ -49,6 +49,18 @@ export function resolveMaintenanceJobLabel(jobType: string) {
       return "手动数据清理";
     case "AUTO_DATA_CLEANUP":
       return "自动数据清理";
+    case "ORDER_HISTORY_CLEANUP":
+      return "订单历史";
+    case "DISPATCH_BATCH_CLEANUP":
+      return "配送批次";
+    case "RECEIPT_RECORD_CLEANUP":
+      return "回执记录";
+    case "DISPATCH_REASSIGNMENT_CLEANUP":
+      return "区域调整记录";
+    case "ADDRESS_BINDING_CLEANUP":
+      return "地址绑定";
+    case "WALLET_TRANSACTION_CLEANUP":
+      return "钱包流水";
     case "CLOUD_RECEIPT_CLEANUP":
       return "回执图片云清理";
     case "CLOUD_STORAGE_SWEEP":
@@ -75,7 +87,23 @@ export function buildMaintenanceResultSummary(item: MaintenanceLogItemResponse |
   if (!item) {
     return "还没有执行记录";
   }
+  if (item.moduleSummaries?.length) {
+    return item.moduleSummaries.map((summary) => summary.summary).join("；");
+  }
   return `扫描 ${item.scannedCount} / 清理 ${item.deletedCount} / 失败 ${item.failedCount}`;
+}
+
+export function normalizeMaintenanceOverview(
+  overview?: Partial<MaintenanceOverviewResponse> | null
+): MaintenanceOverviewResponse {
+  return {
+    latestManual: overview?.latestManual ?? null,
+    latestAuto: overview?.latestAuto ?? null,
+    latestCloudReceipt: overview?.latestCloudReceipt ?? null,
+    latestCloudStorage: overview?.latestCloudStorage ?? null,
+    cleanupRules: Array.isArray(overview?.cleanupRules) ? overview.cleanupRules : [],
+    nextAutoRunLabel: overview?.nextAutoRunLabel || "每日 03:00"
+  };
 }
 
 export function buildMaintenanceLogRows(items: MaintenanceLogItemResponse[]): MaintenanceLogRow[] {

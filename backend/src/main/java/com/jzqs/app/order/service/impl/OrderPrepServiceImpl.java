@@ -146,7 +146,11 @@ public class OrderPrepServiceImpl implements OrderPrepService {
                     WHEN mso.status = 'CANCELLED' THEN '已释放餐次'
                     WHEN mso.status = 'DELIVERED' THEN '已核销'
                     ELSE '已占用'
-                END AS wallet_status_label
+                END AS wallet_status_label,
+                COALESCE(ari.reference_image_url, '') AS reference_image_url,
+                COALESCE(dr.receipt_url, '') AS receipt_url,
+                COALESCE(dr.receipt_note, '') AS receipt_note,
+                dr.delivered_at
             FROM meal_slot_orders mso
             JOIN daily_orders do ON do.id = mso.daily_order_id
             JOIN customers c ON c.id = do.customer_id
@@ -155,6 +159,14 @@ public class OrderPrepServiceImpl implements OrderPrepService {
                 AND ms.meal_period = mso.meal_period
                 AND ms.slot_status = 'ACTIVE'
                 AND EXISTS (SELECT 1 FROM menu_weeks mw2 WHERE mw2.id = ms.week_id AND mw2.status = 'PUBLISHED')
+            LEFT JOIN address_reference_images ari ON ari.customer_address_id = mso.address_id
+            LEFT JOIN (
+                SELECT meal_slot_order_id, receipt_url, receipt_note, delivered_at
+                FROM delivery_receipts dr_inner
+                WHERE dr_inner.id = (
+                    SELECT MAX(id) FROM delivery_receipts WHERE meal_slot_order_id = dr_inner.meal_slot_order_id
+                )
+            ) dr ON dr.meal_slot_order_id = mso.id
             WHERE do.serve_date = ?
               AND mso.status <> 'REFUNDED'
               AND NOT EXISTS (
@@ -186,7 +198,11 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             rs.getBoolean("can_assign"),
             rs.getBoolean("can_cancel"),
             rs.getBoolean("can_receipt"),
-            rs.getString("wallet_status_label")
+            rs.getString("wallet_status_label"),
+            rs.getString("reference_image_url"),
+            rs.getString("receipt_url"),
+            rs.getString("receipt_note"),
+            formatTimestamp(rs.getTimestamp("delivered_at"))
         ), targetDate);
         Map<Long, OrderNoteProjection> noteProjections = loadOrderNoteProjections(rows.stream().map(PrepOrderRow::id).toList());
         List<OrderPrepItemResponse> items = rows.stream()
@@ -843,6 +859,71 @@ public class OrderPrepServiceImpl implements OrderPrepService {
 
     @Override
     @Transactional
+    public Map<String, Object> deleteDeliveryReceipt(long orderId) {
+        Map<String, Object> orderInfo = jdbcTemplate.query(
+            "SELECT status FROM meal_slot_orders WHERE id = ?",
+            ps -> ps.setLong(1, orderId),
+            rs -> {
+                if (!rs.next()) {
+                    return null;
+                }
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("status", rs.getString("status"));
+                return row;
+            }
+        );
+        if (orderInfo == null) {
+            return Map.of("orderId", orderId, "status", "NOT_FOUND");
+        }
+
+        Map<String, Object> latestReceipt = jdbcTemplate.query(
+            """
+                SELECT id, receipt_url
+                FROM delivery_receipts
+                WHERE meal_slot_order_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+            ps -> ps.setLong(1, orderId),
+            rs -> {
+                if (!rs.next()) {
+                    return null;
+                }
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("id", rs.getLong("id"));
+                row.put("receiptUrl", rs.getString("receipt_url"));
+                return row;
+            }
+        );
+        if (latestReceipt == null) {
+            return Map.of(
+                "mealSlotOrderId", orderId,
+                "orderStatus", orderInfo.get("status"),
+                "receiptUrl", "",
+                "deleted", false
+            );
+        }
+
+        jdbcTemplate.update(
+            """
+                UPDATE delivery_receipts
+                SET receipt_url = '',
+                    receipt_note = ''
+                WHERE id = ?
+                """,
+            latestReceipt.get("id")
+        );
+
+        return Map.of(
+            "mealSlotOrderId", orderId,
+            "orderStatus", orderInfo.get("status"),
+            "receiptUrl", "",
+            "deleted", true
+        );
+    }
+
+    @Override
+    @Transactional
     public Map<String, Object> deleteOrder(long orderId) {
         // 1. 检查订单是否存在
         Integer count = jdbcTemplate.queryForObject(
@@ -1147,7 +1228,11 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             row.canAssign(),
             row.canCancel(),
             row.canReceipt(),
-            row.walletStatusLabel()
+            row.walletStatusLabel(),
+            row.referenceImageUrl(),
+            row.receiptUrl(),
+            row.receiptNote(),
+            row.deliveredAt()
         );
     }
 
@@ -1272,7 +1357,11 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         boolean canAssign,
         boolean canCancel,
         boolean canReceipt,
-        String walletStatusLabel
+        String walletStatusLabel,
+        String referenceImageUrl,
+        String receiptUrl,
+        String receiptNote,
+        String deliveredAt
     ) {
     }
 

@@ -9,6 +9,10 @@ public record OperationSettingsResponse(
     int bannerIntervalSeconds,
     int packageExpiryReminderDays,
     int packageLowBalanceThreshold,
+    boolean mealReminderPopupEnabled,
+    boolean deliverySubscribeEnabled,
+    String deliverySubscribeLunchTime,
+    String deliverySubscribeDinnerTime,
     boolean popupAnnouncementEnabled,
     String popupAnnouncementContent
 ) {

@@ -18,6 +18,7 @@ import java.nio.file.Path;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
@@ -31,6 +32,8 @@ public class SettingsServiceImpl implements SettingsService {
     private static final long MAX_BANNER_UPLOAD_SIZE = 5L * 1024 * 1024;
     private static final String DEFAULT_BANNER_IMAGE = "../../assets/hero-new.jpg";
     private static final int DEFAULT_BANNER_INTERVAL_SECONDS = 3;
+    private static final String DEFAULT_DELIVERY_SUBSCRIBE_LUNCH_TIME = "11:30";
+    private static final String DEFAULT_DELIVERY_SUBSCRIBE_DINNER_TIME = "17:30";
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final TransactionalRealtimePublisher realtimeEventPublisher;
@@ -55,7 +58,23 @@ public class SettingsServiceImpl implements SettingsService {
     @Override
     public OperationSettingsResponse operationSettings() {
         Map<String, Object> row = jdbcTemplate.queryForMap(
-            "SELECT ordering_enabled, holiday_notice_title, holiday_notice_desc, banner_images, banner_interval_seconds, package_expiry_reminder_days, package_low_balance_threshold, popup_announcement_enabled, popup_announcement_content FROM admin_settings WHERE id = 1"
+            """
+                SELECT ordering_enabled,
+                       holiday_notice_title,
+                       holiday_notice_desc,
+                       banner_images,
+                       banner_interval_seconds,
+                       package_expiry_reminder_days,
+                       package_low_balance_threshold,
+                       meal_reminder_popup_enabled,
+                       delivery_subscribe_enabled,
+                       delivery_subscribe_lunch_time,
+                       delivery_subscribe_dinner_time,
+                       popup_announcement_enabled,
+                       popup_announcement_content
+                FROM admin_settings
+                WHERE id = 1
+                """
         );
         boolean orderingEnabled = Boolean.TRUE.equals(row.get("ordering_enabled"));
         return new OperationSettingsResponse(
@@ -68,6 +87,10 @@ public class SettingsServiceImpl implements SettingsService {
             normalizeBannerIntervalSeconds(row.get("banner_interval_seconds")),
             normalizePositiveInt(row.get("package_expiry_reminder_days"), 7),
             normalizePositiveInt(row.get("package_low_balance_threshold"), 3),
+            Boolean.TRUE.equals(row.get("meal_reminder_popup_enabled")),
+            Boolean.TRUE.equals(row.get("delivery_subscribe_enabled")),
+            normalizeTimeSetting(row.get("delivery_subscribe_lunch_time"), DEFAULT_DELIVERY_SUBSCRIBE_LUNCH_TIME),
+            normalizeTimeSetting(row.get("delivery_subscribe_dinner_time"), DEFAULT_DELIVERY_SUBSCRIBE_DINNER_TIME),
             Boolean.TRUE.equals(row.get("popup_announcement_enabled")),
             safeString(row.get("popup_announcement_content"))
         );
@@ -139,17 +162,32 @@ public class SettingsServiceImpl implements SettingsService {
 
     @Override
     @Transactional
-    public OperationSettingsResponse updatePackageReminderSettings(int packageExpiryReminderDays, int packageLowBalanceThreshold) {
+    public OperationSettingsResponse updatePackageReminderSettings(
+        int packageExpiryReminderDays,
+        int packageLowBalanceThreshold,
+        boolean mealReminderPopupEnabled,
+        boolean deliverySubscribeEnabled,
+        String deliverySubscribeLunchTime,
+        String deliverySubscribeDinnerTime
+    ) {
         jdbcTemplate.update(
             """
                 UPDATE admin_settings
                 SET package_expiry_reminder_days = ?,
                     package_low_balance_threshold = ?,
+                    meal_reminder_popup_enabled = ?,
+                    delivery_subscribe_enabled = ?,
+                    delivery_subscribe_lunch_time = ?,
+                    delivery_subscribe_dinner_time = ?,
                     updated_at = ?
                 WHERE id = 1
                 """,
             Math.max(1, packageExpiryReminderDays),
             Math.max(1, packageLowBalanceThreshold),
+            mealReminderPopupEnabled,
+            deliverySubscribeEnabled,
+            normalizeTimeSetting(deliverySubscribeLunchTime, DEFAULT_DELIVERY_SUBSCRIBE_LUNCH_TIME),
+            normalizeTimeSetting(deliverySubscribeDinnerTime, DEFAULT_DELIVERY_SUBSCRIBE_DINNER_TIME),
             Timestamp.valueOf(LocalDateTime.now())
         );
         publishHomeEvent("system.home.changed");
@@ -231,6 +269,18 @@ public class SettingsServiceImpl implements SettingsService {
         }
     }
 
+    private String normalizeTimeSetting(Object value, String fallback) {
+        String normalized = safeString(value).trim();
+        if (normalized.isEmpty()) {
+            return fallback;
+        }
+        try {
+            return LocalTime.parse(normalized).withSecond(0).withNano(0).toString();
+        } catch (Exception ex) {
+            return fallback;
+        }
+    }
+
     private void publishHomeEvent(String eventType) {
         realtimeEventPublisher.publish(
             RealtimeEvent.builder(eventType)
@@ -259,7 +309,7 @@ public class SettingsServiceImpl implements SettingsService {
                 if (node.isTextual()) {
                     String imageUrl = node.asText("").trim();
                     if (!imageUrl.isEmpty()) {
-                        normalizedArray.add(createBannerNode(imageUrl, "", "", true, "PREVIEW_IMAGE", ""));
+                        normalizedArray.add(createBannerNode(imageUrl, "", "", true));
                     }
                     continue;
                 }
@@ -278,9 +328,7 @@ public class SettingsServiceImpl implements SettingsService {
                     imageUrl,
                     node.path("title").asText(""),
                     node.path("description").asText(""),
-                    enabled,
-                    normalizeBannerActionType(node.path("actionType").asText("")),
-                    normalizeBannerActionTarget(node.path("actionTarget").asText(""))
+                    enabled
                 ));
             }
             return normalizedArray.isEmpty() ? defaultBannerImagesJson() : objectMapper.writeValueAsString(normalizedArray);
@@ -293,17 +341,13 @@ public class SettingsServiceImpl implements SettingsService {
         String imageUrl,
         String title,
         String description,
-        boolean enabled,
-        String actionType,
-        String actionTarget
+        boolean enabled
     ) {
         ObjectNode node = objectMapper.createObjectNode();
         node.put("imageUrl", imageUrl);
         node.put("title", title);
         node.put("description", description);
         node.put("enabled", enabled);
-        node.put("actionType", actionType);
-        node.put("actionTarget", actionTarget);
         return node;
     }
 
@@ -311,28 +355,12 @@ public class SettingsServiceImpl implements SettingsService {
         try {
             return objectMapper.writeValueAsString(
                 objectMapper.createArrayNode().add(
-                    createBannerNode(DEFAULT_BANNER_IMAGE, "", "", true, "PREVIEW_IMAGE", "")
+                    createBannerNode(DEFAULT_BANNER_IMAGE, "", "", true)
                 )
             );
         } catch (JsonProcessingException ex) {
             throw new IllegalStateException("默认轮播图配置序列化失败", ex);
         }
-    }
-
-    private String normalizeBannerActionType(String actionType) {
-        String normalized = actionType == null ? "" : actionType.trim();
-        return normalized.isEmpty() ? "PREVIEW_IMAGE" : normalized;
-    }
-
-    private String normalizeBannerActionTarget(String actionTarget) {
-        String normalized = actionTarget == null ? "" : actionTarget.trim();
-        if (normalized.isEmpty()) {
-            return "";
-        }
-        if (normalized.startsWith("/") || normalized.startsWith("http://") || normalized.startsWith("https://")) {
-            return normalized;
-        }
-        return "/" + normalized;
     }
 
     private int normalizeBannerIntervalSeconds(Object value) {
