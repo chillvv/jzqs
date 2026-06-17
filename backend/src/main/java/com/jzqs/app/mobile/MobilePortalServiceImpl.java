@@ -510,7 +510,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             );
             jdbcTemplate.update("UPDATE meal_wallets SET reserved_meals = reserved_meals + 1 WHERE id = ?", walletId);
             insertWalletTransaction(walletId, "RESERVE", -1, "小程序", "用户自主下单加餐占用餐次", mergeTime, mergeTargetOrderId);
-            orderNoteSnapshotService.writeOrderSnapshot(
+            attemptWriteOrderSnapshot(
                 mergeTargetOrderId,
                 customerId,
                 "小程序",
@@ -571,7 +571,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         );
         jdbcTemplate.update("UPDATE meal_wallets SET reserved_meals = reserved_meals + 1 WHERE id = ?", walletId);
         insertWalletTransaction(walletId, "RESERVE", -1, "小程序", "用户自主下单占用餐次", now, mealSlotOrderId);
-        orderNoteSnapshotService.writeOrderSnapshot(
+        attemptWriteOrderSnapshot(
             mealSlotOrderId,
             customerId,
             "小程序",
@@ -1856,6 +1856,36 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         }
     }
 
+    private void attemptWriteOrderSnapshot(
+        long mealSlotOrderId,
+        long customerId,
+        String operatorName,
+        String orderUserNote,
+        String subscriptionDefaultNote,
+        List<String> orderOnceMerchantNotes,
+        LocalDateTime snapshotTime
+    ) {
+        try {
+            orderNoteSnapshotService.writeOrderSnapshot(
+                mealSlotOrderId,
+                customerId,
+                operatorName,
+                orderUserNote,
+                subscriptionDefaultNote,
+                orderOnceMerchantNotes,
+                snapshotTime
+            );
+        } catch (RuntimeException ex) {
+            log.warn(
+                "miniapp create order snapshot skipped customerId={} orderId={} reason={}",
+                customerId,
+                mealSlotOrderId,
+                ex.getMessage(),
+                ex
+            );
+        }
+    }
+
     private void sendDeliverySubscriptionAfterCutoffIfReached(long mealSlotOrderId, LocalDateTime deliveredDateTime) {
         DeliveryMealSlotContext context = findDeliveryMealSlotContext(mealSlotOrderId);
         if (context == null || !hasReachedDeliveryNotifyCutoff(context.mealPeriod(), context.serveDate(), deliveredDateTime)) {
@@ -2446,16 +2476,26 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     }
 
     private String normalizeCustomerMerchantRemark(long customerId) {
-        List<String> remarks = jdbcTemplate.queryForList(
-            "SELECT COALESCE(merchant_remark, '') FROM customers WHERE id = ?",
-            String.class,
-            customerId
-        );
-        if (remarks.isEmpty()) {
+        try {
+            List<String> remarks = jdbcTemplate.queryForList(
+                "SELECT COALESCE(merchant_remark, '') FROM customers WHERE id = ?",
+                String.class,
+                customerId
+            );
+            if (remarks.isEmpty()) {
+                return "";
+            }
+            String normalized = remarks.get(0) == null ? "" : remarks.get(0).trim();
+            return "-".equals(normalized) ? "" : normalized;
+        } catch (RuntimeException ex) {
+            log.warn(
+                "miniapp create order merchant remark skipped customerId={} reason={}",
+                customerId,
+                ex.getMessage(),
+                ex
+            );
             return "";
         }
-        String normalized = remarks.get(0) == null ? "" : remarks.get(0).trim();
-        return "-".equals(normalized) ? "" : normalized;
     }
 
     private String preferredOrderNote(Object userNote, Object fallbackNote) {
