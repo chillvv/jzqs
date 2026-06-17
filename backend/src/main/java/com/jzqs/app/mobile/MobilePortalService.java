@@ -50,6 +50,8 @@ public interface MobilePortalService {
 
     int sendScheduledDeliverySubscribeMessages(String mealPeriod);
 
+    int sendAllDeliveredPendingSubscriptions();
+
     Map<String, Object> cancelMiniappOrder(String phone, long orderId);
 
     Map<String, Object> cancelMiniappOrder(long customerId, long orderId);

@@ -738,6 +738,33 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         return sendScheduledDeliverySubscribeMessagesInternal(normalizedMealPeriod, LocalDate.now(), LocalDateTime.now().withNano(0));
     }
 
+    @Override
+    @Transactional
+    public int sendAllDeliveredPendingSubscriptions() {
+        List<Long> orderIds = jdbcTemplate.query(
+            """
+            SELECT cds.meal_slot_order_id
+            FROM customer_delivery_subscriptions cds
+            JOIN meal_slot_orders mso ON mso.id = cds.meal_slot_order_id
+            JOIN daily_orders do ON do.id = mso.daily_order_id
+            JOIN customers c ON c.id = do.customer_id
+            WHERE cds.status IN ('AUTHORIZED', 'FAILED')
+              AND mso.status = 'DELIVERED'
+              AND COALESCE(c.current_openid, c.openid, '') <> ''
+            ORDER BY cds.meal_slot_order_id
+            """,
+            (rs, rowNum) -> rs.getLong(1)
+        );
+        int sentCount = 0;
+        LocalDateTime now = LocalDateTime.now().withNano(0);
+        for (Long orderId : orderIds) {
+            if (trySendDeliverySubscription(orderId, now)) {
+                sentCount++;
+            }
+        }
+        return sentCount;
+    }
+
     @Transactional
     public Map<String, Object> cancelMiniappOrder(String phone, long orderId) {
         return cancelMiniappOrder(findCustomerIdByPhone(phone), orderId);
@@ -1466,7 +1493,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             // Keep receipt submission successful even if reference-image auto-save fails.
         }
         try {
-            sendDeliverySubscriptionAfterCutoffIfReached(mealSlotOrderId, deliveredDateTime);
+            sendDeliverySubscriptionAfterReceiptIfNeeded(mealSlotOrderId, deliveredDateTime);
         } catch (Exception ex) {
             // Keep receipt submission successful even if notification delivery fails.
         }
@@ -1973,9 +2000,8 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         }
     }
 
-    private void sendDeliverySubscriptionAfterCutoffIfReached(long mealSlotOrderId, LocalDateTime deliveredDateTime) {
-        DeliveryMealSlotContext context = findDeliveryMealSlotContext(mealSlotOrderId);
-        if (context == null || !hasReachedDeliveryNotifyCutoff(context.mealPeriod(), context.serveDate(), deliveredDateTime)) {
+    private void sendDeliverySubscriptionAfterReceiptIfNeeded(long mealSlotOrderId, LocalDateTime deliveredDateTime) {
+        if (isDeliverySubscribeFixedTimeEnabled()) {
             return;
         }
         trySendDeliverySubscription(mealSlotOrderId, deliveredDateTime);
@@ -2118,6 +2144,18 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             return false;
         }
         return !now.isBefore(resolveDeliveryNotifyThreshold(serveDate, mealPeriod));
+    }
+
+    private boolean isDeliverySubscribeFixedTimeEnabled() {
+        Boolean enabled = jdbcTemplate.query(
+            """
+            SELECT delivery_subscribe_enabled
+            FROM admin_settings
+            WHERE id = 1
+            """,
+            rs -> rs.next() ? rs.getBoolean("delivery_subscribe_enabled") : Boolean.FALSE
+        );
+        return Boolean.TRUE.equals(enabled);
     }
 
     private boolean isAcceptedSubscribeResult(String acceptResult) {

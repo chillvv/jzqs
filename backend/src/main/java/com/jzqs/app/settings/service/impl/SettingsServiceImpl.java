@@ -9,6 +9,7 @@ import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.common.realtime.RealtimeEvent;
 import com.jzqs.app.common.realtime.TransactionalRealtimePublisher;
+import com.jzqs.app.mobile.MobilePortalService;
 import com.jzqs.app.settings.api.BannerImageUploadResponse;
 import com.jzqs.app.settings.api.OperationSettingsResponse;
 import com.jzqs.app.settings.service.SettingsService;
@@ -37,17 +38,20 @@ public class SettingsServiceImpl implements SettingsService {
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final TransactionalRealtimePublisher realtimeEventPublisher;
+    private final MobilePortalService mobilePortalService;
     private final Path uploadRootDir;
 
     public SettingsServiceImpl(
         JdbcTemplate jdbcTemplate,
         ObjectMapper objectMapper,
         TransactionalRealtimePublisher realtimeEventPublisher,
+        MobilePortalService mobilePortalService,
         @Value("${app.upload-dir:./uploads}") String uploadDir
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.realtimeEventPublisher = realtimeEventPublisher;
+        this.mobilePortalService = mobilePortalService;
         this.uploadRootDir = Path.of(uploadDir).toAbsolutePath().normalize();
     }
 
@@ -170,6 +174,7 @@ public class SettingsServiceImpl implements SettingsService {
         String deliverySubscribeLunchTime,
         String deliverySubscribeDinnerTime
     ) {
+        OperationSettingsResponse previousSettings = operationSettings();
         jdbcTemplate.update(
             """
                 UPDATE admin_settings
@@ -190,6 +195,9 @@ public class SettingsServiceImpl implements SettingsService {
             normalizeTimeSetting(deliverySubscribeDinnerTime, DEFAULT_DELIVERY_SUBSCRIBE_DINNER_TIME),
             Timestamp.valueOf(LocalDateTime.now())
         );
+        if (previousSettings.deliverySubscribeEnabled() && !deliverySubscribeEnabled) {
+            mobilePortalService.sendAllDeliveredPendingSubscriptions();
+        }
         publishHomeEvent("system.home.changed");
         return operationSettings();
     }
