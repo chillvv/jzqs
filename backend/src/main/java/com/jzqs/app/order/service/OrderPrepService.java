@@ -35,6 +35,10 @@ public interface OrderPrepService {
 
     Map<String, Object> updateOrderProfile(long orderId, Map<String, Object> payload);
 
+    Map<String, Object> updateSpecialDispatch(long orderId, String deliveryMealPeriod);
+
+    Map<String, Object> resetSpecialDispatch(long orderId);
+
     OrderNotesResponse orderNotes(long orderId);
 
     Map<String, Object> addOrderNote(long orderId, OrderNoteCreateRequest request);

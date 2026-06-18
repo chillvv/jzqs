@@ -4,6 +4,7 @@ import com.jzqs.app.common.api.BatchOperationResponse;
 import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
+import com.jzqs.app.dispatch.service.DispatchService;
 import com.jzqs.app.order.api.ManualCreateCustomerAddressResponse;
 import com.jzqs.app.order.api.ManualCreateCustomerSearchResponse;
 import com.jzqs.app.order.api.OrderNoteCreateRequest;
@@ -37,10 +38,16 @@ public class OrderPrepServiceImpl implements OrderPrepService {
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private final JdbcTemplate jdbcTemplate;
     private final OrderNoteSnapshotService orderNoteSnapshotService;
+    private final DispatchService dispatchService;
 
-    public OrderPrepServiceImpl(JdbcTemplate jdbcTemplate, OrderNoteSnapshotService orderNoteSnapshotService) {
+    public OrderPrepServiceImpl(
+        JdbcTemplate jdbcTemplate,
+        OrderNoteSnapshotService orderNoteSnapshotService,
+        DispatchService dispatchService
+    ) {
         this.jdbcTemplate = jdbcTemplate;
         this.orderNoteSnapshotService = orderNoteSnapshotService;
+        this.dispatchService = dispatchService;
     }
 
     @Override
@@ -316,7 +323,6 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         Map<String, Object> current = records.get(0);
         long customerId = ((Number) current.get("customer_id")).longValue();
         String currentMealPeriod = stringValue(current.get("meal_period"));
-        String currentDeliveryMealPeriod = stringValue(current.get("delivery_meal_period"));
         int quantity = intValue(payload.get("quantity"), ((Number) current.get("quantity")).intValue());
         String deliveryAddress = fallbackString(payload.get("deliveryAddress"), stringValue(current.get("delivery_address")));
         String merchantRemark = payload.containsKey("merchantRemark")
@@ -329,13 +335,11 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             ? stringValue(payload.get("status"))
             : stringValue(current.get("status"));
         String mealPeriod = resolveMealPeriod(payload.get("mealPeriod"), payload.get("mealSummary"), currentMealPeriod);
-        String deliveryMealPeriod = resolveDeliveryMealPeriod(payload.get("deliveryMealPeriod"), mealPeriod, currentDeliveryMealPeriod);
         long addressId = ensureCustomerAddress(customerId, deliveryAddress);
 
         Integer updated = jdbcTemplate.update(
-            "UPDATE meal_slot_orders SET meal_period = ?, delivery_meal_period = ?, quantity = ?, address_id = ?, merchant_remark = ?, is_priority = ?, status = ? WHERE id = ?",
+            "UPDATE meal_slot_orders SET meal_period = ?, quantity = ?, address_id = ?, merchant_remark = ?, is_priority = ?, status = ? WHERE id = ?",
             mealPeriod,
-            deliveryMealPeriod,
             Math.max(1, quantity),
             addressId,
             merchantRemark,
@@ -350,6 +354,48 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             "orderId", orderId,
             "status", "UPDATED",
             "addressId", addressId
+        );
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> updateSpecialDispatch(long orderId, String deliveryMealPeriod) {
+        String normalizedDeliveryMealPeriod = normalizeMealPeriod(stringValue(deliveryMealPeriod));
+        if (normalizedDeliveryMealPeriod.isBlank()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请选择配送时间");
+        }
+        Map<String, Object> context = requireSpecialDispatchContext(orderId);
+        ensureSpecialDispatchMutable(context);
+        resetDispatchFlow(orderId);
+        jdbcTemplate.update(
+            "UPDATE meal_slot_orders SET delivery_meal_period = ?, status = 'PENDING_DISPATCH' WHERE id = ?",
+            normalizedDeliveryMealPeriod,
+            orderId
+        );
+        dispatchService.autoAssignPendingOrders(normalizedDeliveryMealPeriod);
+        return Map.of(
+            "orderId", orderId,
+            "status", "UPDATED",
+            "deliveryMealPeriod", normalizedDeliveryMealPeriod
+        );
+    }
+
+    @Override
+    @Transactional
+    public Map<String, Object> resetSpecialDispatch(long orderId) {
+        Map<String, Object> context = requireSpecialDispatchContext(orderId);
+        ensureSpecialDispatchMutable(context);
+        String restoredDeliveryMealPeriod = normalizeMealPeriod(stringValue(context.get("meal_period")));
+        resetDispatchFlow(orderId);
+        jdbcTemplate.update(
+            "UPDATE meal_slot_orders SET delivery_meal_period = meal_period, status = 'PENDING_DISPATCH' WHERE id = ?",
+            orderId
+        );
+        dispatchService.autoAssignPendingOrders(restoredDeliveryMealPeriod);
+        return Map.of(
+            "orderId", orderId,
+            "status", "RESET",
+            "deliveryMealPeriod", restoredDeliveryMealPeriod
         );
     }
 
@@ -936,25 +982,39 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         }
 
         // 2. 获取订单信息用于后续清理
-        Map<String, Object> orderInfo = jdbcTemplate.queryForMap("""
-            SELECT mso.id, mso.daily_order_id, mso.status, mso.quantity, do.customer_id
-            FROM meal_slot_orders mso
-            JOIN daily_orders do ON do.id = mso.daily_order_id
-            WHERE mso.id = ?
-            """, orderId);
+        Map<String, Object> orderInfo = jdbcTemplate.query(
+            """
+                SELECT mso.id, mso.daily_order_id, mso.status, mso.quantity, do.customer_id
+                FROM meal_slot_orders mso
+                LEFT JOIN daily_orders do ON do.id = mso.daily_order_id
+                WHERE mso.id = ?
+                """,
+            ps -> ps.setLong(1, orderId),
+            rs -> {
+                if (!rs.next()) {
+                    return null;
+                }
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("daily_order_id", rs.getLong("daily_order_id"));
+                row.put("status", rs.getString("status"));
+                row.put("quantity", rs.getInt("quantity"));
+                long customerIdValue = rs.getLong("customer_id");
+                row.put("customer_id", rs.wasNull() ? null : customerIdValue);
+                return row;
+            }
+        );
+        if (orderInfo == null) {
+            return Map.of("orderId", orderId, "status", "NOT_FOUND");
+        }
 
         long dailyOrderId = ((Number) orderInfo.get("daily_order_id")).longValue();
-        long customerId = ((Number) orderInfo.get("customer_id")).longValue();
+        Long customerId = (Long) orderInfo.get("customer_id");
         String status = (String) orderInfo.get("status");
         int quantity = ((Number) orderInfo.get("quantity")).intValue();
 
         // 3. 如果订单未取消，先释放餐次余额
-        if (!"CANCELLED".equals(status)) {
-            Long walletId = jdbcTemplate.queryForObject(
-                "SELECT id FROM meal_wallets WHERE customer_id = ? AND active = TRUE AND (expired_at IS NULL OR expired_at >= CURRENT_TIMESTAMP)",
-                Long.class,
-                customerId
-            );
+        if (!"CANCELLED".equals(status) && customerId != null) {
+            Long walletId = findActiveWalletIdByCustomerId(customerId);
             if (walletId != null) {
                 jdbcTemplate.update(
                     "UPDATE meal_wallets SET reserved_meals = CASE WHEN reserved_meals >= ? THEN reserved_meals - ? ELSE 0 END WHERE id = ?",
@@ -985,6 +1045,8 @@ public class OrderPrepServiceImpl implements OrderPrepService {
 
         // 5. 删除配送回执
         jdbcTemplate.update("DELETE FROM delivery_receipts WHERE meal_slot_order_id = ?", orderId);
+        jdbcTemplate.update("DELETE FROM customer_delivery_subscriptions WHERE meal_slot_order_id = ?", orderId);
+        jdbcTemplate.update("DELETE FROM order_notes WHERE meal_slot_order_id = ?", orderId);
 
         // 6. 删除订单本身
         jdbcTemplate.update("DELETE FROM meal_slot_orders WHERE id = ?", orderId);
@@ -1000,6 +1062,22 @@ public class OrderPrepServiceImpl implements OrderPrepService {
         }
 
         return Map.of("orderId", orderId, "status", "DELETED");
+    }
+
+    private Long findActiveWalletIdByCustomerId(long customerId) {
+        return jdbcTemplate.query(
+            """
+                SELECT id
+                FROM meal_wallets
+                WHERE customer_id = ?
+                  AND active = TRUE
+                  AND (expired_at IS NULL OR expired_at >= CURRENT_TIMESTAMP)
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+            ps -> ps.setLong(1, customerId),
+            rs -> rs.next() ? rs.getLong("id") : null
+        );
     }
 
     @Override
@@ -1131,6 +1209,67 @@ public class OrderPrepServiceImpl implements OrderPrepService {
             return normalizedFallback;
         }
         return normalizeMealPeriod(mealPeriod);
+    }
+
+    private Map<String, Object> requireSpecialDispatchContext(long orderId) {
+        List<Map<String, Object>> records = jdbcTemplate.queryForList(
+            """
+                SELECT
+                    mso.id,
+                    mso.meal_period,
+                    COALESCE(mso.delivery_meal_period, mso.meal_period) AS delivery_meal_period,
+                    mso.status,
+                    da.id AS dispatch_assignment_id
+                FROM meal_slot_orders mso
+                LEFT JOIN dispatch_assignments da ON da.meal_slot_order_id = mso.id
+                WHERE mso.id = ?
+                """,
+            orderId
+        );
+        if (records.isEmpty()) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "订单不存在");
+        }
+        return records.get(0);
+    }
+
+    private void ensureSpecialDispatchMutable(Map<String, Object> context) {
+        String status = stringValue(context.get("status"));
+        if (!"PENDING_DISPATCH".equals(status) && !"DISPATCHING".equals(status)) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "当前状态不允许特殊处理");
+        }
+    }
+
+    private void resetDispatchFlow(long orderId) {
+        List<Long> batchIds = jdbcTemplate.query(
+            "SELECT batch_id FROM dispatch_batch_items WHERE meal_slot_order_id = ?",
+            (rs, rowNum) -> rs.getLong("batch_id"),
+            orderId
+        );
+        if (!batchIds.isEmpty()) {
+            jdbcTemplate.update("DELETE FROM dispatch_batch_items WHERE meal_slot_order_id = ?", orderId);
+            for (Long batchId : batchIds) {
+                refreshDispatchBatchMetrics(batchId);
+            }
+        }
+        jdbcTemplate.update("DELETE FROM dispatch_assignments WHERE meal_slot_order_id = ?", orderId);
+    }
+
+    private void refreshDispatchBatchMetrics(long batchId) {
+        jdbcTemplate.update(
+            """
+                UPDATE dispatch_batches
+                SET total_count = (
+                        SELECT COUNT(*) FROM dispatch_batch_items WHERE batch_id = ?
+                    ),
+                    delivered_count = (
+                        SELECT COUNT(*) FROM dispatch_batch_items WHERE batch_id = ? AND item_status = 'DELIVERED'
+                    )
+                WHERE id = ?
+                """,
+            batchId,
+            batchId,
+            batchId
+        );
     }
 
     private int intValue(Object value, int fallback) {

@@ -93,7 +93,7 @@ export function buildCustomerOverviewSummary(
 }
 
 export function buildCustomerActionLabels() {
-  return ["详情资料", "扣餐"];
+  return ["详情资料", "补餐", "扣餐"];
 }
 
 export function resolveCustomerSpecialMark(remark: string | null | undefined) {

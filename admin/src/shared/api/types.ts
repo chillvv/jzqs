@@ -60,6 +60,9 @@ export type CustomerDetailResponse = {
   merchantRemark?: string | null;
   customerStatus?: string;
   remainingMeals?: number;
+  openedAt?: string | null;
+  expiredAt?: string | null;
+  remainingValidityDays?: number;
   wallet?: {
     totalMeals?: number;
     reservedMeals?: number;

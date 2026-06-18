@@ -3,7 +3,7 @@ import { createCostEntry, fetchAnalysisOverview, fetchCostEntries } from "../../
 import type { AnalysisOverviewResponse, CostEntryItem } from "../../shared/api/types";
 import { X, RotateCcw } from "lucide-react";
 import { buildAnalysisInsights, formatMoney } from "./operationsAnalysisPage.helpers";
-import { formatDateLabel } from "../../shared/utils/dateTime";
+import { formatDateLabel, formatLocalDateInputValue } from "../../shared/utils/dateTime";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { RemarkField } from "../../shared/components/RemarkField";
 import { toast } from "../../shared/components/Toast";
@@ -24,7 +24,7 @@ export function OperationsAnalysisPage() {
   const [isAddCostOpen, setIsAddCostOpen] = useState(false);
   const [submittingAddCost, setSubmittingAddCost] = useState(false);
   const [costForm, setCostForm] = useState({
-    costDate: new Date().toISOString().slice(0, 10),
+    costDate: formatLocalDateInputValue(),
     costCategory: "INGREDIENT",
     amount: "",
     remark: "",
@@ -52,7 +52,7 @@ export function OperationsAnalysisPage() {
 
   function handleOpenAddCost() {
     setCostForm({
-      costDate: new Date().toISOString().slice(0, 10),
+      costDate: formatLocalDateInputValue(),
       costCategory: "INGREDIENT",
       amount: "",
       remark: "",

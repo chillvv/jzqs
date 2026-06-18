@@ -19,6 +19,8 @@ import {
   bulkImportSubscription,
   fetchRemarkSuggestions,
   updateOrderProfile,
+  applyOrderSpecialDispatch,
+  clearOrderSpecialDispatch,
   checkSubscriptionPreview,
   createOrderAftersale,
   directRefund,
@@ -26,6 +28,7 @@ import {
 } from "../../shared/api/http";
 import type { AdminMenuWeekResponse, DispatchAreaBindingResponse, DispatchManagedRiderResponse, ManualCreateCustomerSearchResponse, OrderPrepItemResponse, OrderPrepStatsResponse, SubscriptionConfirmationItem, SubscriptionPreviewItem, SubscriptionPreviewCheckResponse } from "../../shared/api/types";
 import {
+  buildCrossMealDeliveryRemark,
   buildOrderPrepCompactSummary,
   buildOrderPrepDefaultTab,
   buildSubscriptionConfirmationPanelState,
@@ -33,6 +36,8 @@ import {
   buildOrderPrepSummary,
   buildOrderPrepView,
   formatOrderNote,
+  isCrossMealDelivery,
+  mealPeriodLabel,
   resolveMealPeriod,
   resolveOrderDisplayStatus,
   resolveOrderDisplayStatusLabel,
@@ -59,23 +64,40 @@ import { AdminDialog } from "../../shared/components/AdminDialog";
 import { RemarkField } from "../../shared/components/RemarkField";
 import { DatePicker } from "../../shared/components/DatePicker";
 import { toast } from "../../shared/components/Toast";
-import { SubscriptionManagementTab } from "./SubscriptionManagementTab";
+import { formatLocalDateInputValue } from "../../shared/utils/dateTime";
+import { SubscriptionManagementTab, type SubscriptionManagementFilters, type SubscriptionMealPeriod, type SubscriptionStatusFilter } from "./SubscriptionManagementTab";
 
 function defaultFilterDate() {
-  const today = new Date();
-  return today.toISOString().slice(0, 10);
+  return formatLocalDateInputValue();
 }
 
 const DEFAULT_FILTER_DATE = defaultFilterDate();
 const PAGE_SIZE = 10;
 const ORDER_PREP_MEAL_PERIOD_STORAGE_KEY = "admin-order-prep-meal-period";
+const MAX_RECEIPT_FILE_SIZE = 5 * 1024 * 1024;
+const RECEIPT_UPLOAD_INPUT_ID = "admin-receipt-upload-input";
 
-function mealPeriodLabel(value: string | null | undefined) {
-  return value === "DINNER" ? "晚餐" : "午餐";
-}
+type ReceiptSelectedFile = {
+  name: string;
+  size: number;
+};
 
 function hasImageValue(value: string | null | undefined) {
   return Boolean(value && value.trim());
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes >= 1024 * 1024) {
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+function getReceiptUploadErrorMessage(error: any) {
+  if (error?.response?.status === 413) {
+    return "图片太大，请上传 5MB 以内的图片";
+  }
+  return error?.response?.data?.message || error?.message || "上传回执图片失败";
 }
 
 function resolveStoredOrderMealPeriod() {
@@ -105,6 +127,7 @@ export function OrderPrepPage() {
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [isReceiptOpen, setIsReceiptOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isSpecialProcessOpen, setIsSpecialProcessOpen] = useState(false);
   const [isSubscriptionPreviewOpen, setIsSubscriptionPreviewOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isOrderDetailOpen, setIsOrderDetailOpen] = useState(false);
@@ -136,6 +159,13 @@ export function OrderPrepPage() {
   const [keywordFilter, setKeywordFilter] = useState("");
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [ordersError, setOrdersError] = useState("");
+  const [subscriptionFilters, setSubscriptionFilters] = useState<SubscriptionManagementFilters>({
+    keyword: "",
+    statusFilter: "ALL",
+    mealPeriod: "LUNCH"
+  });
+  const [subscriptionQueryVersion, setSubscriptionQueryVersion] = useState(0);
+  const [subscriptionVisibleCount, setSubscriptionVisibleCount] = useState(0);
 
   // Forms state
   const [manualForm, setManualForm] = useState(createInitialManualCreateForm);
@@ -149,19 +179,25 @@ export function OrderPrepPage() {
   const [submittingReceipt, setSubmittingReceipt] = useState(false);
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [submittingEdit, setSubmittingEdit] = useState(false);
+  const [submittingSpecialProcess, setSubmittingSpecialProcess] = useState(false);
   const [submittingDelete, setSubmittingDelete] = useState(false);
   const [processingConfirmationId, setProcessingConfirmationId] = useState<number | null>(null);
   const [processingConfirmationAction, setProcessingConfirmationAction] = useState<"confirm" | "cancel" | null>(null);
   const [assignForm, setAssignForm] = useState({ riderName: "", areaCode: "" });
   const [receiptForm, setReceiptForm] = useState({ receiptUrl: "", receiptNote: "" });
+  const [selectedReceiptFile, setSelectedReceiptFile] = useState<ReceiptSelectedFile | null>(null);
   const [editForm, setEditForm] = useState({
     mealPeriod: "LUNCH",
-    deliveryMealPeriod: "LUNCH",
     quantity: "1",
     deliveryAddress: "",
     merchantRemark: "",
     priorityCustomer: false,
     status: "PENDING_DISPATCH"
+  });
+  const [specialProcessForm, setSpecialProcessForm] = useState<{
+    deliveryMealPeriod: "LUNCH" | "DINNER";
+  }>({
+    deliveryMealPeriod: "LUNCH"
   });
   const [assignRiders, setAssignRiders] = useState<DispatchManagedRiderResponse[]>([]);
   const [assignAreaBindings, setAssignAreaBindings] = useState<DispatchAreaBindingResponse[]>([]);
@@ -172,6 +208,7 @@ export function OrderPrepPage() {
   function openReceiptModal(item: OrderPrepItemResponse) {
     setActiveItem(item);
     setReceiptForm({ receiptUrl: item.receiptUrl || "", receiptNote: item.receiptNote || "" });
+    setSelectedReceiptFile(null);
     setIsReceiptOpen(true);
   }
 
@@ -184,7 +221,6 @@ export function OrderPrepPage() {
     setActiveItem(item);
     setEditForm({
       mealPeriod: resolveMealPeriod(item),
-      deliveryMealPeriod: item.deliveryMealPeriod === "DINNER" ? "DINNER" : "LUNCH",
       quantity: String(item.quantity || 1),
       deliveryAddress: item.deliveryAddress || "",
       merchantRemark: item.merchantRemark || "",
@@ -192,6 +228,14 @@ export function OrderPrepPage() {
       status: item.status || "PENDING_DISPATCH"
     });
     setIsEditOpen(true);
+  }
+
+  function openSpecialProcessModal(item: OrderPrepItemResponse) {
+    setActiveItem(item);
+    setSpecialProcessForm({
+      deliveryMealPeriod: item.deliveryMealPeriod === "DINNER" ? "DINNER" : "LUNCH"
+    });
+    setIsSpecialProcessOpen(true);
   }
 
   function openDeleteConfirm(item: OrderPrepItemResponse) {
@@ -632,6 +676,7 @@ export function OrderPrepPage() {
       });
       setIsReceiptOpen(false);
       setReceiptForm({ receiptUrl: "", receiptNote: "" });
+      setSelectedReceiptFile(null);
       await reloadOrders();
       toast("回执已提交");
     } catch (err: any) {
@@ -650,6 +695,7 @@ export function OrderPrepPage() {
     try {
       await deleteDeliveryReceipt(activeItem.id);
       setReceiptForm((current) => ({ ...current, receiptUrl: "" }));
+      setSelectedReceiptFile(null);
       setActiveItem((current) => (current ? { ...current, receiptUrl: "", receiptNote: "" } : current));
       await reloadOrders();
       toast("回执已删除");
@@ -666,13 +712,24 @@ export function OrderPrepPage() {
     if (!file) {
       return;
     }
+    if (!file.type.startsWith("image/")) {
+      toast("请上传 JPG、PNG、WEBP 等图片文件", "error");
+      event.target.value = "";
+      return;
+    }
+    if (file.size > MAX_RECEIPT_FILE_SIZE) {
+      toast("回执图片不能超过 5MB", "error");
+      event.target.value = "";
+      return;
+    }
+    setSelectedReceiptFile({ name: file.name, size: file.size });
     setUploadingReceipt(true);
     try {
       const uploaded = await uploadDeliveryReceiptImage(file);
       setReceiptForm((current) => ({ ...current, receiptUrl: uploaded.url }));
       toast("回执图片已上传");
     } catch (error: any) {
-      toast(getErrorMessage(error, "上传回执图片失败"), "error");
+      toast(getReceiptUploadErrorMessage(error), "error");
     } finally {
       setUploadingReceipt(false);
       event.target.value = "";
@@ -687,7 +744,6 @@ export function OrderPrepPage() {
     try {
       await updateOrderProfile(activeItem.id, {
         mealPeriod: editForm.mealPeriod as "LUNCH" | "DINNER",
-        deliveryMealPeriod: editForm.deliveryMealPeriod as "LUNCH" | "DINNER",
         quantity: Number(editForm.quantity) || 1,
         deliveryAddress: trimmedAddress,
         merchantRemark: editForm.merchantRemark,
@@ -702,6 +758,44 @@ export function OrderPrepPage() {
       throw err;
     } finally {
       setSubmittingEdit(false);
+    }
+  }
+
+  async function handleSpecialProcessSubmit() {
+    if (!activeItem || submittingSpecialProcess) {
+      return;
+    }
+    setSubmittingSpecialProcess(true);
+    try {
+      await applyOrderSpecialDispatch(activeItem.id, specialProcessForm.deliveryMealPeriod);
+      setIsSpecialProcessOpen(false);
+      setActiveItem(null);
+      await reloadOrders();
+      toast("特殊处理已生效");
+    } catch (err: any) {
+      toast(getErrorMessage(err, "特殊处理失败"), "error");
+      throw err;
+    } finally {
+      setSubmittingSpecialProcess(false);
+    }
+  }
+
+  async function handleSpecialProcessReset() {
+    if (!activeItem || submittingSpecialProcess) {
+      return;
+    }
+    setSubmittingSpecialProcess(true);
+    try {
+      await clearOrderSpecialDispatch(activeItem.id);
+      setIsSpecialProcessOpen(false);
+      setActiveItem(null);
+      await reloadOrders();
+      toast("已恢复原配送方式");
+    } catch (err: any) {
+      toast(getErrorMessage(err, "取消特殊处理失败"), "error");
+      throw err;
+    } finally {
+      setSubmittingSpecialProcess(false);
     }
   }
 
@@ -763,22 +857,28 @@ export function OrderPrepPage() {
     const mealPeriod = resolveMealPeriod(item);
     const deliveryMealPeriod = item.deliveryMealPeriod === "DINNER" ? "DINNER" : "LUNCH";
     const isLunch = mealPeriod === "LUNCH";
+    const isCrossMealDeliveryOrder = isCrossMealDelivery(mealPeriod, deliveryMealPeriod);
     return (
       <div className="order-meal-panel">
         <div className="order-meal-panel__row">
           <span className={`tag ${isLunch ? "tag-orange" : "tag-green"}`}>{isLunch ? "午餐" : "晚餐"}</span>
-          <span className="order-meal-panel__text">出餐</span>
+          <span className="order-meal-panel__text">{isCrossMealDeliveryOrder ? "跨餐配送" : "同餐配送"}</span>
         </div>
-        <div className="order-meal-panel__row">
-          <span className={`tag ${deliveryMealPeriod === "DINNER" ? "tag-green" : "tag-orange"}`}>
-            {mealPeriodLabel(deliveryMealPeriod)}
-          </span>
-          <span className="order-meal-panel__text">配送</span>
-        </div>
+        {!isCrossMealDeliveryOrder ? (
+          <div className="order-meal-panel__row">
+            <span className={`tag ${deliveryMealPeriod === "DINNER" ? "tag-green" : "tag-orange"}`}>
+              {mealPeriodLabel(deliveryMealPeriod)}
+            </span>
+            <span className="order-meal-panel__text">配送</span>
+          </div>
+        ) : null}
         <div className="order-meal-panel__count">{item.quantity} 餐</div>
       </div>
     );
   };
+
+  const buildMerchantRemarkDisplay = (merchantRemark: string | null | undefined, mealPeriod: string | null | undefined, deliveryMealPeriod: string | null | undefined) =>
+    formatOrderNote(buildCrossMealDeliveryRemark(merchantRemark, mealPeriod, deliveryMealPeriod));
 
   function getRowHighlightClass(item: OrderPrepItemResponse) {
     const displayStatus = resolveOrderDisplayStatus(item);
@@ -852,7 +952,7 @@ export function OrderPrepPage() {
           </div>
           {activeTab === "ORDERS" && (
             <>
-              <div className="filter-item order-meal-toggle">
+              <div className="filter-item subscription-meal-toggle">
                 <span className="filter-label">查看餐次:</span>
                 <div className="segmented-control" role="tablist" aria-label="订单餐次切换">
                   {(["LUNCH", "DINNER"] as OrderPrepMealPeriodFilter[]).map((value) => (
@@ -927,11 +1027,75 @@ export function OrderPrepPage() {
               </div>
             </>
           )}
+          {activeTab === "SUBSCRIPTION_MANAGEMENT" && (
+            <>
+              <div className="filter-item order-meal-toggle">
+                <span className="filter-label">查看餐次:</span>
+                <div className="segmented-control" role="tablist" aria-label="固定订餐餐次切换">
+                  {(["LUNCH", "DINNER"] as SubscriptionMealPeriod[]).map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      className={`segmented-control__item ${subscriptionFilters.mealPeriod === value ? "is-active" : ""}`}
+                      onClick={() => setSubscriptionFilters((current) => ({ ...current, mealPeriod: value }))}
+                    >
+                      {mealPeriodLabel(value)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="filter-item">
+                <span className="filter-label">关键字:</span>
+                <input
+                  type="text"
+                  className="input-box"
+                  placeholder="搜索客户姓名或电话"
+                  style={{ width: "200px" }}
+                  value={subscriptionFilters.keyword}
+                  onChange={(e) => setSubscriptionFilters((current) => ({ ...current, keyword: e.target.value }))}
+                />
+              </div>
+              <div className="filter-item">
+                <span className="filter-label">状态:</span>
+                <AppSelect
+                  className="app-select--filter"
+                  style={{ width: "120px" }}
+                  value={subscriptionFilters.statusFilter}
+                  options={[
+                    { label: "全部状态", value: "ALL" },
+                    { label: "进行中", value: "ACTIVE" },
+                    { label: "已停用", value: "STOPPED" },
+                    { label: "已过期", value: "EXPIRED" }
+                  ]}
+                  onChange={(value) => setSubscriptionFilters((current) => ({ ...current, statusFilter: value as SubscriptionStatusFilter }))}
+                />
+              </div>
+            </>
+          )}
           {activeTab === "ORDERS" ? <span className="dispatch-table-toolbar__count">{mealPeriodLabel(mealPeriodFilter)}筛选出 {view.filteredItems.length} 条</span> : null}
-          <button className="btn btn-primary" disabled={loadingOrders} onClick={() => reloadOrders(filterDate).catch(() => undefined)}><Search size={16} /> {loadingOrders ? "查询中..." : "查询"}</button>
+          <button
+            className="btn btn-primary"
+            disabled={activeTab === "ORDERS" ? loadingOrders : false}
+            onClick={() => {
+              if (activeTab === "SUBSCRIPTION_MANAGEMENT") {
+                setSubscriptionQueryVersion((current) => current + 1);
+                return;
+              }
+              reloadOrders(filterDate).catch(() => undefined);
+            }}
+          ><Search size={16} /> {activeTab === "ORDERS" && loadingOrders ? "查询中..." : "查询"}</button>
           <button
             className="btn btn-outline"
             onClick={() => {
+              if (activeTab === "SUBSCRIPTION_MANAGEMENT") {
+                setSubscriptionFilters({
+                  keyword: "",
+                  statusFilter: "ALL",
+                  mealPeriod: "LUNCH"
+                });
+                setSubscriptionQueryVersion((current) => current + 1);
+                return;
+              }
               setFilterDate(DEFAULT_FILTER_DATE);
               setSourceFilter("ALL");
               setStatusFilter("ALL");
@@ -945,7 +1109,9 @@ export function OrderPrepPage() {
           <div style={{ marginLeft: "auto", color: "var(--text-sub)", fontSize: "13px", fontWeight: 600 }}>
             {activeTab === "CONFIRMATION"
               ? `待确认 ${confirmationItems.length} 份`
-              : `当前筛出 ${view.totalItems} 条订单`}
+              : activeTab === "SUBSCRIPTION_MANAGEMENT"
+                ? `当前筛出 ${subscriptionVisibleCount} 条计划`
+                : `当前筛出 ${view.totalItems} 条订单`}
           </div>
         </div>
       </div>
@@ -957,7 +1123,7 @@ export function OrderPrepPage() {
               {activeTab === "CONFIRMATION" 
                 ? `待确认订单 (${confirmationItems.length})` 
                 : activeTab === "SUBSCRIPTION_MANAGEMENT"
-                  ? "固定订餐管理"
+                  ? `固定订餐管理 (${subscriptionVisibleCount})`
                   : `${mealPeriodLabel(mealPeriodFilter)}订单列表 (${view.totalItems})`}
             </span>
             <div className="segmented-control" role="tablist" aria-label="订单视图切换">
@@ -999,7 +1165,11 @@ export function OrderPrepPage() {
         </div>
 
         {activeTab === "SUBSCRIPTION_MANAGEMENT" ? (
-          <SubscriptionManagementTab />
+          <SubscriptionManagementTab
+            filters={subscriptionFilters}
+            queryVersion={subscriptionQueryVersion}
+            onVisibleCountChange={setSubscriptionVisibleCount}
+          />
         ) : activeTab === "CONFIRMATION" ? (
           <div style={{ display: "grid", gap: "12px", padding: "20px" }}>
             {confirmationItems.map((item) => (
@@ -1032,7 +1202,6 @@ export function OrderPrepPage() {
                     <th style={{ width: "40px" }}><input type="checkbox" /></th>
                     <th>客户标识</th>
                     <th>联系电话</th>
-                    <th>餐次</th>
                     <th>用户备注</th>
                     <th>商家备注</th>
                     <th>配送地址</th>
@@ -1044,19 +1213,19 @@ export function OrderPrepPage() {
                 <tbody>
                   {loadingOrders ? (
                     <tr>
-                      <td colSpan={10} style={{ textAlign: "center", padding: "32px", color: "var(--text-muted)" }}>
+                      <td colSpan={9} style={{ textAlign: "center", padding: "32px", color: "var(--text-muted)" }}>
                         订单加载中...
                       </td>
                     </tr>
                   ) : ordersError ? (
                     <tr>
-                      <td colSpan={10} style={{ textAlign: "center", padding: "32px", color: "var(--error-color-dark)" }}>
+                      <td colSpan={9} style={{ textAlign: "center", padding: "32px", color: "var(--error-color-dark)" }}>
                         加载失败：{ordersError}
                       </td>
                     </tr>
                   ) : view.filteredItems.length === 0 ? (
                     <tr>
-                      <td colSpan={10} style={{ textAlign: "center", padding: "32px", color: "var(--text-muted)" }}>
+                      <td colSpan={9} style={{ textAlign: "center", padding: "32px", color: "var(--text-muted)" }}>
                         {emptyOrderText}
                       </td>
                     </tr>
@@ -1064,6 +1233,7 @@ export function OrderPrepPage() {
                     view.pageItems.map((item) => {
                       const sourceLabel = resolveOrderSourceLabel(item);
                       const rowClass = getRowHighlightClass(item);
+                      const merchantRemarkDisplay = buildMerchantRemarkDisplay(item.merchantRemark, item.mealPeriod, item.deliveryMealPeriod);
                       return (
                         <tr key={item.id} className={rowClass}>
                           <td><input type="checkbox" /></td>
@@ -1071,17 +1241,15 @@ export function OrderPrepPage() {
                             <div style={{ display: "grid", gap: "6px" }}>
                               <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                                 <span>{item.customerName}</span>
+                                <span style={{ color: "var(--primary-color)", fontWeight: 700 }}>×{item.quantity}</span>
                                 {item.priorityCustomer && <span className="tag tag-orange">重点</span>}
                                 {item.fixedSubscription && <span className="tag tag-blue">固定订餐</span>}
                               </div>
                             </div>
                           </td>
                           <td><span style={{ color: "var(--text-sub)" }}>{item.customerPhone}</span></td>
-                          <td>
-                            {renderMealPanel(item)}
-                          </td>
                           <td style={{ color: formatOrderNote(item.userNote) === "-" ? undefined : "var(--error-color)", maxWidth: "160px" }}>{formatOrderNote(item.userNote)}</td>
-                          <td style={{ maxWidth: "160px" }}>{formatOrderNote(item.merchantRemark)}</td>
+                          <td style={{ maxWidth: "160px" }}>{merchantRemarkDisplay}</td>
                           <td>
                             <div style={{ display: "flex", alignItems: "flex-start", gap: "8px", color: "var(--text-sub)", maxWidth: "200px" }}>
                               <MapPin size={14} style={{ marginTop: "2px", flexShrink: 0 }} />
@@ -1108,11 +1276,13 @@ export function OrderPrepPage() {
               {view.pageItems.map((item) => {
                 const sourceLabel = resolveOrderSourceLabel(item);
                 const rowClass = getRowHighlightClass(item);
+                const merchantRemarkDisplay = buildMerchantRemarkDisplay(item.merchantRemark, item.mealPeriod, item.deliveryMealPeriod);
                 return (
                   <div className={`mobile-card ${rowClass}`} key={item.id}>
                     <div className="mobile-card-header">
                       <div>
                         <span style={{ fontWeight: 700 }}>{item.customerName}</span>
+                        <span style={{ color: "var(--primary-color)", marginLeft: "4px", fontWeight: 700 }}>×{item.quantity}</span>
                         <span style={{ color: "var(--text-sub)", fontSize: "12px", marginLeft: "8px" }}>{item.customerPhone}</span>
                         <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "6px" }}>
                           {item.priorityCustomer && <span className="tag tag-orange">重点客户</span>}
@@ -1127,18 +1297,12 @@ export function OrderPrepPage() {
                       {item.walletStatusLabel}
                     </div>
                     <div className="mobile-card-row">
-                      <div className="mobile-card-label">餐次</div>
-                      <div className="mobile-card-value">
-                        {renderMealPanel(item)}
-                      </div>
-                    </div>
-                    <div className="mobile-card-row">
                       <div className="mobile-card-label">用户备注</div>
                       <div className="mobile-card-value" style={{ color: formatOrderNote(item.userNote) === "-" ? "inherit" : "var(--error-color)" }}>{formatOrderNote(item.userNote)}</div>
                     </div>
                     <div className="mobile-card-row">
                       <div className="mobile-card-label">商家备注</div>
-                      <div className="mobile-card-value">{formatOrderNote(item.merchantRemark)}</div>
+                      <div className="mobile-card-value">{merchantRemarkDisplay}</div>
                     </div>
                     <div className="mobile-card-row">
                       <div className="mobile-card-label">来源</div>
@@ -1436,21 +1600,6 @@ export function OrderPrepPage() {
                 )}
               </div>
               <div className="form-group">
-                <label className="form-label"><span className="required">*</span>配送餐次</label>
-                <AppSelect
-                  value={manualForm.deliveryMealPeriod || manualForm.mealPeriod}
-                  options={[
-                    { label: "按午餐配送", value: "LUNCH" },
-                    { label: "按晚餐配送", value: "DINNER" }
-                  ]}
-                  onChange={(val) => setManualForm((current) => ({ ...current, deliveryMealPeriod: val as "LUNCH" | "DINNER" }))}
-                  style={{ width: "100%" }}
-                />
-                <div style={{ color: "var(--text-sub)", fontSize: "12px", marginTop: "8px" }}>
-                  例如可以设置为“午餐出餐，晚餐配送”。
-                </div>
-              </div>
-              <div className="form-group">
                 <label className="form-label"><span className="required">*</span>份数</label>
                 <input 
                   className="form-control" 
@@ -1460,14 +1609,19 @@ export function OrderPrepPage() {
                   onChange={(e) => setManualForm({ ...manualForm, quantity: Math.max(1, parseInt(e.target.value) || 1) })} 
                 />
               </div>
-              <RemarkField
-                label="商家备注"
-                value={manualForm.merchantRemark}
-                onChange={(value) => setManualForm({ ...manualForm, merchantRemark: value })}
-                placeholder="只对当前这一单生效"
-                scene="ORDER_REMARK"
-                customerId={manualSelectedCustomer?.customerId ?? null}
-              />
+              <div>
+                <div className="admin-panel-note" style={{ marginBottom: "8px" }}>
+                  仅此单生效，不会改客户中心里的长期商家备注。
+                </div>
+                <RemarkField
+                  label="商家备注"
+                  value={manualForm.merchantRemark}
+                  onChange={(value) => setManualForm({ ...manualForm, merchantRemark: value })}
+                  placeholder="只对当前这一单生效"
+                  scene="ORDER_REMARK"
+                  customerId={manualSelectedCustomer?.customerId ?? null}
+                />
+              </div>
             </div>
             <div className="modal-footer">
               <button className="btn btn-outline" onClick={closeManualCreateModal} disabled={submittingManualCreate}>取消</button>
@@ -1591,25 +1745,60 @@ export function OrderPrepPage() {
               <div className="form-group">
                 <label className="form-label"><span className="required">*</span>回执图片</label>
                 <input
+                  id={RECEIPT_UPLOAD_INPUT_ID}
                   type="file"
-                  accept="image/*"
+                  accept="image/png,image/jpeg,image/jpg,image/webp"
                   capture="environment"
-                  className="form-control"
+                  className="receipt-upload-input"
                   onChange={(event) => handleReceiptFileChange(event).catch(() => undefined)}
                   disabled={uploadingReceipt || submittingReceipt}
                 />
-                <div className="admin-panel-note" style={{ marginTop: "8px" }}>
-                  {uploadingReceipt ? "图片上传中..." : "电脑端选择图片文件，手机端可直接拍照上传。"}
-                </div>
+                <label
+                  htmlFor={RECEIPT_UPLOAD_INPUT_ID}
+                  className={`receipt-upload-card ${uploadingReceipt ? "is-uploading" : ""} ${hasImageValue(receiptForm.receiptUrl) ? "has-image" : ""}`}
+                >
+                  <div className="receipt-upload-card__header">
+                    <div>
+                      <div className="receipt-upload-card__title">
+                        {uploadingReceipt
+                          ? "正在上传回执图片..."
+                          : hasImageValue(receiptForm.receiptUrl)
+                            ? "回执图片已上传，可重新选择"
+                            : "点击选择回执图片"}
+                      </div>
+                      <div className="receipt-upload-card__desc">
+                        支持 JPG、PNG、WEBP，单张 5MB 以内。电脑端可选文件，手机端可直接拍照。
+                      </div>
+                    </div>
+                    <span className="receipt-upload-trigger">
+                      {uploadingReceipt ? "上传中..." : hasImageValue(receiptForm.receiptUrl) ? "重新选择" : "选择文件"}
+                    </span>
+                  </div>
+                  {selectedReceiptFile ? (
+                    <div className="receipt-upload-summary">
+                      <span>{selectedReceiptFile.name}</span>
+                      <span>{formatFileSize(selectedReceiptFile.size)}</span>
+                    </div>
+                  ) : null}
+                </label>
                 {hasImageValue(receiptForm.receiptUrl) ? (
-                  <div className="order-detail-image-grid" style={{ marginTop: "12px" }}>
-                    <div className="order-detail-image-card">
+                  <div className="order-detail-image-grid receipt-upload-preview-grid" style={{ marginTop: "12px" }}>
+                    <div className="order-detail-image-card receipt-upload-preview-card">
                       <div className="order-detail-image-card__title">当前回执图</div>
                       <img
                         src={receiptForm.receiptUrl}
                         alt="当前回执图"
                         className="order-detail-image-card__image"
                       />
+                      <div className="receipt-upload-actions">
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          onClick={() => window.open(receiptForm.receiptUrl, "_blank")}
+                        >
+                          查看大图
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ) : null}
@@ -1630,7 +1819,7 @@ export function OrderPrepPage() {
                   {submittingReceipt ? "处理中..." : "删除回执"}
                 </button>
               ) : null}
-              <button className="btn btn-primary" disabled={submittingReceipt} onClick={() => handleReceiptSubmit().catch(() => undefined)}>
+              <button className="btn btn-primary" disabled={submittingReceipt || uploadingReceipt || !hasImageValue(receiptForm.receiptUrl)} onClick={() => handleReceiptSubmit().catch(() => undefined)}>
                 {submittingReceipt ? "提交中..." : "提交回执"}
               </button>
             </div>
@@ -1655,18 +1844,6 @@ export function OrderPrepPage() {
                     { label: "晚餐", value: "DINNER" }
                   ]}
                   onChange={(val) => setEditForm({ ...editForm, mealPeriod: val })}
-                  style={{ width: "100%" }}
-                />
-              </div>
-              <div className="form-group">
-                <label className="form-label"><span className="required">*</span>配送餐次</label>
-                <AppSelect
-                  value={editForm.deliveryMealPeriod}
-                  options={[
-                    { label: "按午餐配送", value: "LUNCH" },
-                    { label: "按晚餐配送", value: "DINNER" }
-                  ]}
-                  onChange={(val) => setEditForm({ ...editForm, deliveryMealPeriod: val })}
                   style={{ width: "100%" }}
                 />
               </div>
@@ -1721,6 +1898,61 @@ export function OrderPrepPage() {
         </div>
       )}
 
+      {isSpecialProcessOpen && activeItem && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <span>特殊处理 - {activeItem.customerName}</span>
+              <button
+                type="button"
+                className="modal-close"
+                disabled={submittingSpecialProcess}
+                onClick={submittingSpecialProcess ? undefined : () => setIsSpecialProcessOpen(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <div className="modal-body" style={{ display: "grid", gap: "16px" }}>
+              <div className="auth-panel">
+                <div className="auth-panel__title">当前订单</div>
+                <div className="auth-panel__grid">
+                  <div><strong>订单</strong><span>#{activeItem.id}</span></div>
+                  <div><strong>出餐餐次</strong><span>{mealPeriodLabel(activeItem.mealPeriod)}</span></div>
+                  <div><strong>当前配送</strong><span>{mealPeriodLabel(activeItem.deliveryMealPeriod)}</span></div>
+                  <div><strong>状态</strong><span>{activeItem.displayStatusLabel || resolveOrderDisplayStatusLabel(resolveOrderDisplayStatus(activeItem))}</span></div>
+                </div>
+              </div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">改变配送时间</label>
+                <AppSelect
+                  value={specialProcessForm.deliveryMealPeriod}
+                  options={[
+                    { label: "按午餐配送", value: "LUNCH" },
+                    { label: "按晚餐配送", value: "DINNER" }
+                  ]}
+                  onChange={(val) => setSpecialProcessForm({ deliveryMealPeriod: val as "LUNCH" | "DINNER" })}
+                  style={{ width: "100%" }}
+                />
+                <div style={{ color: "var(--text-sub)", fontSize: "12px", marginTop: "8px" }}>
+                  修改后，这单仍按原餐次出餐，但只会进入目标配送餐次的待分配和骑手链路。
+                </div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline" onClick={() => setIsSpecialProcessOpen(false)} disabled={submittingSpecialProcess}>取消</button>
+              {isCrossMealDelivery(activeItem.mealPeriod, activeItem.deliveryMealPeriod) ? (
+                <button className="btn-delete" disabled={submittingSpecialProcess} onClick={() => handleSpecialProcessReset().catch(() => undefined)}>
+                  {submittingSpecialProcess ? "处理中..." : "取消特殊处理"}
+                </button>
+              ) : null}
+              <button className="btn btn-primary" disabled={submittingSpecialProcess} onClick={() => handleSpecialProcessSubmit().catch(() => undefined)}>
+                {submittingSpecialProcess ? "提交中..." : "确认处理"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <AdminDialog
         open={isOrderDetailOpen}
         title={activeItem ? `订单详情 - ${activeItem.customerName}` : "订单详情"}
@@ -1760,14 +1992,16 @@ export function OrderPrepPage() {
                 <h4 className="order-detail-view__section-title">订单信息</h4>
                 <div className="order-detail-view__list">
                   <div className="order-detail-view__item">
-                    <span className="order-detail-view__label">出餐 / 配送</span>
-                    <div className="order-detail-view__value">
-                      {renderMealPanel(activeItem)}
-                    </div>
-                  </div>
-                  <div className="order-detail-view__item">
                     <span className="order-detail-view__label">来源</span>
                     <span className="order-detail-view__value">{resolveOrderSourceLabel(activeItem)}</span>
+                  </div>
+                  <div className="order-detail-view__item">
+                    <span className="order-detail-view__label">特殊处理</span>
+                    <span className="order-detail-view__value">
+                      {isCrossMealDelivery(activeItem.mealPeriod, activeItem.deliveryMealPeriod)
+                        ? `${mealPeriodLabel(activeItem.mealPeriod)}出餐，${mealPeriodLabel(activeItem.deliveryMealPeriod)}配送`
+                        : "无"}
+                    </span>
                   </div>
                   <div className="order-detail-view__item order-detail-view__item--full">
                     <span className="order-detail-view__label">配送地址</span>
@@ -1822,7 +2056,7 @@ export function OrderPrepPage() {
                   </div>
                   <div className="order-detail-view__item order-detail-view__item--full">
                     <span className="order-detail-view__label">商家备注</span>
-                    <span className="order-detail-view__value">{formatOrderNote(activeItem.merchantRemark)}</span>
+                    <span className="order-detail-view__value">{buildMerchantRemarkDisplay(activeItem.merchantRemark, activeItem.mealPeriod, activeItem.deliveryMealPeriod)}</span>
                   </div>
                 </div>
               </div>
@@ -1846,6 +2080,15 @@ export function OrderPrepPage() {
                 }}
               >
                 售后处理
+              </button>
+              <button
+                className="btn btn-outline"
+                onClick={() => {
+                  setIsOrderDetailOpen(false);
+                  openSpecialProcessModal(activeItem);
+                }}
+              >
+                特殊处理
               </button>
               <button
                 className="btn btn-primary"

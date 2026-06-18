@@ -82,11 +82,11 @@ public interface MobilePortalService {
 
     PageResponse<RiderTaskItemResponse> riderTasks(String riderName);
 
-    RiderBatchSummaryResponse riderSummary(String riderName);
+    RiderBatchSummaryResponse riderSummary(String riderName, String serveDate);
 
-    PageResponse<RiderQueueItemResponse> riderQueue(String riderName);
+    PageResponse<RiderQueueItemResponse> riderQueue(String riderName, String serveDate);
 
-    RiderQueueItemResponse riderQueueItem(long batchItemId, String riderName);
+    RiderQueueItemResponse riderQueueItem(long queueItemId, String riderName, String serveDate, Long mealSlotOrderId);
 
     RiderAddressReferenceResponse riderAddressReference(String riderName, long addressId);
 

@@ -48,5 +48,6 @@ public interface MobileAuthService {
      * 骑手混合登录
      * @deprecated 使用 riderRegister 或 riderPhoneLogin 替代
      */
+    @Deprecated
     RiderLoginResponse riderMixedLogin(String phone, String name, String openid);
 }

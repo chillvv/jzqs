@@ -7,7 +7,7 @@ const taskService = require('../../services/task.service');
 const mapService = require('../../services/map.service');
 const imageUtil = require('../../utils/image');
 const { resolveMediaUrl } = require('../../utils/media-url');
-const { formatCurrentDateMMDD, formatCurrentDateTime, getMealPeriodLabel } = require('../../utils/formatter');
+const { formatCurrentDateTime, formatDateMMDD, formatDateYMD, getMealPeriodLabel } = require('../../utils/formatter');
 const { EXCEPTION_TYPE_OPTIONS } = require('../../utils/constants');
 const realtime = require('../../utils/realtime');
 
@@ -111,15 +111,17 @@ Page({
   },
 
   _syncCurrentDateLabel() {
-    const todayLabel = formatCurrentDateMMDD();
-    if (!this.data.currentDateLabel || this.data.currentDateLabel === todayLabel) {
+    const app = getApp();
+    const workbenchDate = app.getWorkbenchDate() || formatDateYMD();
+    const currentLabel = formatDateMMDD(workbenchDate);
+    if (!this.data.currentDateLabel || this.data.currentDateLabel === currentLabel) {
       if (!this.data.currentDateLabel) {
-        this.setData({ currentDateLabel: todayLabel });
+        this.setData({ currentDateLabel: currentLabel });
       }
       return false;
     }
-    this.setData({ currentDateLabel: todayLabel, order: null, loading: false });
-    wx.showToast({ title: '已切换到新一天，请返回今日队列', icon: 'none' });
+    this.setData({ currentDateLabel: currentLabel, order: null, loading: false });
+    wx.showToast({ title: '日期已切换，请返回队列查看对应列表', icon: 'none' });
     setTimeout(() => {
       wx.navigateBack();
     }, 200);
@@ -131,10 +133,11 @@ Page({
    */
   async onLoad(options) {
     const app = getApp();
+    const workbenchDate = app.getWorkbenchDate() || formatDateYMD();
     this.setData({
       statusBarHeight: app.globalData.statusBarHeight,
       navBarHeight: app.globalData.navBarHeight,
-      currentDateLabel: formatCurrentDateMMDD()
+      currentDateLabel: formatDateMMDD(workbenchDate)
     });
 
     const { batchItemId, mealSlotOrderId, expandDelivery } = options;
@@ -159,6 +162,7 @@ Page({
   async loadOrderDetail(batchItemId, mealSlotOrderId) {
     const app = getApp();
     const riderName = app.getActiveRiderName();
+    const serveDate = app.getWorkbenchDate() || formatDateYMD();
 
     if (!riderName) {
       wx.showToast({ title: '骑手信息未就绪', icon: 'none' });
@@ -170,7 +174,7 @@ Page({
 
     try {
       // 直接查单个订单详情，不依赖全量队列数据
-      const order = await taskService.getOrderDetail(riderName, batchItemId);
+      const order = await taskService.getOrderDetail(riderName, batchItemId, serveDate, mealSlotOrderId);
 
       if (!order) {
         wx.showToast({ title: '订单不存在', icon: 'none' });

@@ -18,7 +18,7 @@ import type {
   CustomerDetailResponse,
   WalletTransactionResponse
 } from "../../shared/api/types";
-import { MinusCircle, RotateCcw, Search, UserPlus, X } from "lucide-react";
+import { MinusCircle, PlusCircle, RotateCcw, Search, UserPlus, X } from "lucide-react";
 import {
   buildCustomerActionLabels,
   buildCustomerAssetStats,
@@ -26,6 +26,7 @@ import {
   buildCustomerOverviewSummary,
   filterCustomerAssets,
   normalizeInitialMealsValue,
+  resolvePrimaryCustomerAddress,
   shouldShowAddressExpandToggle,
   resolveCustomerStatusLabel,
   type CustomerBalanceState,
@@ -35,6 +36,7 @@ import {
 import { formatDateTimeLabel } from "../../shared/utils/dateTime";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { AdminDialog } from "../../shared/components/AdminDialog";
+import { DatePicker } from "../../shared/components/DatePicker";
 import { RemarkField } from "../../shared/components/RemarkField";
 import { toast } from "../../shared/components/Toast";
 
@@ -43,6 +45,9 @@ const emptyEditForm = {
   phone: "",
   remark: "",
   customerStatus: "FORMAL",
+  openedAt: "",
+  expiredAt: "",
+  remainingValidityDays: "",
   initialMeals: "0",
   initialValidityDays: "30",
   addressLine: ""
@@ -121,15 +126,80 @@ function buildEditForm(
   detail: CustomerDetailResponse | null,
   fallback: CustomerAssetResponse | null
 ): typeof emptyEditForm {
+  const openedAt = String(detail?.openedAt || detail?.wallet?.openedAt || fallback?.openedAt || "");
+  const expiredAt = String(detail?.expiredAt || detail?.wallet?.expiredAt || fallback?.packageExpiredAt || "");
+  const remainingValidityDays = detail?.remainingValidityDays
+    ?? detail?.wallet?.remainingValidityDays
+    ?? fallback?.remainingValidityDays
+    ?? "";
   return {
     name: String(detail?.name || fallback?.name || ""),
     phone: String(detail?.phone || fallback?.phone || ""),
     remark: String(detail?.merchantRemark || fallback?.merchantRemark || ""),
     customerStatus: String(detail?.customerStatus || fallback?.customerStatus || "FORMAL"),
+    openedAt: normalizeDateTimeLocalInput(openedAt),
+    expiredAt: normalizeDateInput(expiredAt),
+    remainingValidityDays: remainingValidityDays === "" ? "" : String(remainingValidityDays),
     initialMeals: "0",
     initialValidityDays: "30",
     addressLine: ""
   };
+}
+
+function normalizeDateInput(value?: string | null) {
+  return String(value || "").trim().slice(0, 10);
+}
+
+function normalizeDateTimeLocalInput(value?: string | null) {
+  return String(value || "").trim().slice(0, 16);
+}
+
+function resolveDatePart(value?: string | null) {
+  return normalizeDateInput(value);
+}
+
+function resolveDateTimeLocalValue(date: string, currentValue?: string | null) {
+  if (!date) {
+    return "";
+  }
+  const normalizedCurrent = normalizeDateTimeLocalInput(currentValue);
+  const timePart = normalizedCurrent.includes("T") ? normalizedCurrent.split("T")[1] : "";
+  return `${date}T${timePart || "00:00"}`;
+}
+
+function normalizeRemainingValidityInput(value: string) {
+  return String(value || "").replace(/[^\d-]/g, "");
+}
+
+function resolveRemainingValidityDaysFromDate(expiredAt: string) {
+  if (!expiredAt) {
+    return "";
+  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(`${expiredAt}T00:00:00`);
+  if (Number.isNaN(target.getTime())) {
+    return "";
+  }
+  const diff = Math.round((target.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+  return String(diff);
+}
+
+function resolveExpiredAtFromRemainingDays(remainingValidityDays: string) {
+  if (remainingValidityDays === "") {
+    return "";
+  }
+  const parsed = Number(remainingValidityDays);
+  if (!Number.isFinite(parsed)) {
+    return "";
+  }
+  const target = new Date();
+  target.setHours(0, 0, 0, 0);
+  target.setDate(target.getDate() + parsed);
+  const year = target.getFullYear();
+  const month = String(target.getMonth() + 1).padStart(2, "0");
+  const day = String(target.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function buildPackageExpiryLabel(expiredAt?: string | null) {
@@ -203,9 +273,13 @@ export function CustomerAssetPage() {
   const remainingMeals = activeItem?.remainingMeals ?? 0;
   const deductDisabled = remainingMeals <= 0 || deductCount <= 0 || remainingMeals < deductCount;
 
-  const [detailActionLabel, deductActionLabel] = useMemo(() => buildCustomerActionLabels(), []);
+  const [detailActionLabel, grantActionLabel, deductActionLabel] = useMemo(() => buildCustomerActionLabels(), []);
 
   const detailAddresses = useMemo(() => resolveCustomerAddresses(detail), [detail]);
+  const primaryAddress = useMemo(
+    () => resolvePrimaryCustomerAddress(detailAddresses),
+    [detailAddresses]
+  );
   const visibleAddresses = useMemo(
     () => buildVisibleCustomerAddresses(detailAddresses, isAddressExpanded),
     [detailAddresses, isAddressExpanded]
@@ -370,7 +444,7 @@ export function CustomerAssetPage() {
         Number(grantForm.mealDelta),
         Number(grantForm.validityDays),
         "后台客服",
-        grantForm.remark || "充值/补餐"
+        grantForm.remark || "补餐"
       );
       setGrantForm(defaultGrantForm);
       await refreshCustomerWorkspace(activeItem);
@@ -512,7 +586,10 @@ export function CustomerAssetPage() {
         name: normalizeCustomerName(editForm.name),
         phone: normalizeCustomerPhone(editForm.phone),
         merchantRemark: editForm.remark,
-        customerStatus: editForm.customerStatus
+        customerStatus: editForm.customerStatus,
+        openedAt: editForm.openedAt || null,
+        expiredAt: editForm.expiredAt || null,
+        remainingValidityDays: editForm.remainingValidityDays === "" ? null : Number(editForm.remainingValidityDays)
       });
       await refreshCustomerWorkspace(activeItem);
       setDetailMode("view");
@@ -558,6 +635,14 @@ export function CustomerAssetPage() {
     <div className="customer-action-group">
       <button type="button" className="customer-action-btn customer-action-btn--primary" onClick={() => handleOpenDetail(item).catch((err) => toast(resolveErrorMessage(err, "打开客户详情失败"), "error"))}>
         {detailActionLabel}
+      </button>
+      <button
+        type="button"
+        className="customer-action-btn customer-action-btn--success"
+        onClick={() => handleOpenDetail(item).catch((err) => toast(resolveErrorMessage(err, "打开客户补餐失败"), "error"))}
+      >
+        <PlusCircle size={14} />
+        {grantActionLabel}
       </button>
       <button
         type="button"
@@ -824,53 +909,6 @@ export function CustomerAssetPage() {
                 </div>
               </div>
 
-              <div className="customer-detail-kpi-grid">
-                <div className="customer-detail-kpi">
-                  <div className="customer-detail-kpi__label">当前余额</div>
-                  <div className={`customer-detail-kpi__value ${Number(detail?.remainingMeals ?? activeItem.remainingMeals) <= 0 ? "is-danger" : ""}`}>
-                    {String(detail?.remainingMeals ?? activeItem.remainingMeals)} 餐
-                  </div>
-                </div>
-                <div className="customer-detail-kpi">
-                  <div className="customer-detail-kpi__label">到期日</div>
-                  <div className="customer-detail-kpi__value">
-                    {buildPackageExpiryLabel(detail?.wallet?.expiredAt || activeItem.packageExpiredAt)}
-                  </div>
-                </div>
-                <div className="customer-detail-kpi">
-                  <div className="customer-detail-kpi__label">剩余天数</div>
-                  <div className="customer-detail-kpi__value">
-                    {buildRemainingValidityLabel(
-                      detail?.wallet?.expiredAt || activeItem.packageExpiredAt,
-                      detail?.wallet?.remainingValidityDays ?? activeItem.remainingValidityDays
-                    )}
-                  </div>
-                </div>
-                <div className="customer-detail-kpi">
-                  <div className="customer-detail-kpi__label">开卡时间</div>
-                  <div className="customer-detail-kpi__value">
-                    {String(detail?.wallet?.openedAt || activeItem.openedAt || "未设置")}
-                  </div>
-                </div>
-                <div className="customer-detail-kpi">
-                  <div className="customer-detail-kpi__label">客户状态</div>
-                  {detailMode === "edit" ? (
-                    <div className="customer-detail-kpi__value">
-                      <AppSelect
-                        value={editForm.customerStatus}
-                        options={[
-                          { label: "正式客户", value: "FORMAL" },
-                          { label: "沉睡客户", value: "DORMANT" }
-                        ]}
-                        onChange={(val) => setEditForm({ ...editForm, customerStatus: val })}
-                        style={{ width: "100%" }}
-                      />
-                    </div>
-                  ) : (
-                    <div className="customer-detail-kpi__value">{resolveCustomerStatusLabel(String(detail?.customerStatus || activeItem.customerStatus))}</div>
-                  )}
-                </div>
-              </div>
               {shouldRenderPackageAlert(
                 detail?.wallet?.packageAlertLabel || activeItem.packageAlertLabel,
                 detail?.wallet?.packageAlertCode || activeItem.packageAlertCode
@@ -897,8 +935,67 @@ export function CustomerAssetPage() {
                           <label className="form-label"><span className="required">*</span>联系电话</label>
                           <input className="form-control" value={editForm.phone} onChange={(e) => setEditForm({ ...editForm, phone: normalizeCustomerPhone(e.target.value) })} />
                         </div>
+                        <div className="form-group">
+                          <label className="form-label">当前余额</label>
+                          <input
+                            className="form-control"
+                            value={`${String(detail?.remainingMeals ?? activeItem.remainingMeals)} 餐`}
+                            readOnly
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">客户状态</label>
+                          <AppSelect
+                            value={editForm.customerStatus}
+                            options={[
+                              { label: "正式客户", value: "FORMAL" },
+                              { label: "沉睡客户", value: "DORMANT" }
+                            ]}
+                            onChange={(val) => setEditForm({ ...editForm, customerStatus: val })}
+                            style={{ width: "100%" }}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">开卡时间</label>
+                          <DatePicker
+                            value={resolveDatePart(editForm.openedAt)}
+                            onChange={(date) => setEditForm({ ...editForm, openedAt: resolveDateTimeLocalValue(date, editForm.openedAt) })}
+                            showTomorrowShortcut={false}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">到期时间</label>
+                          <DatePicker
+                            value={editForm.expiredAt}
+                            onChange={(date) => setEditForm({
+                              ...editForm,
+                              expiredAt: date,
+                              remainingValidityDays: resolveRemainingValidityDaysFromDate(date)
+                            })}
+                            showTomorrowShortcut={false}
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">剩余天数</label>
+                          <input
+                            className="form-control"
+                            type="number"
+                            value={editForm.remainingValidityDays}
+                            onChange={(e) => {
+                              const nextRemainingValidityDays = normalizeRemainingValidityInput(e.target.value);
+                              setEditForm({
+                                ...editForm,
+                                remainingValidityDays: nextRemainingValidityDays,
+                                expiredAt: resolveExpiredAtFromRemainingDays(nextRemainingValidityDays)
+                              });
+                            }}
+                          />
+                        </div>
                       </div>
                       <div className="customer-detail-inline-form__remark">
+                        <div className="admin-panel-note" style={{ marginBottom: 8 }}>
+                          长期生效，默认带到后续订单；订单中心填写的商家备注仅此单生效。
+                        </div>
                         <RemarkField
                           label="商家备注"
                           value={editForm.remark}
@@ -920,9 +1017,41 @@ export function CustomerAssetPage() {
                           <span className="customer-detail-info-item__label">联系电话</span>
                           <span className="customer-detail-info-item__value">{String(detail?.phone || activeItem.phone)}</span>
                         </div>
+                        <div className="customer-detail-info-item">
+                          <span className="customer-detail-info-item__label">收货地址</span>
+                          <span className="customer-detail-info-item__value">{primaryAddress?.addressLine || "未设置"}</span>
+                        </div>
+                        <div className="customer-detail-info-item">
+                          <span className="customer-detail-info-item__label">客户状态</span>
+                          <span className="customer-detail-info-item__value">{resolveCustomerStatusLabel(String(detail?.customerStatus || activeItem.customerStatus))}</span>
+                        </div>
+                        <div className="customer-detail-info-item">
+                          <span className="customer-detail-info-item__label">当前余额</span>
+                          <span className="customer-detail-info-item__value">{String(detail?.remainingMeals ?? activeItem.remainingMeals)} 餐</span>
+                        </div>
+                        <div className="customer-detail-info-item">
+                          <span className="customer-detail-info-item__label">开卡时间</span>
+                          <span className="customer-detail-info-item__value">{String(detail?.openedAt || detail?.wallet?.openedAt || activeItem.openedAt || "未设置")}</span>
+                        </div>
+                        <div className="customer-detail-info-item">
+                          <span className="customer-detail-info-item__label">到期时间</span>
+                          <span className="customer-detail-info-item__value">{buildPackageExpiryLabel(detail?.expiredAt || detail?.wallet?.expiredAt || activeItem.packageExpiredAt)}</span>
+                        </div>
+                        <div className="customer-detail-info-item">
+                          <span className="customer-detail-info-item__label">剩余天数</span>
+                          <span className="customer-detail-info-item__value">
+                            {buildRemainingValidityLabel(
+                              detail?.expiredAt || detail?.wallet?.expiredAt || activeItem.packageExpiredAt,
+                              detail?.remainingValidityDays ?? detail?.wallet?.remainingValidityDays ?? activeItem.remainingValidityDays
+                            )}
+                          </span>
+                        </div>
                       </div>
                       <div className="customer-detail-note-block">
                         <div className="customer-detail-note-block__label">商家备注</div>
+                        <div className="admin-panel-note" style={{ marginBottom: 8 }}>
+                          长期生效，默认带到后续订单。
+                        </div>
                         <div className="customer-detail-note-block__value">{String(detail?.merchantRemark || activeItem.merchantRemark || "-")}</div>
                       </div>
                     </>
@@ -1118,10 +1247,10 @@ export function CustomerAssetPage() {
                 </section>
 
                 <section className="customer-detail-card">
-                  <div className="customer-detail-card__title">充值补餐</div>
+                  <div className="customer-detail-card__title">补餐</div>
                   <div className="customer-operation-form-grid">
                     <div className="form-group">
-                      <label className="form-label"><span className="required">*</span>充值/补餐数量</label>
+                      <label className="form-label"><span className="required">*</span>补餐数量</label>
                       <input className="form-control" type="number" value={grantForm.mealDelta} onChange={(e) => setGrantForm({ ...grantForm, mealDelta: e.target.value })} />
                     </div>
                     <div className="form-group">
@@ -1137,7 +1266,7 @@ export function CustomerAssetPage() {
                     />
                   </div>
                   <div className="customer-detail-card__actions">
-                    <button className="btn btn-primary" disabled={submittingGrant} onClick={() => handleGrantSubmit().catch((err) => toast(resolveErrorMessage(err, "充值失败"), "error"))}>{submittingGrant ? "充值中..." : "确认充值"}</button>
+                    <button className="btn btn-primary" disabled={submittingGrant} onClick={() => handleGrantSubmit().catch((err) => toast(resolveErrorMessage(err, "补餐失败"), "error"))}>{submittingGrant ? "补餐中..." : "确认补餐"}</button>
                   </div>
                 </section>
               </div>
@@ -1178,6 +1307,9 @@ export function CustomerAssetPage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-outline" onClick={() => setIsDetailOpen(false)}>关闭</button>
+              <button className="btn btn-primary" disabled={submittingGrant} onClick={() => handleGrantSubmit().catch((err) => toast(resolveErrorMessage(err, "补餐失败"), "error"))}>
+                {submittingGrant ? "补餐中..." : grantActionLabel}
+              </button>
               <button
                 className="btn btn-danger"
                 onClick={() => {
@@ -1246,6 +1378,9 @@ export function CustomerAssetPage() {
                     首个收货地址会自动绑定当前客户姓名和手机号，后续在后台修改客户资料时会同步更新地址联系人与电话。
                 </div>
                 <div className="customer-create-remark-field">
+                    <div className="admin-panel-note" style={{ marginBottom: 8 }}>
+                      长期生效，默认带到后续订单；订单中心填写的商家备注仅此单生效。
+                    </div>
                     <RemarkField
                       label="商家备注"
                       value={editForm.remark}

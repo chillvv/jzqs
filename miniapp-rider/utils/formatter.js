@@ -5,14 +5,60 @@
 const { ITEM_STATUS, ITEM_STATUS_CLASS, MEAL_PERIOD_LABEL, BATCH_STATUS_LABEL } = require('./constants');
 
 /**
+ * 格式化日期为 YYYY-MM-DD
+ * @param {Date|string|number} input - 日期输入
+ * @returns {string}
+ */
+function formatDateYMD(input = new Date()) {
+  const date = input instanceof Date ? new Date(input.getTime()) : new Date(input);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * 获取当前日期的 MM-DD 格式
+ * @returns {string} 例如 "06-14"
+ */
+function formatDateMMDD(input = new Date()) {
+  const date = input instanceof Date ? new Date(input.getTime()) : new Date(input);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${month}-${day}`;
+}
+
+/**
  * 获取当前日期的 MM-DD 格式
  * @returns {string} 例如 "06-14"
  */
 function formatCurrentDateMMDD() {
-  const date = new Date();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${month}-${day}`;
+  return formatDateMMDD(new Date());
+}
+
+/**
+ * 生成骑手工作台日期切换选项
+ * @returns {Array<{ key: string, label: string, value: string, shortLabel: string, displayLabel: string }>}
+ */
+function createWorkbenchDateOptions() {
+  const baseDate = new Date();
+  baseDate.setHours(0, 0, 0, 0);
+  return [
+    { key: 'yesterday', label: '昨天', offset: -1 },
+    { key: 'today', label: '今天', offset: 0 },
+    { key: 'tomorrow', label: '明天', offset: 1 }
+  ].map((item) => {
+    const date = new Date(baseDate.getTime());
+    date.setDate(baseDate.getDate() + item.offset);
+    const shortLabel = formatDateMMDD(date);
+    return {
+      key: item.key,
+      label: item.label,
+      value: formatDateYMD(date),
+      shortLabel,
+      displayLabel: `${item.label} ${shortLabel}`
+    };
+  });
 }
 
 /**
@@ -131,7 +177,10 @@ function calculateProgress(delivered, total) {
 }
 
 module.exports = {
+  formatDateYMD,
+  formatDateMMDD,
   formatCurrentDateMMDD,
+  createWorkbenchDateOptions,
   formatCurrentDateTime,
   formatDateTime,
   formatTime,

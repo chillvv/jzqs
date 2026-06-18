@@ -6,7 +6,10 @@
     <view class="header-left">
       <image class="header-logo" src="/assets/logo.jpeg" mode="aspectFit"></image>
       <text class="header-title">简知轻食</text>
-      <text class="header-date">{{currentDateLabel}}</text>
+      <view class="header-date" bindtap="openDatePicker">
+        <text>{{currentDateTitle}} {{currentDateLabel}}</text>
+        <text class="header-date-arrow">▼</text>
+      </view>
     </view>
   </view>
 
@@ -64,7 +67,7 @@
       <view class="stats-bento">
         <view class="stat-item">
           <text class="stat-value">{{currentMealPeriod === 'LUNCH' ? lunchStats.totalCount : dinnerStats.totalCount}}</text>
-          <text class="stat-label">总单量</text>
+          <text class="stat-label">总份数</text>
         </view>
         <view class="stat-divider"></view>
         <view class="stat-item">
@@ -114,11 +117,11 @@
 
       <view
         wx:for="{{currentMealItems}}"
-        wx:key="batchItemId"
+        wx:key="queueItemIdentity"
         class="order-card {{item.itemStatus === 'DELIVERED' ? 'order-card-completed' : ''}} {{dragging && dragIndex === index ? 'dragging' : ''}} {{item.batchSelected ? 'order-card-selected' : ''}}"
         style="transform: translateY({{dragging ? (index === dragIndex ? dragTranslateY : 0) : 0}}px); transition: {{dragging ? (index === dragIndex ? 'none' : 'transform 0.2s ease') : 'transform 0.2s ease'}}; z-index: {{dragging && index === dragIndex ? 999 : 1}}; position: relative;"
         data-index="{{index}}"
-        data-item-id="{{item.batchItemId}}"
+        data-item-id="{{item.detailItemId}}"
         data-status="{{item.itemStatus}}"
         bindtap="{{isEditMode ? '' : 'handleOrderTap'}}"
         bindtouchstart="{{isEditMode ? 'onTouchStart' : ''}}"
@@ -185,12 +188,32 @@
 
   <view wx:if="{{batchReferenceMode}}" class="batch-action-bar">
     <view class="batch-action-summary">
-      <text class="batch-action-count">已选 {{selectedReferenceItemIds.length}} 单</text>
+      <text class="batch-action-count">已选 {{selectedReferenceItemIds.length}} 条</text>
       <text class="batch-action-copy">将为选中的地址统一上传同一张参考图</text>
     </view>
     <button class="batch-submit-btn" bindtap="handleBatchReferenceUpload" loading="{{batchSubmitting}}" disabled="{{batchSubmitting}}">
       {{batchSubmitting ? '上传中...' : '选择图片并上传'}}
     </button>
+  </view>
+
+  <view wx:if="{{showDatePicker}}" class="date-picker-mask" bindtap="closeDatePicker"></view>
+  <view wx:if="{{showDatePicker}}" class="date-picker-sheet">
+    <view class="date-picker-sheet__header">
+      <text class="date-picker-sheet__title">切换日期</text>
+      <text class="date-picker-sheet__subtitle">仅支持昨天、今天、明天</text>
+    </view>
+    <view class="date-picker-options">
+      <view
+        wx:for="{{dateOptions}}"
+        wx:key="value"
+        class="date-picker-option {{item.active ? 'date-picker-option--active' : ''}}"
+        data-date="{{item.value}}"
+        bindtap="selectWorkbenchDate"
+      >
+        <text class="date-picker-option__label">{{item.label}}</text>
+        <text class="date-picker-option__value">{{item.shortLabel}}</text>
+      </view>
+    </view>
   </view>
 
   <!-- Bottom Spacing for TabBar (handled by padding-bottom in CSS) -->

@@ -1,5 +1,25 @@
 const { request } = require('../utils/request');
 
+async function wxLogin(code) {
+  return request({
+    url: '/api/mobile/rider-auth/wx-login',
+    method: 'POST',
+    data: { code },
+    header: { 'content-type': 'application/json' },
+    requireWorkbench: false
+  });
+}
+
+async function bindPhone(openid, phone, nickname = '骑手') {
+  return request({
+    url: '/api/mobile/rider-auth/bind-phone',
+    method: 'POST',
+    data: { openid, phone, nickname },
+    header: { 'content-type': 'application/json' },
+    requireWorkbench: false
+  });
+}
+
 async function riderRegister(phone, name, openid) {
   return request({
     url: '/api/auth/register-phone',
@@ -28,6 +48,8 @@ async function getRiderProfile(riderName) {
 }
 
 module.exports = {
+  wxLogin,
+  bindPhone,
   riderRegister,
   riderPhoneLogin,
   getRiderProfile

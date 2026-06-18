@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState } from "react";
 import type { DispatchMealPeriod } from "./dispatchCenterLayout.helpers";
+import { formatLocalDateInputValue } from "../../shared/utils/dateTime";
 
 interface DispatchContextValue {
   serveDate: string;
@@ -11,10 +12,7 @@ interface DispatchContextValue {
 const DispatchContext = createContext<DispatchContextValue | null>(null);
 
 export function DispatchProvider({ children }: { children: React.ReactNode }) {
-  const [serveDate, setServeDate] = useState(() => {
-    const today = new Date();
-    return today.toISOString().slice(0, 10);
-  });
+  const [serveDate, setServeDate] = useState(() => formatLocalDateInputValue());
   const [mealPeriod, setMealPeriod] = useState<DispatchMealPeriod>("LUNCH");
 
   return (

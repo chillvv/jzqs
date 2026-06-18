@@ -85,8 +85,9 @@ public class MobilePortalServiceExtension {
             """
                 UPDATE dispatch_batches db
                 SET delivered_count = (
-                    SELECT COUNT(*)
+                    SELECT COALESCE(SUM(mso.quantity), 0)
                     FROM dispatch_batch_items dbi
+                    JOIN meal_slot_orders mso ON mso.id = dbi.meal_slot_order_id
                     WHERE dbi.batch_id = db.id
                       AND dbi.item_status = 'DELIVERED'
                 )

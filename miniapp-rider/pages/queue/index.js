@@ -3,9 +3,24 @@
  * 拖拽排序 v2：插入索引 + 平移动画
  */
 const taskService = require('../../services/task.service');
-const { formatCurrentDateMMDD } = require('../../utils/formatter');
+const { createWorkbenchDateOptions, formatDateYMD } = require('../../utils/formatter');
+const { resolveQueueItemIdentity, resolveQueueItemRequestId } = require('../../utils/rider-queue');
 const realtime = require('../../utils/realtime');
 const AUTO_REFRESH_MS = 8000;
+
+function buildWorkbenchDateState(selectedDate) {
+  const dateOptions = createWorkbenchDateOptions().map((item) => ({
+    ...item,
+    active: item.value === selectedDate
+  }));
+  const activeOption = dateOptions.find((item) => item.active) || dateOptions[1];
+  return {
+    selectedDate: activeOption.value,
+    currentDateLabel: activeOption.shortLabel,
+    currentDateTitle: activeOption.label,
+    dateOptions
+  };
+}
 
 Page({
   data: {
@@ -18,6 +33,10 @@ Page({
     batchSubmitting: false,
     selectedReferenceItemIds: [],
     currentDateLabel: '',
+    currentDateTitle: '今天',
+    selectedDate: '',
+    showDatePicker: false,
+    dateOptions: [],
 
     // 拖拽状态
     dragging: false,
@@ -43,17 +62,13 @@ Page({
 
   async onShow() {
     const app = getApp();
-    
-    const todayLabel = formatCurrentDateMMDD();
-    if (this.data.currentDateLabel && this.data.currentDateLabel !== todayLabel) {
-      console.log('日期已变更，清空队列数据');
-      this.resetQueueState();
-    }
+    const nextSelectedDate = app.getWorkbenchDate() || this.data.selectedDate || formatDateYMD();
     
     this.setData({ 
       statusBarHeight: app.globalData.statusBarHeight,
       navBarHeight: app.globalData.navBarHeight,
-      currentDateLabel: todayLabel
+      ...buildWorkbenchDateState(nextSelectedDate),
+      showDatePicker: false
     });
     
     // 更新 tabBar 选中状态
@@ -101,12 +116,15 @@ Page({
   },
 
   _syncCurrentDateLabel() {
-    const todayLabel = formatCurrentDateMMDD();
-    if (this.data.currentDateLabel === todayLabel) {
+    const supportedDates = createWorkbenchDateOptions().map((item) => item.value);
+    if (supportedDates.includes(this.data.selectedDate)) {
       return false;
     }
+    const todayDate = formatDateYMD();
+    const app = getApp();
+    app.resetWorkbenchDate();
     this.resetQueueState();
-    this.setData({ currentDateLabel: todayLabel });
+    this.setData({ ...buildWorkbenchDateState(todayDate) });
     return true;
   },
 
@@ -114,6 +132,7 @@ Page({
     const { silent = false } = options;
     const app = getApp();
     const riderName = app.getActiveRiderName();
+    const serveDate = this.data.selectedDate || formatDateYMD();
     if (!riderName) {
       if (!silent) {
         wx.showToast({ title: '骑手信息未就绪', icon: 'none' });
@@ -128,7 +147,7 @@ Page({
       this.setData({ loading: true });
     }
     try {
-      const page = await taskService.getQueue(riderName);
+      const page = await taskService.getQueue(riderName, serveDate);
       const items = page.items || [];
       this.setData({ allItems: items });
       this.calculateMealStats(items);
@@ -192,11 +211,12 @@ Page({
   calculateMealStats(items) {
     const lunch = items.filter(i => i.mealPeriod === 'LUNCH');
     const dinner = items.filter(i => i.mealPeriod === 'DINNER');
-    const ld = lunch.filter(i => i.itemStatus === 'DELIVERED').length;
-    const dd = dinner.filter(i => i.itemStatus === 'DELIVERED').length;
+    const sumQuantity = list => list.reduce((sum, item) => sum + (item.quantity || 1), 0);
+    const ld = sumQuantity(lunch.filter(i => i.itemStatus === 'DELIVERED'));
+    const dd = sumQuantity(dinner.filter(i => i.itemStatus === 'DELIVERED'));
     this.setData({
-      lunchStats: { totalCount: lunch.length, deliveredCount: ld, remainingCount: lunch.length - ld },
-      dinnerStats: { totalCount: dinner.length, deliveredCount: dd, remainingCount: dinner.length - dd }
+      lunchStats: { totalCount: sumQuantity(lunch), deliveredCount: ld, remainingCount: sumQuantity(lunch) - ld },
+      dinnerStats: { totalCount: sumQuantity(dinner), deliveredCount: dd, remainingCount: sumQuantity(dinner) - dd }
     });
   },
 
@@ -210,8 +230,9 @@ Page({
     }
     const seen = new Set();
     items = items.filter(i => {
-      if (seen.has(i.batchItemId)) return false;
-      seen.add(i.batchItemId);
+      const queueItemIdentity = resolveQueueItemIdentity(i);
+      if (seen.has(queueItemIdentity)) return false;
+      seen.add(queueItemIdentity);
       return true;
     });
     const selectedSet = new Set(selectedReferenceItemIds);
@@ -232,14 +253,16 @@ Page({
 
       return {
         ...item,
+        queueItemIdentity: resolveQueueItemIdentity(item),
+        detailItemId: resolveQueueItemRequestId(item.batchItemId, item.mealSlotOrderId),
         attentionSources,
         attentionLabel: item.attentionLabel || (needAttention ? '需留意' : ''),
         needAttention,
         hasRemark: needAttention,
-        batchSelected: selectedSet.has(item.batchItemId)
+        batchSelected: selectedSet.has(resolveQueueItemIdentity(item))
       };
     });
-    const visibleIds = new Set(normalizedItems.map(item => item.batchItemId));
+    const visibleIds = new Set(normalizedItems.map(item => item.queueItemIdentity));
     this.setData({
       currentMealItems: normalizedItems,
       selectedReferenceItemIds: selectedReferenceItemIds.filter(id => visibleIds.has(id))
@@ -265,6 +288,30 @@ Page({
       batchReferenceMode: false,
       selectedReferenceItemIds: []
     }, () => this.filterCurrentMealItems());
+  },
+
+  openDatePicker() {
+    this.setData({ showDatePicker: true });
+  },
+
+  closeDatePicker() {
+    this.setData({ showDatePicker: false });
+  },
+
+  async selectWorkbenchDate(e) {
+    const { date } = e.currentTarget.dataset;
+    if (!date || date === this.data.selectedDate) {
+      this.closeDatePicker();
+      return;
+    }
+    const app = getApp();
+    app.setWorkbenchDate(date);
+    this.resetQueueState();
+    this.setData({
+      ...buildWorkbenchDateState(date),
+      showDatePicker: false
+    });
+    await this.loadQueue();
   },
 
   // ========== 拖拽排序（v2 - 插入索引 + 平移动画）==========
@@ -299,12 +346,12 @@ Page({
     }, () => this.filterCurrentMealItems());
   },
 
-  toggleBatchItemSelection(batchItemId) {
+  toggleBatchItemSelection(queueItemIdentity) {
     const selected = new Set(this.data.selectedReferenceItemIds);
-    if (selected.has(batchItemId)) {
-      selected.delete(batchItemId);
+    if (selected.has(queueItemIdentity)) {
+      selected.delete(queueItemIdentity);
     } else {
-      selected.add(batchItemId);
+      selected.add(queueItemIdentity);
     }
     this.setData({
       selectedReferenceItemIds: Array.from(selected)
@@ -341,7 +388,7 @@ Page({
     const selectedSet = new Set(selectedReferenceItemIds);
     const addressIds = [...new Set(
       currentMealItems
-        .filter(item => selectedSet.has(item.batchItemId))
+        .filter(item => selectedSet.has(item.queueItemIdentity))
         .map(item => Number(item.addressId))
         .filter(id => id > 0)
     )];
@@ -507,7 +554,10 @@ Page({
     const { currentMealItems, currentMealPeriod } = this.data;
     const app = getApp();
     const riderName = app.getActiveRiderName();
-    const ids = currentMealItems.filter(i => i.itemStatus !== 'DELIVERED').map(i => i.batchItemId);
+    const ids = currentMealItems
+      .filter(i => i.itemStatus !== 'DELIVERED')
+      .map(i => Number(i.batchItemId))
+      .filter(id => id > 0);
     if (ids.length === 0) return;
     try {
       await taskService.saveOrderSequence(riderName, currentMealPeriod, ids);
@@ -524,16 +574,16 @@ Page({
     }
     
     const itemId = Number(e.currentTarget.dataset.itemId);
-    const item = this.data.currentMealItems.find(i => i.batchItemId === itemId);
+    const item = this.data.currentMealItems.find(i => i.detailItemId === itemId);
     if (!item) return;
 
     if (this.data.batchReferenceMode) {
-      this.toggleBatchItemSelection(item.batchItemId);
+      this.toggleBatchItemSelection(item.queueItemIdentity);
       return;
     }
     
     wx.navigateTo({
-      url: `/pages/order-detail/index?batchItemId=${item.batchItemId}&mealSlotOrderId=${item.mealSlotOrderId}`
+      url: `/pages/order-detail/index?batchItemId=${item.detailItemId}&mealSlotOrderId=${item.mealSlotOrderId}`
     });
   },
 
@@ -542,6 +592,7 @@ Page({
       loading: false, isEditMode: false, allItems: [], currentMealItems: [],
       batchReferenceMode: false, batchSubmitting: false, selectedReferenceItemIds: [],
       dragging: false, dragIndex: -1, dragOriginIndex: -1, dragTranslateY: 0,
+      showDatePicker: false,
       lunchStats: { totalCount: 0, deliveredCount: 0, remainingCount: 0 },
       dinnerStats: { totalCount: 0, deliveredCount: 0, remainingCount: 0 }
     });

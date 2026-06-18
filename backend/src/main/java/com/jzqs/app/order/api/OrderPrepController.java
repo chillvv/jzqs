@@ -89,6 +89,16 @@ public class OrderPrepController {
         return ApiResponse.success(orderPrepService.updateOrderProfile(orderId, body));
     }
 
+    @PostMapping("/{orderId}/special-dispatch")
+    public ApiResponse<Map<String, Object>> updateSpecialDispatch(@PathVariable long orderId, @RequestBody Map<String, String> body) {
+        return ApiResponse.success(orderPrepService.updateSpecialDispatch(orderId, body.get("deliveryMealPeriod")));
+    }
+
+    @PostMapping("/{orderId}/special-dispatch/reset")
+    public ApiResponse<Map<String, Object>> resetSpecialDispatch(@PathVariable long orderId) {
+        return ApiResponse.success(orderPrepService.resetSpecialDispatch(orderId));
+    }
+
     @GetMapping("/{orderId}/notes")
     public ApiResponse<OrderNotesResponse> orderNotes(@PathVariable long orderId) {
         return ApiResponse.success(orderPrepService.orderNotes(orderId));

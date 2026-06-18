@@ -30,7 +30,7 @@
       <!-- 统计数据 -->
       <view class="stats-grid">
         <view class="stat-cell">
-          <view class="stat-label">总单数</view>
+          <view class="stat-label">总份数</view>
           <view class="stat-value">{{summary.totalCount}}</view>
         </view>
         <view class="stat-cell stat-cell-success">
@@ -38,7 +38,7 @@
           <view class="stat-value">{{summary.deliveredCount}}</view>
         </view>
         <view class="stat-cell stat-cell-warning">
-          <view class="stat-label">剩余单</view>
+          <view class="stat-label">剩余份数</view>
           <view class="stat-value">{{summary.remainingCount}}</view>
         </view>
       </view>

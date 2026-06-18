@@ -87,6 +87,7 @@ public class RiderController {
      * 骑手登录（混合模式）
      * @deprecated 使用 register 或 phoneLogin 替代
      */
+    @Deprecated
     @PostMapping("/login")
     @Operation(summary = "骑手登录（已废弃）", description = "请使用 /register 或 /phone-login")
     public ApiResponse<RiderLoginResponse> login(
@@ -121,9 +122,11 @@ public class RiderController {
         @Parameter(description = "骑手姓名", required = true)
         @RequestParam String riderName,
         @Parameter(description = "餐期类型：lunch 或 dinner")
-        @RequestParam(required = false) String mealType
+        @RequestParam(required = false) String mealType,
+        @Parameter(description = "配送日期，格式 yyyy-MM-dd")
+        @RequestParam(required = false) String serveDate
     ) {
-        return ApiResponse.success(mobilePortalService.riderQueue(riderName));
+        return ApiResponse.success(mobilePortalService.riderQueue(riderName, serveDate));
     }
 
     /**
@@ -135,9 +138,13 @@ public class RiderController {
         @Parameter(description = "订单ID（batchItemId）", required = true)
         @PathVariable long orderId,
         @Parameter(description = "骑手姓名", required = true)
-        @RequestParam String riderName
+        @RequestParam String riderName,
+        @Parameter(description = "配送日期，格式 yyyy-MM-dd")
+        @RequestParam(required = false) String serveDate,
+        @Parameter(description = "订单ID（mealSlotOrderId），当批次项尚未生成时用于回退查询")
+        @RequestParam(required = false) Long mealSlotOrderId
     ) {
-        return ApiResponse.success(mobilePortalService.riderQueueItem(orderId, riderName));
+        return ApiResponse.success(mobilePortalService.riderQueueItem(orderId, riderName, serveDate, mealSlotOrderId));
     }
 
     @GetMapping("/address-reference")
@@ -283,9 +290,11 @@ public class RiderController {
     @Operation(summary = "获取配送概览", description = "获取今日配送任务的统计信息")
     public ApiResponse<RiderBatchSummaryResponse> getSummary(
         @Parameter(description = "骑手姓名", required = true)
-        @RequestParam String riderName
+        @RequestParam String riderName,
+        @Parameter(description = "配送日期，格式 yyyy-MM-dd")
+        @RequestParam(required = false) String serveDate
     ) {
-        return ApiResponse.success(mobilePortalService.riderSummary(riderName));
+        return ApiResponse.success(mobilePortalService.riderSummary(riderName, serveDate));
     }
 
     /**

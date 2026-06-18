@@ -40,6 +40,13 @@ function findNextPendingOrderId(orders: DispatchAreaBindingResponse["orders"], c
   return orders.slice(currentIndex + 1).find((item) => item.deliveryStatus !== "DELIVERED")?.orderId ?? null;
 }
 
+function sumOrderQuantity(orders: DispatchAreaBindingResponse["orders"], matcher?: (item: DispatchAreaBindingResponse["orders"][number]) => boolean) {
+  return orders.reduce((sum, item) => {
+    if (matcher && !matcher(item)) return sum;
+    return sum + (item.quantity || 1);
+  }, 0);
+}
+
 type ProgressGroup = {
   key: string;
   areaCode: string;
@@ -121,11 +128,11 @@ export function DispatchProgressPage() {
         "待分配骑手";
 
       const orders = [...binding.orders].sort((left, right) => left.sequenceNumber - right.sequenceNumber);
-      const deliveredCount = orders.filter((item) => item.deliveryStatus === "DELIVERED").length;
+      const deliveredCount = sumOrderQuantity(orders, (item) => item.deliveryStatus === "DELIVERED");
       const currentOrderId = findFirstPendingOrderId(orders);
       const currentSequenceNumber = findFirstPendingSequenceNumber(orders);
       const nextOrderId = findNextPendingOrderId(orders, currentOrderId);
-      const totalCount = matchedProgress?.totalCount ?? orders.length;
+      const totalCount = matchedProgress?.totalCount ?? sumOrderQuantity(orders);
       const completedCount = matchedProgress?.completedCount ?? deliveredCount;
       const pendingCount = matchedProgress?.pendingCount ?? Math.max(totalCount - completedCount, 0);
       const key = `${binding.areaCode}::${riderName}`;
@@ -277,15 +284,15 @@ export function DispatchProgressPage() {
         ) : item.exceptionCount > 0 ? (
           <span className="tag tag-red">异常 {item.exceptionCount}</span>
         ) : item.totalCount > 1 ? (
-          <span className="tag tag-blue">{item.totalCount} 单</span>
+          <span className="tag tag-blue">{item.totalCount} 份</span>
         ) : (
           <span className="tag tag-green">正常</span>
         )}
                       </div>
                       <div className="dispatch-chip-list">
-                        <span className="tag tag-gray">总 {item.totalCount}</span>
-                        <span className="tag tag-green">送 {item.completedCount}</span>
-                        <span className="tag tag-blue">待 {item.pendingCount}</span>
+                        <span className="tag tag-gray">总 {item.totalCount} 份</span>
+                        <span className="tag tag-green">送 {item.completedCount} 份</span>
+                        <span className="tag tag-blue">待 {item.pendingCount} 份</span>
                       </div>
                       <div style={{ display: "grid", gap: "6px" }}>
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", color: "var(--text-light)" }}>
@@ -315,7 +322,7 @@ export function DispatchProgressPage() {
       <AdminDialog
         open={Boolean(activeGroup)}
         title={activeGroup ? `${activeGroup.areaCode} / ${activeGroup.riderName}` : "骑手队列"}
-        description={activeGroup ? `共 ${activeGroup.totalCount} 单，已送 ${activeGroup.completedCount} 单，待送 ${activeGroup.pendingCount} 单` : undefined}
+        description={activeGroup ? `共 ${activeGroup.totalCount} 份，已送 ${activeGroup.completedCount} 份，待送 ${activeGroup.pendingCount} 份` : undefined}
         width={1040}
         onClose={() => {
           setSelectedGroupKey(undefined);
@@ -330,9 +337,9 @@ export function DispatchProgressPage() {
                 <div className="dispatch-inline-note">骑手：{activeGroup.riderName}</div>
               </div>
               <div className="dispatch-chip-list">
-                <span className="tag tag-gray">共 {activeGroup.totalCount} 单</span>
-                <span className="tag tag-green">已送 {activeGroup.completedCount}</span>
-                <span className="tag tag-blue">待送 {activeGroup.pendingCount}</span>
+                <span className="tag tag-gray">共 {activeGroup.totalCount} 份</span>
+                <span className="tag tag-green">已送 {activeGroup.completedCount} 份</span>
+                <span className="tag tag-blue">待送 {activeGroup.pendingCount} 份</span>
               </div>
             </div>
 

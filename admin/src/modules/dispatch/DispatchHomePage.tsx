@@ -213,12 +213,12 @@ export function DispatchHomePage() {
 
       <div className="admin-grid-3" style={{ marginBottom: '16px' }}>
         <div className="admin-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', borderLeft: '4px solid var(--warning-color)', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-          <div style={{ color: 'var(--text-light)', fontSize: '13px' }}>待分配订单</div>
-          <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--warning-color)' }}>{overview.pendingCount} 单</div>
+          <div style={{ color: 'var(--text-light)', fontSize: '13px' }}>待分配份数</div>
+          <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--warning-color)' }}>{overview.pendingCount} 份</div>
         </div>
         <div className="admin-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', borderLeft: '4px solid var(--primary-color)', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-          <div style={{ color: 'var(--text-light)', fontSize: '13px' }}>待配送订单</div>
-          <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--primary-color)' }}>{overview.dispatchingCount} 单</div>
+          <div style={{ color: 'var(--text-light)', fontSize: '13px' }}>待配送份数</div>
+          <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--primary-color)' }}>{overview.dispatchingCount} 份</div>
         </div>
         <div className="admin-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', borderLeft: '4px solid var(--error-color)', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
           <div style={{ color: 'var(--text-light)', fontSize: '13px' }}>区域缺骑手</div>

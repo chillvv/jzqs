@@ -28,11 +28,12 @@ import {
   type AftersaleResolveAction,
   type AftersaleStatusKey
 } from "./aftersalePage.helpers";
+import { formatLocalDateInputValue } from "../../shared/utils/dateTime";
 
 const DEFAULT_OPERATOR = "后台客服";
 
 function getToday() {
-  return new Date().toISOString().slice(0, 10);
+  return formatLocalDateInputValue();
 }
 
 function resolveToneTagClass(status: string, type: string) {

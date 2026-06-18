@@ -84,7 +84,11 @@ export function buildDispatchAreaStats(bindings: DispatchAreaBindingResponse[]) 
   return {
     totalCount: bindings.length,
     dispatchingCount: bindings.reduce(
-      (sum, area) => sum + area.orders.filter((item) => item.deliveryStatus === "PENDING_DISPATCH").length,
+      (sum, area) =>
+        sum + area.orders.reduce(
+          (orderSum, item) => orderSum + (item.deliveryStatus === "PENDING_DISPATCH" ? (item.quantity || 1) : 0),
+          0
+        ),
       0
     ),
     missingRiderAreaCount: bindings.filter((area) => area.missingRider).length

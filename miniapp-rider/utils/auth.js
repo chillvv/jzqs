@@ -10,6 +10,7 @@ const AUTH_TOKEN_KEY = 'auth_token';
 const AUTH_STATE_KEY = 'auth_state';
 const RIDER_VERIFY_TOKEN_URL = '/api/mobile/rider-auth/verify-token';
 const RIDER_PROFILE_URL = '/api/mobile/rider-auth/me';
+const authService = require('../services/auth.service');
 
 function reportAuthDebug(hypothesisId, location, msg, data, traceId) {
   void hypothesisId;
@@ -42,6 +43,8 @@ class Auth {
    * 小程序启动时调用一次
    */
   async init() {
+    await this.restoreWechatSession();
+
     // 1. 检查本地 token
     const token = wx.getStorageSync(AUTH_TOKEN_KEY);
     // #region debug-point A:init-token
@@ -58,6 +61,7 @@ class Auth {
         const result = await this.verifyToken(token);
         if (result && result.riderId) {
           this.applyVerifiedAuthState(token, result);
+          this.persistAuthState();
           this.globalData.ready = true;
           return;
         }
@@ -68,7 +72,50 @@ class Auth {
       wx.removeStorageSync(AUTH_TOKEN_KEY);
     }
 
+    this.restorePersistedAuthState();
     this.globalData.ready = true;
+  }
+
+  async restoreWechatSession() {
+    try {
+      const loginResult = await new Promise((resolve, reject) => {
+        wx.login({
+          success: resolve,
+          fail: reject
+        });
+      });
+      const code = loginResult && loginResult.code ? String(loginResult.code).trim() : '';
+      if (!code) {
+        return;
+      }
+      const result = await authService.wxLogin(code);
+      if (!result) {
+        return;
+      }
+      this.globalData.openid = result.openid || this.globalData.openid;
+      this.globalData.needPhoneAuth = !!result.needPhoneAuth;
+      this.globalData.registered = !!result.registered;
+      this.globalData.riderStatus = result.riderStatus || this.globalData.riderStatus;
+      this.globalData.workbenchEnabled = typeof result.workbenchEnabled === 'boolean'
+        ? result.workbenchEnabled
+        : this.globalData.workbenchEnabled;
+      this.globalData.riderName = result.riderName || this.globalData.riderName;
+      this.globalData.phone = result.phone || this.globalData.phone;
+      if (result.token) {
+        this.applyAuth(result);
+        this.globalData.userId = result.riderId || this.globalData.userId;
+        this.globalData.userType = 'rider';
+        this.globalData.loggedIn = true;
+        this.globalData.registered = true;
+        this.globalData.needPhoneAuth = false;
+        this.globalData.ready = true;
+        this.persistAuthState();
+        return;
+      }
+      this.persistAuthState();
+    } catch (error) {
+      console.warn('[Auth] 恢复微信会话失败:', error && error.message ? error.message : error);
+    }
   }
 
   /**
@@ -166,7 +213,9 @@ class Auth {
         ? result.workbenchEnabled
         : this.globalData.riderStatus === 'ACTIVE';
       this.globalData.riderName = result.name || result.riderName || this.globalData.riderName;
-      this.globalData.phone = result.phone || '';
+      this.globalData.phone = result.phone || this.globalData.phone;
+      this.globalData.openid = result.openid || this.globalData.openid;
+      this.persistAuthState();
     }
   }
 
@@ -187,6 +236,7 @@ class Auth {
       : this.globalData.riderStatus === 'ACTIVE';
     this.globalData.riderName = result.name || result.riderName || '';
     this.globalData.phone = result.phone || '';
+    this.persistAuthState();
   }
 
   /**
@@ -243,6 +293,42 @@ class Auth {
       this.globalData.phone = '';
       this.globalData.openid = '';
     }
+  }
+
+  persistAuthState() {
+    try {
+      wx.setStorageSync(AUTH_STATE_KEY, {
+        userId: this.globalData.userId,
+        loggedIn: this.globalData.loggedIn,
+        registered: this.globalData.registered,
+        needPhoneAuth: this.globalData.needPhoneAuth,
+        riderStatus: this.globalData.riderStatus,
+        workbenchEnabled: this.globalData.workbenchEnabled,
+        riderName: this.globalData.riderName,
+        phone: this.globalData.phone,
+        openid: this.globalData.openid
+      });
+    } catch (_) {}
+  }
+
+  restorePersistedAuthState() {
+    try {
+      const savedState = wx.getStorageSync(AUTH_STATE_KEY);
+      if (!savedState || typeof savedState !== 'object') {
+        return;
+      }
+      this.globalData.userId = savedState.userId || this.globalData.userId;
+      this.globalData.loggedIn = !!savedState.loggedIn;
+      this.globalData.registered = !!savedState.registered;
+      this.globalData.needPhoneAuth = !!savedState.needPhoneAuth;
+      this.globalData.riderStatus = savedState.riderStatus || this.globalData.riderStatus;
+      this.globalData.workbenchEnabled = typeof savedState.workbenchEnabled === 'boolean'
+        ? savedState.workbenchEnabled
+        : this.globalData.workbenchEnabled;
+      this.globalData.riderName = savedState.riderName || this.globalData.riderName;
+      this.globalData.phone = savedState.phone || this.globalData.phone;
+      this.globalData.openid = savedState.openid || this.globalData.openid;
+    } catch (_) {}
   }
 
   /**
@@ -352,7 +438,8 @@ class Auth {
       riderStatus: this.globalData.riderStatus,
       workbenchEnabled: this.globalData.workbenchEnabled,
       riderName: this.globalData.riderName,
-      phone: this.globalData.phone
+      phone: this.globalData.phone,
+      openid: this.globalData.openid
     };
   }
 
@@ -398,7 +485,7 @@ class Auth {
 
     switch (this.globalData.riderStatus) {
       case 'ACTIVE':
-        return '/pages/today/index';
+        return '/pages/queue/index';
       case 'PENDING':
         return '/pages/pending/index';
       case 'DISABLED':

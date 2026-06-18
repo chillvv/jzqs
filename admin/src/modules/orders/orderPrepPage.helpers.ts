@@ -33,9 +33,41 @@ export function formatOrderNote(value: string | null | undefined) {
   return trimmed || "-";
 }
 
+export function mealPeriodLabel(value: string | null | undefined) {
+  return value === "DINNER" ? "晚餐" : "午餐";
+}
+
 export function isMeaningfulRemark(value: string | null | undefined) {
   const trimmed = value?.trim() ?? "";
   return trimmed.length > 0 && trimmed !== "-";
+}
+
+export function isCrossMealDelivery(
+  mealPeriod: string | null | undefined,
+  deliveryMealPeriod: string | null | undefined
+) {
+  const normalizedMealPeriod = mealPeriod === "DINNER" ? "DINNER" : "LUNCH";
+  const normalizedDeliveryMealPeriod = deliveryMealPeriod === "DINNER" ? "DINNER" : "LUNCH";
+  return normalizedMealPeriod !== normalizedDeliveryMealPeriod;
+}
+
+export function buildCrossMealDeliveryRemark(
+  merchantRemark: string | null | undefined,
+  mealPeriod: string | null | undefined,
+  deliveryMealPeriod: string | null | undefined
+) {
+  const trimmedRemark = merchantRemark?.trim() ?? "";
+  if (!isCrossMealDelivery(mealPeriod, deliveryMealPeriod)) {
+    return trimmedRemark;
+  }
+  const deliveryRemark = `${mealPeriodLabel(mealPeriod)}，${mealPeriodLabel(deliveryMealPeriod)}配送`;
+  if (!trimmedRemark) {
+    return deliveryRemark;
+  }
+  if (trimmedRemark.includes(deliveryRemark)) {
+    return trimmedRemark;
+  }
+  return `${deliveryRemark}；${trimmedRemark}`;
 }
 
 export function resolveMealPeriod(item: OrderPrepItemResponse): OrderPrepMealPeriodFilter {

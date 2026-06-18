@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createNextMenuWeek, copyMenuWeekFromLastWeek, fetchCurrentMenuWeek, publishMenuWeek, saveMenuWeekDay } from "../../shared/api/http";
 import type { AdminMenuWeekDay, AdminMenuWeekResponse, AdminMenuWeekSlot } from "../../shared/api/types";
 import { buildMenuWeekSummary, resolveWeekStatusLabel } from "./menuSchedulePage.helpers";
-import { formatDateLabel } from "../../shared/utils/dateTime";
+import { formatDateLabel, formatLocalDateInputValue, shiftLocalDateInputValue } from "../../shared/utils/dateTime";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { RemarkField } from "../../shared/components/RemarkField";
 import { DatePicker } from "../../shared/components/DatePicker";
@@ -327,9 +327,7 @@ export function MenuSchedulePage() {
         <button
           className="btn btn-outline"
           onClick={() => {
-            const prev = new Date(selectedDate);
-            prev.setDate(prev.getDate() - 7);
-            handlePickWeek(prev.toISOString().slice(0, 10)).catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"));
+            handlePickWeek(shiftLocalDateInputValue(selectedDate, -7)).catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"));
           }}
         >‹ 上一周</button>
         <DatePicker
@@ -343,9 +341,7 @@ export function MenuSchedulePage() {
         <button
           className="btn btn-outline"
           onClick={() => {
-            const next = new Date(selectedDate);
-            next.setDate(next.getDate() + 7);
-            handlePickWeek(next.toISOString().slice(0, 10)).catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"));
+            handlePickWeek(shiftLocalDateInputValue(selectedDate, 7)).catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"));
           }}
         >下一周 ›</button>
       </div>
@@ -425,5 +421,5 @@ export function MenuSchedulePage() {
 function nextWeekDate() {
   const date = new Date();
   date.setDate(date.getDate() + 7);
-  return date.toISOString().slice(0, 10);
+  return formatLocalDateInputValue(date);
 }

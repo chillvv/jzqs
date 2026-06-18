@@ -1,4 +1,6 @@
 const AGREEMENT_ACCEPTED_KEY = 'miniapp_rider_auth_agreement_accepted_v2';
+const auth = require('../../utils/auth');
+const authService = require('../../services/auth.service');
 
 function readAgreementAccepted() {
   try {
@@ -39,6 +41,13 @@ Page({
       agreementSheetChecked: agreementAccepted,
       'profileForm.phoneNumber': phoneNumber
     });
+  },
+
+  onShow() {
+    const state = auth.getAuthState();
+    if (state.loggedIn && state.registered) {
+      wx.switchTab({ url: '/pages/profile/index' });
+    }
   },
 
   goBack() {
@@ -158,7 +167,21 @@ Page({
       if (!app || typeof app.loginWithPhone !== 'function') {
         throw new Error('应用未初始化，请重启小程序');
       }
-      await app.loginWithPhone(phone);
+      const state = auth.getAuthState();
+      if (state.openid || auth.globalData.openid) {
+        const response = await authService.bindPhone(
+          state.openid || auth.globalData.openid,
+          phone,
+          '骑手'
+        );
+        auth.applyAuth(response);
+        auth.globalData.ready = true;
+        if (typeof app.syncRiderGlobals === 'function') {
+          app.syncRiderGlobals();
+        }
+      } else {
+        await app.loginWithPhone(phone);
+      }
       wx.showToast({ title: '登录成功', icon: 'success' });
       setTimeout(() => {
         wx.switchTab({ url: '/pages/profile/index' });

@@ -6,7 +6,6 @@
     "pages/queue/index",
     "pages/order-detail/index",
     "pages/register/index",
-    "pages/today/index",
     "pages/pending/index",
     "pages/blocked/index"
   ],

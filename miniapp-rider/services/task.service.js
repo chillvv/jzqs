@@ -5,15 +5,19 @@
 
 const { request, uploadFile } = require('../utils/request');
 const cloudStorage = require('../utils/cloud-storage');
+const { appendServeDateQuery, resolveQueueItemRequestId } = require('../utils/rider-queue');
 
 /**
  * 获取今日任务概览
  * @param {string} riderName - 骑手姓名
  * @returns {Promise<Object>} 任务概览数据
  */
-async function getTodaySummary(riderName) {
+async function getTodaySummary(riderName, serveDate) {
   return await request({
-    url: `/api/mobile/rider/summary?riderName=${encodeURIComponent(riderName)}`
+    url: appendServeDateQuery(
+      `/api/mobile/rider/summary?riderName=${encodeURIComponent(riderName)}`,
+      serveDate
+    )
   });
 }
 
@@ -22,9 +26,12 @@ async function getTodaySummary(riderName) {
  * @param {string} riderName - 骑手姓名
  * @returns {Promise<Object>} 队列数据
  */
-async function getQueue(riderName) {
+async function getQueue(riderName, serveDate) {
   return await request({
-    url: `/api/mobile/rider/queue?riderName=${encodeURIComponent(riderName)}`
+    url: appendServeDateQuery(
+      `/api/mobile/rider/queue?riderName=${encodeURIComponent(riderName)}`,
+      serveDate
+    )
   });
 }
 
@@ -34,9 +41,14 @@ async function getQueue(riderName) {
  * @param {number} batchItemId - 批次项ID
  * @returns {Promise<Object>} 订单详情
  */
-async function getOrderDetail(riderName, batchItemId) {
+async function getOrderDetail(riderName, batchItemId, serveDate, mealSlotOrderId) {
+  const requestId = resolveQueueItemRequestId(batchItemId, mealSlotOrderId);
+  let url = `/api/rider/orders/${requestId}?riderName=${encodeURIComponent(riderName)}`;
+  if (Number(mealSlotOrderId) > 0) {
+    url += `&mealSlotOrderId=${encodeURIComponent(mealSlotOrderId)}`;
+  }
   return await request({
-    url: `/api/rider/orders/${batchItemId}?riderName=${encodeURIComponent(riderName)}`
+    url: appendServeDateQuery(url, serveDate)
   });
 }
 

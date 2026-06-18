@@ -214,7 +214,6 @@ export async function updateOrderMerchantRemark(orderId: number, merchantRemark:
 
 export async function updateOrderProfile(orderId: number, payload: {
   mealPeriod: "LUNCH" | "DINNER";
-  deliveryMealPeriod?: "LUNCH" | "DINNER";
   quantity: number;
   deliveryAddress: string;
   merchantRemark: string;
@@ -222,6 +221,21 @@ export async function updateOrderProfile(orderId: number, payload: {
   status?: string;
 }) {
   const response = await http.post<ApiResponse<{ orderId: number; status: string }>>(`/api/admin/orders/${orderId}/profile`, payload);
+  return response.data.data;
+}
+
+export async function applyOrderSpecialDispatch(orderId: number, deliveryMealPeriod: "LUNCH" | "DINNER") {
+  const response = await http.post<ApiResponse<{ orderId: number; status: string; deliveryMealPeriod: string }>>(
+    `/api/admin/orders/${orderId}/special-dispatch`,
+    { deliveryMealPeriod }
+  );
+  return response.data.data;
+}
+
+export async function clearOrderSpecialDispatch(orderId: number) {
+  const response = await http.post<ApiResponse<{ orderId: number; status: string; deliveryMealPeriod: string }>>(
+    `/api/admin/orders/${orderId}/special-dispatch/reset`
+  );
   return response.data.data;
 }
 
@@ -298,6 +312,9 @@ export async function updateCustomerProfile(customerId: number, payload: {
   phone?: string;
   merchantRemark?: string;
   customerStatus?: string;
+  openedAt?: string | null;
+  expiredAt?: string | null;
+  remainingValidityDays?: number | null;
 }) {
   const response = await http.post<ApiResponse<{ customerId: number; status: string }>>(`/api/admin/customers/${customerId}/profile`, payload);
   return response.data.data;
@@ -768,7 +785,6 @@ export async function createManualOrder(payload: {
   customerId: number;
   addressId: number;
   mealPeriod: "LUNCH" | "DINNER";
-  deliveryMealPeriod?: "LUNCH" | "DINNER";
   merchantRemark: string;
   deliveryAddress: string;
   source: string;

@@ -86,7 +86,7 @@ public class DispatchServiceImpl implements DispatchService {
         autoAssignRememberedPendingOrders(mealPeriod);
         int pendingCount = queryCount(
             """
-                SELECT COUNT(*)
+                SELECT COALESCE(SUM(mso.quantity), 0)
                 FROM meal_slot_orders mso
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
                 LEFT JOIN dispatch_assignments da ON da.meal_slot_order_id = mso.id
@@ -103,7 +103,7 @@ public class DispatchServiceImpl implements DispatchService {
         );
         int dispatchingCount = queryCount(
             """
-                SELECT COUNT(*)
+                SELECT COALESCE(SUM(mso.quantity), 0)
                 FROM dispatch_assignments da
                 JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
@@ -210,7 +210,8 @@ public class DispatchServiceImpl implements DispatchService {
                     da.area_code,
                     da.meal_slot_order_id AS order_id,
                     COALESCE(NULLIF(da.sequence_number, 0), dbi.current_sequence, 0) AS sequence_number,
-                    da.status AS delivery_status
+                    da.status AS delivery_status,
+                    mso.quantity
                 FROM dispatch_assignments da
                 JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
@@ -226,7 +227,8 @@ public class DispatchServiceImpl implements DispatchService {
                 rs.getString("area_code"),
                 rs.getLong("order_id"),
                 rs.getInt("sequence_number"),
-                rs.getString("delivery_status")
+                rs.getString("delivery_status"),
+                rs.getInt("quantity")
             ),
             targetDate,
             finalMealPeriod,
@@ -852,7 +854,7 @@ public class DispatchServiceImpl implements DispatchService {
                     rs.getObject("default_rider_profile_id") == null ? null : rs.getLong("default_rider_profile_id"),
                     rs.getString("default_rider_name"),
                     missingRider ? null : currentRiderName,
-                    orders.size(),
+                    orders.stream().mapToInt(item -> Math.max(item.quantity(), 1)).sum(),
                     missingRider,
                     orders,
                     rs.getString("updated_by"),
@@ -2047,7 +2049,23 @@ public class DispatchServiceImpl implements DispatchService {
 
     private void refreshBatchMetrics(long batchId) {
         jdbcTemplate.update(
-            "UPDATE dispatch_batches SET total_count = (SELECT COUNT(*) FROM dispatch_batch_items WHERE batch_id = ?), delivered_count = (SELECT COUNT(*) FROM dispatch_batch_items WHERE batch_id = ? AND item_status = 'DELIVERED') WHERE id = ?",
+            """
+                UPDATE dispatch_batches
+                SET total_count = (
+                        SELECT COALESCE(SUM(mso.quantity), 0)
+                        FROM dispatch_batch_items dbi
+                        JOIN meal_slot_orders mso ON mso.id = dbi.meal_slot_order_id
+                        WHERE dbi.batch_id = ?
+                    ),
+                    delivered_count = (
+                        SELECT COALESCE(SUM(mso.quantity), 0)
+                        FROM dispatch_batch_items dbi
+                        JOIN meal_slot_orders mso ON mso.id = dbi.meal_slot_order_id
+                        WHERE dbi.batch_id = ?
+                          AND dbi.item_status = 'DELIVERED'
+                    )
+                WHERE id = ?
+                """,
             batchId,
             batchId,
             batchId
@@ -2165,7 +2183,8 @@ public class DispatchServiceImpl implements DispatchService {
         String areaCode,
         long orderId,
         int sequenceNumber,
-        String deliveryStatus
+        String deliveryStatus,
+        int quantity
     ) {
     }
 
@@ -2240,9 +2259,10 @@ public class DispatchServiceImpl implements DispatchService {
         }
 
         private void add(RiderProgressRow row) {
-            totalCount++;
+            int quantity = Math.max(row.quantity(), 1);
+            totalCount += quantity;
             if ("DELIVERED".equals(row.deliveryStatus())) {
-                completedCount++;
+                completedCount += quantity;
                 return;
             }
             if (!currentCaptured) {

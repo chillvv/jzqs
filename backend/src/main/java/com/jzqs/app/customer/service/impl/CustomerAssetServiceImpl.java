@@ -178,6 +178,10 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         detail.put("customerStatus", normalizeCustomerStatus(customer.getCustomerStatus()));
         detail.put("merchantRemark", blankToNull(customer.getMerchantRemark()));
         detail.put("priorityCustomer", false);
+        detail.put("remainingMeals", wallet == null ? 0 : remainingMeals(wallet));
+        detail.put("openedAt", formatDateTime(wallet == null ? null : wallet.getOpenedAt()));
+        detail.put("expiredAt", formatDate(wallet == null ? null : wallet.getExpiredAt()));
+        detail.put("remainingValidityDays", remainingValidityDays(wallet == null ? null : wallet.getExpiredAt()));
         detail.put("registeredAt", formatDateTime(customer.getRegisteredAt() != null ? customer.getRegisteredAt() : customer.getCreatedAt()));
         detail.put("lastOrderAt", formatDateTime(customer.getLastOrderAt()));
         detail.put("wallet", wallet == null ? null : Map.of(
@@ -302,6 +306,23 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         }
         if (payload.containsKey("customerStatus")) {
             customer.setCustomerStatus(normalizeCustomerStatus(stringValue(payload.get("customerStatus"))));
+        }
+
+        boolean shouldPatchWalletProfile = payload.containsKey("openedAt")
+            || payload.containsKey("expiredAt")
+            || payload.containsKey("remainingValidityDays");
+        if (shouldPatchWalletProfile) {
+            MealWalletEntity wallet = findOrCreateWallet(customerId);
+            if (payload.containsKey("openedAt")) {
+                wallet.setOpenedAt(parseDateTimeValue(payload.get("openedAt")));
+            }
+            if (payload.containsKey("expiredAt")) {
+                wallet.setExpiredAt(parseDateEndOfDayValue(payload.get("expiredAt")));
+            } else if (payload.containsKey("remainingValidityDays")) {
+                wallet.setExpiredAt(resolveWalletExpiryFromRemainingDays(payload.get("remainingValidityDays")));
+            }
+            wallet.setLastAdjustedAt(LocalDateTime.now());
+            mealWalletMapper.updateById(wallet);
         }
         
         // 处理 defaultUserRemark 更新
@@ -581,11 +602,39 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         return LocalDate.now().plusDays(validityDays).atTime(23, 59, 59);
     }
 
+    private LocalDateTime resolveWalletExpiryFromRemainingDays(Object rawRemainingValidityDays) {
+        String normalized = blankToNull(stringValue(rawRemainingValidityDays));
+        if (normalized == null) {
+            return null;
+        }
+        int remainingDays = Integer.parseInt(normalized);
+        return LocalDate.now().plusDays(remainingDays).atTime(23, 59, 59);
+    }
+
     private int remainingValidityDays(LocalDateTime expiredAt) {
         if (expiredAt == null) {
             return 0;
         }
         return (int) ChronoUnit.DAYS.between(LocalDate.now(), expiredAt.toLocalDate());
+    }
+
+    private LocalDateTime parseDateTimeValue(Object rawValue) {
+        String normalized = blankToNull(stringValue(rawValue));
+        if (normalized == null) {
+            return null;
+        }
+        if (normalized.length() == 16) {
+            normalized = normalized + ":00";
+        }
+        return LocalDateTime.parse(normalized);
+    }
+
+    private LocalDateTime parseDateEndOfDayValue(Object rawValue) {
+        String normalized = blankToNull(stringValue(rawValue));
+        if (normalized == null) {
+            return null;
+        }
+        return LocalDate.parse(normalized, DATE_FORMATTER).atTime(23, 59, 59);
     }
 
     private PackageAlert evaluatePackageAlert(MealWalletEntity wallet, int remainingMeals, PackageReminderSettings settings) {

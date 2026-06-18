@@ -1,7 +1,21 @@
-const { request } = require('../../utils/request');
 const { buildTodayCards } = require('../../utils/today-helpers');
-const { formatCurrentDateMMDD } = require('../../utils/formatter');
+const taskService = require('../../services/task.service');
+const { createWorkbenchDateOptions, formatDateYMD } = require('../../utils/formatter');
 const realtime = require('../../utils/realtime');
+
+function buildWorkbenchDateState(selectedDate) {
+  const dateOptions = createWorkbenchDateOptions().map((item) => ({
+    ...item,
+    active: item.value === selectedDate
+  }));
+  const activeOption = dateOptions.find((item) => item.active) || dateOptions[1];
+  return {
+    selectedDate: activeOption.value,
+    currentDateLabel: activeOption.shortLabel,
+    currentDateTitle: activeOption.label,
+    dateOptions
+  };
+}
 
 Page({
   data: {
@@ -16,21 +30,28 @@ Page({
     },
     cards: [],
     refreshInterval: null,
-    currentDateLabel: ''
+    currentDateLabel: '',
+    currentDateTitle: '今天',
+    selectedDate: '',
+    showDatePicker: false,
+    dateOptions: []
   },
   async onShow() {
     const app = getApp();
-    
-    // 检查日期是否变更，如变更直接清空缓存重载
-    const todayLabel = formatCurrentDateMMDD();
-    if (this.data.currentDateLabel && this.data.currentDateLabel !== todayLabel) {
-      console.log('日期已变更，清空页面数据');
-      this.setData({ cards: [], summary: { totalCount: 0, deliveredCount: 0, remainingCount: 0 } });
-    }
+    const todayDate = formatDateYMD();
+    app.resetWorkbenchDate();
+    const nextDateState = buildWorkbenchDateState(todayDate);
     this.setData({
       statusBarHeight: app.globalData.statusBarHeight,
       navBarHeight: app.globalData.navBarHeight,
-      currentDateLabel: todayLabel
+      cards: [],
+      summary: {
+        totalCount: 0,
+        deliveredCount: 0,
+        remainingCount: 0
+      },
+      ...nextDateState,
+      showDatePicker: false
     });
     await app.waitForRiderAuth();
     const viewState = app.getRiderViewState();
@@ -58,12 +79,15 @@ Page({
   },
 
   _syncCurrentDateLabel() {
-    const todayLabel = formatCurrentDateMMDD();
-    if (this.data.currentDateLabel === todayLabel) {
+    const todayDate = formatDateYMD();
+    if (this.data.selectedDate === todayDate) {
       return false;
     }
+    const app = getApp();
+    app.resetWorkbenchDate();
     this.setData({
-      currentDateLabel: todayLabel,
+      ...buildWorkbenchDateState(todayDate),
+      showDatePicker: false,
       cards: [],
       summary: {
         totalCount: 0,
@@ -118,6 +142,7 @@ Page({
   async loadSummary() {
     const app = getApp();
     const riderName = app.getActiveRiderName();
+    const serveDate = this.data.selectedDate || formatDateYMD();
     if (!riderName) {
       wx.showToast({ title: '骑手信息未就绪', icon: 'none' });
       wx.stopPullDownRefresh();
@@ -125,7 +150,7 @@ Page({
     }
     this.setData({ loading: true });
     try {
-      const summary = await request({ url: `/api/mobile/rider/summary?riderName=${encodeURIComponent(riderName)}` });
+      const summary = await taskService.getTodaySummary(riderName, serveDate);
       const cards = buildTodayCards(summary);
       app.globalData.riderProfile.riderName = summary.riderName || riderName;
       app.globalData.riderProfile.completedCount = summary.deliveredCount || 0;
@@ -137,12 +162,39 @@ Page({
       wx.stopPullDownRefresh();
     }
   },
+  openDatePicker() {
+    this.setData({ showDatePicker: true });
+  },
+  closeDatePicker() {
+    this.setData({ showDatePicker: false });
+  },
+  async selectWorkbenchDate(e) {
+    const { date } = e.currentTarget.dataset;
+    if (!date || date === this.data.selectedDate) {
+      this.closeDatePicker();
+      return;
+    }
+    const app = getApp();
+    app.setWorkbenchDate(date);
+    this.setData({
+      ...buildWorkbenchDateState(date),
+      showDatePicker: false,
+      cards: [],
+      summary: {
+        totalCount: 0,
+        deliveredCount: 0,
+        remainingCount: 0
+      }
+    });
+    await this.loadSummary();
+  },
   openQueue() {
     const app = getApp();
     if (app.getRiderViewState() !== 'active') {
       wx.switchTab({ url: '/pages/profile/index' });
       return;
     }
+    app.setWorkbenchDate(this.data.selectedDate || formatDateYMD());
     wx.switchTab({ url: '/pages/queue/index' });
   },
 

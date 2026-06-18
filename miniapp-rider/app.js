@@ -17,7 +17,8 @@ App({
     riderOpenid: '',
     riderStatus: 'UNAUTHORIZED',
     riderName: '',
-    riderProfile: null
+    riderProfile: null,
+    riderWorkbenchDate: ''
   },
 
   onLaunch() {
@@ -120,11 +121,23 @@ App({
   },
 
   openWorkbench() {
-    wx.reLaunch({ url: '/pages/today/index' });
+    wx.reLaunch({ url: '/pages/queue/index' });
   },
 
   getActiveRiderName() {
     return auth.getAuthState().riderName;
+  },
+
+  getWorkbenchDate() {
+    return this.globalData.riderWorkbenchDate || '';
+  },
+
+  setWorkbenchDate(date) {
+    this.globalData.riderWorkbenchDate = String(date || '').trim();
+  },
+
+  resetWorkbenchDate() {
+    this.globalData.riderWorkbenchDate = '';
   },
 
   async refreshRiderProfile() {

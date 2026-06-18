@@ -14,7 +14,10 @@
 <view class="container">
   <view class="section-title">
     <text>今日任务</text>
-    <text class="date-badge">{{currentDateLabel}}</text>
+    <view class="date-badge" bindtap="openDatePicker">
+      <text>{{currentDateTitle}} {{currentDateLabel}}</text>
+      <text class="date-badge-arrow">▼</text>
+    </view>
   </view>
 
   <view wx:if="{{viewState === 'guest'}}" class="card guest-card">
@@ -41,7 +44,7 @@
     </view>
     <view class="stats-grid">
       <view class="stat-cell">
-        <view class="stat-label">总单数</view>
+        <view class="stat-label">总份数</view>
         <view class="stat-value">{{summary.totalCount || 0}}</view>
       </view>
       <view class="stat-cell">
@@ -49,7 +52,7 @@
         <view class="stat-value">{{summary.deliveredCount || 0}}</view>
       </view>
       <view class="stat-cell">
-        <view class="stat-label">剩余单</view>
+        <view class="stat-label">剩余份数</view>
         <view class="stat-value">{{summary.remainingCount || 0}}</view>
       </view>
     </view>
@@ -60,7 +63,7 @@
       <view class="card-title">{{item.mealLabel}}批次</view>
       <text class="tag tag-blue">{{item.batchStatusLabel}}</text>
     </view>
-    <view class="muted" style="margin-top: 8rpx;">总 {{item.totalCount}} 单 · 已送 {{item.deliveredCount}} 单 · 剩余 {{item.remainingCount}} 单</view>
+    <view class="muted" style="margin-top: 8rpx;">总 {{item.totalCount}} 份 · 已送 {{item.deliveredCount}} 份 · 剩余 {{item.remainingCount}} 份</view>
     <view class="muted" style="margin-top: 8rpx;">当前第 {{item.currentSequence}} 站：{{item.currentCustomerName}}</view>
     <view class="muted" style="margin-top: 8rpx;">下一单：{{item.nextCustomerName}}</view>
     <button class="primary-btn" style="margin-top: 20rpx;" bindtap="openQueue">进入队列</button>
@@ -70,4 +73,24 @@
     今日暂无配送批次
   </view>
   </block>
+</view>
+
+<view wx:if="{{showDatePicker}}" class="date-picker-mask" bindtap="closeDatePicker"></view>
+<view wx:if="{{showDatePicker}}" class="date-picker-sheet">
+  <view class="date-picker-sheet__header">
+    <text class="date-picker-sheet__title">切换日期</text>
+    <text class="date-picker-sheet__subtitle">仅支持昨天、今天、明天</text>
+  </view>
+  <view class="date-picker-options">
+    <view
+      wx:for="{{dateOptions}}"
+      wx:key="value"
+      class="date-picker-option {{item.active ? 'date-picker-option--active' : ''}}"
+      data-date="{{item.value}}"
+      bindtap="selectWorkbenchDate"
+    >
+      <text class="date-picker-option__label">{{item.label}}</text>
+      <text class="date-picker-option__value">{{item.shortLabel}}</text>
+    </view>
+  </view>
 </view>

@@ -1071,6 +1071,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
     }
 
     @Override
+    @Deprecated
     @Transactional
     public RiderLoginResponse riderMixedLogin(String phone, String name, String openid) {
         String finalPhone = requirePhone(phone);

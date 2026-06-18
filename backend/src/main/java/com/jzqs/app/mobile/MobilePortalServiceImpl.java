@@ -1081,6 +1081,56 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         return "-".equals(normalized) ? "" : normalized;
     }
 
+    private Map<Long, OrderNoteProjection> loadOrderNoteProjections(List<Long> orderIds) {
+        if (orderIds == null || orderIds.isEmpty()) {
+            return Map.of();
+        }
+        String placeholders = String.join(",", orderIds.stream().map(id -> "?").toList());
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+            """
+                SELECT meal_slot_order_id, note_type, content
+                FROM order_notes
+                WHERE effective_status = 'ACTIVE'
+                  AND meal_slot_order_id IN (
+            """
+                + placeholders
+                + """
+                  )
+                ORDER BY meal_slot_order_id, created_at, id
+                """,
+            orderIds.toArray()
+        );
+        Map<Long, RiderOrderNoteAccumulator> accumulators = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            long orderId = ((Number) row.get("meal_slot_order_id")).longValue();
+            RiderOrderNoteAccumulator accumulator = accumulators.computeIfAbsent(orderId, ignored -> new RiderOrderNoteAccumulator());
+            accumulator.add(safeString(row.get("note_type")), safeString(row.get("content")));
+        }
+        Map<Long, OrderNoteProjection> projections = new LinkedHashMap<>();
+        for (Long orderId : orderIds) {
+            RiderOrderNoteAccumulator accumulator = accumulators.get(orderId);
+            if (accumulator != null) {
+                projections.put(orderId, accumulator.toProjection());
+            }
+        }
+        return projections;
+    }
+
+    private String resolveProjectedUserNote(OrderNoteProjection projection, String legacyValue) {
+        if (projection != null && projection.hasOrderNotes()) {
+            return projection.userNote().isBlank() ? "-" : projection.userNote();
+        }
+        String normalized = normalizeSpecialValue(legacyValue);
+        return normalized.isBlank() ? "-" : normalized;
+    }
+
+    private String resolveProjectedAdminNote(OrderNoteProjection projection, String legacyValue) {
+        if (projection != null && projection.hasOrderNotes()) {
+            return projection.adminNote();
+        }
+        return normalizeSpecialValue(legacyValue);
+    }
+
     public PageResponse<RiderTaskItemResponse> riderTasks(String riderName) {
         LocalDate today = LocalDate.now();
         List<RiderTaskItemResponse> items = jdbcTemplate.query("""
@@ -1130,8 +1180,8 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         return PageResponse.of(items, 1, 20, items.size());
     }
 
-    public RiderBatchSummaryResponse riderSummary(String riderName) {
-        LocalDate today = LocalDate.now();
+    public RiderBatchSummaryResponse riderSummary(String riderName, String serveDate) {
+        LocalDate targetDate = resolveServeDateOrToday(serveDate);
         List<RiderBatchSummaryResponse.BatchCardResponse> cards = jdbcTemplate.query("""
             SELECT
                 db.id AS batch_id,
@@ -1171,7 +1221,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             rs.getInt("current_sequence"),
             rs.getString("current_customer_name"),
             rs.getString("next_customer_name")
-        ), riderName, today);
+        ), riderName, targetDate);
         RiderBatchSummaryResponse.BatchCardResponse lunch = cards.stream().filter(item -> "LUNCH".equals(item.mealPeriod())).findFirst().orElse(null);
         RiderBatchSummaryResponse.BatchCardResponse dinner = cards.stream().filter(item -> "DINNER".equals(item.mealPeriod())).findFirst().orElse(null);
         int totalCount = cards.stream().mapToInt(RiderBatchSummaryResponse.BatchCardResponse::totalCount).sum();
@@ -1186,15 +1236,16 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         );
     }
 
-    public PageResponse<RiderQueueItemResponse> riderQueue(String riderName) {
-        LocalDate today = LocalDate.now();
-        List<RiderQueueItemResponse> items = jdbcTemplate.query("""
+    public PageResponse<RiderQueueItemResponse> riderQueue(String riderName, String serveDate) {
+        LocalDate targetDate = resolveServeDateOrToday(serveDate);
+        ensureRiderQueueMaterialized(riderName, targetDate);
+        List<RiderQueueRow> rows = jdbcTemplate.query("""
             SELECT
-                dbi.id AS batch_item_id,
-                db.id AS batch_id,
+                COALESCE(dbi.id, 0) AS batch_item_id,
+                COALESCE(db.id, 0) AS batch_id,
                 mso.id AS meal_slot_order_id,
                 mso.address_id AS address_id,
-                dbi.current_sequence,
+                COALESCE(NULLIF(dbi.current_sequence, 0), NULLIF(da.sequence_number, 0), 0) AS current_sequence,
                 c.name AS customer_name,
                 c.phone AS customer_phone,
                 ca.address_line AS delivery_address,
@@ -1209,32 +1260,36 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                       OR TRIM(COALESCE(mso.merchant_remark, '')) <> ''
                     THEN TRUE ELSE FALSE
                 END AS is_special_order,
-                dbi.item_status,
+                COALESCE(
+                    dbi.item_status,
+                    CASE
+                        WHEN da.status = 'DELIVERED' THEN 'DELIVERED'
+                        WHEN da.status = 'DEFERRED' THEN 'DEFERRED'
+                        ELSE 'PENDING'
+                    END
+                ) AS item_status,
                 CASE WHEN dr.id IS NULL THEN 'PENDING' ELSE 'UPLOADED' END AS receipt_status,
                 COALESCE(dr.receipt_url, '') AS receipt_url,
                 COALESCE(dr.receipt_note, '') AS receipt_note
-            FROM dispatch_batch_items dbi
-            JOIN dispatch_batches db ON db.id = dbi.batch_id
-            JOIN rider_profiles rp ON rp.id = db.rider_profile_id
-            JOIN meal_slot_orders mso ON mso.id = dbi.meal_slot_order_id
+            FROM dispatch_assignments da
+            JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
             JOIN daily_orders doo ON doo.id = mso.daily_order_id
             JOIN customers c ON c.id = doo.customer_id
             JOIN customer_addresses ca ON ca.id = mso.address_id
+            LEFT JOIN dispatch_batch_items dbi ON dbi.meal_slot_order_id = mso.id
+            LEFT JOIN dispatch_batches db ON db.id = dbi.batch_id
             LEFT JOIN menu_week_items ms ON ms.serve_date = doo.serve_date
                 AND ms.meal_period = mso.meal_period
                 AND ms.slot_status = 'ACTIVE'
                 AND EXISTS (SELECT 1 FROM menu_weeks mw2 WHERE mw2.id = ms.week_id AND mw2.status = 'PUBLISHED')
             LEFT JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
-            WHERE rp.rider_name = ?
-              AND db.serve_date = ?
+            WHERE da.rider_name = ?
               AND doo.serve_date = ?
-            ORDER BY CASE WHEN COALESCE(mso.delivery_meal_period, mso.meal_period) = 'LUNCH' THEN 1 ELSE 2 END, dbi.current_sequence ASC
+            ORDER BY CASE WHEN COALESCE(mso.delivery_meal_period, mso.meal_period) = 'LUNCH' THEN 1 ELSE 2 END,
+                     COALESCE(NULLIF(dbi.current_sequence, 0), NULLIF(da.sequence_number, 0), 2147483647) ASC,
+                     da.id ASC
             """, (rs, rowNum) -> {
-            String note = rs.getString("note");
-            String merchantRemark = rs.getString("merchant_remark");
-            List<String> attentionSources = buildAttentionSources(note, merchantRemark);
-            boolean hasAttentionMark = !attentionSources.isEmpty();
-            return new RiderQueueItemResponse(
+            return new RiderQueueRow(
                 rs.getLong("batch_item_id"),
                 rs.getLong("batch_id"),
                 rs.getLong("meal_slot_order_id"),
@@ -1248,31 +1303,250 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 rs.getString("delivery_meal_period"),
                 rs.getString("meal_name"),
                 rs.getInt("quantity"),
-                note,
-                merchantRemark,
-                hasAttentionMark,
-                attentionSources,
-                buildAttentionLabel(attentionSources),
-                hasAttentionMark,
-                buildSpecialSummary(note, merchantRemark),
+                rs.getString("note"),
+                rs.getString("merchant_remark"),
                 rs.getString("item_status"),
                 rs.getString("receipt_status"),
                 rs.getString("receipt_url"),
                 rs.getString("receipt_note")
             );
-        }, riderName, today, today);
+        }, riderName, targetDate);
+        Map<Long, OrderNoteProjection> projections = loadOrderNoteProjections(rows.stream().map(RiderQueueRow::mealSlotOrderId).toList());
+        List<RiderQueueItemResponse> items = rows.stream()
+            .map(row -> buildRiderQueueItemResponse(row, projections.get(row.mealSlotOrderId())))
+            .toList();
         return PageResponse.of(items, 1, 50, items.size());
     }
 
-    public RiderQueueItemResponse riderQueueItem(long batchItemId, String riderName) {
-        LocalDate today = LocalDate.now();
-        List<RiderQueueItemResponse> results = jdbcTemplate.query("""
+    private RiderQueueItemResponse buildRiderQueueItemResponse(RiderQueueRow row, OrderNoteProjection projection) {
+        String note = resolveProjectedUserNote(projection, row.note());
+        String merchantRemark = resolveProjectedAdminNote(projection, row.merchantRemark());
+        List<String> attentionSources = buildAttentionSources(note, merchantRemark);
+        boolean hasAttentionMark = !attentionSources.isEmpty();
+        return new RiderQueueItemResponse(
+            row.batchItemId(),
+            row.batchId(),
+            row.mealSlotOrderId(),
+            row.addressId(),
+            row.currentSequence(),
+            row.customerName(),
+            row.customerPhone(),
+            row.deliveryAddress(),
+            row.deliveryMealPeriod(),
+            row.productionMealPeriod(),
+            row.deliveryMealPeriod(),
+            row.mealName(),
+            row.quantity(),
+            note,
+            merchantRemark,
+            hasAttentionMark,
+            attentionSources,
+            buildAttentionLabel(attentionSources),
+            hasAttentionMark,
+            buildSpecialSummary(note, merchantRemark),
+            row.itemStatus(),
+            row.receiptStatus(),
+            row.receiptUrl(),
+            row.receiptNote()
+        );
+    }
+
+    private LocalDate resolveServeDateOrToday(String serveDate) {
+        if (serveDate == null) {
+            return LocalDate.now();
+        }
+        String normalized = serveDate.trim();
+        if (normalized.isEmpty()
+            || "undefined".equalsIgnoreCase(normalized)
+            || "null".equalsIgnoreCase(normalized)) {
+            return LocalDate.now();
+        }
+        return LocalDate.parse(normalized);
+    }
+
+    private void ensureRiderQueueMaterialized(String riderName, LocalDate serveDate) {
+        if (isBlank(riderName) || serveDate == null) {
+            return;
+        }
+        List<Map<String, Object>> assignments = jdbcTemplate.queryForList("""
             SELECT
-                dbi.id AS batch_item_id,
-                db.id AS batch_id,
+                da.meal_slot_order_id,
+                da.rider_profile_id,
+                da.area_code,
+                da.status,
+                da.sequence_number
+            FROM dispatch_assignments da
+            JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
+            JOIN daily_orders doo ON doo.id = mso.daily_order_id
+            WHERE da.rider_name = ?
+              AND doo.serve_date = ?
+            """, riderName, serveDate);
+        for (Map<String, Object> assignment : assignments) {
+            Number orderId = (Number) assignment.get("meal_slot_order_id");
+            Number riderProfileId = (Number) assignment.get("rider_profile_id");
+            if (orderId == null || riderProfileId == null) {
+                continue;
+            }
+            ensureQueueBatchItem(
+                orderId.longValue(),
+                riderProfileId.longValue(),
+                (String) assignment.get("area_code"),
+                (String) assignment.get("status"),
+                (Number) assignment.get("sequence_number")
+            );
+        }
+    }
+
+    private void ensureQueueBatchItem(
+        long orderId,
+        long riderProfileId,
+        String areaCode,
+        String assignmentStatus,
+        Number assignmentSequenceNumber
+    ) {
+        Map<String, Object> orderContext = jdbcTemplate.queryForMap("""
+            SELECT
+                doo.serve_date AS serve_date,
+                COALESCE(mso.delivery_meal_period, mso.meal_period) AS meal_period
+            FROM meal_slot_orders mso
+            JOIN daily_orders doo ON doo.id = mso.daily_order_id
+            WHERE mso.id = ?
+            """, orderId);
+        LocalDate serveDate = toLocalDate(orderContext.get("serve_date"));
+        String mealPeriod = (String) orderContext.get("meal_period");
+        long batchId = ensureQueueBatch(orderId, riderProfileId, areaCode, serveDate, mealPeriod);
+        int desiredSequence = assignmentSequenceNumber != null && assignmentSequenceNumber.intValue() > 0
+            ? assignmentSequenceNumber.intValue()
+            : nextBatchSequence(batchId);
+        String desiredItemStatus = mapBatchItemStatus(assignmentStatus);
+
+        List<Map<String, Object>> existingItems = jdbcTemplate.queryForList("""
+            SELECT id, batch_id, current_sequence, item_status
+            FROM dispatch_batch_items
+            WHERE meal_slot_order_id = ?
+            ORDER BY id ASC
+            LIMIT 1
+            """, orderId);
+        Long previousBatchId = null;
+        if (existingItems.isEmpty()) {
+            jdbcTemplate.update("""
+                INSERT INTO dispatch_batch_items (
+                    batch_id,
+                    meal_slot_order_id,
+                    current_sequence,
+                    suggested_sequence,
+                    item_status,
+                    manually_adjusted
+                ) VALUES (?, ?, ?, ?, ?, FALSE)
+                """, batchId, orderId, desiredSequence, desiredSequence, desiredItemStatus);
+        } else {
+            Map<String, Object> existing = existingItems.get(0);
+            long batchItemId = ((Number) existing.get("id")).longValue();
+            long existingBatchId = ((Number) existing.get("batch_id")).longValue();
+            int currentSequence = ((Number) existing.get("current_sequence")).intValue();
+            String currentItemStatus = (String) existing.get("item_status");
+            int finalSequence = assignmentSequenceNumber != null && assignmentSequenceNumber.intValue() > 0
+                ? assignmentSequenceNumber.intValue()
+                : currentSequence;
+            if (existingBatchId != batchId) {
+                previousBatchId = existingBatchId;
+            }
+            if (existingBatchId != batchId
+                || currentSequence != finalSequence
+                || !desiredItemStatus.equals(currentItemStatus)) {
+                jdbcTemplate.update("""
+                    UPDATE dispatch_batch_items
+                    SET batch_id = ?,
+                        current_sequence = ?,
+                        suggested_sequence = ?,
+                        item_status = ?
+                    WHERE id = ?
+                    """, batchId, finalSequence, finalSequence, desiredItemStatus, batchItemId);
+            }
+        }
+        refreshRiderBatchState(batchId);
+        if (previousBatchId != null && previousBatchId.longValue() != batchId) {
+            refreshRiderBatchState(previousBatchId);
+        }
+    }
+
+    private long ensureQueueBatch(long orderId, long riderProfileId, String areaCode, LocalDate serveDate, String mealPeriod) {
+        List<Long> batchIds = jdbcTemplate.query("""
+            SELECT id
+            FROM dispatch_batches
+            WHERE serve_date = ?
+              AND meal_period = ?
+              AND rider_profile_id = ?
+              AND area_code <=> ?
+            ORDER BY id ASC
+            LIMIT 1
+            """, (rs, rowNum) -> rs.getLong("id"), serveDate, mealPeriod, riderProfileId, areaCode);
+        if (!batchIds.isEmpty()) {
+            return batchIds.get(0);
+        }
+        long batchId = insertAndReturnId(
+            """
+                INSERT INTO dispatch_batches (
+                    serve_date,
+                    meal_period,
+                    rider_profile_id,
+                    area_code,
+                    batch_status,
+                    total_count,
+                    delivered_count,
+                    current_sequence
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+            serveDate,
+            mealPeriod,
+            riderProfileId,
+            areaCode,
+            "READY",
+            0,
+            0,
+            1
+        );
+        jdbcTemplate.update(
+            "UPDATE dispatch_assignments SET rider_profile_id = ?, area_code = ? WHERE meal_slot_order_id = ?",
+            riderProfileId,
+            areaCode,
+            orderId
+        );
+        return batchId;
+    }
+
+    private int nextBatchSequence(long batchId) {
+        Integer sequence = jdbcTemplate.queryForObject(
+            "SELECT COALESCE(MAX(current_sequence), 0) + 1 FROM dispatch_batch_items WHERE batch_id = ?",
+            Integer.class,
+            batchId
+        );
+        return sequence == null ? 1 : sequence;
+    }
+
+    private String mapBatchItemStatus(String assignmentStatus) {
+        if ("DELIVERED".equals(assignmentStatus)) {
+            return "DELIVERED";
+        }
+        if ("DEFERRED".equals(assignmentStatus)) {
+            return "DEFERRED";
+        }
+        return "PENDING";
+    }
+
+    public RiderQueueItemResponse riderQueueItem(long queueItemId, String riderName, String serveDate, Long mealSlotOrderId) {
+        LocalDate targetDate = resolveServeDateOrToday(serveDate);
+        ensureRiderQueueMaterialized(riderName, targetDate);
+        long resolvedMealSlotOrderId = mealSlotOrderId == null ? 0L : mealSlotOrderId.longValue();
+        boolean shouldUseMealSlotOrderFallback = resolvedMealSlotOrderId > 0;
+        String detailSql = shouldUseMealSlotOrderFallback
+            ? """
+            SELECT
+                COALESCE(dbi.id, 0) AS batch_item_id,
+                COALESCE(db.id, 0) AS batch_id,
                 mso.id AS meal_slot_order_id,
                 mso.address_id AS address_id,
-                dbi.current_sequence,
+                COALESCE(NULLIF(dbi.current_sequence, 0), NULLIF(da.sequence_number, 0), 0) AS current_sequence,
                 c.name AS customer_name,
                 c.phone AS customer_phone,
                 ca.address_line AS delivery_address,
@@ -1287,32 +1561,83 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                       OR TRIM(COALESCE(mso.merchant_remark, '')) <> ''
                     THEN TRUE ELSE FALSE
                 END AS is_special_order,
-                dbi.item_status,
+                COALESCE(
+                    dbi.item_status,
+                    CASE
+                        WHEN da.status = 'DELIVERED' THEN 'DELIVERED'
+                        WHEN da.status = 'DEFERRED' THEN 'DEFERRED'
+                        ELSE 'PENDING'
+                    END
+                ) AS item_status,
                 CASE WHEN dr.id IS NULL THEN 'PENDING' ELSE 'UPLOADED' END AS receipt_status,
                 COALESCE(dr.receipt_url, '') AS receipt_url,
                 COALESCE(dr.receipt_note, '') AS receipt_note
-            FROM dispatch_batch_items dbi
-            JOIN dispatch_batches db ON db.id = dbi.batch_id
-            JOIN rider_profiles rp ON rp.id = db.rider_profile_id
-            JOIN meal_slot_orders mso ON mso.id = dbi.meal_slot_order_id
+            FROM dispatch_assignments da
+            JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
             JOIN daily_orders doo ON doo.id = mso.daily_order_id
             JOIN customers c ON c.id = doo.customer_id
             JOIN customer_addresses ca ON ca.id = mso.address_id
+            LEFT JOIN dispatch_batch_items dbi ON dbi.meal_slot_order_id = mso.id
+            LEFT JOIN dispatch_batches db ON db.id = dbi.batch_id
+            LEFT JOIN menu_week_items ms ON ms.serve_date = doo.serve_date
+                AND ms.meal_period = mso.meal_period
+                AND ms.slot_status = 'ACTIVE'
+                AND EXISTS (SELECT 1 FROM menu_weeks mw2 WHERE mw2.id = ms.week_id AND mw2.status = 'PUBLISHED')
+            LEFT JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
+            WHERE mso.id = ?
+              AND da.rider_name = ?
+              AND doo.serve_date = ?
+            """
+            : """
+            SELECT
+                COALESCE(dbi.id, 0) AS batch_item_id,
+                COALESCE(db.id, 0) AS batch_id,
+                mso.id AS meal_slot_order_id,
+                mso.address_id AS address_id,
+                COALESCE(NULLIF(dbi.current_sequence, 0), NULLIF(da.sequence_number, 0), 0) AS current_sequence,
+                c.name AS customer_name,
+                c.phone AS customer_phone,
+                ca.address_line AS delivery_address,
+                mso.meal_period AS production_meal_period,
+                COALESCE(mso.delivery_meal_period, mso.meal_period) AS delivery_meal_period,
+                COALESCE(ms.meal_name, CASE WHEN mso.meal_period = 'LUNCH' THEN '待配置午餐' ELSE '待配置晚餐' END) AS meal_name,
+                mso.quantity,
+                COALESCE(mso.user_note, mso.note, '-') AS note,
+                COALESCE(mso.merchant_remark, '') AS merchant_remark,
+                CASE
+                    WHEN TRIM(COALESCE(mso.user_note, mso.note, '')) <> ''
+                      OR TRIM(COALESCE(mso.merchant_remark, '')) <> ''
+                    THEN TRUE ELSE FALSE
+                END AS is_special_order,
+                COALESCE(
+                    dbi.item_status,
+                    CASE
+                        WHEN da.status = 'DELIVERED' THEN 'DELIVERED'
+                        WHEN da.status = 'DEFERRED' THEN 'DEFERRED'
+                        ELSE 'PENDING'
+                    END
+                ) AS item_status,
+                CASE WHEN dr.id IS NULL THEN 'PENDING' ELSE 'UPLOADED' END AS receipt_status,
+                COALESCE(dr.receipt_url, '') AS receipt_url,
+                COALESCE(dr.receipt_note, '') AS receipt_note
+            FROM dispatch_assignments da
+            JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
+            JOIN daily_orders doo ON doo.id = mso.daily_order_id
+            JOIN customers c ON c.id = doo.customer_id
+            JOIN customer_addresses ca ON ca.id = mso.address_id
+            LEFT JOIN dispatch_batch_items dbi ON dbi.meal_slot_order_id = mso.id
+            LEFT JOIN dispatch_batches db ON db.id = dbi.batch_id
             LEFT JOIN menu_week_items ms ON ms.serve_date = doo.serve_date
                 AND ms.meal_period = mso.meal_period
                 AND ms.slot_status = 'ACTIVE'
                 AND EXISTS (SELECT 1 FROM menu_weeks mw2 WHERE mw2.id = ms.week_id AND mw2.status = 'PUBLISHED')
             LEFT JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
             WHERE dbi.id = ?
-              AND rp.rider_name = ?
-              AND db.serve_date = ?
+              AND da.rider_name = ?
               AND doo.serve_date = ?
-            """, (rs, rowNum) -> {
-            String note = rs.getString("note");
-            String merchantRemark = rs.getString("merchant_remark");
-            List<String> attentionSources = buildAttentionSources(note, merchantRemark);
-            boolean hasAttentionMark = !attentionSources.isEmpty();
-            return new RiderQueueItemResponse(
+            """;
+        List<RiderQueueRow> results = jdbcTemplate.query(detailSql, (rs, rowNum) -> {
+            return new RiderQueueRow(
                 rs.getLong("batch_item_id"),
                 rs.getLong("batch_id"),
                 rs.getLong("meal_slot_order_id"),
@@ -1326,20 +1651,20 @@ public class MobilePortalServiceImpl implements MobilePortalService {
                 rs.getString("delivery_meal_period"),
                 rs.getString("meal_name"),
                 rs.getInt("quantity"),
-                note,
-                merchantRemark,
-                hasAttentionMark,
-                attentionSources,
-                buildAttentionLabel(attentionSources),
-                hasAttentionMark,
-                buildSpecialSummary(note, merchantRemark),
+                rs.getString("note"),
+                rs.getString("merchant_remark"),
                 rs.getString("item_status"),
                 rs.getString("receipt_status"),
                 rs.getString("receipt_url"),
                 rs.getString("receipt_note")
             );
-        }, batchItemId, riderName, today, today);
-        return results.isEmpty() ? null : results.get(0);
+        }, shouldUseMealSlotOrderFallback ? resolvedMealSlotOrderId : queueItemId, riderName, targetDate);
+        if (results.isEmpty()) {
+            return null;
+        }
+        RiderQueueRow row = results.get(0);
+        OrderNoteProjection projection = loadOrderNoteProjections(List.of(row.mealSlotOrderId())).get(row.mealSlotOrderId());
+        return buildRiderQueueItemResponse(row, projection);
     }
 
     public RiderAddressReferenceResponse riderAddressReference(String riderName, long addressId) {
@@ -1818,12 +2143,23 @@ public class MobilePortalServiceImpl implements MobilePortalService {
             jdbcTemplate.update("UPDATE dispatch_batch_items SET item_status = 'CURRENT' WHERE id = ?", currentIds.get(0));
         }
         Integer deliveredCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM dispatch_batch_items WHERE batch_id = ? AND item_status = 'DELIVERED'",
+            """
+                SELECT COALESCE(SUM(mso.quantity), 0)
+                FROM dispatch_batch_items dbi
+                JOIN meal_slot_orders mso ON mso.id = dbi.meal_slot_order_id
+                WHERE dbi.batch_id = ?
+                  AND dbi.item_status = 'DELIVERED'
+                """,
             Integer.class,
             batchId
         );
         Integer totalCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM dispatch_batch_items WHERE batch_id = ?",
+            """
+                SELECT COALESCE(SUM(mso.quantity), 0)
+                FROM dispatch_batch_items dbi
+                JOIN meal_slot_orders mso ON mso.id = dbi.meal_slot_order_id
+                WHERE dbi.batch_id = ?
+                """,
             Integer.class,
             batchId
         );
@@ -2186,6 +2522,56 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     ) {
     }
 
+    private record RiderQueueRow(
+        long batchItemId,
+        long batchId,
+        long mealSlotOrderId,
+        long addressId,
+        int currentSequence,
+        String customerName,
+        String customerPhone,
+        String deliveryAddress,
+        String mealPeriod,
+        String productionMealPeriod,
+        String deliveryMealPeriod,
+        String mealName,
+        int quantity,
+        String note,
+        String merchantRemark,
+        String itemStatus,
+        String receiptStatus,
+        String receiptUrl,
+        String receiptNote
+    ) {
+    }
+
+    private record OrderNoteProjection(String userNote, String adminNote, boolean hasOrderNotes) {
+    }
+
+    private static final class RiderOrderNoteAccumulator {
+        private final List<String> userNotes = new ArrayList<>();
+        private final List<String> merchantNotes = new ArrayList<>();
+
+        private void add(String noteType, String content) {
+            String normalized = content == null ? "" : content.trim();
+            if (normalized.isBlank() || "-".equals(normalized)) {
+                return;
+            }
+            List<String> target = "MERCHANT".equals(noteType) ? merchantNotes : userNotes;
+            if (!target.contains(normalized)) {
+                target.add(normalized);
+            }
+        }
+
+        private OrderNoteProjection toProjection() {
+            return new OrderNoteProjection(
+                String.join(" / ", userNotes),
+                String.join(" / ", merchantNotes),
+                true
+            );
+        }
+    }
+
     private record ContactSnapshot(
         String name,
         String phone
@@ -2407,6 +2793,16 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         } catch (Exception ex) {
             return fallback;
         }
+    }
+
+    private LocalDate toLocalDate(Object value) {
+        if (value instanceof LocalDate localDate) {
+            return localDate;
+        }
+        if (value instanceof java.sql.Date sqlDate) {
+            return sqlDate.toLocalDate();
+        }
+        return LocalDate.parse(String.valueOf(value));
     }
 
     private String formatDate(LocalDateTime value) {

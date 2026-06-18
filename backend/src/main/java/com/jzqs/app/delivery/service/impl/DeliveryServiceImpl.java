@@ -133,22 +133,49 @@ public class DeliveryServiceImpl implements DeliveryService {
         );
         jdbcTemplate.update("UPDATE meal_slot_orders SET status = 'DELIVERED' WHERE id = ?", orderId);
         jdbcTemplate.update("UPDATE dispatch_assignments SET status = 'DELIVERED' WHERE meal_slot_order_id = ?", orderId);
-        Long walletId = jdbcTemplate.queryForObject("""
-            SELECT mw.id
-            FROM meal_wallets mw
-            JOIN daily_orders do ON do.customer_id = mw.customer_id
-            JOIN meal_slot_orders mso ON mso.daily_order_id = do.id
-            WHERE mso.id = ? AND mw.active = TRUE
-            """, Long.class, orderId);
-        jdbcTemplate.update(
-            "UPDATE meal_wallets SET reserved_meals = CASE WHEN reserved_meals > 0 THEN reserved_meals - 1 ELSE 0 END, consumed_meals = consumed_meals + 1 WHERE id = ?",
-            walletId
+        Map<String, Object> walletInfo = jdbcTemplate.query(
+            """
+                SELECT mw.id AS wallet_id, COALESCE(mso.quantity, 1) AS quantity
+                FROM meal_slot_orders mso
+                LEFT JOIN daily_orders do ON do.id = mso.daily_order_id
+                LEFT JOIN meal_wallets mw
+                    ON mw.customer_id = do.customer_id
+                   AND mw.active = TRUE
+                   AND (mw.expired_at IS NULL OR mw.expired_at >= CURRENT_TIMESTAMP)
+                WHERE mso.id = ?
+                ORDER BY mw.id DESC
+                LIMIT 1
+                """,
+            ps -> ps.setLong(1, orderId),
+            rs -> {
+                if (!rs.next()) {
+                    return null;
+                }
+                Map<String, Object> row = new java.util.LinkedHashMap<>();
+                long walletIdValue = rs.getLong("wallet_id");
+                row.put("walletId", rs.wasNull() ? null : walletIdValue);
+                row.put("quantity", rs.getInt("quantity"));
+                return row;
+            }
         );
-        insertWalletTransaction(walletId, "CONSUME", -1, "系统", "送达后核销餐次", orderId);
+        Long walletId = walletInfo == null ? null : (Long) walletInfo.get("walletId");
+        int quantity = walletInfo == null ? 1 : ((Number) walletInfo.get("quantity")).intValue();
+        String walletAction = "SKIPPED";
+        if (walletId != null) {
+            jdbcTemplate.update(
+                "UPDATE meal_wallets SET reserved_meals = CASE WHEN reserved_meals >= ? THEN reserved_meals - ? ELSE 0 END, consumed_meals = consumed_meals + ? WHERE id = ?",
+                quantity,
+                quantity,
+                quantity,
+                walletId
+            );
+            insertWalletTransaction(walletId, "CONSUME", -quantity, "系统", "送达后核销餐次", orderId);
+            walletAction = "CONSUMED";
+        }
         return Map.of(
             "mealSlotOrderId", orderId,
             "orderStatus", "DELIVERED",
-            "walletAction", "CONSUMED",
+            "walletAction", walletAction,
             "notificationStatus", "SKIPPED",
             "receiptUrl", receiptUrl,
             "visibleAt", visibleAt,

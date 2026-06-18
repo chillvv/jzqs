@@ -17,6 +17,10 @@ spring:
   flyway:
     enabled: true
     repair-on-migrate: true
+  servlet:
+    multipart:
+      max-file-size: 8MB
+      max-request-size: 8MB
 
 logging:
   level:

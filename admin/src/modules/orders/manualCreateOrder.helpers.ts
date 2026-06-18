@@ -21,7 +21,6 @@ export type ManualCreateFormState = {
   customerId: string;
   addressId: number | null;
   mealPeriod: ManualCreateMealPeriod | "";
-  deliveryMealPeriod: ManualCreateMealPeriod | "";
   merchantRemark: string;
   deliveryAddress: string;
   quantity: number;
@@ -61,7 +60,6 @@ export function createInitialManualCreateForm(): ManualCreateFormState {
     customerId: "",
     addressId: null,
     mealPeriod: "",
-    deliveryMealPeriod: "",
     merchantRemark: "",
     deliveryAddress: "",
     quantity: 1
@@ -160,8 +158,7 @@ export function applyManualCreateMealPeriodSelection(
 
   return {
     ...currentForm,
-    mealPeriod: selectedOption.mealPeriod,
-    deliveryMealPeriod: currentForm.deliveryMealPeriod || selectedOption.mealPeriod
+    mealPeriod: selectedOption.mealPeriod
   };
 }
 
@@ -193,7 +190,6 @@ export function buildManualCreatePayload(form: ManualCreateFormState, serveDate:
     customerId,
     addressId: form.addressId,
     mealPeriod: form.mealPeriod,
-    deliveryMealPeriod: form.deliveryMealPeriod || form.mealPeriod,
     merchantRemark,
     deliveryAddress,
     source: "BACKEND",

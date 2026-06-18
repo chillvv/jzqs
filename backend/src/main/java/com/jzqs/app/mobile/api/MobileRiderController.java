@@ -31,13 +31,13 @@ public class MobileRiderController {
     }
 
     @GetMapping("/summary")
-    public ApiResponse<RiderBatchSummaryResponse> summary(@RequestParam String riderName) {
-        return ApiResponse.success(mobilePortalService.riderSummary(riderName));
+    public ApiResponse<RiderBatchSummaryResponse> summary(@RequestParam String riderName, @RequestParam(required = false) String serveDate) {
+        return ApiResponse.success(mobilePortalService.riderSummary(riderName, serveDate));
     }
 
     @GetMapping("/queue")
-    public ApiResponse<PageResponse<RiderQueueItemResponse>> queue(@RequestParam String riderName) {
-        return ApiResponse.success(mobilePortalService.riderQueue(riderName));
+    public ApiResponse<PageResponse<RiderQueueItemResponse>> queue(@RequestParam String riderName, @RequestParam(required = false) String serveDate) {
+        return ApiResponse.success(mobilePortalService.riderQueue(riderName, serveDate));
     }
 
     @PostMapping(value = "/uploads/receipt", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

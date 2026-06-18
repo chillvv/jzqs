@@ -521,7 +521,7 @@ export function DispatchAreasPage() {
           <div className="dispatch-stat-card__value">{areaStats.totalCount}</div>
         </div>
         <div className="dispatch-stat-card">
-          <div className="admin-panel-note">待配送订单</div>
+          <div className="admin-panel-note">待配送份数</div>
           <div className="dispatch-stat-card__value is-primary">{areaStats.dispatchingCount}</div>
         </div>
         <div className="dispatch-stat-card">
@@ -546,10 +546,10 @@ export function DispatchAreasPage() {
                 <div>
                   <div className="dispatch-card__title">{area.areaCode}</div>
                   <div className="dispatch-card__subtitle">骑手：{area.currentRiderName || (area.missingRider ? "缺骑手" : area.defaultRiderName || "未设置")}</div>
-                  <div className="dispatch-card__subtitle">订单数：{area.orderCount}</div>
+                  <div className="dispatch-card__subtitle">订单份数：{area.orderCount}</div>
                 </div>
                 <span className={`tag ${area.missingRider ? "tag-red" : "tag-blue"}`}>
-                  {area.missingRider ? "缺骑手" : `${area.orderCount} 单`}
+                  {area.missingRider ? "缺骑手" : `${area.orderCount} 份`}
                 </span>
               </div>
 
