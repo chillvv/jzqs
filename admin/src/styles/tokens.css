@@ -1,0 +1,66 @@
+/* ============================================================
+ * 设计令牌 (Design Tokens) —— 全站主题单一来源
+ * 主题色保持 #2563eb（admin 蓝色品牌色），如需换肤只改本文件。
+ * 拆分自 index.css，作为 CSS 变量的统一定义入口。
+ * ============================================================ */
+
+:root {
+  color-scheme: light;
+  --primary-color: #2563eb;
+  --primary-hover: #1d4ed8;
+  --accent-color: #0f172a;
+  --accent-hover: #1e293b;
+  --success-color: #059669;
+  --success-bg: #d1fae5;
+  --warning-color: #d97706;
+  --warning-bg: #fef3c7;
+  --error-color: #f87171;
+  --error-color-dark: #ef4444;
+  --error-bg: #fee2e2;
+  --info-color: #2563eb;
+  --info-bg: #dbeafe;
+  --bg-body: #f5f7fb;
+  --bg-page: #eef2f8;
+  --bg-surface: #ffffff;
+  --bg-surface-soft: rgba(255, 255, 255, 0.78);
+  --text-main: #0f172a;
+  --text-sub: #475569;
+  --text-muted: #94a3b8;
+  --border-color: #e2e8f0;
+  --border-light: #f1f5f9;
+  --sidebar-bg: rgba(255, 255, 255, 0.82);
+  --sidebar-text: #475569;
+  --sidebar-active-bg: #eff6ff;
+  --sidebar-active-text: #2563eb;
+  --border-radius-base: 10px;
+  --border-radius-lg: 18px;
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.02);
+  --shadow-sm: 0 2px 6px rgba(15, 23, 42, 0.03);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.04);
+  --shadow-modal: 0 8px 24px rgba(15, 23, 42, 0.06);
+
+  /* RGB 通道令牌：供 rgba(var(--*-rgb), alpha) 使用，统一带透明度的主题色 */
+  --primary-rgb: 37, 99, 235;
+  --ink-rgb: 15, 23, 42;
+  --muted-rgb: 148, 163, 184;
+  /* 第二轮补充令牌 */
+  --text-on-primary: #ffffff;
+  --bg-input: #f8fafc;
+  --primary-light: #60a5fa;
+  --primary-lighter: #eff6ff;
+  --primary-lightest: #f8fbff;
+  --primary-dark: #1e3a8a;
+  --primary-darker: #1e40af;
+  --success-500: #10b981;
+  --success-700: #15803d;
+  --success-bg-soft: #f0fdf4;
+  --error-500: #dc2626;
+  --error-700: #991b1b;
+  --error-800: #7f1d1d;
+  --error-bg-soft: #fef2f2;
+  --warning-500: #f59e0b;
+  --warning-bg-soft: #fff7ed;
+  --info-bg-soft: #dbeafe;
+  --text-subtle: #64748b;
+  --border-subtle: #cbd5e1;
+}

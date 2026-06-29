@@ -1,0 +1,74 @@
+<view class="subpage-nav-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+  <view class="subpage-nav-content" style="height: {{navBarHeight - statusBarHeight}}px;">
+    <view class="subpage-nav-left">
+      <view class="subpage-nav-back" bindtap="goBack">
+        <view class="subpage-nav-back-icon"></view>
+      </view>
+      <text class="subpage-nav-title">骑手注册</text>
+    </view>
+    <view class="subpage-nav-right"></view>
+  </view>
+</view>
+<view class="subpage-nav-spacer" style="height: {{navBarHeight}}px;"></view>
+
+<view class="register-container">
+  <view class="register-header">
+    <text class="title">骑手注册</text>
+    <text class="subtitle">首次使用请先注册</text>
+  </view>
+
+  <view class="register-form">
+    <!-- 姓名输入 -->
+    <view class="form-item">
+      <text class="label">姓名</text>
+      <input
+        class="input"
+        type="text"
+        placeholder="请输入真实姓名"
+        value="{{name}}"
+        bindinput="onNameInput"
+      />
+    </view>
+
+    <!-- 手机号输入 -->
+    <view class="form-item">
+      <text class="label">手机号</text>
+      <input
+        class="input"
+        type="number"
+        placeholder="请输入手机号"
+        maxlength="11"
+        value="{{phone}}"
+        bindinput="onPhoneInput"
+      />
+    </view>
+
+    <!-- 协议勾选 -->
+    <view class="agreement">
+      <checkbox-group bindchange="onAgreeChange">
+        <label class="agreement-label">
+          <checkbox value="agreed" checked="{{agreed}}" />
+          <text>我已阅读并同意</text>
+          <text class="link" bindtap="onViewAgreement">《用户协议》</text>
+        </label>
+      </checkbox-group>
+    </view>
+
+    <!-- 注册按钮 -->
+    <button
+      class="register-btn"
+      type="primary"
+      loading="{{loading}}"
+      disabled="{{loading}}"
+      bindtap="onRegister"
+    >
+      {{loading ? '注册中...' : '注册'}}
+    </button>
+
+    <!-- 已有账号 -->
+    <view class="footer">
+      <text>已有账号？</text>
+      <text class="link" bindtap="goToLogin">去登录</text>
+    </view>
+  </view>
+</view>

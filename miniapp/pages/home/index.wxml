@@ -1,0 +1,103 @@
+<!-- =====================================
+     Tab 1：首页 (周一到周日全部列出，图片修复)
+     ===================================== -->
+<view class="custom-nav-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+  <view class="custom-nav-left">
+    <image class="custom-nav-logo" src="/assets/logo.jpeg" mode="aspectFit"></image>
+    <text class="custom-nav-title">简知轻食</text>
+  </view>
+</view>
+<view class="custom-nav-spacer" style="height: {{navBarHeight}}px;"></view>
+
+<!-- =====================================
+     全屏强制公告（开启后锁定小程序）
+     ===================================== -->
+<view wx:if="{{home.popupAnnouncementEnabled && home.popupAnnouncementContent}}" class="fullscreen-announcement">
+  <view class="fullscreen-announcement__content">
+    <view class="fullscreen-announcement__badge">营业公告</view>
+    <view class="fullscreen-announcement__title">{{home.holidayNoticeTitle || '系统公告'}}</view>
+    <view class="fullscreen-announcement__body">
+      <view wx:for="{{fullscreenAnnouncementLines}}" wx:key="index" class="fullscreen-announcement__line">{{item}}</view>
+    </view>
+    <view class="fullscreen-announcement__hint">
+      ↓ 下拉刷新可检查是否恢复服务
+    </view>
+  </view>
+</view>
+
+<block wx:else>
+<view id="tab-home" class="content">
+  <view class="hero-banner">
+    <swiper class="hero-swiper" circular autoplay interval="{{home.bannerIntervalMs || 3000}}" indicator-dots="{{home.bannerImages.length > 1}}" wx:if="{{home && home.bannerImages && home.bannerImages.length > 0}}">
+      <swiper-item wx:for="{{home.bannerImages}}" wx:key="imageUrl" bindtap="handleBannerTap" data-index="{{index}}">
+        <view class="hero-banner-card">
+          <image class="hero-banner-img" src="{{item.imageUrl}}" mode="aspectFit" lazy-load="true"></image>
+        </view>
+      </swiper-item>
+    </swiper>
+    <view wx:else class="hero-banner-card">
+      <image class="hero-banner-img" src="../../assets/green-intro.jpg" mode="aspectFit" lazy-load="true"></image>
+    </view>
+  </view>
+  <view class="menu-section">
+    <view class="poster-header">
+      <view>
+        <view class="poster-title">本周主厨菜单</view>
+      </view>
+      <view class="poster-range">{{rangeText}}</view>
+    </view>
+    <view class="menu-list">
+      <view wx:if="{{loading && !weekCards.length}}" class="skeleton-list">
+        <view class="skeleton-card" wx:for="{{[1,2,3]}}" wx:key="*this">
+          <view class="skeleton-header"></view>
+          <view class="skeleton-body">
+            <view class="skeleton-badge"></view>
+            <view class="skeleton-lines">
+              <view class="skeleton-line"></view>
+              <view class="skeleton-line short"></view>
+            </view>
+          </view>
+        </view>
+      </view>
+      <block wx:else>
+        <view wx:if="{{home && !home.orderingEnabled}}" class="rest-card" style="margin-bottom: 0;">{{home.holidayNoticeTitle}}：{{home.holidayNoticeDesc}}</view>
+        <block wx:for="{{weekCards}}" wx:key="serveDate">
+          <view wx:if="{{item.slotStatus === 'ACTIVE'}}" class="day-card-full">
+            <view class="day-card-header"><text class="day-title">{{item.weekdayLabel}}</text><text class="day-date">{{item.shortDate}}</text></view>
+            <block wx:for="{{item.items}}" wx:key="id" wx:for-item="subitem">
+              <view class="meal-row">
+                <view class="meal-badge">{{subitem.mealPeriod === 'LUNCH' ? '午' : '晚'}}</view>
+                <view class="meal-info">
+                  <view class="meal-main">
+                    <view wx:for="{{subitem.dishItems}}" wx:key="*this" wx:for-item="dish" class="meal-main-item">{{dish}}</view>
+                  </view>
+                  <view class="meal-meta">
+                    <text class="meal-note" wx:if="{{subitem.merchantNote && subitem.merchantNote !== '-'}}">备注：{{subitem.merchantNote}}</text>
+                    <text class="meal-kcal">🔥 {{subitem.totalCalories}} kcal</text>
+                  </view>
+                </view>
+              </view>
+            </block>
+          </view>
+          <view wx:elif="{{item.slotStatus === 'UNCONFIGURED'}}" class="rest-card" style="margin-bottom: 0;">{{item.weekdayLabel}}菜单待配置，请稍后查看</view>
+          <view wx:else class="rest-card" style="margin-bottom: 0;">🌿 {{item.weekdayLabel}}店休，法定节假日正常接单</view>
+        </block>
+        <view wx:if="{{!weekCards.length && !loading}}" class="rest-card">暂无菜单数据</view>
+      </block>
+    </view>
+  </view>
+</view>
+<view wx:if="{{showMealReminderPopup}}" class="meal-reminder-popup">
+  <view class="meal-reminder-popup__mask" bindtap="closeMealReminderPopup"></view>
+  <view class="meal-reminder-popup__panel">
+    <view class="meal-reminder-popup__badge">餐包提醒</view>
+    <view class="meal-reminder-popup__title">{{home.mealReminderTitle}}</view>
+    <view class="meal-reminder-popup__message">{{home.mealReminderMessage}}</view>
+    <view class="meal-reminder-popup__check" bindtap="toggleMealReminderChecked">
+      <view class="meal-reminder-popup__checkbox {{mealReminderChecked ? 'is-checked' : ''}}">{{mealReminderChecked ? '✓' : ''}}</view>
+      <text>这个状态今天不再提醒</text>
+    </view>
+    <button class="meal-reminder-popup__button" bindtap="closeMealReminderPopup">我知道了</button>
+  </view>
+</view>
+</block>

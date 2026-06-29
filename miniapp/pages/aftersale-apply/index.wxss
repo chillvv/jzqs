@@ -1,0 +1,79 @@
+.form-card {
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.form-label {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #111827;
+}
+
+.type-selector {
+  display: flex;
+  gap: 20rpx;
+}
+
+.type-card {
+  flex: 1;
+  border: 2rpx solid var(--border);
+  border-radius: 20rpx;
+  padding: 24rpx;
+  background: var(--bg-card);
+  transition: all 0.2s;
+}
+
+.type-card.active {
+  border-color: var(--brand-dark);
+  background: var(--brand-light);
+}
+
+.type-title {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 8rpx;
+}
+
+.type-desc {
+  font-size: 22rpx;
+  color: var(--text-sub);
+}
+
+.radio-line {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+  padding: 12rpx 0;
+  color: #374151;
+}
+
+.picker-line {
+  min-height: 84rpx;
+  display: flex;
+  align-items: center;
+  padding: 0 24rpx;
+  border-radius: 24rpx;
+  background: #f8fafc;
+  color: #111827;
+}
+
+.remark-box {
+  width: 100%;
+  min-height: 220rpx;
+  padding: 24rpx;
+  box-sizing: border-box;
+  border-radius: 24rpx;
+  background: #f8fafc;
+  color: #111827;
+}
+
+.submit-btn {
+  margin-top: 12rpx;
+  border-radius: 999rpx;
+  background: var(--brand-dark);
+  color: #ffffff;
+  font-size: 30rpx;
+  font-weight: 600;
+}

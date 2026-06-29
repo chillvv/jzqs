@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "餐次流水",
+  "enablePullDownRefresh": true,
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "subpage-navbar": "/components/subpage-navbar/index"
+  }
+}

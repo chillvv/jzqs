@@ -1,0 +1,60 @@
+<subpage-navbar title="{{selectOrderId ? '选择配送地址' : '收餐地址管理'}}" />
+
+<view class="subpage">
+  <view class="subpage-card">
+    <view class="hero-inline-main">{{selectOrderId ? '选择新的配送地址' : '收餐地址管理'}}</view>
+    <view wx:if="{{selectOrderId}}" class="subpage-subtitle">请选择一个已保存地址，用于替换当前订单的配送地址</view>
+  </view>
+
+  <view wx:if="{{items.length}}">
+    <view wx:for="{{items}}" wx:key="id" class="subpage-card">
+      <view class="order-head">
+        <view>
+          <view class="section-label" style="margin-bottom: 4rpx;">{{item.contactName}}</view>
+          <view class="section-label" style="font-size: 26rpx; color: var(--text-sub); margin-bottom: 12rpx; font-weight: normal;">{{item.contactPhone}}</view>
+          <view class="subpage-subtitle">{{item.addressLine}}</view>
+        </view>
+        <view wx:if="{{item.isDefault}}" class="status-pill-default" style="white-space: nowrap; writing-mode: horizontal-tb;">默认地址</view>
+      </view>
+      <view class="action-row">
+        <button wx:if="{{selectOrderId}}" class="sub-btn primary" data-id="{{item.id}}" bindtap="selectAddressForOrder">使用这个地址</button>
+        <button wx:if="{{!item.isDefault}}" class="sub-btn ghost" data-id="{{item.id}}" bindtap="setDefault">设为默认</button>
+        <button class="sub-btn ghost" data-id="{{item.id}}" bindtap="editAddress" style="margin-left: 16rpx;">编辑</button>
+        <button class="sub-btn ghost" data-id="{{item.id}}" bindtap="deleteAddress" style="margin-left: 16rpx; color: #ff4d4f; border-color: #ff4d4f;">删除</button>
+      </view>
+    </view>
+  </view>
+
+  <view wx:elif="{{!loading}}" class="subpage-card">
+    <view class="empty-text">还没有保存任何地址</view>
+  </view>
+
+  <button class="sub-btn primary full-btn" style="margin-top: 40rpx;" bindtap="showAddPopup">{{selectOrderId ? '+ 新增后使用' : '+ 新增地址'}}</button>
+
+  <!-- 新增/编辑地址半屏弹窗 -->
+  <view class="address-popup-mask {{showPopup ? 'show' : ''}}" bindtap="hideAddPopup"></view>
+  <view class="address-popup-container {{showPopup ? 'show' : ''}}">
+    <view class="popup-header">
+      <view>{{form.id ? '编辑地址' : '新增地址'}}</view>
+      <view class="close-btn" bindtap="hideAddPopup">×</view>
+    </view>
+    <scroll-view scroll-y class="popup-body" style="padding-top: 20rpx;">
+      <view class="inline-form-item">
+        <view class="inline-form-label">当前登录用户</view>
+        <view class="subpage-subtitle">{{customerProfile.name || '未设置姓名'}} {{customerProfile.phone || ''}}</view>
+      </view>
+      <view class="inline-form-item">
+        <view class="inline-form-label">详细地址</view>
+        <input class="form-input" data-field="addressLine" value="{{form.addressLine}}" bindinput="onInputChange" placeholder="请输入详细地址" />
+      </view>
+      <view class="switch-row">
+        <text class="inline-form-label">设为默认地址</text>
+        <switch checked="{{form.isDefault}}" color="#B8D060" bindchange="onDefaultChange" />
+      </view>
+    </scroll-view>
+    <view class="popup-footer" style="padding-bottom: env(safe-area-inset-bottom); border-top: none; display: flex; flex-direction: column; gap: 24rpx; padding-top: 12rpx;">
+      <button class="sub-btn ghost full-btn" style="margin-top: 0;" bindtap="importWechatAddress">一键导入微信地址</button>
+      <button class="sub-btn primary full-btn" style="margin-top: 0;" bindtap="saveAddress" loading="{{saving}}" disabled="{{saving}}">保存地址</button>
+    </view>
+  </view>
+</view>

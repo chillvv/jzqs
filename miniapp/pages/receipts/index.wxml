@@ -1,0 +1,83 @@
+<subpage-navbar title="{{targetOrderId ? '订单详情' : '每日送达回执'}}" />
+
+<view class="subpage">
+  <view wx:if="{{!targetOrderId}}" class="subpage-card">
+    <view class="hero-inline-main">每日送达回执</view>
+  </view>
+
+  <view wx:if="{{items.length}}">
+    <block wx:if="{{targetOrderId}}">
+      <view wx:for="{{items}}" wx:key="id" class="detail-page-stack">
+        <view class="subpage-card detail-hero-card">
+          <view class="detail-hero-top">
+            <view class="detail-status-title">{{item.mealName}}</view>
+            <view class="status-pill delivered">已送达</view>
+          </view>
+          <view class="detail-status-subtitle" style="margin-bottom: 32rpx; margin-top: -12rpx;">{{item.serveDateText}} {{item.periodText}}</view>
+
+          <view class="detail-info-list" style="background: transparent; padding: 0;">
+            <view class="detail-info-row detail-info-primary" style="padding-top: 0; border-top: none;">
+              <text class="detail-info-label">配送地址</text>
+              <text class="detail-info-value detail-address-text">{{item.deliveryAddress}}</text>
+            </view>
+            <view class="detail-info-row" wx:if="{{item.mealDetail && item.mealDetail !== item.mealName}}">
+              <text class="detail-info-label">餐品内容</text>
+              <text class="detail-info-value">{{item.mealDetail}}</text>
+            </view>
+            <view class="detail-info-row" wx:if="{{item.note && item.note !== '-'}}">
+              <text class="detail-info-label">备注</text>
+              <text class="detail-info-value">{{item.note}}</text>
+            </view>
+            <view class="detail-info-row" wx:if="{{item.merchantNote && item.merchantNote !== '-'}}">
+              <text class="detail-info-label">商家备注</text>
+              <text class="detail-info-value">{{item.merchantNote}}</text>
+            </view>
+            <view class="detail-info-row">
+              <text class="detail-info-label">订单来源</text>
+              <text class="detail-info-value">{{item.sourceText}}</text>
+            </view>
+          </view>
+        </view>
+
+        <view class="subpage-card detail-section-card">
+          <view class="detail-section-head">
+            <view class="detail-section-title">配送回执</view>
+          </view>
+
+          <view class="detail-info-list" style="background: transparent; padding: 0; margin-bottom: 24rpx;">
+            <view class="detail-info-row rider-note-block" style="padding-top: 0; border-top: none;">
+              <text class="detail-info-label">骑手备注</text>
+              <text class="detail-info-value rider-note-text">{{item.receiptNote || '骑手已完成配送，如需帮助请联系客服。'}}</text>
+            </view>
+          </view>
+
+          <view wx:if="{{item.canShowReceiptImage}}" class="receipt-photo-panel" style="margin-top: 0; padding: 0; background: transparent;">
+            <image class="receipt-photo" src="{{item.receiptUrl}}" mode="widthFix" bindtap="previewReceipt" data-url="{{item.receiptUrl}}" lazy-load="true" />
+            <view class="receipt-photo-hint">点击图片可查看大图</view>
+          </view>
+          <view wx:else class="receipt-inline-hint" style="margin-top: 0; padding: 24rpx; background: #f9f9f9; border-radius: 12rpx; text-align: center; color: var(--text-muted); font-size: 26rpx;">{{item.receiptHint || '当前暂无可查看回执图片'}}</view>
+        </view>
+      </view>
+    </block>
+    <block wx:else>
+      <view wx:for="{{items}}" wx:key="id" class="subpage-card">
+        <view class="order-head">
+          <view>
+            <view class="section-label">{{item.serveDateText}} {{item.periodText}}</view>
+            <view class="subpage-subtitle">{{item.mealName}}</view>
+          </view>
+          <view class="status-pill delivered">已送达</view>
+        </view>
+        <view class="detail-line">配送地址：{{item.deliveryAddress}}</view>
+        <view class="detail-line rider-note-line">骑手备注：{{item.receiptNote || '暂无'}}</view>
+        <view class="action-row">
+          <button class="sub-btn primary" data-id="{{item.id}}" bindtap="openOrderDetail">查看订单详情</button>
+        </view>
+      </view>
+    </block>
+  </view>
+
+  <view wx:elif="{{!loading}}" class="subpage-card">
+    <view class="empty-text">{{targetOrderId ? '该订单暂时没有可查看的订单详情' : '暂无送达回执'}}</view>
+  </view>
+</view>

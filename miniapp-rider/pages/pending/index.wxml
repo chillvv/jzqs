@@ -1,0 +1,59 @@
+<view class="subpage-nav-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+  <view class="subpage-nav-content" style="height: {{navBarHeight - statusBarHeight}}px;">
+    <view class="subpage-nav-left">
+      <view class="subpage-nav-back" bindtap="goBack">
+        <view class="subpage-nav-back-icon"></view>
+      </view>
+      <text class="subpage-nav-title">待分配</text>
+    </view>
+    <view class="subpage-nav-right"></view>
+  </view>
+</view>
+<view class="subpage-nav-spacer" style="height: {{navBarHeight}}px;"></view>
+
+<view class="state-page">
+  <view class="state-banner banner-blue">
+    <view class="state-badge">待分配</view>
+    <view class="state-title">已登记成功，等待老板分配区域</view>
+    <view class="state-desc">你的骑手信息已经进入后台配送中心，老板启用后会自动进入工作台。</view>
+  </view>
+  <view class="card">
+    <view class="card-title">当前登记信息</view>
+    <view class="info-row">
+      <text class="label">骑手姓名</text>
+      <text class="value">{{riderProfile.displayName || '--'}}</text>
+    </view>
+    <view class="info-row">
+      <text class="label">手机号</text>
+      <text class="value">{{riderProfile.phone || '--'}}</text>
+    </view>
+    <view class="info-row">
+      <text class="label">账号状态</text>
+      <text class="value">{{riderProfile.riderStatus || 'UNASSIGNED'}}</text>
+    </view>
+    <view class="info-row">
+      <text class="label">最近登录</text>
+      <text class="value">{{riderProfile.lastLoginAt || riderProfile.firstLoginAt || '--'}}</text>
+    </view>
+  </view>
+  <view class="card">
+    <view class="card-title">下一步</view>
+    <view class="step-row">
+      <text class="step-no">1</text>
+      <text class="step-text">老板在后台“待分配骑手”里看到你的登记记录。</text>
+    </view>
+    <view class="step-row">
+      <text class="step-no">2</text>
+      <text class="step-text">填写骑手名称、分配固定区域并启用账号。</text>
+    </view>
+    <view class="step-row">
+      <text class="step-no">3</text>
+      <text class="step-text">你点击刷新状态后即可进入今日和队列工作台。</text>
+    </view>
+  </view>
+  <view class="action-stack">
+    <button class="primary-btn" loading="{{refreshing}}" disabled="{{refreshing}}" bindtap="refreshStatus">刷新分配状态</button>
+    <button class="secondary-btn" bindtap="contactMerchant">联系老板处理</button>
+    <button class="secondary-btn" bindtap="logout">重新登录</button>
+  </view>
+</view>

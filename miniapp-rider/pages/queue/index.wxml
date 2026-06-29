@@ -1,0 +1,220 @@
+<!-- 骑手小程序 - 订单列表页 -->
+<view class="page-container">
+
+  <!-- TopAppBar -->
+  <view class="header-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+    <view class="header-left">
+      <image class="header-logo" src="/assets/logo.jpeg" mode="aspectFit"></image>
+      <text class="header-title">简知轻食</text>
+      <view class="header-date" bindtap="openDatePicker">
+        <text>{{currentDateTitle}} {{currentDateLabel}}</text>
+        <text class="header-date-arrow">▼</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- 可滚动区域：编辑模式下禁用滚动和下拉刷新 -->
+  <scroll-view
+    class="scroll-area"
+    scroll-y="{{!isEditMode}}"
+    refresher-enabled="{{!isEditMode}}"
+    refresher-triggered="{{refresherTriggered}}"
+    bindrefresherrefresh="onScrollRefresh"
+  >
+
+  <!-- Review Banner (Pending Approval) -->
+  <view wx:if="{{viewState === 'pending'}}" class="banner banner-warning">
+    <text class="material-symbols-outlined banner-icon">i</text>
+    <text class="banner-text">账号待审核，暂无法接单。</text>
+  </view>
+
+  <!-- Blocked Banner -->
+  <view wx:elif="{{viewState === 'blocked'}}" class="banner banner-error">
+    <text class="material-symbols-outlined banner-icon">!</text>
+    <text class="banner-text">账号已停用，请联系站长。</text>
+  </view>
+
+  <view wx:elif="{{viewState === 'active'}}" class="main-content">
+
+    <!-- Toggle & Stats -->
+    <view class="toggle-section">
+      <view class="toggle-row">
+        <view class="toggle-container">
+          <view class="toggle-bg {{currentMealPeriod === 'DINNER' ? 'toggle-right' : 'toggle-left'}}"></view>
+          <view
+            class="toggle-btn {{currentMealPeriod === 'LUNCH' ? 'active' : ''}}"
+            data-period="LUNCH"
+            bindtap="switchMealPeriod"
+          >午餐</view>
+          <view
+            class="toggle-btn {{currentMealPeriod === 'DINNER' ? 'active' : ''}}"
+            data-period="DINNER"
+            bindtap="switchMealPeriod"
+          >晚餐</view>
+        </view>
+        <view class="header-action-group">
+          <view wx:if="{{currentStatusFilter !== 'DELIVERED'}}" class="edit-btn-inline {{batchReferenceMode ? 'header-action-disabled' : ''}}" bindtap="toggleEditMode">
+            <image class="edit-icon" src="{{isEditMode ? '/assets/icons/check.svg' : '/assets/icons/sort.svg'}}" mode="aspectFit"></image>
+            <text class="edit-text">{{isEditMode ? '完成' : '排序'}}</text>
+          </view>
+          <view class="batch-btn-inline {{isEditMode ? 'header-action-disabled' : ''}}" bindtap="toggleBatchReferenceMode">
+            <image class="action-icon" src="{{batchReferenceMode ? '/assets/icons/check.svg' : '/assets/icons/camera.svg'}}" mode="aspectFit"></image>
+            <text class="edit-text">{{batchReferenceMode ? '完成' : '批量传图'}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="stats-bento">
+        <view class="stat-item">
+          <text class="stat-value">{{currentMealPeriod === 'LUNCH' ? lunchStats.totalCount : dinnerStats.totalCount}}</text>
+          <text class="stat-label">总份数</text>
+        </view>
+        <view class="stat-divider"></view>
+        <view class="stat-item">
+          <text class="stat-value text-success">{{currentMealPeriod === 'LUNCH' ? lunchStats.deliveredCount : dinnerStats.deliveredCount}}</text>
+          <text class="stat-label">已完成</text>
+        </view>
+        <view class="stat-divider"></view>
+        <view class="stat-item">
+          <text class="stat-value text-primary">{{currentMealPeriod === 'LUNCH' ? lunchStats.remainingCount : dinnerStats.remainingCount}}</text>
+          <text class="stat-label">待配送</text>
+        </view>
+      </view>
+
+      <!-- 状态筛选 -->
+      <view class="status-filter-row">
+        <view
+          class="status-filter-chip {{currentStatusFilter === 'PENDING' ? 'chip-active-pending' : ''}}"
+          data-filter="PENDING"
+          bindtap="switchStatusFilter"
+        >待配送</view>
+        <view
+          class="status-filter-chip {{currentStatusFilter === '' ? 'chip-active-all' : ''}}"
+          data-filter=""
+          bindtap="switchStatusFilter"
+        >全部</view>
+        <view
+          class="status-filter-chip {{currentStatusFilter === 'DELIVERED' ? 'chip-active-delivered' : ''}}"
+          data-filter="DELIVERED"
+          bindtap="switchStatusFilter"
+        >已完成</view>
+      </view>
+    </view>
+
+    <!-- Orders List -->
+    <view class="orders-list {{isEditMode ? 'edit-mode' : ''}} {{dragging ? 'is-dragging' : ''}} {{batchReferenceMode ? 'batch-mode' : ''}}">
+
+      <!-- 拖拽提示 -->
+      <view wx:if="{{isEditMode && currentMealItems.length > 0}}" class="drag-hint">
+        <text class="material-symbols-outlined">↑</text>
+        <text>长按卡片调整顺序。</text>
+      </view>
+
+      <view wx:if="{{batchReferenceMode && currentMealItems.length > 0}}" class="batch-hint">
+        <image class="hint-icon" src="/assets/icons/info-circle.svg" mode="aspectFit"></image>
+        <text>请勾选需要设置同一张参考图的订单。</text>
+      </view>
+
+      <view
+        wx:for="{{currentMealItems}}"
+        wx:key="queueItemIdentity"
+        class="order-card {{item.itemStatus === 'DELIVERED' ? 'order-card-completed' : ''}} {{dragging && dragIndex === index ? 'dragging' : ''}} {{item.batchSelected ? 'order-card-selected' : ''}}"
+        style="transform: translateY({{dragging ? (index === dragIndex ? dragTranslateY : 0) : 0}}px) {{dragging && dragIndex === index ? 'scale(1.05)' : 'scale(1)'}}; transition: {{dragging ? (index === dragIndex ? 'none' : 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)') : 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)'}}; z-index: {{dragging && index === dragIndex ? 9999 : 1}}; position: relative;"
+        data-index="{{index}}"
+        data-item-id="{{item.detailItemId}}"
+        data-status="{{item.itemStatus}}"
+        bindtap="{{isEditMode ? '' : 'handleOrderTap'}}"
+        bindtouchstart="{{isEditMode ? 'onTouchStart' : ''}}"
+        bindtouchmove="onTouchMove"
+        bindtouchend="onTouchEnd"
+        bindtouchcancel="onTouchEnd"
+      >
+        <!-- 绝对定位的右上角状态标签 -->
+        <view class="order-card-status-tag {{item.itemStatus === 'DELIVERED' ? 'tag-completed' : 'tag-pending'}}">
+          {{item.itemStatus === 'DELIVERED' ? '已完成' : '待配送'}}
+        </view>
+
+        <view class="order-card-content">
+          <view class="order-card-header">
+            <view wx:if="{{batchReferenceMode}}" class="batch-checkbox {{item.batchSelected ? 'batch-checkbox-selected' : ''}}">
+              <text>{{item.batchSelected ? '✓' : ''}}</text>
+            </view>
+            
+            <view class="order-badge-wrapper">
+              <view class="order-badge {{item.itemStatus === 'DELIVERED' && currentStatusFilter === '' ? 'order-badge-completed' : ''}}">
+                <text class="badge-prefix">#</text>{{index + 1}}
+              </view>
+            </view>
+            
+            <view class="order-info">
+              <view class="order-name-row">
+                <view class="order-name {{item.itemStatus === 'DELIVERED' ? 'order-name-completed' : ''}}">
+                  {{item.customerName}}
+                </view>
+                <view wx:if="{{item.needAttention}}" class="special-tag-inline">{{item.attentionLabel || '需留意'}}</view>
+                <view wx:if="{{item.quantity > 1}}" class="quantity-badge">
+                  ×{{item.quantity}}
+                </view>
+              </view>
+            </view>
+
+            <view class="order-right" style="{{isEditMode ? '' : 'display: none;'}}">
+              <view class="drag-handle">
+                <text class="material-symbols-outlined">⋮⋮</text>
+              </view>
+            </view>
+          </view>
+          
+          <view class="order-address {{item.itemStatus === 'DELIVERED' ? 'order-address-completed' : ''}}">
+            <text class="address-icon">📍</text>
+            <text class="address-text-content {{!item.deliveryAddress ? 'no-address' : ''}}"><text wx:if="{{item.buildingInfo}}" class="building-info-text">{{item.buildingInfo}}</text>{{item.deliveryAddress || '地址未提供'}}</text>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 空状态 -->
+    <view wx:if="{{currentMealItems.length === 0 && !loading}}" class="empty-state">
+      <view class="empty-icon">
+        <text class="material-symbols-outlined" style="font-size: 96rpx;">📭</text>
+      </view>
+      <view class="empty-text">
+        {{currentStatusFilter === 'PENDING' ? '暂无待配送订单' : currentStatusFilter === 'DELIVERED' ? '暂无已完成订单' : '暂无订单'}}
+      </view>
+    </view>
+    <view wx:if="{{batchReferenceMode}}" class="batch-action-safe-spacer"></view>
+  </view>
+  </scroll-view>
+
+  <view wx:if="{{batchReferenceMode}}" class="batch-action-bar">
+    <view class="batch-action-summary">
+      <text class="batch-action-count">已选 {{selectedReferenceItemIds.length}} 条</text>
+      <text class="batch-action-copy">将为选中的地址统一上传同一张参考图</text>
+    </view>
+    <button class="batch-submit-btn" bindtap="handleBatchReferenceUpload" loading="{{batchSubmitting}}" disabled="{{batchSubmitting}}">
+      {{batchSubmitting ? '上传中...' : '选择图片并上传'}}
+    </button>
+  </view>
+
+  <view wx:if="{{showDatePicker}}" class="date-picker-mask" bindtap="closeDatePicker"></view>
+  <view wx:if="{{showDatePicker}}" class="date-picker-sheet">
+    <view class="date-picker-sheet__header">
+      <text class="date-picker-sheet__title">切换日期</text>
+      <text class="date-picker-sheet__subtitle">仅支持昨天、今天、明天</text>
+    </view>
+    <view class="date-picker-options">
+      <view
+        wx:for="{{dateOptions}}"
+        wx:key="value"
+        class="date-picker-option {{item.active ? 'date-picker-option--active' : ''}}"
+        data-date="{{item.value}}"
+        bindtap="selectWorkbenchDate"
+      >
+        <text class="date-picker-option__label">{{item.label}}</text>
+        <text class="date-picker-option__value">{{item.shortLabel}}</text>
+      </view>
+    </view>
+  </view>
+
+  <!-- Bottom Spacing for TabBar (handled by padding-bottom in CSS) -->
+</view>

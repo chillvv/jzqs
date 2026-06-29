@@ -1,0 +1,116 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: jzqs-mysql
+    restart: unless-stopped
+    cpus: 1.50
+    mem_limit: 1024m
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --performance_schema=OFF
+      - --innodb_buffer_pool_size=256M
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+    container_name: jzqs-backend
+    restart: unless-stopped
+    cpus: 1.50
+    mem_limit: 1024m
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
+      SPRING_DATASOURCE_USERNAME: ${SPRING_DATASOURCE_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${SPRING_DATASOURCE_PASSWORD}
+      SERVER_PORT: 8080
+      APP_UPLOAD_DIR: /app/uploads
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      WECHAT_DEV_MODE: ${WECHAT_DEV_MODE:-false}
+      WECHAT_APPID: ${WECHAT_APPID:-}
+      WECHAT_SECRET: ${WECHAT_SECRET:-}
+      WECHAT_CLOUD_ENV_ID: ${WECHAT_CLOUD_ENV_ID:-cloud1-4g88w3e2dedee471}
+      APP_JWT_SECRET: ${APP_JWT_SECRET}
+      APP_INTERNAL_API_TOKEN: ${APP_INTERNAL_API_TOKEN}
+      APP_AUTH_FILTER_ENABLED: ${APP_AUTH_FILTER_ENABLED:-true}
+      APP_DEBUG_MINIAPP_ORDER_ENABLED: ${APP_DEBUG_MINIAPP_ORDER_ENABLED:-false}
+      DB_MAX_POOL_SIZE: ${DB_MAX_POOL_SIZE:-12}
+      DB_MIN_IDLE: ${DB_MIN_IDLE:-2}
+      DB_IDLE_TIMEOUT_MS: ${DB_IDLE_TIMEOUT_MS:-300000}
+      DB_MAX_LIFETIME_MS: ${DB_MAX_LIFETIME_MS:-1800000}
+      DB_CONNECTION_TIMEOUT_MS: ${DB_CONNECTION_TIMEOUT_MS:-10000}
+      DB_VALIDATION_TIMEOUT_MS: ${DB_VALIDATION_TIMEOUT_MS:-3000}
+      SERVER_TOMCAT_THREADS_MAX: ${SERVER_TOMCAT_THREADS_MAX:-80}
+      SERVER_TOMCAT_THREADS_MIN_SPARE: ${SERVER_TOMCAT_THREADS_MIN_SPARE:-10}
+      SERVER_TOMCAT_ACCEPT_COUNT: ${SERVER_TOMCAT_ACCEPT_COUNT:-100}
+      SERVER_TOMCAT_MAX_CONNECTIONS: ${SERVER_TOMCAT_MAX_CONNECTIONS:-1024}
+      JAVA_OPTS: "-XX:+UseG1GC -XX:MaxRAMPercentage=50 -XX:InitialRAMPercentage=25 -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/./urandom"
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    volumes:
+      - backend_uploads:/app/uploads
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
+
+  admin:
+    build:
+      context: ./admin
+    container_name: jzqs-admin
+    restart: unless-stopped
+    cpus: 0.75
+    mem_limit: 256m
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1/ >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  caddy:
+    image: caddy:2
+    container_name: jzqs-caddy
+    restart: unless-stopped
+    cpus: 0.50
+    mem_limit: 256m
+    depends_on:
+      backend:
+        condition: service_healthy
+      admin:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  mysql_data:
+  backend_uploads:
+  caddy_data:
+  caddy_config:

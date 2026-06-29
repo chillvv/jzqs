@@ -1,0 +1,46 @@
+<subpage-navbar title="餐次流水单" />
+
+<view class="subpage">
+  <view class="subpage-card">
+    <view class="hero-inline-main">餐次流水单</view>
+  </view>
+
+  <view class="wallet-summary-card">
+    <view class="wallet-summary-block">
+      <view class="wallet-summary-label">总餐次</view>
+      <view class="wallet-summary-value">{{home ? home.totalMeals : '--'}}</view>
+    </view>
+    <view class="wallet-summary-block">
+      <view class="wallet-summary-label">剩余可用</view>
+      <view class="wallet-summary-value strong">{{home ? home.remainingMeals : '--'}}</view>
+    </view>
+  </view>
+  <view class="subpage-card" wx:if="{{home}}">
+    <view class="detail-line">到期日：{{home.packageExpiredAt || '--'}}</view>
+    <view class="detail-line">剩余天数：{{home.packageExpiredAt ? home.remainingValidityDays : '--'}}{{home.packageExpiredAt ? ' 天' : ''}}</view>
+    <view class="detail-line" wx:if="{{home.packageAlertMessage}}">提醒：{{home.packageAlertMessage}}</view>
+  </view>
+
+  <view wx:if="{{items.length}}">
+    <view wx:for="{{items}}" wx:key="id" class="subpage-card" bindtap="goToRelatedOrder" data-id="{{item.relatedOrderId}}">
+      <view class="order-head">
+        <view>
+          <view class="section-label">{{item.title}}</view>
+          <view class="subpage-subtitle">{{item.displayCreatedAt || item.createdAt}}</view>
+        </view>
+        <view class="wallet-delta {{item.mealDelta > 0 ? 'plus' : 'minus'}}">{{item.deltaText}} 餐</view>
+      </view>
+      <view wx:if="{{item.statusText}}" class="detail-line">状态：{{item.statusText}}</view>
+      <view class="detail-line">操作人：{{item.operatorName}}</view>
+      <view class="detail-line">说明：{{item.remarkText || item.remark || '暂无说明'}}</view>
+      <view class="detail-line">{{item.flowHint}}</view>
+      <view wx:if="{{item.relatedOrderId}}" class="related-order-hint">
+        点击查看关联订单 <text class="arrow">›</text>
+      </view>
+    </view>
+  </view>
+
+  <view wx:elif="{{!loading}}" class="subpage-card">
+    <view class="empty-text">暂无餐次流水</view>
+  </view>
+</view>
