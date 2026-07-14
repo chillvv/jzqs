@@ -42,7 +42,7 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
     try {
       const data = await fetchSubscriptionPreview(filterDate);
       if (skipInsufficient) {
-        setPreviewItems(data.filter(item => item.hasBalance).map(item => ({ ...item, selected: true })));
+        setPreviewItems(data.flatMap(item => item.hasBalance ? [{ ...item, selected: true }] : []));
       } else {
         setPreviewItems(data.map(item => ({ ...item, selected: item.hasBalance })));
       }

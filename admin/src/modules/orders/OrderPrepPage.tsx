@@ -492,7 +492,7 @@ export function OrderPrepPage() {
       const data = await fetchSubscriptionPreview(filterDate);
       if (skipInsufficient) {
         // 仅导入余额充足的客户
-        setPreviewItems(data.filter(item => item.hasBalance).map(item => ({ ...item, selected: true })));
+        setPreviewItems(data.flatMap(item => item.hasBalance ? [{ ...item, selected: true }] : []));
       } else {
         setPreviewItems(data.map(item => ({ ...item, selected: item.hasBalance })));
       }
