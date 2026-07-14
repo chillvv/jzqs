@@ -87,11 +87,25 @@ function areRulesEqual(
   });
 }
 
-function normalizeTimestamp(value?: string | null) {
+function normalizeTimestamp(value?: string | number | number[] | null) {
   if (!value) {
     return 0;
   }
-  const normalized = value.includes("T") ? value : value.replace(" ", "T");
+  if (typeof value === "number") {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    if (value.length >= 6) {
+      const [year, month, day, hour, minute, second] = value;
+      return new Date(year, month - 1, day, hour, minute, second).getTime();
+    }
+    if (value.length >= 3) {
+      const [year, month, day] = value;
+      return new Date(year, month - 1, day).getTime();
+    }
+    return 0;
+  }
+  const normalized = typeof value === "string" && value.includes("T") ? value : String(value).replace(" ", "T");
   const timestamp = Date.parse(normalized);
   return Number.isNaN(timestamp) ? 0 : timestamp;
 }

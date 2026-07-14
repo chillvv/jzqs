@@ -1,0 +1,240 @@
+<!-- =====================================
+      Tab 2：点餐页
+      ===================================== -->
+<view class="custom-nav-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px; display: {{showCheckout ? 'none' : 'flex'}};">
+  <view class="custom-nav-left">
+    <image class="custom-nav-logo" src="/assets/logo.jpeg" mode="aspectFit"></image>
+    <text class="custom-nav-title">简知轻食</text>
+  </view>
+</view>
+<view class="custom-nav-spacer" style="height: {{navBarHeight}}px; display: {{showCheckout ? 'none' : 'block'}};"></view>
+
+<view id="tab-order" class="content">
+  <view id="view-menu" style="display: {{showCheckout ? 'none' : 'block'}};">
+    <view class="menu-top">
+      <view class="menu-top-title">预订明日餐食</view>
+      <view class="menu-top-row">
+        <view class="date-tag">{{serveDateText}}</view>
+        <view class="menu-top-desc">{{canOrder ? '提前一天预订，保证食材新鲜' : statusText}}</view>
+      </view>
+    </view>
+
+    <view class="menu-list-wrap" wx:if="{{loading && !lunchItem && !dinnerItem}}">
+      <view class="skeleton-list">
+        <view class="skeleton-card" wx:for="{{[1,2]}}" wx:key="*this">
+          <view class="skeleton-header"></view>
+          <view class="skeleton-body">
+            <view class="skeleton-badge"></view>
+            <view class="skeleton-lines">
+              <view class="skeleton-line"></view>
+              <view class="skeleton-line short"></view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+    <view class="menu-list-wrap" wx:elif="{{canOrder}}">
+      <view class="meal-item" id="meal-1" wx:if="{{lunchItem}}">
+        <image class="meal-img" src="../../assets/meal-default.jpeg" mode="aspectFill" lazy-load="true"></image>
+        <view class="meal-content">
+          <view>
+            <view class="meal-title">【午餐】营养菜单</view>
+            <view class="meal-desc">
+              <block wx:for="{{lunchItem.dishItems}}" wx:key="*this" wx:for-item="dish">
+                <view>- {{dish}}</view>
+              </block>
+            </view>
+            <view class="meal-tags">
+              <text class="meal-tag">🔥 {{lunchItem.totalCalories}} kcal</text>
+              <text class="meal-tag" wx:if="{{lunchItem.merchantNote && lunchItem.merchantNote !== '-'}}">备注：{{lunchItem.merchantNote}}</text>
+            </view>
+          </view>
+          <view class="meal-bottom">
+            <view class="meal-price-box {{qty1 > 0 ? 'show' : ''}}">扣 1 <text>餐</text></view>
+            <view class="stepper {{qty1 > 0 ? 'active' : ''}}">
+              <view class="step-btn minus" bindtap="updateCart1Minus">-</view>
+              <view class="step-num">{{qty1}}</view>
+              <view class="step-btn plus" bindtap="updateCart1Plus">+</view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="meal-item" id="meal-2" wx:if="{{dinnerItem}}">
+        <image class="meal-img" src="../../assets/meal-default.jpeg" mode="aspectFill" lazy-load="true"></image>
+        <view class="meal-content">
+          <view>
+            <view class="meal-title">【晚餐】营养菜单</view>
+            <view class="meal-desc">
+              <block wx:for="{{dinnerItem.dishItems}}" wx:key="*this" wx:for-item="dish">
+                <view>- {{dish}}</view>
+              </block>
+            </view>
+            <view class="meal-tags">
+              <text class="meal-tag">🔥 {{dinnerItem.totalCalories}} kcal</text>
+              <text class="meal-tag" wx:if="{{dinnerItem.merchantNote && dinnerItem.merchantNote !== '-'}}">备注：{{dinnerItem.merchantNote}}</text>
+            </view>
+          </view>
+          <view class="meal-bottom">
+            <view class="meal-price-box {{qty2 > 0 ? 'show' : ''}}">扣 1 <text>餐</text></view>
+            <view class="stepper {{qty2 > 0 ? 'active' : ''}}">
+              <view class="step-btn minus" bindtap="updateCart2Minus">-</view>
+              <view class="step-num">{{qty2}}</view>
+              <view class="step-btn plus" bindtap="updateCart2Plus">+</view>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <!-- 异常状态空卡片 -->
+    <view class="rest-card" wx:if="{{!canOrder && !loading}}">
+      {{statusText}}
+    </view>
+
+    <!-- 购物车栏 -->
+    <view class="cart-bar {{totalQty > 0 && canOrder ? 'show' : ''}}" wx:if="{{totalQty > 0 && canOrder}}">
+      <view class="cart-info">
+        <view class="cart-total">{{totalQty}}<text>餐</text></view>
+        <view class="cart-desc">共 {{totalQty}} 份明天的餐食</view>
+      </view>
+      <button class="btn-checkout" bindtap="goToCheckout" disabled="{{!home || !home.orderingEnabled || !selfOrderEnabled}}">{{selfOrderEnabled ? (isGuest ? '先验证再预订' : '去结算') : '联系专属客服'}}</button>
+    </view>
+  </view>
+
+  <!-- 结算视图 -->
+  <view id="view-checkout" style="display: {{showCheckout ? 'block' : 'none'}};">
+    <view class="checkout-nav" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+      <view class="subpage-nav-content" style="height: {{navBarHeight - statusBarHeight}}px;">
+        <view class="subpage-nav-left">
+          <view class="subpage-nav-back" bindtap="backToMenu">
+            <view class="subpage-nav-back-icon"></view>
+          </view>
+          <text class="subpage-nav-title">确认订单</text>
+        </view>
+        <view class="subpage-nav-right"></view>
+      </view>
+    </view>
+    <view class="subpage-nav-spacer" style="height: {{navBarHeight}}px;"></view>
+
+    <view class="checkout-scroll">
+      <view class="address-card" bindtap="showAddressList">
+        <view class="addr-left-icon">📍</view>
+        <view class="addr-content" wx:if="{{selectedAddressId}}">
+          <view class="addr-detail"><text style="flex: 1; word-break: break-all;">{{selectedAddressText}}</text></view>
+          <view class="addr-user">{{selectedContactText}}</view>
+        </view>
+        <view class="addr-content" wx:else>
+          <view class="addr-empty" style="font-size: 32rpx; font-weight: 600; color: var(--text-main);">
+            请选择收餐地址
+          </view>
+        </view>
+        <view class="change-text">更换</view>
+      </view>
+
+      <view class="checkout-row-card">
+        <view class="checkout-row">
+          <text class="checkout-row-label">配送时间</text>
+          <text class="checkout-row-value" style="color:var(--brand-dark); font-weight:600;">明日 ({{serveDateText}}) 按餐次送达</text>
+        </view>
+      </view>
+
+      <view class="order-summary-card">
+        <view class="osc-title">
+          <text>餐食明细</text>
+          <text class="date">商家自配</text>
+        </view>
+        <view id="checkout-items">
+          <view class="checkout-item" wx:for="{{checkoutItems}}" wx:key="id">
+            <image class="ci-img" src="../../assets/meal-default.jpeg" mode="aspectFill" lazy-load="true"></image>
+            <view class="ci-info">
+              <view class="ci-name">【{{item.periodText}}】营养菜单</view>
+              <view class="ci-desc">
+                <block wx:for="{{item.dishItems}}" wx:key="*this" wx:for-item="dish">
+                  <view>- {{dish}}</view>
+                </block>
+              </view>
+              <view class="ci-bottom">
+                <text class="ci-qty"></text>
+                <text class="ci-price">x{{item.qty}}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view class="checkout-row-card">
+        <view class="checkout-row" style="flex-direction: column; align-items: stretch; gap: 16rpx;">
+          <view style="display: flex; justify-content: space-between; align-items: center;">
+            <text class="checkout-row-label">订单备注</text>
+            <view style="display: flex; align-items: center; gap: 16rpx;">
+              <text wx:if="{{historyRemarkSuggestions.length > 0}}" style="font-size: 22rpx; color: #999;">最近使用</text>
+              <text class="btn-set-default {{customRemark === defaultRemark && customRemark !== '' ? 'active' : ''}}" bindtap="toggleDefaultRemark">设为默认</text>
+            </view>
+          </view>
+          <view class="remark-preset-list" wx:if="{{historyRemarkSuggestions.length > 0}}" style="justify-content: flex-start; margin-bottom: 8rpx;">
+            <view class="remark-chip {{customRemark === item ? 'active' : ''}}" wx:for="{{historyRemarkSuggestions}}" wx:key="*this" bindtap="selectHistoryRemark" data-note="{{item}}">
+              {{item}}
+            </view>
+          </view>
+          <input
+            type="text"
+            class="remark-input"
+            placeholder="口味、偏好要求 (选填)"
+            placeholder-style="color: #94a3b8;"
+            value="{{customRemark}}"
+            bindinput="onRemarkInput"
+            cursor-spacing="80"
+          />
+        </view>
+        <view class="checkout-row">
+          <text class="checkout-row-label">餐具数量</text>
+          <text class="checkout-row-value">按餐量提供</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="submit-bar">
+      <view class="submit-total">
+        <text class="submit-total-label">合计扣减</text>
+        <text class="submit-total-num">{{totalQty * price}}</text>
+        <text class="submit-total-unit">餐</text>
+      </view>
+      <button class="btn-submit" bindtap="submitOrder" loading="{{submitting}}" disabled="{{submitting}}">确认预订</button>
+    </view>
+  </view>
+
+  <!-- 地址半屏弹窗 -->
+  <view class="address-popup-mask {{showAddressPopup ? 'show' : ''}}" bindtap="hideAddressList" wx:if="{{showAddressPopup}}"></view>
+  <view class="address-popup-container {{showAddressPopup ? 'show' : ''}}" wx:if="{{showAddressPopup}}">
+    <view class="popup-header">
+      <view>选择地址</view>
+      <view class="close-btn" bindtap="hideAddressList">×</view>
+    </view>
+    <scroll-view scroll-y class="popup-body">
+      <view class="address-item {{item.id === selectedAddressId ? 'selected' : ''}}" wx:for="{{addresses}}" wx:key="id" bindtap="selectAddress" data-id="{{item.id}}">
+        <view class="addr-info">
+          <view class="addr-detail-text">{{item.addressLine}}</view>
+          <view class="addr-user">{{item.contactName}} {{item.contactPhone}}</view>
+        </view>
+        <view class="address-select-indicator {{item.id === selectedAddressId ? 'active' : ''}}">
+          <text class="address-select-icon">{{item.id === selectedAddressId ? '✓' : ''}}</text>
+        </view>
+      </view>
+    </scroll-view>
+    <view class="popup-footer">
+      <button class="btn-add-address" bindtap="goToAddAddress">+ 新增地址</button>
+    </view>
+  </view>
+
+  <view class="inline-auth-mask {{showInlineAuth ? 'show' : ''}}" bindtap="closeInlineAuth" wx:if="{{showInlineAuth}}"></view>
+  <view class="inline-auth-sheet {{showInlineAuth ? 'show' : ''}}" wx:if="{{showInlineAuth}}">
+    <view class="inline-auth-sheet__header">
+      <view>
+        <view class="inline-auth-sheet__title">先确认会员手机号</view>
+      </view>
+      <view class="inline-auth-sheet__close" bindtap="closeInlineAuth">×</view>
+    </view>
+    <button class="inline-auth-sheet__primary" bindtap="goProfileAuth">微信一键登录</button>
+  </view>
+</view>

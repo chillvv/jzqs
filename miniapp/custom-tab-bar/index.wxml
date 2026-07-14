@@ -1,0 +1,14 @@
+<view class="custom-tab-bar">
+  <view class="tab-item {{selected === 0 ? 'active' : ''}}" data-path="/pages/home/index" data-index="0" bindtap="switchTab">
+    <image class="tab-icon" src="{{selected === 0 ? '/images/home-line-active.svg' : '/images/home-line.svg'}}"></image>
+    <text class="tab-text">首页</text>
+  </view>
+  <view class="tab-item {{selected === 1 ? 'active' : ''}}" data-path="/pages/order/index" data-index="1" bindtap="switchTab">
+    <image class="tab-icon" src="{{selected === 1 ? '/images/order-line-active.svg' : '/images/order-line.svg'}}"></image>
+    <text class="tab-text">点餐</text>
+  </view>
+  <view class="tab-item {{selected === 2 ? 'active' : ''}}" data-path="/pages/profile/index" data-index="2" bindtap="switchTab">
+    <image class="tab-icon" src="{{selected === 2 ? '/images/my-line-active.svg' : '/images/my-line.svg'}}"></image>
+    <text class="tab-text">我的</text>
+  </view>
+</view>

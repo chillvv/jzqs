@@ -1,0 +1,43 @@
+{
+  "__usePrivacyCheck__": true,
+  "pages": [
+    "pages/profile/index",
+    "pages/login/index",
+    "pages/queue/index",
+    "pages/order-detail/index",
+    "pages/register/index",
+    "pages/pending/index",
+    "pages/blocked/index"
+  ],
+  "window": {
+    "navigationBarTitleText": "简知轻食骑手端",
+    "navigationBarBackgroundColor": "#F5F5F7",
+    "navigationBarTextStyle": "black",
+    "backgroundColor": "#F5F5F7",
+    "backgroundTextStyle": "light",
+    "navigationStyle": "custom"
+  },
+  "tabBar": {
+    "custom": true,
+    "color": "#999999",
+    "selectedColor": "#2563EB",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      { 
+        "pagePath": "pages/queue/index", 
+        "text": "订单",
+        "iconPath": "assets/icons/queue.png",
+        "selectedIconPath": "assets/icons/queue-active.png"
+      },
+      { 
+        "pagePath": "pages/profile/index", 
+        "text": "我的",
+        "iconPath": "assets/icons/profile.png",
+        "selectedIconPath": "assets/icons/profile-active.png"
+      }
+    ]
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json"
+}

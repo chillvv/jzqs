@@ -21,8 +21,18 @@ export function shiftLocalDateInputValue(value: string, offsetDays: number) {
   return formatLocalDateInputValue(date);
 }
 
-export function formatDateTimeLabel(value?: string | null) {
-  const raw = normalizeDateInput(value);
+export function formatDateTimeLabel(value?: string | number[] | null) {
+  if (Array.isArray(value)) {
+    if (value.length >= 5) {
+      const [year, month, day, hour, minute] = value;
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")} ${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    }
+    if (value.length >= 3) {
+      const [year, month, day] = value;
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")} 00:00`;
+    }
+  }
+  const raw = normalizeDateInput(value as string);
   if (!raw) return "-";
   const normalized = raw.replace("T", " ");
   if (normalized.length >= 16) {
@@ -31,8 +41,14 @@ export function formatDateTimeLabel(value?: string | null) {
   return normalized;
 }
 
-export function formatDateLabel(value?: string | null) {
-  const raw = normalizeDateInput(value);
+export function formatDateLabel(value?: string | number[] | null) {
+  if (Array.isArray(value)) {
+    if (value.length >= 3) {
+      const [year, month, day] = value;
+      return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    }
+  }
+  const raw = normalizeDateInput(value as string);
   if (!raw) return "-";
   return raw.replace("T", " ").slice(0, 10);
 }

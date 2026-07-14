@@ -1,0 +1,71 @@
+<!-- 骑手小程序 - 个人中心 -->
+<view id="tab-profile" class="content page">
+  
+  <!-- TopAppBar -->
+  <view class="header-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+    <view class="header-left">
+      <image class="header-logo" src="/assets/logo.jpeg" mode="aspectFit"></image>
+      <text class="header-title">简知轻食</text>
+    </view>
+  </view>
+
+  <view class="profile-header">
+    <view class="profile-meta">
+      <view class="profile-name">{{displayName}}</view>
+      <view class="profile-sub" wx:if="{{viewState === 'active' || viewState === 'pending' || viewState === 'blocked'}}">{{maskedPhone}}</view>
+      <view class="profile-badge member" wx:if="{{viewState === 'active'}}">骑手已开通</view>
+      <view class="profile-guest-action" wx:if="{{viewState === 'guest' || viewState === 'checking' || viewState === 'loading' || viewState === 'not_found' || viewState === 'unknown'}}" bindtap="goLoginPage">
+        去登录 <text class="arrow">›</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="vip-card" wx:if="{{viewState === 'active' || viewState === 'blocked' || viewState === 'pending'}}">
+    <view class="vip-card-sweep"></view>
+    <view class="vip-title">今日完成单量</view>
+    <view class="vip-balance"><text class="num">{{riderInfo.todayDeliveredCount}}</text><text class="unit">单</text></view>
+    <view class="vip-footer">
+      <view class="vip-status"><view class="status-dot {{riderInfo.rawStatus === 'ACTIVE' ? 'status-active' : 'status-disabled'}}"></view>工作状态：{{riderInfo.workStatus}}</view>
+    </view>
+  </view>
+
+  <!-- 待审核/已停用 -->
+  <view wx:if="{{viewState === 'pending' || viewState === 'blocked'}}" class="state-card" style="margin: 0 24rpx 32rpx; background: #fff; border-radius: 24rpx; padding: 32rpx;">
+    <view wx:if="{{viewState === 'pending'}}">
+      <view style="font-size: 32rpx; font-weight: 700; color: #111; margin-bottom: 12rpx;">账号审核中</view>
+      <view style="font-size: 26rpx; color: #999;">您的注册信息已提交，请耐心等待管理员审核通过后即可接单。</view>
+    </view>
+    <view wx:if="{{viewState === 'blocked'}}">
+      <view style="font-size: 32rpx; font-weight: 700; color: #EF4444; margin-bottom: 12rpx;">账号已停用</view>
+      <view style="font-size: 26rpx; color: #999;">如有疑问请联系站长处理。</view>
+    </view>
+  </view>
+
+  <view class="menu-group">
+    <view class="list-item" bindtap="handleMenuClick" data-action="history">
+      <view class="list-icon-wrap">
+        <text class="list-icon">📝</text>
+        <view class="list-copy">
+          <view class="list-title">历史订单</view>
+          <view class="list-desc">查看已完成配送记录与历史回执。</view>
+        </view>
+      </view>
+      <text class="list-arrow">›</text>
+    </view>
+    <view class="list-item" bindtap="handleMenuClick" data-action="settings">
+      <view class="list-icon-wrap">
+        <text class="list-icon">⚙️</text>
+        <view class="list-copy">
+          <view class="list-title">账号设置</view>
+          <view class="list-desc">管理登录状态、接单信息和基础偏好。</view>
+        </view>
+      </view>
+      <text class="list-arrow">›</text>
+    </view>
+  </view>
+  
+  <view class="logout-section" wx:if="{{viewState === 'active' || viewState === 'pending' || viewState === 'blocked'}}">
+    <button class="btn-logout" bindtap="logout">退出登录</button>
+  </view>
+
+</view>

@@ -1,0 +1,8 @@
+{
+  "navigationBarTitleText": "我的预订",
+  "enablePullDownRefresh": true,
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "subpage-navbar": "/components/subpage-navbar/index"
+  }
+}

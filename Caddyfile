@@ -1,0 +1,52 @@
+jzqs.top {
+    encode zstd gzip
+
+    handle /uploads/* {
+        reverse_proxy backend:8080 {
+            transport http {
+                dial_timeout 5s
+                response_header_timeout 30s
+                read_timeout 30s
+                write_timeout 30s
+            }
+        }
+    }
+
+    handle /api/* {
+        reverse_proxy backend:8080 {
+            transport http {
+                dial_timeout 5s
+                response_header_timeout 30s
+                read_timeout 30s
+                write_timeout 30s
+            }
+        }
+    }
+
+    handle /ws/* {
+        reverse_proxy backend:8080 {
+            transport http {
+                dial_timeout 5s
+                response_header_timeout 30s
+                read_timeout 300s
+                write_timeout 300s
+            }
+        }
+    }
+
+    handle {
+        reverse_proxy admin:80 {
+            transport http {
+                dial_timeout 5s
+                response_header_timeout 15s
+                read_timeout 30s
+                write_timeout 30s
+            }
+        }
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        -Server
+    }
+}

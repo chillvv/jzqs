@@ -1,0 +1,104 @@
+spring:
+  application:
+    name: jzqs-backend
+  mandatory-file-encoding: UTF-8
+  jackson:
+    time-zone: Asia/Shanghai
+  task:
+    scheduling:
+      timezone: Asia/Shanghai
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://127.0.0.1:3306/jzqs?useUnicode=true&characterEncoding=UTF-8&connectionCollation=utf8mb4_unicode_ci&serverTimezone=Asia/Shanghai}
+    username: ${SPRING_DATASOURCE_USERNAME:root}
+    password: ${SPRING_DATASOURCE_PASSWORD:root}
+    hikari:
+      maximum-pool-size: ${DB_MAX_POOL_SIZE:12}
+      minimum-idle: ${DB_MIN_IDLE:2}
+      idle-timeout: ${DB_IDLE_TIMEOUT_MS:300000}
+      max-lifetime: ${DB_MAX_LIFETIME_MS:1800000}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:10000}
+      validation-timeout: ${DB_VALIDATION_TIMEOUT_MS:3000}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: false
+    show-sql: false
+  flyway:
+    enabled: true
+    repair-on-migrate: true
+  servlet:
+    multipart:
+      max-file-size: 8MB
+      max-request-size: 8MB
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
+logging:
+  level:
+    org.springframework.jdbc.core: INFO
+    org.springframework.jdbc.core.JdbcTemplate: INFO
+    org.springframework.jdbc.core.StatementCreatorUtils: INFO
+    # 只显示 SQL 语句，不显示结果集详情
+    com.baomidou.mybatisplus: INFO
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    # 注释掉详细日志输出，只在需要调试时开启
+    # log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      id-type: auto
+
+server:
+  port: ${SERVER_PORT:8081}
+  shutdown: graceful
+  servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+  tomcat:
+    uri-encoding: UTF-8
+    threads:
+      max: ${SERVER_TOMCAT_THREADS_MAX:80}
+      min-spare: ${SERVER_TOMCAT_THREADS_MIN_SPARE:10}
+    accept-count: ${SERVER_TOMCAT_ACCEPT_COUNT:100}
+    max-connections: ${SERVER_TOMCAT_MAX_CONNECTIONS:1024}
+
+app:
+  upload-dir: ${APP_UPLOAD_DIR:./uploads}
+  auth:
+    filter:
+      enabled: ${APP_AUTH_FILTER_ENABLED:true}
+  debug:
+    miniapp-order-enabled: ${APP_DEBUG_MINIAPP_ORDER_ENABLED:false}
+  mobile:
+    self-order-cutoff: ${APP_MOBILE_SELF_ORDER_CUTOFF:23:00}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+# 微信小程序配置
+wechat:
+  # 开发模式：true 时不调用微信接口，使用模拟数据
+  dev-mode: ${WECHAT_DEV_MODE:true}
+  # 小程序 AppID（生产模式必填）
+  appid: ${WECHAT_APPID:}
+  # 小程序 AppSecret（生产模式必填）
+  secret: ${WECHAT_SECRET:}
+  # 云开发环境 ID
+  cloud-env-id: ${WECHAT_CLOUD_ENV_ID:cloud1-4g88w3e2dedee471}
+  subscribe:
+    delivery-template-id: ${WECHAT_DELIVERY_TEMPLATE_ID:DCpNx6852oVCXO83CKuR-uO8WsgvVEDdAaUgwkLNi3s}
+    delivery-page: ${WECHAT_DELIVERY_PAGE:pages/orders/index}

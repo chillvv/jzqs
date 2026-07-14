@@ -1,0 +1,47 @@
+/* pages/wallet/index.wxss */
+
+/* 钱包页样式（从 app.wxss 拆入） */
+.wallet-summary-card {
+  background: linear-gradient(135deg, var(--bg-card) 0%, var(--brand-light) 100%);
+  border-radius: 28rpx;
+  box-shadow: var(--shadow-sm);
+  border: 2rpx solid rgba(184, 208, 96, 0.25);
+  padding: 28rpx;
+  margin-bottom: 24rpx;
+  display: flex;
+  gap: 24rpx;
+}
+
+.wallet-summary-block {
+  flex: 1;
+}
+
+.wallet-summary-label {
+  font-size: 24rpx;
+  color: var(--text-sub);
+  margin-bottom: 10rpx;
+}
+
+.wallet-summary-value {
+  font-size: 48rpx;
+  font-weight: 800;
+  color: var(--text-main);
+  font-family: "Courier New", Courier, monospace;
+}
+
+.wallet-summary-value.strong {
+  color: var(--brand-dark);
+}
+
+.wallet-delta {
+  font-size: 30rpx;
+  font-weight: 800;
+}
+
+.wallet-delta.plus {
+  color: var(--success-color);
+}
+
+.wallet-delta.minus {
+  color: var(--error-color);
+}

@@ -1,0 +1,82 @@
+# 上传的文件
+/uploads/
+/backend/uploads/
+/backend/.backup/
+
+# 恢复与备份
+/_recovery/
+
+# AI & 工具产物 (Trae/Superpowers)
+/.trae/
+/.superpowers/
+/.kiro/
+/.claude/
+/.worktrees/
+/.worktree-backups/
+/docs/superpowers/
+.trae-sandbox/
+
+# 测试类与测试资源 (生产环境不需要)
+/tests/
+/backend/src/test/
+/admin/src/**/*.test.ts
+/admin/src/**/*.test.tsx
+/admin/scripts/
+/admin/temp-test/
+/miniapp/tests/
+/miniapp-rider/tests/
+
+# 开发文档与本地规格说明
+/docs/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# 编译输出与构建产物
+/backend/target/
+/backend/build/
+/admin/dist/
+/admin/admin-build-verify.log
+/admin/admin-build.log
+/admin/admin-helper-test.log
+/admin/admin-test.log
+
+# 日志
+*.log
+*.out
+*.err
+backend/*.log
+backend/*.out
+backend/*.err
+admin/*.log
+backend/*.txt
+
+# 临时文件
+*.tmp
+*.temp
+/split_*.js
+/ui-assessment/
+/ui_optimization_plan.md
+backend/tmp_*
+
+# 操作系统
+.DS_Store
+Thumbs.db
+
+# Node modules
+node_modules/
+/admin/node_modules/
+
+# Docker env
+.env
+.env.local
+.env.*.local
+
+# Backend 本地配置
+/backend/src/main/resources/application-local.yml
+
+# 小程序开发工具
+.miniprogram/
+project.private.config.json

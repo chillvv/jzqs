@@ -1,0 +1,41 @@
+<subpage-navbar title="申请售后" />
+
+<view class="subpage">
+  <view class="subpage-card">
+    <view class="hero-inline-main">申请售后</view>
+  </view>
+
+  <view class="subpage-card form-card">
+    <view class="form-label">申请类型</view>
+    <radio-group bindchange="onTypeChange" class="type-selector">
+      <label class="type-card {{type === 'REFUND' ? 'active' : ''}}">
+        <radio value="REFUND" checked="{{type === 'REFUND'}}" hidden="true" />
+        <view class="type-title">退款</view>
+        <view class="type-desc">未送达或不需要了</view>
+      </label>
+      <label class="type-card {{type === 'COMPENSATION' ? 'active' : ''}}">
+        <radio value="COMPENSATION" checked="{{type === 'COMPENSATION'}}" hidden="true" />
+        <view class="type-title">补偿/其他</view>
+        <view class="type-desc">餐品少漏错、质量等</view>
+      </label>
+    </radio-group>
+
+    <view class="form-label">原因</view>
+    <picker mode="selector" range="{{reasonOptions}}" range-key="label" bindchange="onReasonChange" value="0">
+      <view class="picker-line">{{reasonText || '请选择原因'}}</view>
+    </picker>
+
+    <view class="form-label">备注</view>
+    <textarea
+      class="remark-box"
+      placeholder="补充说明本次申请的具体情况"
+      maxlength="120"
+      value="{{remark}}"
+      bindinput="onRemarkInput"
+    />
+
+    <button class="submit-btn" loading="{{submitting}}" bindtap="submit">
+      {{submitting ? '提交中...' : '提交申请'}}
+    </button>
+  </view>
+</view>

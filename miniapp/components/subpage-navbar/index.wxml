@@ -1,0 +1,12 @@
+<view class="subpage-nav-bar" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
+  <view class="subpage-nav-content" style="height: {{navBarHeight - statusBarHeight}}px;">
+    <view class="subpage-nav-left">
+      <view class="subpage-nav-back" bindtap="goBack">
+        <view class="subpage-nav-back-icon"></view>
+      </view>
+      <text class="subpage-nav-title">{{title}}</text>
+    </view>
+    <view class="subpage-nav-right"></view>
+  </view>
+</view>
+<view class="subpage-nav-spacer" style="height: {{navBarHeight}}px;"></view>

@@ -1,0 +1,103 @@
+<subpage-navbar title="{{showingTargetOrderOnly ? '关联订单' : '我的预订记录'}}" />
+
+<view class="subpage">
+  <view class="subpage-card">
+    <view class="hero-inline-main">{{showingTargetOrderOnly ? '关联订单' : '我的预订记录'}}</view>
+    <view wx:if="{{showingTargetOrderOnly}}" class="target-order-hint">
+      <text>已为你直达餐次流水对应订单</text>
+      <button class="sub-btn ghost target-order-btn" bindtap="viewAllOrders">查看全部订单</button>
+    </view>
+  </view>
+
+  <view class="subpage-card">
+    <view class="filter-row">
+      <view
+        wx:for="{{filters}}"
+        wx:key="value"
+        class="filter-chip {{currentStatus === item.value ? 'active' : ''}}"
+        data-status="{{item.value}}"
+        bindtap="onFilterTap"
+      >
+        {{item.label}}
+      </view>
+    </view>
+  </view>
+
+  <view wx:if="{{loading && !items.length}}" class="skeleton-list">
+    <view class="skeleton-card" wx:for="{{[1,2,3]}}" wx:key="*this">
+      <view class="skeleton-header"></view>
+      <view class="skeleton-body">
+        <view class="skeleton-lines" style="padding-top:0;">
+          <view class="skeleton-line"></view>
+          <view class="skeleton-line short"></view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:elif="{{items.length}}">
+    <view
+      wx:for="{{items}}"
+      wx:key="id"
+      class="subpage-card order-card {{targetOrderId && item.id == targetOrderId ? 'highlight-card' : ''}}"
+    >
+      <view class="order-card-header">
+        <view class="order-time-wrap">
+          <text class="order-time">{{item.serveDateText}} {{item.periodText}}</text>
+        </view>
+        <view class="order-status {{item.statusClass}}" bindtap="showStatusDetail" data-item="{{item}}">
+          {{item.statusText}}
+          <text wx:if="{{item.afterSaleStatus === 'REJECTED'}}" class="detail-icon">ⓘ</text>
+        </view>
+      </view>
+
+      <view class="order-card-body">
+        <view class="order-main-info">
+          <view class="order-meal-name">{{item.mealName}}</view>
+          <view class="order-guidance" wx:if="{{item.guidanceText}}">{{item.guidanceText}}</view>
+        </view>
+
+        <view class="order-detail-list">
+          <view class="detail-row" wx:if="{{item.mealDetail && item.mealDetail !== item.mealName}}">
+            <text class="detail-label">内容</text>
+            <text class="detail-value">{{item.mealDetail}}</text>
+          </view>
+          <view class="detail-row">
+            <text class="detail-label">地址</text>
+            <text class="detail-value">{{item.deliveryAddress}}</text>
+          </view>
+          <view class="detail-row" wx:if="{{item.note && item.note !== '-'}}">
+            <text class="detail-label">备注</text>
+            <text class="detail-value highlight-note">{{item.note}}</text>
+          </view>
+          <view class="detail-row" wx:if="{{item.merchantNote && item.merchantNote !== '-'}}">
+            <text class="detail-label">商家回复</text>
+            <text class="detail-value">{{item.merchantNote}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="order-card-footer" wx:if="{{item.canCancel || item.canApplyAftersale || item.isAftersaleProcessing || item.canViewReceipt || item.changeAddressMode}}">
+        <view class="action-btn-group">
+          <button class="action-btn outline" wx:if="{{item.canCancel}}" data-id="{{item.id}}" bindtap="cancelOrder">取消预订</button>
+          <button class="action-btn outline" wx:if="{{item.canApplyAftersale}}" data-id="{{item.id}}" bindtap="openAftersale">申请售后</button>
+          <button class="action-btn outline" wx:if="{{item.isAftersaleProcessing}}" data-id="{{item.id}}" bindtap="viewAftersale">售后中</button>
+          <button class="action-btn outline" wx:if="{{item.changeAddressMode === 'SELF_SERVICE' || item.changeAddressMode === 'CONTACT_SUPPORT'}}" data-id="{{item.id}}" data-mode="{{item.changeAddressMode}}" bindtap="changeAddress">{{item.changeAddressMode === 'SELF_SERVICE' ? '更换地址' : '联系改址'}}</button>
+          <button class="action-btn primary" wx:if="{{item.canViewReceipt}}" data-id="{{item.id}}" bindtap="openReceipt">{{item.orderPrimaryActionText || '查看回执'}}</button>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:elif="{{!loading}}" class="subpage-card">
+    <view class="empty-state-wrap">
+      <image class="empty-icon" src="../../assets/icons/order.png" mode="aspectFit"></image>
+      <view class="empty-title">{{targetOrderId ? '未找到对应的关联订单' : '当前筛选条件下暂无订单'}}</view>
+      <view class="empty-desc">去看看今天的营养菜单吧</view>
+      <button class="btn-go-order" bindtap="goToOrder">去点餐</button>
+    </view>
+    <view wx:if="{{targetOrderId}}" class="action-row">
+      <button class="sub-btn ghost target-order-btn" bindtap="viewAllOrders">查看全部订单</button>
+    </view>
+  </view>
+</view>
