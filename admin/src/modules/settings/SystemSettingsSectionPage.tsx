@@ -1179,15 +1179,6 @@ export function SystemSettingsSectionPage() {
             </div>
           </div>
         </div>
-        <div style={{ background: "#f8fafc", borderRadius: 12, padding: 16, border: "1px solid var(--border-soft)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-            <span style={{ fontSize: 13, color: "var(--text-sub)", fontWeight: 700 }}>系统提示词 (Prompt)</span>
-            <span style={{ fontSize: 12, color: "var(--text-subtle)" }}>{aiSettings?.aiPromptTemplate?.length || 0} 字符</span>
-          </div>
-          <div style={{ fontSize: 13, color: "var(--text-body)", whiteSpace: "pre-wrap", wordBreak: "break-word", maxHeight: 180, overflowY: "auto" }}>
-            {aiSettings?.aiPromptTemplate || "未配置提示词"}
-          </div>
-        </div>
       </div>
     );
   }

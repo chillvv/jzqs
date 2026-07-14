@@ -860,7 +860,7 @@ export async function updateDispatchRouteWorkbench(payload: {
   defaultStrategyMode: string;
   anchorAddress: string;
 }) {
-  const response = await http.put<ApiResponse<DispatchAiWorkbenchResponse>>("/api/admin/settings/dispatch-route-workbench", payload);
+  const response = await http.post<ApiResponse<DispatchAiWorkbenchResponse>>("/api/admin/settings/dispatch-route-workbench", payload);
   return response.data.data;
 }
 

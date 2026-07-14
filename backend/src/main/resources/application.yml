@@ -28,6 +28,7 @@ spring:
   flyway:
     enabled: true
     repair-on-migrate: true
+    encoding: UTF-8
   servlet:
     multipart:
       max-file-size: 8MB
