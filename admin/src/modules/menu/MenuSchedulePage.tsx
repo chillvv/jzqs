@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { createNextMenuWeek, copyMenuWeekFromLastWeek, fetchCurrentMenuWeek, publishMenuWeek, saveMenuWeekDay } from "../../shared/api/http";
+import useSWR from "swr";
+import { swrFetcher, createNextMenuWeek, copyMenuWeekFromLastWeek, publishMenuWeek, saveMenuWeekDay } from "../../shared/api/http";
 import type { AdminMenuWeekDay, AdminMenuWeekResponse, AdminMenuWeekSlot } from "../../shared/api/types";
 import { buildMenuWeekSummary, resolveWeekStatusLabel } from "./menuSchedulePage.helpers";
 import { formatDateLabel, formatLocalDateInputValue, shiftLocalDateInputValue } from "../../shared/utils/dateTime";
@@ -39,38 +40,53 @@ function slotLabel(period: "LUNCH" | "DINNER") {
 }
 
 export function MenuSchedulePage() {
-  const [week, setWeek] = useState<AdminMenuWeekResponse | null>(null);
+  const [targetDate, setTargetDate] = useState("");
   const [expandedDate, setExpandedDate] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, DayDraft>>({});
-  const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState("");
+  const [currentWeekId, setCurrentWeekId] = useState<number | null>(null);
+  
   const [isPublishConfirmOpen, setIsPublishConfirmOpen] = useState(false);
   const [copyingLastWeek, setCopyingLastWeek] = useState(false);
   const [creatingNextWeek, setCreatingNextWeek] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [savingDay, setSavingDay] = useState<string | null>(null);
 
+  const url = targetDate 
+    ? `/api/admin/menu-weeks/current?targetDate=${encodeURIComponent(targetDate)}` 
+    : "/api/admin/menu-weeks/current";
+
+  const { data: response, error, isLoading: loading, mutate } = useSWR(
+    url,
+    swrFetcher,
+    { revalidateOnFocus: false }
+  );
+
+  const week = response?.data as AdminMenuWeekResponse | undefined | null;
+  const selectedDate = targetDate || week?.weekStartDate || "";
+
   useEffect(() => {
-    reloadMenu().catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"));
-  }, []);
+    if (error) {
+      toast(error?.response?.data?.message || error.message || String(error), "error");
+    }
+  }, [error]);
 
-
-  async function reloadMenu(targetDate?: string) {
-    setLoading(true);
-    const currentWeek = await fetchCurrentMenuWeek(targetDate);
-    const nextDrafts: Record<string, DayDraft> = {};
-    currentWeek.days.forEach((day) => {
-      nextDrafts[day.serveDate] = {
-        lunch: toDraft(day.lunch),
-        dinner: toDraft(day.dinner)
-      };
-    });
-    setWeek(currentWeek);
-    setDrafts(nextDrafts);
-    setExpandedDate(null);
-    setSelectedDate(currentWeek.weekStartDate);
-    setLoading(false);
-  }
+  useEffect(() => {
+    if (week) {
+      const nextDrafts: Record<string, DayDraft> = {};
+      week.days.forEach((day) => {
+        nextDrafts[day.serveDate] = {
+          lunch: toDraft(day.lunch),
+          dinner: toDraft(day.dinner)
+        };
+      });
+      setDrafts(nextDrafts);
+      
+      if (week.weekId !== currentWeekId) {
+        setExpandedDate(null);
+        setCurrentWeekId(week.weekId);
+      }
+    }
+  }, [week, currentWeekId]);
 
   async function handleCreateNextWeek() {
     if (creatingNextWeek) {
@@ -79,8 +95,10 @@ export function MenuSchedulePage() {
     setCreatingNextWeek(true);
     try {
       await createNextMenuWeek();
-      await reloadMenu(nextWeekDate());
+      setTargetDate(nextWeekDate());
       toast("下周空白模板已创建", "success");
+    } catch (err: any) {
+      toast(err?.response?.data?.message || err.message || String(err), "error");
     } finally {
       setCreatingNextWeek(false);
     }
@@ -93,8 +111,10 @@ export function MenuSchedulePage() {
     setCopyingLastWeek(true);
     try {
       await copyMenuWeekFromLastWeek();
-      await reloadMenu();
+      await mutate();
       toast("已将上周菜单复制到本周", "success");
+    } catch (err: any) {
+      toast(err?.response?.data?.message || err.message || String(err), "error");
     } finally {
       setCopyingLastWeek(false);
     }
@@ -110,8 +130,10 @@ export function MenuSchedulePage() {
       setIsPublishConfirmOpen(false);
       await persistDraftDaysBeforePublish(week.weekId);
       await publishMenuWeek(week.weekId);
-      await reloadMenu();
+      await mutate();
       toast(`${week.weekStartDate} ~ ${week.weekEndDate} 菜单已发布`, "success");
+    } catch (err: any) {
+      toast(err?.response?.data?.message || err.message || String(err), "error");
     } finally {
       setPublishing(false);
     }
@@ -211,7 +233,7 @@ export function MenuSchedulePage() {
     setSavingDay(serveDate);
     try {
       await saveMenuWeekDay(week.weekId, serveDate, drafts[serveDate]);
-      await reloadMenu(week.weekStartDate);
+      await mutate();
       setExpandedDate(serveDate);
       toast("保存成功", "success");
     } finally {
@@ -229,9 +251,9 @@ export function MenuSchedulePage() {
     );
   }
 
-  async function handlePickWeek(targetDate: string) {
+  function handlePickWeek(targetDate: string) {
     if (!targetDate) return;
-    await reloadMenu(targetDate);
+    setTargetDate(targetDate);
   }
 
   const pageTitle = useMemo(() => {
@@ -336,12 +358,12 @@ export function MenuSchedulePage() {
         <button
           className="btn btn-outline"
           onClick={() => {
-            handlePickWeek(shiftLocalDateInputValue(selectedDate, -7)).catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"));
+            handlePickWeek(shiftLocalDateInputValue(selectedDate, -7));
           }}
         >‹ 上一周</button>
         <DatePicker
           value={selectedDate}
-          onChange={(date) => handlePickWeek(date).catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"))}
+          onChange={(date) => handlePickWeek(date)}
           showTomorrowShortcut={false}
         />
         <span className="menu-week-toolbar__range">
@@ -350,7 +372,7 @@ export function MenuSchedulePage() {
         <button
           className="btn btn-outline"
           onClick={() => {
-            handlePickWeek(shiftLocalDateInputValue(selectedDate, 7)).catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"));
+            handlePickWeek(shiftLocalDateInputValue(selectedDate, 7));
           }}
         >下一周 ›</button>
       </div>
