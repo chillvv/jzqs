@@ -44,6 +44,8 @@ import { AdminDialog } from "../../shared/components/AdminDialog";
 import { EmptyStateCard } from "../../shared/components/EmptyStateCard";
 import { SettingsModal } from "../../shared/components/SettingsModal";
 import { toast } from "../../shared/components/Toast";
+import { Input } from "../../shared/components/ui/input";
+import { Checkbox } from "../../shared/components/ui/checkbox";
 import {
   buildDispatchAiConversation,
   buildCustomerFacingSettingHints,
@@ -1327,7 +1329,7 @@ export function SystemSettingsSectionPage() {
         <div className="form-group">
           <label className="form-label">启用自动预排</label>
           <div className="toggle-row">
-            <input type="checkbox" checked={routeWorkbenchForm.autoScheduleEnabled} onChange={(e) => setRouteWorkbenchForm({ ...routeWorkbenchForm, autoScheduleEnabled: e.target.checked })} />
+            <Checkbox checked={routeWorkbenchForm.autoScheduleEnabled} onCheckedChange={(checked) => setRouteWorkbenchForm({ ...routeWorkbenchForm, autoScheduleEnabled: !!checked })} />
             <span>{routeWorkbenchForm.autoScheduleEnabled ? "到点后自动为次日派单排序" : "关闭后仅保留手动测试与商家拖拽确认"}</span>
           </div>
         </div>
@@ -1471,10 +1473,9 @@ export function SystemSettingsSectionPage() {
         <div className="form-group">
           <label className="form-label">启用锁定公告</label>
           <div className="toggle-row">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={popupForm.enabled}
-              onChange={(e) => setPopupForm({ ...popupForm, enabled: e.target.checked })}
+              onCheckedChange={(checked) => setPopupForm({ ...popupForm, enabled: !!checked })}
             />
             <span>
               {popupForm.enabled
@@ -1555,10 +1556,9 @@ export function SystemSettingsSectionPage() {
         <div className="form-group">
           <label className="form-label">顾客上线弹窗提醒</label>
           <div className="toggle-row">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={packageReminderForm.mealReminderPopupEnabled}
-              onChange={(e) => setPackageReminderForm({ ...packageReminderForm, mealReminderPopupEnabled: e.target.checked })}
+              onCheckedChange={(checked) => setPackageReminderForm({ ...packageReminderForm, mealReminderPopupEnabled: !!checked })}
             />
             <span>{packageReminderForm.mealReminderPopupEnabled ? "开启后顾客打开小程序会收到一次温和提醒" : "关闭后顾客上线时不再主动弹出提醒"}</span>
           </div>
@@ -1566,10 +1566,9 @@ export function SystemSettingsSectionPage() {
         <div className="form-group">
           <label className="form-label">订阅通知发送</label>
           <div className="toggle-row">
-            <input
-              type="checkbox"
+            <Checkbox
               checked={packageReminderForm.deliverySubscribeEnabled}
-              onChange={(e) => setPackageReminderForm({ ...packageReminderForm, deliverySubscribeEnabled: e.target.checked })}
+              onCheckedChange={(checked) => setPackageReminderForm({ ...packageReminderForm, deliverySubscribeEnabled: !!checked })}
             />
             <span>{packageReminderForm.deliverySubscribeEnabled ? "开启后按午餐、晚餐各自时间扫描并发送顾客订阅通知" : "关闭后不发送顾客订阅通知"}</span>
           </div>
@@ -1666,10 +1665,9 @@ export function SystemSettingsSectionPage() {
                 点击图片可预览大图；上传后会直接用于顾客端轮播展示。
               </div>
               <div className="toggle-row" style={{ marginBottom: 12 }}>
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={item.enabled}
-                  onChange={(e) => updateBannerField(index, "enabled", e.target.checked)}
+                  onCheckedChange={(checked) => updateBannerField(index, "enabled", !!checked)}
                 />
                 <span>启用这张轮播图</span>
               </div>
