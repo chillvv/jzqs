@@ -18,6 +18,14 @@ import type {
   DispatchManagedRiderResponse,
   DispatchAreaOrderItemResponse
 } from "../../shared/api/types";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../../shared/components/ui/table";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { AdminDialog } from "../../shared/components/AdminDialog";
 import { SafeInput } from "../../shared/components/SafeInput";
@@ -401,38 +409,40 @@ export function DispatchAreasPage() {
       {bindings.length === 0 ? (
         <div className="dispatch-empty">暂无区域，请先创建一个区域并绑定骑手。</div>
       ) : (
-        <div className="dispatch-area-grid">
-          {bindings.map((area) => (
-            <button
-              key={area.areaCode}
-              type="button"
-              className={`dispatch-card ${area.missingRider ? "has-warning" : ""}`}
-              style={{ textAlign: "left", cursor: "pointer" }}
-              onClick={() => setActiveAreaCode(area.areaCode)}
-            >
-              <div className="dispatch-card__header">
-                <div>
-                  <div className="dispatch-card__title">{area.areaCode}</div>
-                  <div className="dispatch-card__subtitle">骑手：{area.currentRiderName || (area.missingRider ? "缺骑手" : area.defaultRiderName || "未设置")}</div>
-                  <div className="dispatch-card__subtitle">订单份数：{area.orderCount}</div>
-                </div>
-                <span className={`tag ${area.missingRider ? "tag-red" : "tag-blue"}`}>
-                  {area.missingRider ? "缺骑手" : `${area.orderCount} 份`}
-                </span>
-              </div>
-
-              {area.missingRider ? (
-                <div className="dispatch-area-warning" style={{ margin: "0 0 12px" }}>
-                  <div className="dispatch-area-warning__title">该区域当前有订单但没有骑手，请尽快处理</div>
-                </div>
-              ) : null}
-              <div className="dispatch-chip-list" style={{ marginTop: "12px" }}>
-                <span className={area.currentRiderName ? "tag tag-green" : "tag tag-gray"}>
-                  {area.currentRiderName || area.defaultRiderName || "暂无骑手"}
-                </span>
-              </div>
-            </button>
-          ))}
+        <div className="border rounded-md">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>区域名称</TableHead>
+                <TableHead>骑手</TableHead>
+                <TableHead>订单份数</TableHead>
+                <TableHead>状态</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {bindings.map((area) => (
+                <TableRow
+                  key={area.areaCode}
+                  onClick={() => setActiveAreaCode(area.areaCode)}
+                  style={{ cursor: "pointer" }}
+                  className={area.missingRider ? "bg-red-50 hover:bg-red-100" : ""}
+                >
+                  <TableCell className="font-medium">{area.areaCode}</TableCell>
+                  <TableCell>
+                    {area.currentRiderName || area.defaultRiderName || "暂无骑手"}
+                  </TableCell>
+                  <TableCell>{area.orderCount} 份</TableCell>
+                  <TableCell>
+                    {area.missingRider ? (
+                      <span className="tag tag-red">缺骑手</span>
+                    ) : (
+                      <span className="tag tag-green">正常</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         </div>
       )}
 
