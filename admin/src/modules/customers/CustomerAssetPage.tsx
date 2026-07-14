@@ -1,15 +1,16 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo, useState } from "react";
+import useSWR from "swr";
 import {
   createCustomerAddress,
   createCustomerProfile,
   deleteCustomerAddress,
-  fetchCustomerAssets,
   fetchCustomerDetail,
   fetchWalletTransactions,
   grantWalletMeals,
   deductWalletMeals,
   updateCustomerAddress,
-  updateCustomerProfile
+  updateCustomerProfile,
+  swrFetcher
 } from "../../shared/api/http";
 import type {
   CustomerAssetResponse,
@@ -246,8 +247,15 @@ function buildAddressForm(address?: CustomerAddressItem | null) {
 }
 
 export function CustomerAssetPage() {
+  const { data: response, error, isLoading: loading, mutate } = useSWR(
+    "/api/admin/customers/assets",
+    swrFetcher,
+    { revalidateOnFocus: false }
+  );
+  
+  const items = (response?.data?.items as CustomerAssetResponse[]) || [];
+  
   const [selectedRowIds, setSelectedRowIds] = useState<Set<number>>(new Set());
-  const [items, setItems] = useState<CustomerAssetResponse[]>([]);
   const [activeItem, setActiveItem] = useState<CustomerAssetResponse | null>(null);
   const [isDeductOpen, setIsDeductOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -295,14 +303,15 @@ export function CustomerAssetPage() {
     [detailAddresses]
   );
 
-  useEffect(() => {
-    reloadCustomers().catch((error) => toast(resolveErrorMessage(error, "加载客户列表失败"), "error"));
-  }, []);
+  React.useEffect(() => {
+    if (error) {
+      toast(resolveErrorMessage(error, "加载客户列表失败"), "error");
+    }
+  }, [error]);
 
   async function reloadCustomers() {
-    const page = await fetchCustomerAssets();
-    setItems(page.items);
-    return page.items;
+    const res = await mutate();
+    return (res?.data?.items as CustomerAssetResponse[]) || [];
   }
 
   async function loadCustomerWorkspace(item: CustomerAssetResponse) {
@@ -877,7 +886,7 @@ export function CustomerAssetPage() {
             {filteredItems.length === 0 && (
               <tr>
                 <td colSpan={9} style={{ padding: "0" }}>
-                  <AsyncContentView status="empty" emptyText="暂无符合条件的客户记录">
+                  <AsyncContentView status={loading ? "loading" : "empty"} emptyText="暂无符合条件的客户记录">
                     <div style={{ marginTop: 16 }}>
                       <button className="btn btn-primary" onClick={handleOpenCreate}>
                         <UserPlus size={16} /> 新增第一个客户
@@ -941,7 +950,7 @@ export function CustomerAssetPage() {
             );
           })}
           {filteredItems.length === 0 && (
-            <AsyncContentView status="empty" emptyText="当前筛选条件下没有客户">
+            <AsyncContentView status={loading ? "loading" : "empty"} emptyText="当前筛选条件下没有客户">
               <div style={{ marginTop: 16 }}>
                 <button className="btn btn-primary" onClick={handleOpenCreate}>
                   <UserPlus size={16} /> 新增第一个客户
