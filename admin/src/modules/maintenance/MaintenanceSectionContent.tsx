@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
+import useSWR from "swr";
 import { CheckCircle, Clock3, Database, ShieldCheck, SlidersHorizontal, Trash2 } from "lucide-react";
 import {
-  fetchMaintenanceLogs,
-  fetchMaintenanceOverview,
+  swrFetcher,
   triggerDataCleanup,
   triggerMaintenanceModuleCleanup,
   updateMaintenanceCleanupSettings
@@ -100,44 +100,50 @@ interface MaintenanceSectionContentProps {
 }
 
 export function MaintenanceSectionContent({ embedded = false }: MaintenanceSectionContentProps) {
-  const [overview, setOverview] = useState<MaintenanceOverviewResponse>(EMPTY_OVERVIEW);
-  const [logs, setLogs] = useState<MaintenanceLogItemResponse[]>([]);
+  const { data: overviewRes, error: overviewError, isLoading: overviewLoading, mutate: mutateOverview } = useSWR(
+    '/api/admin/maintenance/overview',
+    swrFetcher,
+    { revalidateOnFocus: false }
+  );
+
+  const { data: logsRes, error: logsError, isLoading: logsLoading, mutate: mutateLogs } = useSWR(
+    '/api/admin/maintenance/logs',
+    swrFetcher,
+    { revalidateOnFocus: false }
+  );
+
+  const overviewData = overviewRes?.data as MaintenanceOverviewResponse | undefined;
+  const logsData = logsRes?.data as MaintenanceLogItemResponse[] | undefined;
+
+  const overview = useMemo(() => {
+    return overviewData ? normalizeMaintenanceOverview(overviewData) : EMPTY_OVERVIEW;
+  }, [overviewData]);
+
+  const logs = logsData || [];
+  const loading = overviewLoading || logsLoading;
+  const error = overviewError ? (overviewError?.response?.data?.message || overviewError?.message || String(overviewError)) : logsError ? (logsError?.response?.data?.message || logsError?.message || String(logsError)) : null;
+
   const [editableRules, setEditableRules] = useState<MaintenanceCleanupRuleResponse[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [rulesInitialized, setRulesInitialized] = useState(false);
   const [cleaning, setCleaning] = useState(false);
   const [savingRules, setSavingRules] = useState(false);
   const [runningModuleKey, setRunningModuleKey] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ status: string; message: string } | null>(null);
   const [isCleanupConfirmOpen, setIsCleanupConfirmOpen] = useState(false);
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
 
-  async function reloadMaintenanceData(syncRules = true) {
-    setLoading(true);
-    try {
-      const [nextOverview, nextLogs] = await Promise.all([
-        fetchMaintenanceOverview(),
-        fetchMaintenanceLogs()
-      ]);
-      const normalizedOverview = normalizeMaintenanceOverview(nextOverview);
-      setOverview(normalizedOverview);
-      setLogs(nextLogs);
-      if (syncRules) {
-        setEditableRules(normalizedOverview.cleanupRules);
-      }
-      setError(null);
-    } catch (err: any) {
-      const message = err?.response?.data?.message || err?.message || String(err);
-      setError(message);
-      throw err;
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (overviewData && !rulesInitialized) {
+      setEditableRules(normalizeMaintenanceOverview(overviewData).cleanupRules);
+      setRulesInitialized(true);
     }
-  }
+  }, [overviewData, rulesInitialized]);
 
   useEffect(() => {
-    reloadMaintenanceData().catch((err) => toast(err?.response?.data?.message || err?.message || String(err), "error"));
-  }, []);
+    if (error) {
+      toast(error, "error");
+    }
+  }, [error]);
 
   async function handleCleanup() {
     setCleaning(true);
@@ -145,7 +151,7 @@ export function MaintenanceSectionContent({ embedded = false }: MaintenanceSecti
       setIsCleanupConfirmOpen(false);
       const response = await triggerDataCleanup();
       setResult(response);
-      await reloadMaintenanceData(false);
+      await Promise.all([mutateOverview(), mutateLogs()]);
       toast(response.message || "数据清理已完成");
     } catch (err: any) {
       toast(err?.response?.data?.message || err?.message || String(err), "error");
@@ -159,7 +165,7 @@ export function MaintenanceSectionContent({ embedded = false }: MaintenanceSecti
     try {
       const response = await triggerMaintenanceModuleCleanup(moduleKey);
       setResult(response);
-      await reloadMaintenanceData(false);
+      await Promise.all([mutateOverview(), mutateLogs()]);
       toast(response.message || "模块清理已执行");
     } catch (err: any) {
       toast(err?.response?.data?.message || err?.message || String(err), "error");
@@ -180,10 +186,9 @@ export function MaintenanceSectionContent({ embedded = false }: MaintenanceSecti
         }))
       });
       const normalizedOverview = normalizeMaintenanceOverview(nextOverview);
-      setOverview(normalizedOverview);
+      mutateOverview({ data: nextOverview, code: 200, message: "" }, { revalidate: false });
       setEditableRules(normalizedOverview.cleanupRules);
       setResult({ status: "SUCCESS", message: "清理规则已保存" });
-      await reloadMaintenanceData();
       toast("清理规则已保存");
     } catch (err: any) {
       toast(err?.response?.data?.message || err?.message || String(err), "error");
