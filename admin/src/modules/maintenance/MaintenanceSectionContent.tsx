@@ -19,6 +19,7 @@ import {
   type MaintenanceTone
 } from "./maintenancePage.helpers";
 import { formatDateTimeLabel } from "../../shared/utils/dateTime";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../shared/components/ui/table";
 import { AdminDialog } from "../../shared/components/AdminDialog";
 import { AsyncContentView, type AsyncContentViewStatus } from "../../shared/components/AsyncContentView";
 import { toast } from "../../shared/components/Toast";
@@ -363,39 +364,39 @@ export function MaintenanceSectionContent({ embedded = false }: MaintenanceSecti
           />
         ) : (
           <div className="table-responsive">
-            <table>
-              <thead>
-                <tr>
-                  <th>板块</th>
-                  <th>状态</th>
-                  <th>清理范围</th>
-                  <th>执行摘要</th>
-                  <th>时间</th>
-                </tr>
-              </thead>
-              <tbody>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>板块</TableHead>
+                  <TableHead>状态</TableHead>
+                  <TableHead>清理范围</TableHead>
+                  <TableHead>执行摘要</TableHead>
+                  <TableHead>时间</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {logRows.map((row) => (
-                  <tr key={row.id}>
-                    <td>
+                  <TableRow key={row.id}>
+                    <TableCell>
                       <div className="maintenance-log-table__job">{row.jobLabel}</div>
                       <div className="maintenance-log-table__trigger">{row.triggerLabel}</div>
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell>
                       <span className={`tag ${resolveToneTagClass(row.tone)}`}>{row.statusLabel}</span>
                       {row.errorDetail ? <div className="maintenance-log-table__error">{row.errorDetail}</div> : null}
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell>
                       <div className="maintenance-log-table__range">{row.rangeLabel}</div>
-                    </td>
-                    <td>
+                    </TableCell>
+                    <TableCell>
                       <div className="maintenance-log-table__summary">{row.summary}</div>
                       <div className="maintenance-log-table__message">{row.message}</div>
-                    </td>
-                    <td>{row.timeLabel}</td>
-                  </tr>
+                    </TableCell>
+                    <TableCell>{row.timeLabel}</TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         )}
       </section>

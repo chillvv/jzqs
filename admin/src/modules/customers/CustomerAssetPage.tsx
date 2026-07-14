@@ -35,6 +35,7 @@ import {
   type CustomerRemainingValidityState
 } from "./customerAssetPage.helpers";
 import { formatDateTimeLabel } from "../../shared/utils/dateTime";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../shared/components/ui/table";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { AdminDialog } from "../../shared/components/AdminDialog";
 import { AsyncContentView } from "../../shared/components/AsyncContentView";
@@ -813,28 +814,28 @@ export function CustomerAssetPage() {
         )}
 
         <div className="table-responsive table-responsive--fixed-height">
-          <table>
-          <thead>
-            <tr>
-              <th style={{ width: 48, textAlign: "center" }}>
+          <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead style={{ width: 48, textAlign: "center" }}>
                 <input
                   type="checkbox"
                   checked={isAllSelected}
                   ref={(input) => { if (input) input.indeterminate = isIndeterminate; }}
                   onChange={handleSelectAll}
                 />
-              </th>
-              <th>客户姓名</th>
-              <th>联系电话</th>
-              <th>客户状态</th>
-              <th>商家备注</th>
-              <th>到期日</th>
-              <th>剩余天数</th>
-              <th>餐次余额</th>
-              <th>操作</th>
-            </tr>
-          </thead>
-          <tbody>
+              </TableHead>
+              <TableHead>客户姓名</TableHead>
+              <TableHead>联系电话</TableHead>
+              <TableHead>客户状态</TableHead>
+              <TableHead>商家备注</TableHead>
+              <TableHead>到期日</TableHead>
+              <TableHead>剩余天数</TableHead>
+              <TableHead>餐次余额</TableHead>
+              <TableHead>操作</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {filteredItems.map((item) => {
               const isSelected = selectedRowIds.has(item.id);
               const exhausted = item.status === "EXHAUSTED";
@@ -843,49 +844,49 @@ export function CustomerAssetPage() {
               const remainingValidityLabel = buildRemainingValidityLabel(item.packageExpiredAt, item.remainingValidityDays);
               const shouldShowPackageAlert = shouldRenderPackageAlert(item.packageAlertLabel, item.packageAlertCode);
               return (
-                <tr key={item.id} className={isSelected ? "row-selected" : ""}>
-                  <td style={{ textAlign: "center" }}>
+                <TableRow key={item.id} className={isSelected ? "row-selected" : ""}>
+                  <TableCell style={{ textAlign: "center" }}>
                     <input
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => handleSelectRow(item.id)}
                     />
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     <div className="customer-table-name">
                       <div className="customer-table-name__main">
                         <span style={{ whiteSpace: "nowrap" }}>{item.name}</span>
                       </div>
                     </div>
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     <div className="customer-table-phone">
                       <div className="customer-table-phone__number">{item.phone}</div>
                     </div>
-                  </td>
-                  <td><span className="customer-status-text" style={{ whiteSpace: "nowrap" }}>{statusLabel}</span></td>
-                  <td>
+                  </TableCell>
+                  <TableCell><span className="customer-status-text" style={{ whiteSpace: "nowrap" }}>{statusLabel}</span></TableCell>
+                  <TableCell>
                     <div className="customer-table-note">{item.merchantRemark || "暂无备注"}</div>
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     <div className="customer-table-note">{packageExpiryLabel}</div>
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     <div className="customer-table-note">{remainingValidityLabel}</div>
                     {shouldShowPackageAlert ? <div className="customer-table-note">{`当前提醒：${item.packageAlertLabel}`}</div> : null}
-                  </td>
-                  <td>
+                  </TableCell>
+                  <TableCell>
                     <div className="customer-balance-cell">
                       <span className={`customer-balance-cell__value ${exhausted ? "is-danger" : ""}`}>{item.remainingMeals}</span>
                     </div>
-                  </td>
-                  <td>{renderActions(item)}</td>
-                </tr>
+                  </TableCell>
+                  <TableCell>{renderActions(item)}</TableCell>
+                </TableRow>
               );
             })}
             {filteredItems.length === 0 && (
-              <tr>
-                <td colSpan={9} style={{ padding: "0" }}>
+              <TableRow>
+                <TableCell colSpan={9} style={{ padding: "0" }}>
                   <AsyncContentView status={loading ? "loading" : "empty"} emptyText="暂无符合条件的客户记录">
                     <div style={{ marginTop: 16 }}>
                       <button className="btn btn-primary" onClick={handleOpenCreate}>
@@ -893,11 +894,11 @@ export function CustomerAssetPage() {
                       </button>
                     </div>
                   </AsyncContentView>
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-          </table>
+          </TableBody>
+          </Table>
         </div>
 
         {/* Mobile View */}
@@ -1361,30 +1362,30 @@ export function CustomerAssetPage() {
                   <AsyncContentView status="empty" emptyText="暂无流水记录" />
                 ) : (
                   <div className="customer-transaction-table-wrap">
-                    <table className="customer-transaction-table customer-transaction-table--embedded">
-                      <thead>
-                        <tr>
-                          <th>类型</th>
-                          <th>变动额</th>
-                          <th>备注</th>
-                          <th>时间</th>
-                        </tr>
-                      </thead>
-                      <tbody>
+                    <Table className="customer-transaction-table customer-transaction-table--embedded">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>类型</TableHead>
+                          <TableHead>变动额</TableHead>
+                          <TableHead>备注</TableHead>
+                          <TableHead>时间</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
                         {transactions.map((tx) => (
-                          <tr key={tx.id}>
-                            <td>{resolveWalletTransactionTypeLabel(tx.transactionType)}</td>
-                            <td>
+                          <TableRow key={tx.id}>
+                            <TableCell>{resolveWalletTransactionTypeLabel(tx.transactionType)}</TableCell>
+                            <TableCell>
                               <span className={tx.mealDelta > 0 ? "customer-transaction-delta is-plus" : "customer-transaction-delta is-minus"}>
                                 {tx.mealDelta > 0 ? `+${tx.mealDelta}` : tx.mealDelta}
                               </span>
-                            </td>
-                            <td>{tx.remark || "-"}</td>
-                            <td><span className="customer-transaction-time">{formatDateTimeLabel(tx.createdAt)}</span></td>
-                          </tr>
+                            </TableCell>
+                            <TableCell>{tx.remark || "-"}</TableCell>
+                            <TableCell><span className="customer-transaction-time">{formatDateTimeLabel(tx.createdAt)}</span></TableCell>
+                          </TableRow>
                         ))}
-                      </tbody>
-                    </table>
+                      </TableBody>
+                    </Table>
                   </div>
                 )}
               </section>
