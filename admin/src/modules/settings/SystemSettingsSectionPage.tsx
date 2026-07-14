@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
+import useSWR from "swr";
 import { NavLink, useParams } from "react-router-dom";
 import {
   deleteDispatchAreaMemory,
-  fetchDispatchAiJobLog,
   fetchDispatchAiWorkbench,
   fetchDispatchAreaCodes,
   fetchDispatchAreaMemories,
@@ -10,6 +10,7 @@ import {
   fetchOperationSettings,
   refreshDispatchAiBalance,
   runDispatchAiNow,
+  swrFetcher,
   updateBannerImages,
   updateDispatchAreaMemory,
   updateDispatchRouteWorkbench,
@@ -189,8 +190,6 @@ export function SystemSettingsSectionPage() {
   const [areaMemorySourceLoading, setAreaMemorySourceLoading] = useState(false);
   const [selectedLogId, setSelectedLogId] = useState<number | null>(null);
   const [runTypeFilter, setRunTypeFilter] = useState<"PRODUCTION" | "TEST">("PRODUCTION");
-  const [aiThinkingLog, setAiThinkingLog] = useState<DispatchAiWorkbenchResponse["recentLogs"][number] | null>(null);
-  const [aiThinkingLoading, setAiThinkingLoading] = useState(false);
   const [previewBannerImage, setPreviewBannerImage] = useState("");
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -203,6 +202,17 @@ export function SystemSettingsSectionPage() {
     ? (selectedLogId || dispatchAiWorkbench?.recentLogs?.find((log) => log.runType === "TEST")?.id || null)
     : null;
 
+  const selectedLogForThinking = thinkingLogId ? dispatchAiWorkbench?.recentLogs?.find(l => l.id === thinkingLogId) : null;
+  const isTestLogSelected = activeSection === SETTINGS_SECTION.AI_DISPATCH && selectedLogForThinking && selectedLogForThinking.runType === "TEST";
+
+  const { data: aiThinkingLog = null, isLoading: aiThinkingLoading } = useSWR<DispatchAiWorkbenchResponse["recentLogs"][number]>(
+    isTestLogSelected ? `/api/admin/dispatch/job-logs/${thinkingLogId}` : null,
+    swrFetcher,
+    {
+      refreshInterval: (data) => (data?.status === "RUNNING" ? 1500 : 0)
+    }
+  );
+
   useEffect(() => {
     reloadSettings().catch(showError);
     reloadDispatchAiWorkbench().catch(showError);
@@ -214,52 +224,6 @@ export function SystemSettingsSectionPage() {
     }
     reloadDispatchAreaCodes().catch(showError);
   }, [activeSection]);
-
-  useEffect(() => {
-    if (activeSection !== SETTINGS_SECTION.AI_DISPATCH || !thinkingLogId) {
-      return;
-    }
-    
-    // Only fetch thinking log if the selected log is a TEST run
-    const selectedLog = dispatchAiWorkbench?.recentLogs?.find(l => l.id === thinkingLogId);
-    if (!selectedLog || selectedLog.runType !== "TEST") {
-      setAiThinkingLog(null);
-      return;
-    }
-
-    let disposed = false;
-    let timer: number | null = null;
-    async function loadThinkingLog() {
-      setAiThinkingLoading(true);
-      try {
-        const log = await fetchDispatchAiJobLog(thinkingLogId as number);
-        if (disposed) {
-          return;
-        }
-        setAiThinkingLog(log);
-        if (log.status === "RUNNING") {
-          timer = window.setTimeout(() => {
-            loadThinkingLog().catch(showError);
-          }, 1500);
-        }
-      } catch (err: any) {
-        if (!disposed) {
-          showError(err);
-        }
-      } finally {
-        if (!disposed) {
-          setAiThinkingLoading(false);
-        }
-      }
-    }
-    loadThinkingLog().catch(showError);
-    return () => {
-      disposed = true;
-      if (timer) {
-        window.clearTimeout(timer);
-      }
-    };
-  }, [activeSection, thinkingLogId, dispatchAiWorkbench?.recentLogs]);
 
   function showError(err: any) {
     toast(err?.response?.data?.message || err.message || String(err), "error");
