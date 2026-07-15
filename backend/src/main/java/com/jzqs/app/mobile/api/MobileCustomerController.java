@@ -206,6 +206,32 @@ public class MobileCustomerController {
         ));
     }
 
+    @PutMapping("/addresses/{addressId}")
+    public ApiResponse<MobileAddressResponse> updateAddress(
+        @PathVariable long addressId,
+        @RequestHeader("Authorization") String authorization,
+        @Valid @RequestBody MobileAddressUpsertRequest request
+    ) {
+        return ApiResponse.success(mobilePortalService.updateCustomerAddress(
+            extractCustomerId(authorization),
+            addressId,
+            request.contactName(),
+            request.contactPhone(),
+            request.addressLine(),
+            request.areaCode(),
+            request.isDefault()
+        ));
+    }
+
+    @DeleteMapping("/addresses/{addressId}")
+    public ApiResponse<Void> deleteAddress(
+        @PathVariable long addressId,
+        @RequestHeader("Authorization") String authorization
+    ) {
+        mobilePortalService.deleteCustomerAddress(extractCustomerId(authorization), addressId);
+        return ApiResponse.success(null);
+    }
+
     @PostMapping("/addresses/{addressId}/default")
     public ApiResponse<MobileDefaultAddressResponse> setDefaultAddress(
         @PathVariable long addressId,

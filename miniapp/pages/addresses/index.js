@@ -38,6 +38,8 @@ Page({
     saving: false,
     showPopup: false,
     selectOrderId: null,
+    isManageMode: false,
+    selectedDefaultId: null,
     statusBarHeight: 0,
     navBarHeight: 44,
     customerProfile: {
@@ -240,14 +242,42 @@ Page({
     }
   },
 
-  async setDefault(e) {
-    const { id } = e.currentTarget.dataset;
+  toggleManageMode() {
+    if (this.data.isManageMode) {
+      this.confirmDefault();
+    } else {
+      const defaultAddr = this.data.items.find(item => item.isDefault);
+      this.setData({
+        isManageMode: true,
+        selectedDefaultId: defaultAddr ? defaultAddr.id : null
+      });
+    }
+  },
+
+  onCardTap(e) {
+    if (!this.data.isManageMode) return;
+    const id = Number(e.currentTarget.dataset.id);
+    this.setData({ selectedDefaultId: id });
+  },
+
+  async confirmDefault() {
+    const { selectedDefaultId } = this.data;
+    if (!selectedDefaultId) {
+      this.setData({ isManageMode: false });
+      return;
+    }
+    const currentDefault = this.data.items.find(item => item.isDefault);
+    if (currentDefault && currentDefault.id === selectedDefaultId) {
+      this.setData({ isManageMode: false });
+      return;
+    }
     try {
       await request({
-        url: `/api/mobile/customer/addresses/${id}/default`,
+        url: `/api/mobile/customer/addresses/${selectedDefaultId}/default`,
         method: 'POST'
       });
       wx.showToast({ title: '默认地址已更新', icon: 'success' });
+      this.setData({ isManageMode: false });
       this.loadAddresses();
     } catch (error) {
       wx.showToast({ title: error.message || '更新失败', icon: 'none' });

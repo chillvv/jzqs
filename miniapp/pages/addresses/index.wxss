@@ -1,0 +1,108 @@
+/* 地址半屏弹窗 */
+.hero-inline-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.manage-default-btn {
+  font-size: 26rpx;
+  color: var(--brand-primary, #B8D060);
+  padding: 6rpx 20rpx;
+  border: 2rpx solid var(--brand-primary, #B8D060);
+  border-radius: 32rpx;
+  flex-shrink: 0;
+}
+
+.radio-indicator {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  border: 3rpx solid var(--border);
+  margin-right: 20rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 6rpx;
+}
+
+.radio-indicator.checked {
+  border-color: var(--brand-primary, #B8D060);
+}
+
+.radio-dot {
+  width: 22rpx;
+  height: 22rpx;
+  border-radius: 50%;
+  background: var(--brand-primary, #B8D060);
+}
+
+.address-popup-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+}
+
+.address-popup-mask.show {
+  opacity: 1;
+  visibility: visible;
+}
+
+.address-popup-container {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-card);
+  border-radius: 32rpx 32rpx 0 0;
+  z-index: 1000;
+  transform: translateY(100%);
+  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  display: flex;
+  flex-direction: column;
+  max-height: 80vh;
+}
+
+.address-popup-container.show {
+  transform: translateY(0);
+}
+
+.popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 32rpx;
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--text-main);
+  border-bottom: 2rpx solid var(--border);
+}
+
+.close-btn {
+  font-size: 40rpx;
+  color: var(--text-muted);
+  padding: 0 16rpx;
+  margin-right: -16rpx;
+  line-height: 1;
+}
+
+.popup-body {
+  flex: 1;
+  min-height: 300rpx;
+  max-height: 50vh;
+  padding: 0 32rpx;
+}
+
+.popup-footer {
+  padding: 24rpx 32rpx;
+  border-top: 2rpx solid var(--border);
+}

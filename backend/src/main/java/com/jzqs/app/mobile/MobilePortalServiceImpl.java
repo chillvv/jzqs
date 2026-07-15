@@ -314,6 +314,26 @@ public class MobilePortalServiceImpl implements MobilePortalService {
 
     @Override
     @Transactional
+    public MobileAddressResponse updateCustomerAddress(
+        long customerId,
+        long addressId,
+        String contactName,
+        String contactPhone,
+        String addressLine,
+        String areaCode,
+        boolean isDefault
+    ) {
+        return mobileAddressModule.updateCustomerAddress(customerId, addressId, contactName, contactPhone, addressLine, areaCode, isDefault);
+    }
+
+    @Override
+    @Transactional
+    public void deleteCustomerAddress(long customerId, long addressId) {
+        mobileAddressModule.deleteCustomerAddress(customerId, addressId);
+    }
+
+    @Override
+    @Transactional
     public MobileDefaultAddressResponse setDefaultAddress(String phone, long addressId) {
         return setDefaultAddress(findCustomerIdByPhone(phone), addressId);
     }

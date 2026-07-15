@@ -2,23 +2,31 @@
 
 <view class="subpage">
   <view class="subpage-card">
-    <view class="hero-inline-main">{{selectOrderId ? '选择新的配送地址' : '收餐地址管理'}}</view>
+    <view class="hero-inline-row">
+      <view class="hero-inline-main">{{selectOrderId ? '选择新的配送地址' : '收餐地址管理'}}</view>
+      <view wx:if="{{!selectOrderId && items.length > 0}}" class="manage-default-btn" bindtap="toggleManageMode">
+        {{isManageMode ? '完成' : '设为默认'}}
+      </view>
+    </view>
     <view wx:if="{{selectOrderId}}" class="subpage-subtitle">请选择一个已保存地址，用于替换当前订单的配送地址</view>
+    <view wx:elif="{{isManageMode}}" class="subpage-subtitle" style="margin-top: 8rpx;">勾选一个地址，点击"完成"设为默认</view>
   </view>
 
   <view wx:if="{{items.length}}">
-    <view wx:for="{{items}}" wx:key="id" class="subpage-card">
+    <view wx:for="{{items}}" wx:key="id" class="subpage-card" data-id="{{item.id}}" bindtap="onCardTap">
       <view class="order-head">
-        <view>
+        <view wx:if="{{isManageMode}}" class="radio-indicator {{selectedDefaultId === item.id ? 'checked' : ''}}">
+          <view wx:if="{{selectedDefaultId === item.id}}" class="radio-dot"></view>
+        </view>
+        <view style="flex: 1;">
           <view class="section-label" style="margin-bottom: 4rpx;">{{item.contactName}}</view>
           <view class="section-label" style="font-size: 26rpx; color: var(--text-sub); margin-bottom: 12rpx; font-weight: normal;">{{item.contactPhone}}</view>
           <view class="subpage-subtitle">{{item.addressLine}}</view>
         </view>
-        <view wx:if="{{item.isDefault}}" class="status-pill-default" style="white-space: nowrap; writing-mode: horizontal-tb;">默认地址</view>
+        <view wx:if="{{item.isDefault && !isManageMode}}" class="status-pill-default" style="white-space: nowrap; writing-mode: horizontal-tb;">默认地址</view>
       </view>
-      <view class="action-row">
+      <view wx:if="{{!isManageMode}}" class="action-row">
         <button wx:if="{{selectOrderId}}" class="sub-btn primary" data-id="{{item.id}}" bindtap="selectAddressForOrder">使用这个地址</button>
-        <button wx:if="{{!item.isDefault}}" class="sub-btn ghost" data-id="{{item.id}}" bindtap="setDefault">设为默认</button>
         <button class="sub-btn ghost" data-id="{{item.id}}" bindtap="editAddress" style="margin-left: 16rpx;">编辑</button>
         <button class="sub-btn ghost" data-id="{{item.id}}" bindtap="deleteAddress" style="margin-left: 16rpx; color: #ff4d4f; border-color: #ff4d4f;">删除</button>
       </view>

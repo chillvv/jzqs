@@ -68,6 +68,64 @@ class MobileAddressModule {
         return new MobileAddressResponse(addressId, contact.name(), contact.phone(), finalAddressLine, finalAreaCode, isDefault);
     }
 
+    MobileAddressResponse updateCustomerAddress(
+        long customerId,
+        long addressId,
+        String contactName,
+        String contactPhone,
+        String addressLine,
+        String areaCode,
+        boolean isDefault
+    ) {
+        Integer count = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM customer_addresses WHERE id = ? AND customer_id = ?",
+            Integer.class,
+            addressId,
+            customerId
+        );
+        if (count == null || count == 0) {
+            throw new BusinessException(ErrorCode.ADDRESS_NOT_FOUND, "未找到该地址");
+        }
+        
+        ContactSnapshot contact = resolveCustomerAddressContact(customerId);
+        String finalAddressLine = requireAddressLine(addressLine);
+        String finalAreaCode = areaCode == null ? "" : areaCode.trim();
+        
+        if (isDefault) {
+            jdbcTemplate.update("UPDATE customer_addresses SET is_default = FALSE WHERE customer_id = ?", customerId);
+        }
+        
+        jdbcTemplate.update(
+            """
+                UPDATE customer_addresses 
+                SET contact_name = ?, contact_phone = ?, address_line = ?, area_code = ?, is_default = ?
+                WHERE id = ? AND customer_id = ?
+                """,
+            contact.name(),
+            contact.phone(),
+            finalAddressLine,
+            finalAreaCode,
+            isDefault,
+            addressId,
+            customerId
+        );
+        
+        return new MobileAddressResponse(addressId, contact.name(), contact.phone(), finalAddressLine, finalAreaCode, isDefault);
+    }
+
+    void deleteCustomerAddress(long customerId, long addressId) {
+        Integer count = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM customer_addresses WHERE id = ? AND customer_id = ?",
+            Integer.class,
+            addressId,
+            customerId
+        );
+        if (count == null || count == 0) {
+            throw new BusinessException(ErrorCode.ADDRESS_NOT_FOUND, "未找到该地址");
+        }
+        jdbcTemplate.update("DELETE FROM customer_addresses WHERE id = ? AND customer_id = ?", addressId, customerId);
+    }
+
     MobileDefaultAddressResponse setDefaultAddress(long customerId, long addressId) {
         Integer count = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM customer_addresses WHERE id = ? AND customer_id = ?",

@@ -86,6 +86,10 @@ public interface MobilePortalService {
 
     MobileAddressResponse saveCustomerAddress(long customerId, String contactName, String contactPhone, String addressLine, String areaCode, boolean isDefault);
 
+    MobileAddressResponse updateCustomerAddress(long customerId, long addressId, String contactName, String contactPhone, String addressLine, String areaCode, boolean isDefault);
+
+    void deleteCustomerAddress(long customerId, long addressId);
+
     MobileDefaultAddressResponse setDefaultAddress(String phone, long addressId);
 
     MobileDefaultAddressResponse setDefaultAddress(long customerId, long addressId);
