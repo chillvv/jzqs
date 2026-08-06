@@ -1,3 +1,4 @@
+const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const { submitAftersaleApplication } = require("../../utils/aftersale");
 const { buildAftersaleNotice } = require("../../utils/customer-order-flow");
 
@@ -8,6 +9,8 @@ const REASON_OPTIONS = [
 ];
 
 Page({
+  onShareAppMessage: shareAppMessage,
+  onShareTimeline: shareTimeline,
   data: {
     statusBarHeight: 0,
     navBarHeight: 44,

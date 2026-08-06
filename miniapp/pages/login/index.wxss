@@ -91,6 +91,13 @@ page {
   font-weight: 500;
 }
 
+.auth-name-hint {
+  margin-top: 20rpx;
+  font-size: 24rpx;
+  color: var(--text-sub);
+  line-height: 1.6;
+}
+
 /* Buttons */
 .auth-btn {
   width: 320rpx !important;
@@ -195,6 +202,10 @@ page {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.auth-agreement-text {
+  font-size: 24rpx;
 }
 
 .auth-agreement-link {

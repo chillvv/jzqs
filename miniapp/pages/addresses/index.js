@@ -1,3 +1,4 @@
+const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const { request } = require('../../utils/request');
 
 function normalizePhone(value) {
@@ -32,6 +33,8 @@ function validateAddressForm(form, customerProfile) {
 }
 
 Page({
+  onShareAppMessage: shareAppMessage,
+  onShareTimeline: shareTimeline,
   data: {
     items: [],
     loading: false,

@@ -1036,3 +1036,6 @@
 }
 
 .menu-group { background: var(--bg-card); border-radius: 24rpx; margin: 0 24rpx 32rpx; padding: 0; box-shadow: var(--shadow-sm); }
+
+.logout-section { padding: 40rpx; margin-top: 20rpx; }
+.btn-logout { width: 100% !important; box-sizing: border-box; background: var(--bg-card); color: #ff4d4f; border: 1rpx solid #ff4d4f; border-radius: 40rpx; font-size: 28rpx; height: 88rpx; display: flex; justify-content: center; align-items: center; text-align: center; padding: 0; margin: 0; }

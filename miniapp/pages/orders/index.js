@@ -1,3 +1,4 @@
+const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const { request } = require('../../utils/request');
 const { mapOrderForDisplay, resolveVisibleOrders } = require('../../utils/order-list');
 const { buildOrderStatusGuidance } = require('../../utils/customer-order-flow');
@@ -5,6 +6,8 @@ const { buildRejectedAftersaleDetail } = require('../../utils/aftersale');
 const realtime = require('../../utils/realtime');
 
 Page({
+  onShareAppMessage: shareAppMessage,
+  onShareTimeline: shareTimeline,
   data: {
     statusBarHeight: 0,
     navBarHeight: 44,
@@ -116,6 +119,10 @@ Page({
     });
     wx.setNavigationBarTitle({ title: '我的订单' });
     this.loadOrders();
+  },
+
+  goToOrder() {
+    wx.switchTab({ url: '/pages/order/index' });
   },
 
   cancelOrder(e) {

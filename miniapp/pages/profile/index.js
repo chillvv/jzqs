@@ -1,3 +1,4 @@
+const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const { request } = require('../../utils/request');
 const { maskPhone } = require('../../utils/mobile');
 const { getSubmitProfileError } = require('../../utils/profile-auth');
@@ -15,7 +16,7 @@ const AGREEMENT_ACCEPTED_KEY = 'miniapp_customer_auth_agreement_accepted_v1';
 
 function displayName(name) {
   if (!name || name.startsWith('微信用户-') || name.startsWith('待完善-')) {
-    return '微信用户';
+    return '用户';
   }
   return name;
 }
@@ -54,10 +55,12 @@ function persistAgreementAccepted() {
 }
 
 Page({
+  onShareAppMessage: shareAppMessage,
+  onShareTimeline: shareTimeline,
   data: {
     home: null,
     maskedPhone: '',
-    displayName: '微信游客',
+    displayName: '游客',
     loading: false,
     onboarding: true,
     savingProfile: false,
@@ -158,7 +161,7 @@ Page({
       this.setData({
         home: null,
         maskedPhone: '',
-        displayName: '微信游客'
+        displayName: '游客'
       });
       wx.stopPullDownRefresh();
       return;
@@ -298,7 +301,7 @@ Page({
     try {
       await ensurePhonePrivacyPermission();
       wx.showToast({
-        title: '已完成微信隐私授权，请再次点击微信一键登录',
+        title: '已完成手机号授权，请再次点击手机号快捷登录',
         icon: 'none'
       });
       return;
@@ -344,7 +347,7 @@ Page({
     try {
       code = String(code || '').trim();
       if (!code) {
-        wx.showToast({ title: '微信手机号授权失败，请重试', icon: 'none' });
+        wx.showToast({ title: '手机号授权失败，请重试', icon: 'none' });
         return;
       }
 
@@ -373,7 +376,7 @@ Page({
         this.startRegisterFlow();
         wx.showToast({ title: '请填写姓名完成注册', icon: 'none' });
       } else {
-        wx.showToast({ title: error.message || '微信授权失败', icon: 'none' });
+        wx.showToast({ title: error.message || '手机号授权失败', icon: 'none' });
       }
     } finally {
       this.setData({ savingProfile: false });

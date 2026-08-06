@@ -1,3 +1,4 @@
+const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const { request } = require('../../utils/request');
 const { maskPhone } = require('../../utils/mobile');
 const { getSubmitProfileError } = require('../../utils/profile-auth');
@@ -50,6 +51,8 @@ function clearAgreementAccepted() {
 }
 
 Page({
+  onShareAppMessage: shareAppMessage,
+  onShareTimeline: shareTimeline,
   data: {
     savingProfile: false,
     wechatLoading: false,
@@ -172,7 +175,7 @@ Page({
     }
     if (this.data.pendingAgreementAction === 'wechat-login') {
       wx.showToast({
-        title: '已勾选协议，请再次点击微信登录',
+        title: '已勾选协议，请再次点击手机号快捷登录',
         icon: 'none'
       });
     }
@@ -207,7 +210,7 @@ Page({
     try {
       await ensurePhonePrivacyPermission();
       wx.showToast({
-        title: '已完成微信隐私授权，请再次点击微信一键登录',
+        title: '已完成手机号授权，请再次点击手机号快捷登录',
         icon: 'none'
       });
       return;
@@ -252,7 +255,7 @@ Page({
     try {
       const finalCode = String(code || '').trim();
       if (!finalCode) {
-        wx.showToast({ title: '微信手机号授权失败，请重试', icon: 'none' });
+        wx.showToast({ title: '手机号授权失败，请重试', icon: 'none' });
         return;
       }
 
@@ -260,14 +263,14 @@ Page({
       applyCustomerAuthResult(result);
 
       const home = await request({ url: '/api/mobile/customer/home' });
-      if (isPlaceholderCustomerName(home && home.name)) {
+      if (result.needName || isPlaceholderCustomerName(home && home.name)) {
         this.setData({
           authFlowMode: 'complete-profile',
           phoneAuthHint: home && home.phone ? maskPhone(home.phone) : this.data.phoneAuthHint,
           'profileForm.nickname': '',
           'profileForm.phoneNumber': home && home.phone ? String(home.phone).replace(/\D/g, '') : this.data.profileForm.phoneNumber
         });
-        wx.showToast({ title: '请填写姓名完成注册', icon: 'none' });
+        wx.showToast({ title: '请填写您的姓名（建议实名）', icon: 'none' });
         return;
       }
 
@@ -277,9 +280,9 @@ Page({
       }, 800);
     } catch (error) {
       if (shouldStartRegister(error)) {
-        wx.showToast({ title: '新用户请点击微信一键登录', icon: 'none' });
+        wx.showToast({ title: '新用户请点击手机号快捷登录', icon: 'none' });
       } else {
-        wx.showToast({ title: error.message || '微信授权失败', icon: 'none' });
+        wx.showToast({ title: error.message || '手机号授权失败', icon: 'none' });
       }
     } finally {
       this.setData({ wechatLoading: false });

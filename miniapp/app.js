@@ -20,6 +20,12 @@ App({
   },
   
   async onLaunch() {
+    try {
+      wx.showShareMenu({ menus: ['shareAppMessage', 'shareTimeline'] });
+    } catch (e) {
+      console.error('[App] 初始化分享菜单失败', e);
+    }
+
     this.globalData.apiBaseUrl = resolveApiBaseUrl(wx.getStorageSync('apiBaseUrl'));
     this.globalData.cloudEnvId = resolveCloudEnvId(wx.getStorageSync('cloudEnvId'));
     this.globalData.serviceHeaders = resolveServiceHeaders(wx.getStorageSync('serviceHeaders'));
@@ -94,7 +100,7 @@ App({
    */
   async submitPhoneAuth({ phoneNumber, nickname }) {
     // 注意：新版使用微信一键登录，此方法仅作兼容
-    throw new Error('请使用微信一键登录');
+    throw new Error('请使用手机号快捷登录');
   },
   
   /**

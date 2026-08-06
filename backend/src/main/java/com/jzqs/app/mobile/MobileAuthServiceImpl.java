@@ -73,7 +73,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         if (!hasBoundPhone(customerId)) {
             return authState(openid, session.sessionKey(), false, true, false, null);
         }
-        return authState(openid, session.sessionKey(), true, false, false, customerId);
+        return authState(openid, session.sessionKey(), true, false, isPlaceholderName(customerName(customerId)), customerId);
     }
 
     @Override
@@ -104,7 +104,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             Timestamp.valueOf(now),
             customerId
         );
-        return authState(finalOpenid, "session_" + finalOpenid, true, false, false, customerId);
+        return authState(finalOpenid, "session_" + finalOpenid, true, false, isPlaceholderName(customerName(customerId)), customerId);
     }
 
     @Override
@@ -177,7 +177,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "未找到可绑定的客户");
         }
         ensureCustomerFormalWithZeroMealWallet(customerId, now);
-        return authState(finalOpenid, "dev_session_" + finalOpenid, true, false, false, customerId);
+        return authState(finalOpenid, "dev_session_" + finalOpenid, true, false, isPlaceholderName(customerName(customerId)), customerId);
     }
 
     @Override
@@ -422,7 +422,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         }
         ensureCustomerFormalWithZeroMealWallet(customerId, now);
 
-        return authState(finalOpenid, finalOpenid.isEmpty() ? null : "session_" + finalOpenid, true, false, false, customerId);
+        return authState(finalOpenid, finalOpenid.isEmpty() ? null : "session_" + finalOpenid, true, false, isPlaceholderName(customerName(customerId)), customerId);
     }
 
     @Override
@@ -801,7 +801,25 @@ public class MobileAuthServiceImpl implements MobileAuthService {
     }
 
     private String guestNickname(String phone) {
-        return "微信用户-" + phone.substring(phone.length() - 4);
+        String suffix = (phone == null || phone.length() < 4) ? "0000" : phone.substring(phone.length() - 4);
+        String random = String.format("%04d", (int) (Math.random() * 10000));
+        return "微信用户-" + suffix + random;
+    }
+
+    private String customerName(Long customerId) {
+        if (customerId == null) {
+            return null;
+        }
+        return jdbcTemplate.query(
+            "SELECT name FROM customers WHERE id = ?",
+            ps -> ps.setLong(1, customerId),
+            rs -> rs.next() ? rs.getString(1) : null
+        );
+    }
+
+    private boolean isPlaceholderName(String name) {
+        String value = name == null ? "" : name.trim();
+        return value.startsWith("微信用户-") || value.startsWith("待完善-");
     }
 
     private RiderAuthProfileResponse riderNotFoundProfile(String phone) {

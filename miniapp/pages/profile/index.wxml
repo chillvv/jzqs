@@ -27,7 +27,7 @@
     <view class="vip-balance"><text class="num">{{home ? home.remainingMeals : '--'}}</text><text class="unit">餐</text></view>
     <view class="vip-submeta" wx:if="{{home && home.packageExpiredAt}}">
       <view class="member-copy member-copy--compact">到期日：{{home.packageExpiredAt}}</view>
-      <view class="vip-validity-line">
+      <view class="vip-validity-line" wx:if="{{home.remainingValidityDays >= 0}}">
         <text class="member-copy member-copy--compact">剩余 </text>
         <text class="vip-validity-days">{{home.remainingValidityDays}}</text>
         <text class="member-copy member-copy--compact"> 天</text>

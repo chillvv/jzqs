@@ -38,7 +38,7 @@
         <image class="meal-img" src="../../assets/meal-default.jpeg" mode="aspectFill" lazy-load="true"></image>
         <view class="meal-content">
           <view>
-            <view class="meal-title">【午餐】营养菜单</view>
+            <view class="meal-title">明日午餐</view>
             <view class="meal-desc">
               <block wx:for="{{lunchItem.dishItems}}" wx:key="*this" wx:for-item="dish">
                 <view>- {{dish}}</view>
@@ -50,7 +50,6 @@
             </view>
           </view>
           <view class="meal-bottom">
-            <view class="meal-price-box {{qty1 > 0 ? 'show' : ''}}">扣 1 <text>餐</text></view>
             <view class="stepper {{qty1 > 0 ? 'active' : ''}}">
               <view class="step-btn minus" bindtap="updateCart1Minus">-</view>
               <view class="step-num">{{qty1}}</view>
@@ -64,7 +63,7 @@
         <image class="meal-img" src="../../assets/meal-default.jpeg" mode="aspectFill" lazy-load="true"></image>
         <view class="meal-content">
           <view>
-            <view class="meal-title">【晚餐】营养菜单</view>
+            <view class="meal-title">明日晚餐</view>
             <view class="meal-desc">
               <block wx:for="{{dinnerItem.dishItems}}" wx:key="*this" wx:for-item="dish">
                 <view>- {{dish}}</view>
@@ -76,7 +75,6 @@
             </view>
           </view>
           <view class="meal-bottom">
-            <view class="meal-price-box {{qty2 > 0 ? 'show' : ''}}">扣 1 <text>餐</text></view>
             <view class="stepper {{qty2 > 0 ? 'active' : ''}}">
               <view class="step-btn minus" bindtap="updateCart2Minus">-</view>
               <view class="step-num">{{qty2}}</view>
@@ -95,8 +93,7 @@
     <!-- 购物车栏 -->
     <view class="cart-bar {{totalQty > 0 && canOrder ? 'show' : ''}}" wx:if="{{totalQty > 0 && canOrder}}">
       <view class="cart-info">
-        <view class="cart-total">{{totalQty}}<text>餐</text></view>
-        <view class="cart-desc">共 {{totalQty}} 份明天的餐食</view>
+        <view class="cart-desc">共 <text class="cart-total">{{totalQty}}<text>餐</text></text> 明天的餐食</view>
       </view>
       <button class="btn-checkout" bindtap="goToCheckout" disabled="{{!home || !home.orderingEnabled || !selfOrderEnabled}}">{{selfOrderEnabled ? (isGuest ? '先验证再预订' : '去结算') : '联系专属客服'}}</button>
     </view>
@@ -148,7 +145,7 @@
           <view class="checkout-item" wx:for="{{checkoutItems}}" wx:key="id">
             <image class="ci-img" src="../../assets/meal-default.jpeg" mode="aspectFill" lazy-load="true"></image>
             <view class="ci-info">
-              <view class="ci-name">【{{item.periodText}}】营养菜单</view>
+              <view class="ci-name">明日{{item.periodText}}</view>
               <view class="ci-desc">
                 <block wx:for="{{item.dishItems}}" wx:key="*this" wx:for-item="dish">
                   <view>- {{dish}}</view>
@@ -169,7 +166,7 @@
             <text class="checkout-row-label">订单备注</text>
             <view style="display: flex; align-items: center; gap: 16rpx;">
               <text wx:if="{{historyRemarkSuggestions.length > 0}}" style="font-size: 22rpx; color: #999;">最近使用</text>
-              <text class="btn-set-default {{customRemark === defaultRemark && customRemark !== '' ? 'active' : ''}}" bindtap="toggleDefaultRemark">设为默认</text>
+              <text class="btn-set-default {{customRemark === defaultRemark && customRemark !== '' ? 'active' : ''}}" bindtap="toggleDefaultRemark">设置默认</text>
             </view>
           </view>
           <view class="remark-preset-list" wx:if="{{historyRemarkSuggestions.length > 0}}" style="justify-content: flex-start; margin-bottom: 8rpx;">
@@ -235,6 +232,6 @@
       </view>
       <view class="inline-auth-sheet__close" bindtap="closeInlineAuth">×</view>
     </view>
-    <button class="inline-auth-sheet__primary" bindtap="goProfileAuth">微信一键登录</button>
+    <button class="inline-auth-sheet__primary" bindtap="goProfileAuth">手机号快捷登录</button>
   </view>
 </view>

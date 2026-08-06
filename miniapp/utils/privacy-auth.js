@@ -31,18 +31,18 @@ function normalizePrivacyError(detailOrError) {
 function getPhonePrivacyErrorMessage(detailOrError) {
   const result = normalizePrivacyError(detailOrError);
   if (result.scopeUndeclared) {
-    return '小程序后台隐私保护指引还未声明手机号能力，请先补充后再使用微信一键登录';
+    return '小程序后台隐私保护指引还未声明手机号能力，请先补充后再使用手机号快捷登录';
   }
   if (result.jsapiBlocked) {
-    return '微信手机号权限未生效，请检查隐私指引后重试';
+    return '手机号权限未生效，请检查隐私指引后重试';
   }
   if (result.denied) {
     return '你已拒绝隐私授权，请重新点击并同意';
   }
   if (result.noPermission) {
-    return '微信手机号能力未生效，请检查小程序后台隐私保护指引并在真机重试';
+    return '手机号能力未生效，请检查小程序后台隐私保护指引并在真机重试';
   }
-  return '微信手机号授权失败，请重试';
+  return '手机号授权失败，请重试';
 }
 
 function getPrivacySetting() {
@@ -77,7 +77,7 @@ function getPrivacySetting() {
 function openPrivacyContract() {
   return new Promise((resolve, reject) => {
     if (typeof wx.openPrivacyContract !== 'function') {
-      reject(new Error('当前微信版本不支持打开隐私保护指引'));
+      reject(new Error('当前版本不支持打开隐私保护指引'));
       return;
     }
     wx.openPrivacyContract({

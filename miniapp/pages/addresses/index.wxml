@@ -5,7 +5,7 @@
     <view class="hero-inline-row">
       <view class="hero-inline-main">{{selectOrderId ? '选择新的配送地址' : '收餐地址管理'}}</view>
       <view wx:if="{{!selectOrderId && items.length > 0}}" class="manage-default-btn" bindtap="toggleManageMode">
-        {{isManageMode ? '完成' : '设为默认'}}
+        {{isManageMode ? '完成' : '设置默认'}}
       </view>
     </view>
     <view wx:if="{{selectOrderId}}" class="subpage-subtitle">请选择一个已保存地址，用于替换当前订单的配送地址</view>
@@ -56,7 +56,7 @@
         <input class="form-input" data-field="addressLine" value="{{form.addressLine}}" bindinput="onInputChange" placeholder="请输入详细地址" />
       </view>
       <view class="switch-row">
-        <text class="inline-form-label">设为默认地址</text>
+        <text class="inline-form-label">设置默认地址</text>
         <switch checked="{{form.isDefault}}" color="#B8D060" bindchange="onDefaultChange" />
       </view>
     </scroll-view>

@@ -1,3 +1,4 @@
+const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const { request } = require('../../utils/request');
 const { formatMonthDay, periodLabel } = require('../../utils/mobile');
 const { getCheckoutMealLimitMessage } = require('../../utils/order-guards');
@@ -42,6 +43,8 @@ function openInlineAuth(page, source) {
 }
 
 Page({
+  onShareAppMessage: shareAppMessage,
+  onShareTimeline: shareTimeline,
   data: {
     showCheckout: false,
     showAddressPopup: false,
@@ -242,7 +245,7 @@ Page({
           : this.data.home
       });
       if (currentRemark) {
-        wx.showToast({ title: '已设为默认备注', icon: 'success' });
+        wx.showToast({ title: '已设置默认备注', icon: 'success' });
       } else {
         wx.showToast({ title: '已清空默认备注', icon: 'success' });
       }

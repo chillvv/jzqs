@@ -80,7 +80,7 @@
             </block>
           </view>
           <view wx:elif="{{item.slotStatus === 'UNCONFIGURED'}}" class="rest-card" style="margin-bottom: 0;">{{item.weekdayLabel}}菜单待配置，请稍后查看</view>
-          <view wx:else class="rest-card" style="margin-bottom: 0;">🌿 {{item.weekdayLabel}}店休，法定节假日正常接单</view>
+          <view wx:else class="rest-card" style="margin-bottom: 0;">🌿 {{item.weekdayLabel}}固定店休，法定节假日不出餐</view>
         </block>
         <view wx:if="{{!weekCards.length && !loading}}" class="rest-card">暂无菜单数据</view>
       </block>

@@ -1,3 +1,4 @@
+const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const { request } = require('../../utils/request');
 const { resolveMediaUrl } = require('../../utils/media-url');
 const realtime = require('../../utils/realtime');
@@ -30,6 +31,8 @@ function persistMealReminderDismissed(key, dismissed) {
 }
 
 Page({
+  onShareAppMessage: shareAppMessage,
+  onShareTimeline: shareTimeline,
   data: {
     home: null,
     rangeText: '',

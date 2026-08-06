@@ -22,6 +22,7 @@ class Auth {
       openid: '',
       registered: false,
       needPhoneAuth: false,
+      needName: false,
       authMode: 'UNKNOWN'
     };
   }
@@ -90,7 +91,7 @@ class Auth {
     }
     await this.silentLogin();
     if (!this.globalData.openid) {
-      throw new Error('缺少微信身份标识，请重新进入小程序后重试');
+      throw new Error('缺少登录身份标识，请重新进入小程序后重试');
     }
     return this.globalData.openid;
   }
@@ -151,15 +152,15 @@ class Auth {
   }
 
   /**
-   * 微信手机号一键登录
+   * 手机号快捷登录
    */
   async bindPhone(payload) {
     if (!payload || typeof payload !== 'object') {
-      throw new Error('请重新发起微信手机号授权');
+      throw new Error('请重新发起手机号授权');
     }
     const code = String(payload.code || '').trim();
     if (!code) {
-      throw new Error('微信手机号授权失败，请重试');
+      throw new Error('手机号授权失败，请重试');
     }
     try {
       const openid = await this.ensureOpenidReady();
@@ -182,7 +183,8 @@ class Auth {
     this.globalData.authMode = result.authMode || 'MINIAPP_WX';
     this.globalData.openid = result.openid || '';
     this.globalData.registered = result.registered || false;
-    this.globalData.needPhoneAuth = Boolean(result.needPhoneAuth || !result.registered);
+    this.globalData.needName = Boolean(result.needName);
+    this.globalData.needPhoneAuth = Boolean(result.needPhoneAuth || (!result.registered && !this.globalData.needName));
 
     if (result.token) {
       this.applyAuth(result);
@@ -203,6 +205,7 @@ class Auth {
       this.globalData.loggedIn = true;
       this.globalData.registered = true;
       this.globalData.needPhoneAuth = false;
+      this.globalData.needName = Boolean(result.needName);
       this.globalData.authMode = result.authMode || this.globalData.authMode;
       this.syncAppGlobalData();
     }
@@ -229,6 +232,7 @@ class Auth {
       this.globalData.loggedIn = false;
       this.globalData.registered = false;
       this.globalData.needPhoneAuth = false;
+      this.globalData.needName = false;
       this.globalData.authMode = 'UNKNOWN';
       this.globalData.ready = true;
       this.syncAppGlobalData();
@@ -244,6 +248,7 @@ class Auth {
       app.globalData.token = this.globalData.token;
       app.globalData.loggedIn = this.globalData.loggedIn;
       app.globalData.needPhoneAuth = this.globalData.needPhoneAuth;
+      app.globalData.needName = this.globalData.needName;
       app.globalData.registered = this.globalData.registered;
       app.globalData.openid = this.globalData.openid;
       app.globalData.userId = this.globalData.userId;
@@ -315,6 +320,7 @@ class Auth {
       loggedIn: this.globalData.loggedIn,
       registered: this.globalData.registered,
       needPhoneAuth: this.globalData.needPhoneAuth,
+      needName: this.globalData.needName,
       openid: this.globalData.openid,
       userId: this.globalData.userId,
       userType: this.globalData.userType,

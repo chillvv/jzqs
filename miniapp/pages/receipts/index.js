@@ -1,7 +1,10 @@
+const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const { request } = require('../../utils/request');
 const { mapReceiptRecord } = require('../../utils/receipt-display');
 
 Page({
+  onShareAppMessage: shareAppMessage,
+  onShareTimeline: shareTimeline,
   data: {
     statusBarHeight: 0,
     navBarHeight: 44,

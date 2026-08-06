@@ -7,7 +7,7 @@ async function requestDeliverySubscribeAuthorization(options = {}) {
   const { throwOnUnsupported = false } = options;
   if (typeof wx.requestSubscribeMessage !== 'function') {
     if (throwOnUnsupported) {
-      throw new Error('当前微信版本不支持订阅消息测试');
+      throw new Error('当前版本不支持订阅消息测试');
     }
     return '';
   }

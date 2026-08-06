@@ -1,5 +1,8 @@
 {
   "__usePrivacyCheck__": true,
+  "requiredPrivateInfos": [
+    "chooseAddress"
+  ],
   "pages": [
     "pages/home/index",
     "pages/order/index",
