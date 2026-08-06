@@ -1,3 +1,4 @@
+const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const AGREEMENT_ACCEPTED_KEY = 'miniapp_rider_auth_agreement_accepted_v2';
 
 function maskPhone(phone) {
@@ -24,6 +25,8 @@ function buildRiderProfile(app) {
 }
 
 Page({
+  onShareAppMessage: shareAppMessage,
+  onShareTimeline: shareTimeline,
   data: {
     statusBarHeight: 0,
     navBarHeight: 0,

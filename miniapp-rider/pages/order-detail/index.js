@@ -1,3 +1,4 @@
+const { shareAppMessage, shareTimeline } = require('../../utils/share');
 /**
  * 订单详情页面
  * 提供单个订单的所有操作：导航、电话、送达确认、异常上报等
@@ -20,6 +21,8 @@ function normalizeOptionalText(value) {
 }
 
 Page({
+  onShareAppMessage: shareAppMessage,
+  onShareTimeline: shareTimeline,
   data: {
     statusBarHeight: 0,
     navBarHeight: 44,

@@ -1,3 +1,4 @@
+const { shareAppMessage, shareTimeline } = require('../../utils/share');
 /**
  * 骑手小程序 - 订单列表页
  * 拖拽排序 v2：插入索引 + 平移动画
@@ -23,6 +24,8 @@ function buildWorkbenchDateState(selectedDate) {
 }
 
 Page({
+  onShareAppMessage: shareAppMessage,
+  onShareTimeline: shareTimeline,
   data: {
     statusBarHeight: 0,
     navBarHeight: 0,

@@ -1,3 +1,4 @@
+const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const AGREEMENT_ACCEPTED_KEY = 'miniapp_rider_auth_agreement_accepted_v2';
 const auth = require('../../utils/auth');
 const authService = require('../../services/auth.service');
@@ -17,6 +18,8 @@ function persistAgreementAccepted() {
 }
 
 Page({
+  onShareAppMessage: shareAppMessage,
+  onShareTimeline: shareTimeline,
   data: {
     savingProfile: false,
     statusBarHeight: 0,

@@ -31,6 +31,12 @@ App({
   },
 
   onLaunch() {
+    try {
+      wx.showShareMenu({ menus: ['shareAppMessage', 'shareTimeline'] });
+    } catch (e) {
+      console.error('[App] 初始化分享菜单失败', e);
+    }
+
     const sysInfo = wx.getSystemInfoSync();
     const menuButton = wx.getMenuButtonBoundingClientRect();
     

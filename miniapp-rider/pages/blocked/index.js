@@ -1,4 +1,7 @@
+const { shareAppMessage, shareTimeline } = require('../../utils/share');
 Page({
+  onShareAppMessage: shareAppMessage,
+  onShareTimeline: shareTimeline,
   data: {
     statusBarHeight: 0,
     navBarHeight: 44,
