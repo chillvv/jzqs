@@ -43,6 +43,9 @@ public class WalletTransactionEntity {
     @TableField("snapshot_balance")
     private Integer snapshotBalance;
 
+    @TableField("expired_at_snapshot")
+    private LocalDateTime expiredAtSnapshot;
+
     private Boolean refunded;
 
     @TableField("refund_reason_code")
@@ -148,6 +151,14 @@ public class WalletTransactionEntity {
 
     public void setSnapshotBalance(Integer snapshotBalance) {
         this.snapshotBalance = snapshotBalance;
+    }
+
+    public LocalDateTime getExpiredAtSnapshot() {
+        return expiredAtSnapshot;
+    }
+
+    public void setExpiredAtSnapshot(LocalDateTime expiredAtSnapshot) {
+        this.expiredAtSnapshot = expiredAtSnapshot;
     }
 
     public Boolean getRefunded() {

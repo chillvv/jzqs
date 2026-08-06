@@ -74,10 +74,11 @@ export function CustomerDeductDialog({
                 <SafeInput className="form-control" type="number" value={deductForm.mealDelta} onValueChange={(value) => onChange({ ...deductForm, mealDelta: value })} />
               </div>
               <RemarkField
-                label="操作备注"
+                label="扣餐原因"
+                required
                 value={deductForm.remark}
                 onChange={(value) => onChange({ ...deductForm, remark: value })}
-                placeholder="例如：客户微信群确认本餐作废，后台扣回 1 餐"
+                placeholder="必须填写，例如：客户微信群确认本餐作废，后台扣回 1 餐"
                 scene="WALLET_REMARK"
               />
             </div>

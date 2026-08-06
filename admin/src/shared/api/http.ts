@@ -45,6 +45,7 @@ import type {
   RemarkSuggestionResponse,
   RemarkSuggestionScene,
   WalletTransactionResponse,
+  CustomerBatchExtendResponse,
   SubscriptionPreviewItem,
   SubscriptionImportItem,
   AnalysisOverviewResponse,
@@ -1075,11 +1076,12 @@ export async function uploadDeliveryReceiptImage(file: File) {
   return response.data.data;
 }
 
-export async function grantWalletMeals(customerId: number, mealDelta: number, validityDays: number, remark: string) {
+export async function grantWalletMeals(customerId: number, mealDelta: number, validityDays: number, remark: string, expiredAt?: string) {
   const response = await http.post<ApiResponse<{ remainingMeals: number }>>(`/api/admin/customers/${customerId}/wallet/grant`, {
     mealDelta,
     validityDays,
-    remark
+    remark,
+    expiredAt: expiredAt || null
   });
   return response.data.data;
 }
@@ -1113,6 +1115,14 @@ export async function deductWalletMeals(customerId: number, mealDelta: number, r
 
 export async function fetchWalletTransactions(customerId: number) {
   const response = await http.get<ApiResponse<PageResponse<WalletTransactionResponse>>>(`/api/admin/customers/${customerId}/wallet-transactions`);
+  return response.data.data;
+}
+
+export async function batchExtendWalletValidity(extendDays: number, remark: string) {
+  const response = await http.post<ApiResponse<CustomerBatchExtendResponse>>("/api/admin/customers/wallet/batch-extend", {
+    extendDays,
+    remark
+  });
   return response.data.data;
 }
 

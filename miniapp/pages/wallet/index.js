@@ -1,9 +1,12 @@
+const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const { request } = require('../../utils/request');
 const { formatWalletTransaction } = require('../../utils/aftersale');
 const { buildWalletHint } = require('../../utils/customer-order-flow');
 const realtime = require('../../utils/realtime');
 
 Page({
+  onShareAppMessage: shareAppMessage,
+  onShareTimeline: shareTimeline,
   data: {
     statusBarHeight: 0,
     navBarHeight: 44,

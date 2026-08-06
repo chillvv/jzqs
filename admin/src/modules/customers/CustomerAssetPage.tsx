@@ -10,6 +10,7 @@ import {
   deductWalletMeals,
   updateCustomerAddress,
   updateCustomerProfile,
+  batchExtendWalletValidity,
   swrFetcher
 } from "../../shared/api/http";
 import type {
@@ -19,7 +20,7 @@ import type {
   CustomerDetailResponse,
   WalletTransactionResponse
 } from "../../shared/api/types";
-import { MinusCircle, PlusCircle, RotateCcw, Search, UserPlus, X } from "lucide-react";
+import { CalendarDays, MinusCircle, PlusCircle, RotateCcw, Search, UserPlus, X } from "lucide-react";
 import {
   buildCustomerActionLabels,
   buildCustomerAssetStats,
@@ -46,6 +47,7 @@ import { toast } from "../../shared/components/Toast";
 import { TooltipHint } from "../../shared/components/TooltipHint";
 import { CustomerCreateDialog } from "./components/CustomerCreateDialog";
 import { CustomerDeductDialog } from "./components/CustomerDeductDialog";
+import { CustomerGrantDialog, type GrantForm } from "./components/CustomerGrantDialog";
 
 const emptyEditForm = {
   name: "",
@@ -57,9 +59,17 @@ const emptyEditForm = {
   remainingValidityDays: "",
   initialMeals: "0",
   initialValidityDays: "30",
+  initialMealRemark: "",
   addressLine: ""
 };
-const defaultGrantForm = { mealDelta: "5", validityDays: "30", remark: "补餐" };
+function buildDefaultGrantForm(): GrantForm {
+  return {
+    mealDelta: "5",
+    validityDays: "30",
+    remark: "",
+    expiredAt: resolveExpiredAtFromRemainingDays("30")
+  };
+}
 const defaultDeductForm = { mealDelta: "1", remark: "手工扣减" };
 const emptyAddressForm = {
   contactName: "",
@@ -149,6 +159,7 @@ function buildEditForm(
     remainingValidityDays: remainingValidityDays === "" ? "" : String(remainingValidityDays),
     initialMeals: "0",
     initialValidityDays: "30",
+    initialMealRemark: "",
     addressLine: ""
   };
 }
@@ -259,11 +270,12 @@ export function CustomerAssetPage() {
   const [selectedRowIds, setSelectedRowIds] = useState<Set<number>>(new Set());
   const [activeItem, setActiveItem] = useState<CustomerAssetResponse | null>(null);
   const [isDeductOpen, setIsDeductOpen] = useState(false);
+  const [isGrantOpen, setIsGrantOpen] = useState(false);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [detailMode, setDetailMode] = useState<"view" | "edit">("view");
-  const [grantForm, setGrantForm] = useState(defaultGrantForm);
+  const [grantForm, setGrantForm] = useState<GrantForm>(() => buildDefaultGrantForm());
   const [deductForm, setDeductForm] = useState(defaultDeductForm);
   const [editForm, setEditForm] = useState(emptyEditForm);
   const [keywordFilter, setKeywordFilter] = useState("");
@@ -284,11 +296,20 @@ export function CustomerAssetPage() {
   const [submittingGrant, setSubmittingGrant] = useState(false);
   const [submittingCreate, setSubmittingCreate] = useState(false);
   const [submittingDeduct, setSubmittingDeduct] = useState(false);
+  const [isBatchExtendOpen, setIsBatchExtendOpen] = useState(false);
+  const [batchExtendForm, setBatchExtendForm] = useState<{ extendDays: string; remark: string }>({ extendDays: "7", remark: "" });
+  const [submittingBatchExtend, setSubmittingBatchExtend] = useState(false);
   const deductCount = Number(deductForm.mealDelta || 0);
   const remainingMeals = activeItem?.remainingMeals ?? 0;
   const deductDisabled = remainingMeals <= 0 || deductCount <= 0 || remainingMeals < deductCount;
 
   const [detailActionLabel, grantActionLabel, deductActionLabel] = useMemo(() => buildCustomerActionLabels(), []);
+
+  // 批量延期：统计所有"已设置到期时间且未过期"的客户数量（不受当前筛选影响）
+  const nonExpiredCustomerCount = useMemo(
+    () => items.filter((item) => Boolean(item.packageExpiredAt) && item.remainingValidityDays >= 0).length,
+    [items]
+  );
 
   const detailAddresses = useMemo(() => resolveCustomerAddresses(detail), [detail]);
   const primaryAddress = useMemo(
@@ -445,9 +466,18 @@ export function CustomerAssetPage() {
   }
 
   async function handleGrantSubmit() {
-    if (!activeItem || !grantForm.mealDelta) return;
-    if (Number(grantForm.validityDays || 0) <= 0) {
-      toast("请填写有效期天数", "error");
+    if (!activeItem) return;
+    const mealDelta = Number(grantForm.mealDelta);
+    if (!Number.isFinite(mealDelta) || mealDelta <= 0) {
+      toast("请填写加餐数量（大于 0）", "error");
+      return;
+    }
+    if (!grantForm.expiredAt) {
+      toast("请选择到期时间（可通过天数或日历指定）", "error");
+      return;
+    }
+    if (!String(grantForm.remark || "").trim()) {
+      toast("请填写加餐原因，流水会展示给用户和商家", "error");
       return;
     }
     if (submittingGrant) {
@@ -457,12 +487,14 @@ export function CustomerAssetPage() {
     try {
       await grantWalletMeals(
         activeItem.id,
-        Number(grantForm.mealDelta),
-        Number(grantForm.validityDays),
-        grantForm.remark || "补餐"
+        mealDelta,
+        Number(grantForm.validityDays || 30),
+        grantForm.remark.trim(),
+        grantForm.expiredAt
       );
-      setGrantForm(defaultGrantForm);
-      await refreshCustomerWorkspace(activeItem);
+      setGrantForm(buildDefaultGrantForm());
+      setIsGrantOpen(false);
+      await reloadCustomers();
     } finally {
       setSubmittingGrant(false);
     }
@@ -472,6 +504,10 @@ export function CustomerAssetPage() {
     if (!activeItem || !deductForm.mealDelta) return;
     if (deductDisabled) {
       toast("余额不足", "error");
+      return;
+    }
+    if (!String(deductForm.remark || "").trim()) {
+      toast("请填写扣餐原因，流水会展示给用户和商家", "error");
       return;
     }
     if (submittingDeduct) {
@@ -486,6 +522,43 @@ export function CustomerAssetPage() {
     } finally {
       setSubmittingDeduct(false);
     }
+  }
+
+  async function handleBatchExtendSubmit() {
+    const extendDays = Number(batchExtendForm.extendDays);
+    if (!Number.isFinite(extendDays) || extendDays < 1 || extendDays > 3650) {
+      toast("请填写延期天数（1-3650 天）", "error");
+      return;
+    }
+    if (!String(batchExtendForm.remark || "").trim()) {
+      toast("请填写延期原因，流水会展示给用户和商家", "error");
+      return;
+    }
+    if (nonExpiredCustomerCount <= 0) {
+      toast("当前没有未过期的客户可延期", "error");
+      return;
+    }
+    if (submittingBatchExtend) {
+      return;
+    }
+    setSubmittingBatchExtend(true);
+    try {
+      const result = await batchExtendWalletValidity(extendDays, batchExtendForm.remark.trim());
+      setIsBatchExtendOpen(false);
+      setBatchExtendForm({ extendDays: "7", remark: "" });
+      await reloadCustomers();
+      toast(`已为 ${result.affectedCount} 位未过期客户统一延长 ${extendDays} 天`, "success");
+    } catch (err: any) {
+      toast(err?.response?.data?.message || err?.message || "批量延期失败", "error");
+    } finally {
+      setSubmittingBatchExtend(false);
+    }
+  }
+
+  function handleOpenGrant(item: CustomerAssetResponse) {
+    setActiveItem(item);
+    setGrantForm(buildDefaultGrantForm());
+    setIsGrantOpen(true);
   }
 
   async function handleOpenDetail(item: CustomerAssetResponse) {
@@ -510,6 +583,7 @@ export function CustomerAssetPage() {
   function handleCancelInlineEdit() {
     setEditForm(buildEditForm(detail, activeItem));
     setDetailMode("view");
+    resetAddressEditor();
   }
 
   async function handleCreateSubmit() {
@@ -543,6 +617,10 @@ export function CustomerAssetPage() {
       toast("请填写初始有效期天数", "error");
       return;
     }
+    if (meals > 0 && !String(editForm.initialMealRemark || "").trim()) {
+      toast("请填写初始加餐原因，流水会展示给用户和商家", "error");
+      return;
+    }
     if (submittingCreate) {
       return;
     }
@@ -556,7 +634,7 @@ export function CustomerAssetPage() {
         contactName: normalizeCustomerName(editForm.name),
         contactPhone: normalizeCustomerPhone(editForm.phone),
         initialMealDelta: meals,
-        initialMealRemark: meals > 0 ? "建档初始加餐" : "",
+        initialMealRemark: meals > 0 ? (editForm.initialMealRemark.trim() || "建档初始加餐") : "",
         initialValidityDays: meals > 0 ? validityDays : undefined
       });
 
@@ -661,6 +739,7 @@ export function CustomerAssetPage() {
   function resolveWalletTransactionTypeLabel(type: string) {
     if (type === "OPEN") return "开卡";
     if (type === "GRANT") return "后台发放";
+    if (type === "EXTEND_VALIDITY") return "统一延期";
     if (type === "RESERVE") return "下单占用";
     if (type === "RELEASE") return "取消释放";
     if (type === "MANUAL_DEDUCT") return "手工扣减";
@@ -673,14 +752,10 @@ export function CustomerAssetPage() {
       <button type="button" className="customer-action-btn customer-action-btn--primary" onClick={() => handleOpenDetail(item).catch((err) => toast(resolveErrorMessage(err, "打开客户详情失败"), "error"))}>
         {detailActionLabel}
       </button>
-      <button type="button" className="customer-action-btn customer-action-btn--accent" onClick={() => handleOpenDetail(item).catch(() => undefined)}>
-        <PlusCircle size={14} />
-        加餐
-      </button>
       <button
         type="button"
-        className="customer-action-btn customer-action-btn--success"
-        onClick={() => handleOpenDetail(item).catch((err) => toast(resolveErrorMessage(err, "打开客户补餐失败"), "error"))}
+        className="customer-action-btn customer-action-btn--accent"
+        onClick={() => handleOpenGrant(item)}
       >
         <PlusCircle size={14} />
         {grantActionLabel}
@@ -777,6 +852,16 @@ export function CustomerAssetPage() {
             onChange={(value) => setRemainingValidityStateFilter(value as CustomerRemainingValidityState)}
           />
           <button className="btn btn-primary" onClick={() => reloadCustomers().catch((err) => toast(resolveErrorMessage(err, "刷新客户列表失败"), "error"))}><Search size={16} /> 刷新</button>
+          <button
+            className="btn btn-outline"
+            onClick={() => {
+              setBatchExtendForm({ extendDays: "7", remark: "" });
+              setIsBatchExtendOpen(true);
+            }}
+            title="节假日等场景下，给所有未过期客户统一延长到期时间"
+          >
+            <CalendarDays size={16} /> 批量延期
+          </button>
           <button
             className="btn btn-outline"
             onClick={() => {
@@ -1146,7 +1231,7 @@ export function CustomerAssetPage() {
                     <div className="customer-detail-card__header">
                       <div className="customer-detail-card__title">收货地址</div>
                       <div className="customer-detail-card__actions" style={{ gap: 8, flexWrap: "wrap" }}>
-                        {showAddressExpandToggle && (
+                        {detailMode === "edit" && showAddressExpandToggle && (
                           <button
                             type="button"
                             className="btn btn-outline"
@@ -1156,9 +1241,16 @@ export function CustomerAssetPage() {
                             {isAddressExpanded ? "收起地址" : "展开全部"}
                           </button>
                         )}
-                        <button type="button" className="btn btn-outline" disabled={submittingAddress} onClick={handleStartCreateAddress}>
-                          {submittingAddress && editingAddressId == null ? "处理中..." : "新增地址"}
-                        </button>
+                        {detailMode === "edit" && (
+                          <button type="button" className="btn btn-outline" disabled={submittingAddress} onClick={handleStartCreateAddress}>
+                            {submittingAddress && editingAddressId == null ? "处理中..." : "新增地址"}
+                          </button>
+                        )}
+                        {detailMode === "view" && (
+                          <span className="admin-panel-note" style={{ fontSize: 12 }}>
+                            点击右上角「编辑资料」后可新增 / 修改 / 删除地址
+                          </span>
+                        )}
                       </div>
                     </div>
 
@@ -1207,7 +1299,7 @@ export function CustomerAssetPage() {
                                 )}
                               </div>
                               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                                {!address.isDefault && (
+                                {detailMode === "edit" && !address.isDefault && (
                                   <button
                                     type="button"
                                     className="btn btn-outline"
@@ -1217,22 +1309,26 @@ export function CustomerAssetPage() {
                                     {submittingAddress && submittingAddressActionId === address.id ? "处理中..." : "设为默认"}
                                   </button>
                                 )}
-                                <button
-                                  type="button"
-                                  className="btn btn-outline"
-                                  disabled={submittingAddress}
-                                  onClick={() => handleStartEditAddress(address)}
-                                >
-                                  编辑
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn btn-danger"
-                                  disabled={detailAddresses.length <= 1 || submittingAddress}
-                                  onClick={() => handleRequestDeleteAddress(address)}
-                                >
-                                  {submittingAddress && submittingAddressActionId === address.id ? "处理中..." : "删除"}
-                                </button>
+                                {detailMode === "edit" && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-outline"
+                                    disabled={submittingAddress}
+                                    onClick={() => handleStartEditAddress(address)}
+                                  >
+                                    编辑
+                                  </button>
+                                )}
+                                {detailMode === "edit" && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-danger"
+                                    disabled={detailAddresses.length <= 1 || submittingAddress}
+                                    onClick={() => handleRequestDeleteAddress(address)}
+                                  >
+                                    {submittingAddress && submittingAddressActionId === address.id ? "处理中..." : "删除"}
+                                  </button>
+                                )}
                               </div>
                             </div>
                             <div className="customer-detail-note-block__value">
@@ -1244,7 +1340,7 @@ export function CustomerAssetPage() {
                       </div>
                     )}
 
-                    {isAddressEditorOpen && (
+                    {isAddressEditorOpen && detailMode === "edit" && (
                       <div
                         style={{
                           padding: 16,
@@ -1330,34 +1426,13 @@ export function CustomerAssetPage() {
                     )}
                   </div>
                 </section>
-
-                <section className="customer-detail-card">
-                  <div className="customer-detail-card__title">补餐</div>
-                  <div className="customer-operation-form-grid">
-                    <div className="form-group">
-                      <label className="form-label"><span className="required">*</span>补餐数量</label>
-                      <SafeInput className="form-control" type="number" value={grantForm.mealDelta} onValueChange={(value) => setGrantForm({ ...grantForm, mealDelta: value })} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label"><span className="required">*</span>有效期天数</label>
-                      <SafeInput className="form-control" type="number" min="1" value={grantForm.validityDays} onValueChange={(value) => setGrantForm({ ...grantForm, validityDays: value })} />
-                    </div>
-                    <RemarkField
-                      label="操作备注"
-                      value={grantForm.remark}
-                      onChange={(value) => setGrantForm({ ...grantForm, remark: value })}
-                      placeholder="例如：客户微信转账续卡，后台补 10 餐"
-                      scene="WALLET_REMARK"
-                    />
-                  </div>
-                  <div className="customer-detail-card__actions">
-                    <button className="btn btn-primary" disabled={submittingGrant} onClick={() => handleGrantSubmit().catch((err) => toast(resolveErrorMessage(err, "补餐失败"), "error"))}>{submittingGrant ? "补餐中..." : "确认补餐"}</button>
-                  </div>
-                </section>
               </div>
 
               <section className="customer-detail-card customer-detail-card--full">
-                <div className="customer-detail-card__title">流水记录</div>
+                <div className="customer-detail-card__header" style={{ marginBottom: 12 }}>
+                  <div className="customer-detail-card__title">流水记录</div>
+                  <div className="customer-transaction-count">共 {transactions.length} 条，滚动查看更多</div>
+                </div>
                 {transactions.length === 0 ? (
                   <AsyncContentView status="empty" emptyText="暂无流水记录" />
                 ) : (
@@ -1367,7 +1442,9 @@ export function CustomerAssetPage() {
                         <TableRow>
                           <TableHead>类型</TableHead>
                           <TableHead>变动额</TableHead>
-                          <TableHead>备注</TableHead>
+                          <TableHead>操作人</TableHead>
+                          <TableHead>本次到期</TableHead>
+                          <TableHead>备注（加餐原因）</TableHead>
                           <TableHead>时间</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1380,6 +1457,8 @@ export function CustomerAssetPage() {
                                 {tx.mealDelta > 0 ? `+${tx.mealDelta}` : tx.mealDelta}
                               </span>
                             </TableCell>
+                            <TableCell>{tx.operatorName || "系统"}</TableCell>
+                            <TableCell>{tx.expiredAtSnapshot ? <span className="customer-transaction-expiry">{tx.expiredAtSnapshot}</span> : "-"}</TableCell>
                             <TableCell>{tx.remark || "-"}</TableCell>
                             <TableCell><span className="customer-transaction-time">{formatDateTimeLabel(tx.createdAt)}</span></TableCell>
                           </TableRow>
@@ -1392,9 +1471,6 @@ export function CustomerAssetPage() {
             </div>
             <div className="modal-footer">
               <button className="btn btn-outline" onClick={() => setIsDetailOpen(false)}>关闭</button>
-              <button className="btn btn-primary" disabled={submittingGrant} onClick={() => handleGrantSubmit().catch((err) => toast(resolveErrorMessage(err, "补餐失败"), "error"))}>
-                {submittingGrant ? "补餐中..." : grantActionLabel}
-              </button>
               <button
                 className="btn btn-danger"
                 onClick={() => {
@@ -1418,6 +1494,29 @@ export function CustomerAssetPage() {
         onSubmit={() => handleCreateSubmit().catch((err) => toast(resolveErrorMessage(err, "创建客户失败"), "error"))}
         onChange={setEditForm}
         normalizeCustomerPhone={normalizeCustomerPhone}
+      />
+
+      <CustomerGrantDialog
+        open={isGrantOpen}
+        activeItem={activeItem}
+        grantForm={grantForm}
+        submitting={submittingGrant}
+        onClose={() => setIsGrantOpen(false)}
+        onSubmit={() => handleGrantSubmit().catch((err) => toast(resolveErrorMessage(err, "加餐失败"), "error"))}
+        onChange={setGrantForm}
+        onValidityDaysChange={(value) => {
+          const nextDays = String(value || "").replace(/[^\d]/g, "");
+          setGrantForm({
+            ...grantForm,
+            validityDays: nextDays,
+            expiredAt: resolveExpiredAtFromRemainingDays(nextDays)
+          });
+        }}
+        onExpiredAtChange={(date) => setGrantForm({
+          ...grantForm,
+          expiredAt: date,
+          validityDays: resolveRemainingValidityDaysFromDate(date)
+        })}
       />
 
       <CustomerDeductDialog
@@ -1449,6 +1548,51 @@ export function CustomerAssetPage() {
       >
         <div style={{ color: "var(--text-sub)", padding: "8px 0" }}>
           删除后该配送地址将从客户资料中移除，请确认后再执行。
+        </div>
+      </AdminDialog>
+
+      <AdminDialog
+        open={isBatchExtendOpen}
+        title="批量统一延长有效期"
+        description="已过期客户不参与"
+        width={440}
+        onClose={submittingBatchExtend ? () => undefined : () => setIsBatchExtendOpen(false)}
+        footer={(
+          <>
+            <button className="btn btn-outline" disabled={submittingBatchExtend} onClick={() => setIsBatchExtendOpen(false)}>取消</button>
+            <button
+              className="btn btn-primary"
+              disabled={submittingBatchExtend || nonExpiredCustomerCount <= 0}
+              onClick={() => handleBatchExtendSubmit().catch((err) => toast(resolveErrorMessage(err, "批量延期失败"), "error"))}
+            >
+              {submittingBatchExtend ? "延期处理中..." : "确认统一延期"}
+            </button>
+          </>
+        )}
+      >
+        <div style={{ display: "grid", gap: 14, padding: "8px 0" }}>
+          <div className="batch-extend-count">
+            <span className="batch-extend-count__num">{nonExpiredCustomerCount}</span>
+            <span className="batch-extend-count__label">位未过期客户</span>
+          </div>
+          <div className="form-group">
+            <label className="form-label"><span className="required">*</span>延期天数</label>
+            <SafeInput
+              className="form-control"
+              type="number"
+              min="1"
+              value={batchExtendForm.extendDays}
+              onValueChange={(value) => setBatchExtendForm({ ...batchExtendForm, extendDays: String(value || "").replace(/[^\d]/g, "") })}
+            />
+          </div>
+          <RemarkField
+            label="延期原因"
+            required
+            value={batchExtendForm.remark}
+            onChange={(value) => setBatchExtendForm({ ...batchExtendForm, remark: value })}
+            placeholder="例如：国庆节统一延长 7 天"
+            scene="WALLET_REMARK"
+          />
         </div>
       </AdminDialog>
     </div>

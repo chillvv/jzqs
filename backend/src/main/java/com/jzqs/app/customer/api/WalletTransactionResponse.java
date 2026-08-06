@@ -13,6 +13,7 @@ public record WalletTransactionResponse(
     boolean refunded,
     String refundReasonCode,
     String refundReasonText,
-    String createdAt
+    String createdAt,
+    String expiredAtSnapshot
 ) {
 }

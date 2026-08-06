@@ -4,6 +4,8 @@ import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.customer.api.CustomerAddressActionResponse;
 import com.jzqs.app.customer.api.CustomerAddressUpsertRequest;
 import com.jzqs.app.customer.api.CustomerAssetResponse;
+import com.jzqs.app.customer.api.CustomerBatchExtendRequest;
+import com.jzqs.app.customer.api.CustomerBatchExtendResponse;
 import com.jzqs.app.customer.api.CustomerDetailResponse;
 import com.jzqs.app.customer.api.CustomerProfileCreateRequest;
 import com.jzqs.app.customer.api.CustomerProfileCreateResponse;
@@ -39,6 +41,8 @@ public interface CustomerAssetService {
     CustomerWalletAdjustResponse grantMeals(long customerId, WalletAdjustRequest request);
 
     CustomerWalletAdjustResponse deductMeals(long customerId, WalletAdjustRequest request);
+
+    CustomerBatchExtendResponse batchExtendValidity(CustomerBatchExtendRequest request);
 
     PageResponse<WalletTransactionResponse> walletTransactions(long customerId);
 

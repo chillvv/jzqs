@@ -17,7 +17,7 @@
   </view>
   <view class="subpage-card" wx:if="{{home}}">
     <view class="detail-line">到期日：{{home.packageExpiredAt || '--'}}</view>
-    <view class="detail-line">剩余天数：{{home.packageExpiredAt ? home.remainingValidityDays : '--'}}{{home.packageExpiredAt ? ' 天' : ''}}</view>
+    <view class="detail-line" wx:if="{{home.packageExpiredAt && home.remainingValidityDays >= 0}}">剩余天数：{{home.remainingValidityDays}} 天</view>
     <view class="detail-line" wx:if="{{home.packageAlertMessage}}">提醒：{{home.packageAlertMessage}}</view>
   </view>
 
@@ -33,6 +33,7 @@
       <view wx:if="{{item.statusText}}" class="detail-line">状态：{{item.statusText}}</view>
       <view class="detail-line">操作人：{{item.operatorName}}</view>
       <view class="detail-line">说明：{{item.remarkText || item.remark || '暂无说明'}}</view>
+      <view wx:if="{{item.expiredAtLabel}}" class="detail-line expiry-line">本次调整后到期：{{item.expiredAtLabel}}</view>
       <view class="detail-line">{{item.flowHint}}</view>
       <view wx:if="{{item.relatedOrderId}}" class="related-order-hint">
         点击查看关联订单 <text class="arrow">›</text>

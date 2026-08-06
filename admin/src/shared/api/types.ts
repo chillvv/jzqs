@@ -341,6 +341,13 @@ export type WalletTransactionResponse = {
   refundReasonCode: string;
   refundReasonText: string;
   createdAt: string;
+  expiredAtSnapshot: string | null;
+};
+
+export type CustomerBatchExtendResponse = {
+  affectedCount: number;
+  skippedCount: number;
+  totalCount: number;
 };
 export type MaintenanceLogItemResponse = {
   id: number;
@@ -349,8 +356,8 @@ export type MaintenanceLogItemResponse = {
   triggerSource: string;
   status: string;
   timeRangeLabel: string;
-  startedAt: string | null;
-  finishedAt: string | null;
+  startedAt: string | number[] | null;
+  finishedAt: string | number[] | null;
   durationMs: number | null;
   scannedCount: number;
   deletedCount: number;
@@ -358,6 +365,15 @@ export type MaintenanceLogItemResponse = {
   message: string;
   errorDetail: string | null;
   moduleSummaries: MaintenanceCleanupModuleSummaryResponse[];
+};
+export type MaintenanceCleanupModuleDetailItem = {
+  scopeLabel: string;
+  tableName: string;
+  scannedCount: number;
+  deletedCount: number;
+  failedCount: number;
+  rangeLabel: string;
+  note: string;
 };
 export type MaintenanceCleanupModuleSummaryResponse = {
   moduleKey: string;
@@ -367,6 +383,7 @@ export type MaintenanceCleanupModuleSummaryResponse = {
   failedCount: number;
   timeRangeLabel: string;
   summary: string;
+  details?: MaintenanceCleanupModuleDetailItem[] | null;
 };
 export type MaintenanceCleanupRuleResponse = {
   moduleKey: string;

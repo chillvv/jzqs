@@ -43,6 +43,7 @@ services:
       SERVER_PORT: 8080
       APP_UPLOAD_DIR: /app/uploads
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      TZ: Asia/Shanghai
       WECHAT_DEV_MODE: ${WECHAT_DEV_MODE:-false}
       WECHAT_APPID: ${WECHAT_APPID:-}
       WECHAT_SECRET: ${WECHAT_SECRET:-}
@@ -61,7 +62,7 @@ services:
       SERVER_TOMCAT_THREADS_MIN_SPARE: ${SERVER_TOMCAT_THREADS_MIN_SPARE:-10}
       SERVER_TOMCAT_ACCEPT_COUNT: ${SERVER_TOMCAT_ACCEPT_COUNT:-100}
       SERVER_TOMCAT_MAX_CONNECTIONS: ${SERVER_TOMCAT_MAX_CONNECTIONS:-1024}
-      JAVA_OPTS: "-Dfile.encoding=UTF-8 -XX:+UseG1GC -XX:MaxRAMPercentage=50 -XX:InitialRAMPercentage=25 -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/./urandom"
+      JAVA_OPTS: "-Dfile.encoding=UTF-8 -Duser.timezone=Asia/Shanghai -XX:+UseG1GC -XX:MaxRAMPercentage=50 -XX:InitialRAMPercentage=25 -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/./urandom"
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     volumes:

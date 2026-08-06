@@ -95,6 +95,14 @@ function formatChineseDate(value) {
   return `${year}年${Number(month)}月${Number(day)}日`;
 }
 
+function resolveWalletTransactionExpiry(item) {
+  const raw = String(item.expiredAtSnapshot || "").trim();
+  if (!raw) {
+    return "";
+  }
+  return formatChineseDate(raw);
+}
+
 function formatWalletTransaction(item) {
   return {
     ...item,
@@ -102,7 +110,8 @@ function formatWalletTransaction(item) {
     deltaText: `${item.mealDelta > 0 ? "+" : ""}${item.mealDelta}`,
     statusText: resolveWalletTransactionStatusText(item),
     remarkText: resolveWalletTransactionRemark(item),
-    displayCreatedAt: formatChineseDate(item.createdAt)
+    displayCreatedAt: formatChineseDate(item.createdAt),
+    expiredAtLabel: resolveWalletTransactionExpiry(item)
   };
 }
 

@@ -15,6 +15,7 @@ interface CustomerCreateForm {
   remainingValidityDays: string;
   initialMeals: string;
   initialValidityDays: string;
+  initialMealRemark: string;
   addressLine: string;
 }
 
@@ -87,6 +88,18 @@ export function CustomerCreateDialog({
                 />
                 <div className="admin-panel-note" style={{ marginTop: "4px" }}>填写后会同步生成该客户当前餐包的到期日</div>
               </div>
+              {Number(form.initialMeals || 0) > 0 && (
+                <div className="form-group" style={{ marginTop: "16px" }}>
+                  <label className="form-label"><span className="required">*</span>初始加餐原因</label>
+                  <SafeInput
+                    className="form-control"
+                    value={form.initialMealRemark}
+                    onValueChange={(value) => onChange({ ...form, initialMealRemark: value })}
+                    placeholder="例如：微信转账续卡 30 餐"
+                  />
+                  <div className="admin-panel-note" style={{ marginTop: "4px" }}>加餐原因会记录在流水上，商家和用户都能看到</div>
+                </div>
+              )}
               <div className="customer-edit-form-grid">
                 <div className="form-group">
                   <label className="form-label"><span className="required">*</span>收货地址</label>

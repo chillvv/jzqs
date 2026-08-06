@@ -8,6 +8,8 @@ import com.jzqs.app.customer.api.CustomerAddressActionResponse;
 import com.jzqs.app.customer.api.CustomerAddressDetailResponse;
 import com.jzqs.app.customer.api.CustomerAddressUpsertRequest;
 import com.jzqs.app.customer.api.CustomerAssetResponse;
+import com.jzqs.app.customer.api.CustomerBatchExtendRequest;
+import com.jzqs.app.customer.api.CustomerBatchExtendResponse;
 import com.jzqs.app.customer.api.CustomerDetailResponse;
 import com.jzqs.app.customer.api.CustomerProfileCreateRequest;
 import com.jzqs.app.customer.api.CustomerProfileCreateResponse;
@@ -30,6 +32,7 @@ import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -51,6 +54,8 @@ import org.springframework.jdbc.support.KeyHolder;
 public class CustomerAssetServiceImpl implements CustomerAssetService {
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    /** 统一使用北京时间作为加餐/有效期计算的基准时区 */
+    private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
 
     private final CustomerMapper customerMapper;
     private final MealWalletMapper mealWalletMapper;
@@ -247,7 +252,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "客户姓名已存在，请更换姓名（如加编号后缀）");
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = now();
         CustomerEntity customer = new CustomerEntity();
         customer.setName(name);
         customer.setPhone(phone);
@@ -273,10 +278,11 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         if (initialMealDelta > 0) {
             MealWalletEntity wallet = findOrCreateWallet(customer.getId());
             wallet.setTotalMeals(nvl(wallet.getTotalMeals()) + initialMealDelta);
-            wallet.setExpiredAt(resolveWalletExpiry(initialValidityDays));
-            wallet.setLastAdjustedAt(LocalDateTime.now());
+            LocalDateTime grantExpiredAt = resolveWalletExpiry(initialValidityDays);
+            wallet.setExpiredAt(grantExpiredAt);
+            wallet.setLastAdjustedAt(now());
             mealWalletMapper.updateById(wallet);
-            insertWalletTransaction(wallet.getId(), "GRANT", initialMealDelta, "ADMIN", initialMealRemark);
+            insertWalletTransaction(wallet.getId(), "GRANT", initialMealDelta, "ADMIN", initialMealRemark, grantExpiredAt);
         }
 
         return new CustomerProfileCreateResponse(customer.getId(), "CREATED");
@@ -332,7 +338,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             } else if (request.remainingValidityDays() != null) {
                 wallet.setExpiredAt(resolveWalletExpiryFromRemainingDays(request.remainingValidityDays()));
             }
-            wallet.setLastAdjustedAt(LocalDateTime.now());
+            wallet.setLastAdjustedAt(now());
             mealWalletMapper.updateById(wallet);
         }
         
@@ -351,11 +357,11 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
                     INSERT INTO customer_notes (
                         customer_id, note_type, scope_type, content, is_active, display_order, created_by, updated_by, created_at, updated_at
                     ) VALUES (?, 'USER', 'LONG_TERM', ?, TRUE, 0, 'USER', 'USER', ?, ?)
-                    """, customerId, defaultUserRemark, Timestamp.valueOf(LocalDateTime.now()), Timestamp.valueOf(LocalDateTime.now()));
+                    """, customerId, defaultUserRemark, Timestamp.valueOf(now()), Timestamp.valueOf(now()));
             }
         }
         
-        customer.setUpdatedAt(LocalDateTime.now());
+        customer.setUpdatedAt(now());
         customerMapper.updateById(customer);
         jdbcTemplate.update(
             "UPDATE customer_addresses SET contact_name = ?, contact_phone = ? WHERE customer_id = ?",
@@ -453,15 +459,14 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
     @Override
     @Transactional
     public CustomerWalletAdjustResponse grantMeals(long customerId, WalletAdjustRequest request) {
-        if (request.validityDays() == null) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "validityDays 不能为空且必须大于等于 1");
-        }
+        // 统一过期时间：优先使用日历指定的 expiredAt，否则按当前北京时间 + validityDays 计算
+        LocalDateTime grantExpiredAt = resolveGrantExpiry(request);
         MealWalletEntity wallet = findOrCreateWallet(customerId);
         wallet.setTotalMeals(nvl(wallet.getTotalMeals()) + request.mealDelta());
-        wallet.setExpiredAt(resolveWalletExpiry(request.validityDays()));
-        wallet.setLastAdjustedAt(LocalDateTime.now());
+        wallet.setExpiredAt(grantExpiredAt);
+        wallet.setLastAdjustedAt(now());
         mealWalletMapper.updateById(wallet);
-        insertWalletTransaction(wallet.getId(), "GRANT", request.mealDelta(), request.operatorName(), request.remark());
+        insertWalletTransaction(wallet.getId(), "GRANT", request.mealDelta(), request.operatorName(), request.remark(), grantExpiredAt);
         int remainingMeals = remainingMeals(wallet);
         return buildAdjustResult(customerId, remainingMeals);
     }
@@ -477,9 +482,41 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         int nextTotal = nvl(wallet.getTotalMeals()) - request.mealDelta();
         wallet.setTotalMeals(nextTotal);
         mealWalletMapper.updateById(wallet);
-        insertWalletTransaction(wallet.getId(), "MANUAL_DEDUCT", -request.mealDelta(), request.operatorName(), request.remark());
+        insertWalletTransaction(wallet.getId(), "MANUAL_DEDUCT", -request.mealDelta(), request.operatorName(), request.remark(), null);
         remainingMeals = remainingMeals(wallet);
         return buildAdjustResult(customerId, remainingMeals);
+    }
+
+    @Override
+    @Transactional
+    public CustomerBatchExtendResponse batchExtendValidity(CustomerBatchExtendRequest request) {
+        int extendDays = request.extendDays();
+        String remark = blankToNull(request.remark());
+        if (remark == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请填写延期原因（会展示在流水上）");
+        }
+        List<MealWalletEntity> wallets = mealWalletMapper.selectList(
+            new LambdaQueryWrapper<MealWalletEntity>()
+                .eq(MealWalletEntity::getActive, true)
+        );
+        LocalDate currentDay = today();
+        int affected = 0;
+        int skipped = 0;
+        for (MealWalletEntity wallet : wallets) {
+            LocalDateTime expiredAt = wallet.getExpiredAt();
+            // 只给设置了到期时间且尚未过期的客户延期；无到期时间 / 已过期的跳过
+            if (expiredAt == null || expiredAt.toLocalDate().isBefore(currentDay)) {
+                skipped++;
+                continue;
+            }
+            LocalDateTime nextExpiry = expiredAt.plusDays(extendDays);
+            wallet.setExpiredAt(nextExpiry);
+            wallet.setLastAdjustedAt(now());
+            mealWalletMapper.updateById(wallet);
+            insertWalletTransaction(wallet.getId(), "EXTEND_VALIDITY", 0, "系统", remark, nextExpiry);
+            affected++;
+        }
+        return new CustomerBatchExtendResponse(affected, skipped, wallets.size());
     }
 
     @Override
@@ -504,7 +541,8 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             Boolean.TRUE.equals(tx.getRefunded()),
             tx.getRefundReasonCode() == null ? "" : tx.getRefundReasonCode(),
             tx.getRefundReasonText() == null ? "" : tx.getRefundReasonText(),
-            formatDateTime(tx.getCreatedAt())
+            formatDateTime(tx.getCreatedAt()),
+            formatDate(tx.getExpiredAtSnapshot())
         )).toList();
 
         return PageResponse.of(items, 1, 20, items.size());
@@ -559,6 +597,14 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         return new RemarkSuggestionResponse(normalizedScene, items);
     }
 
+    private LocalDateTime now() {
+        return LocalDateTime.now(SHANGHAI);
+    }
+
+    private LocalDate today() {
+        return LocalDate.now(SHANGHAI);
+    }
+
     private MealWalletEntity findActiveWallet(long customerId) {
         MealWalletEntity wallet = mealWalletMapper.selectOne(
             new LambdaQueryWrapper<MealWalletEntity>()
@@ -586,7 +632,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
     }
 
     private MealWalletEntity createInitialWallet(long customerId) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = now();
         MealWalletEntity wallet = new MealWalletEntity();
         wallet.setCustomerId(customerId);
         wallet.setTotalMeals(0);
@@ -614,7 +660,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
     }
 
     private LocalDateTime resolveWalletExpiry(int validityDays) {
-        return LocalDate.now().plusDays(validityDays).atTime(23, 59, 59);
+        return today().plusDays(validityDays).atTime(23, 59, 59);
     }
 
     private LocalDateTime resolveWalletExpiryFromRemainingDays(Object rawRemainingValidityDays) {
@@ -623,14 +669,29 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             return null;
         }
         int remainingDays = Integer.parseInt(normalized);
-        return LocalDate.now().plusDays(remainingDays).atTime(23, 59, 59);
+        return today().plusDays(remainingDays).atTime(23, 59, 59);
     }
 
     private int remainingValidityDays(LocalDateTime expiredAt) {
         if (expiredAt == null) {
             return 0;
         }
-        return (int) ChronoUnit.DAYS.between(LocalDate.now(), expiredAt.toLocalDate());
+        return (int) ChronoUnit.DAYS.between(today(), expiredAt.toLocalDate());
+    }
+
+    /**
+     * 解析加餐请求的到期时间：优先使用请求中显式指定的 expiredAt（日历选定的日期），
+     * 否则按有效期天数从当前北京时间 + N 天计算。两种方式最终统一为一个过期时间。
+     */
+    private LocalDateTime resolveGrantExpiry(WalletAdjustRequest request) {
+        String explicitExpiry = blankToNull(request.expiredAt());
+        if (explicitExpiry != null) {
+            return parseDateEndOfDayValue(explicitExpiry);
+        }
+        if (request.validityDays() == null || request.validityDays() < 1) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "有效期天数不能为空且必须大于等于 1");
+        }
+        return resolveWalletExpiry(request.validityDays());
     }
 
     private LocalDateTime parseDateTimeValue(Object rawValue) {
@@ -648,6 +709,10 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         String normalized = blankToNull(stringValue(rawValue));
         if (normalized == null) {
             return null;
+        }
+        if (normalized.contains("T")) {
+            String dateTime = normalized.length() == 16 ? normalized + ":00" : normalized;
+            return LocalDateTime.parse(dateTime);
         }
         return LocalDate.parse(normalized, DATE_FORMATTER).atTime(23, 59, 59);
     }
@@ -669,7 +734,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         return PackageAlert.none();
     }
 
-    private void insertWalletTransaction(long walletId, String transactionType, int mealDelta, String operatorName, String remark) {
+    private void insertWalletTransaction(long walletId, String transactionType, int mealDelta, String operatorName, String remark, LocalDateTime expiredAtSnapshot) {
         WalletTransactionEntity tx = new WalletTransactionEntity();
         tx.setWalletId(walletId);
         tx.setTransactionType(transactionType);
@@ -677,7 +742,8 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         tx.setMealDelta(mealDelta);
         tx.setOperatorName(operatorName);
         tx.setRemark(remark);
-        tx.setCreatedAt(LocalDateTime.now());
+        tx.setExpiredAtSnapshot(expiredAtSnapshot);
+        tx.setCreatedAt(now());
         tx.setSnapshotBalance(querySnapshotBalance(walletId));
         walletTransactionMapper.insert(tx);
     }

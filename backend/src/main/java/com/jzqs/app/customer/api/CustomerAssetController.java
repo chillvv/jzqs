@@ -105,7 +105,8 @@ public class CustomerAssetController {
             request.mealDelta(),
             request.validityDays(),
             AdminRequestContextSupport.requireOperatorName(),
-            request.remark()
+            request.remark(),
+            request.expiredAt()
         );
         return ApiResponse.success(customerAssetService.grantMeals(customerId, normalizedRequest));
     }
@@ -119,9 +120,18 @@ public class CustomerAssetController {
             request.mealDelta(),
             request.validityDays(),
             AdminRequestContextSupport.requireOperatorName(),
-            request.remark()
+            request.remark(),
+            request.expiredAt()
         );
         return ApiResponse.success(customerAssetService.deductMeals(customerId, normalizedRequest));
+    }
+
+    @PostMapping("/wallet/batch-extend")
+    @RateLimit(key = "admin:customers:wallet:batch-extend", maxRequests = 2, windowSeconds = 30)
+    @Idempotent(key = "admin:customers:wallet:batch-extend", ttlSeconds = 15, includeBody = true)
+    @AuditAction(module = "CUSTOMER_ASSET", action = "BATCH_EXTEND_VALIDITY")
+    public ApiResponse<CustomerBatchExtendResponse> batchExtend(@Valid @RequestBody CustomerBatchExtendRequest request) {
+        return ApiResponse.success(customerAssetService.batchExtendValidity(request));
     }
 
     @GetMapping("/{customerId}/wallet-transactions")

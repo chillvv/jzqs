@@ -383,11 +383,13 @@ class MobileCustomerQueryModule {
                     wt.refunded,
                     COALESCE(wt.refund_reason_code, '') AS refund_reason_code,
                     COALESCE(wt.refund_reason_text, '') AS refund_reason_text,
-                    wt.created_at AS created_at
+                    wt.created_at AS created_at,
+                    wt.expired_at_snapshot AS expired_at_snapshot
                 FROM wallet_transactions wt
                 JOIN meal_wallets mw ON mw.id = wt.wallet_id
                 WHERE mw.customer_id = ?
                 ORDER BY wt.id DESC
+                LIMIT 50
                 """,
             (rs, rowNum) -> new WalletTransactionResponse(
                 rs.getLong("id"),
@@ -402,7 +404,8 @@ class MobileCustomerQueryModule {
                 rs.getBoolean("refunded"),
                 rs.getString("refund_reason_code"),
                 rs.getString("refund_reason_text"),
-                formatTimestamp(rs.getTimestamp("created_at"))
+                formatTimestamp(rs.getTimestamp("created_at")),
+                formatTimestamp(rs.getTimestamp("expired_at_snapshot"))
             ),
             customerId
         );

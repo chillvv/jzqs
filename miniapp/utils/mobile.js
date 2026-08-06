@@ -52,6 +52,8 @@ function transactionLabel(type) {
       return '开卡';
     case 'GRANT':
       return '后台发放';
+    case 'EXTEND_VALIDITY':
+      return '统一延期';
     case 'RESERVE':
       return '下单占用';
     case 'RELEASE':
