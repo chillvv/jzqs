@@ -16,6 +16,9 @@
 /docs/superpowers/
 .trae-sandbox/
 
+# 本地工作记忆（不提交）
+/.workbuddy/
+
 # 测试类与测试资源 (生产环境不需要)
 /tests/
 /backend/src/test/
