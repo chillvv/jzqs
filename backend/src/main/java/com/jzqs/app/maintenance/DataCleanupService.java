@@ -39,7 +39,7 @@ public class DataCleanupService {
     private static final DateTimeFormatter RANGE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter DISPLAY_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final String NEXT_AUTO_RUN_LABEL = "每日 03:00";
-    private static final int MAINTENANCE_LOG_RETENTION_DAYS = 90;
+    static final int MAINTENANCE_LOG_KEEP_COUNT = 10;
     private static final Set<String> BUSINESS_MODULE_KEYS = Set.of(
         "ORDER_HISTORY",
         "RECEIPT_RECORD",
@@ -600,7 +600,11 @@ public class DataCleanupService {
             deletedCount,
             0,
             "订单<" + cutoffDate,
-            deletedCount > 0 ? "扫描 " + deletedCount + " 条订单历史，清理 " + deletedCount + " 条" : "订单历史本次无需清理"
+            deletedCount > 0 ? "扫描 " + deletedCount + " 条订单历史，清理 " + deletedCount + " 条" : "订单历史本次无需清理",
+            List.of(
+                buildModuleDetail("订单明细", "meal_slot_orders", mealSlotCount, mealSlotCount, "订单<" + cutoffDate, "按订单状态和配送日期清理的历史订单明细"),
+                buildModuleDetail("订单主记录", "daily_orders", dailyOrderCount, dailyOrderCount, "订单<" + cutoffDate, "明细清理完成后无残留引用的历史订单主表")
+            )
         );
     }
 
@@ -662,7 +666,12 @@ public class DataCleanupService {
             deletedCount,
             0,
             "配送<" + cutoffDate,
-            deletedCount > 0 ? "扫描 " + deletedCount + " 条配送批次数据，清理 " + deletedCount + " 条" : "配送批次本次无需清理"
+            deletedCount > 0 ? "扫描 " + deletedCount + " 条配送批次数据，清理 " + deletedCount + " 条" : "配送批次本次无需清理",
+            List.of(
+                buildModuleDetail("配送批次明细", "dispatch_batch_items", batchItemCount, batchItemCount, "配送<" + cutoffDate, "按配送日期清理的历史批次明细"),
+                buildModuleDetail("配送批次", "dispatch_batches", batchCount, batchCount, "配送<" + cutoffDate, "明细清空后无残留引用的历史配送批次"),
+                buildModuleDetail("配送指派", "dispatch_assignments", assignmentCount, assignmentCount, "配送<" + cutoffDate, "已送达订单对应的历史配送指派记录")
+            )
         );
     }
 
@@ -688,6 +697,9 @@ public class DataCleanupService {
             cutoffTime
         );
         int deletedLocalFiles = deleteLocalReceiptFiles(receiptPathsToCleanup);
+        int localFileCandidateCount = (int) receiptPathsToCleanup.stream()
+            .filter((path) -> resolveManagedUploadPath(path) != null)
+            .count();
         int cleanedCount = jdbcTemplate.update(
             """
             UPDATE delivery_receipts
@@ -722,7 +734,11 @@ public class DataCleanupService {
             cleanedCount,
             0,
             "回执<" + cutoffTime.format(RANGE_FORMATTER),
-            summary
+            summary,
+            List.of(
+                buildModuleDetail("回执内容记录", "delivery_receipts", scannedCount, cleanedCount, "回执<" + cutoffTime.format(RANGE_FORMATTER), "清空过期回执的图片地址、备注并对顾客隐藏"),
+                buildModuleDetail("本地落盘图片", "uploads/*", localFileCandidateCount, deletedLocalFiles, "回执<" + cutoffTime.format(RANGE_FORMATTER), "删除上传目录中对应的过期回执图片文件")
+            )
         );
     }
 
@@ -746,7 +762,8 @@ public class DataCleanupService {
             deletedCount,
             0,
             "区域调整<" + cutoffTime.format(RANGE_FORMATTER),
-            deletedCount > 0 ? "扫描 " + deletedCount + " 条区域调整记录，清理 " + deletedCount + " 条" : "区域调整记录本次无需清理"
+            deletedCount > 0 ? "扫描 " + deletedCount + " 条区域调整记录，清理 " + deletedCount + " 条" : "区域调整记录本次无需清理",
+            List.of(buildModuleDetail("区域调整记录", "dispatch_reassignments", deletedCount, deletedCount, "区域调整<" + cutoffTime.format(RANGE_FORMATTER), "按创建时间清理的历史区域调整记录"))
         );
     }
 
@@ -771,7 +788,8 @@ public class DataCleanupService {
             deletedCount,
             0,
             "地址绑定<" + cutoffDate,
-            deletedCount > 0 ? "扫描 " + deletedCount + " 条地址绑定，清理 " + deletedCount + " 条" : "地址绑定本次无需清理"
+            deletedCount > 0 ? "扫描 " + deletedCount + " 条地址绑定，清理 " + deletedCount + " 条" : "地址绑定本次无需清理",
+            List.of(buildModuleDetail("骑手地址绑定", "rider_address_bindings", deletedCount, deletedCount, "地址绑定<" + cutoffDate, "按最近活动时间清理的长期未用地址绑定"))
         );
     }
 
@@ -795,7 +813,8 @@ public class DataCleanupService {
             deletedCount,
             0,
             "钱包流水<" + cutoffTime.format(RANGE_FORMATTER),
-            deletedCount > 0 ? "扫描 " + deletedCount + " 条钱包流水，清理 " + deletedCount + " 条" : "钱包流水本次无需清理"
+            deletedCount > 0 ? "扫描 " + deletedCount + " 条钱包流水，清理 " + deletedCount + " 条" : "钱包流水本次无需清理",
+            List.of(buildModuleDetail("钱包流水", "wallet_transactions", deletedCount, deletedCount, "钱包流水<" + cutoffTime.format(RANGE_FORMATTER), "按创建时间清理的过期钱包流水记录"))
         );
     }
 
@@ -836,18 +855,43 @@ public class DataCleanupService {
     }
 
     private void pruneMaintenanceJobLogs() {
-        LocalDateTime cutoffTime = LocalDateTime.now().minusDays(MAINTENANCE_LOG_RETENTION_DAYS);
         int deletedCount = jdbcTemplate.update(
             """
             DELETE FROM maintenance_job_logs
-            WHERE started_at < ?
+            WHERE id NOT IN (
+                SELECT id FROM (
+                    SELECT id
+                    FROM maintenance_job_logs
+                    ORDER BY started_at DESC, id DESC
+                    LIMIT ?
+                ) keep_ids
+            )
             LIMIT 5000
             """,
-            Timestamp.valueOf(cutoffTime)
+            MAINTENANCE_LOG_KEEP_COUNT
         );
         if (deletedCount > 0) {
-            log.info("清理维护执行日志: {}", deletedCount);
+            log.info("维护执行日志仅保留最近 {} 条，本次清理 {} 条", MAINTENANCE_LOG_KEEP_COUNT, deletedCount);
         }
+    }
+
+    private MaintenanceCleanupModuleDetailItemResponse buildModuleDetail(
+        String scopeLabel,
+        String tableName,
+        int scannedCount,
+        int deletedCount,
+        String rangeLabel,
+        String note
+    ) {
+        return new MaintenanceCleanupModuleDetailItemResponse(
+            scopeLabel,
+            tableName,
+            scannedCount,
+            deletedCount,
+            0,
+            rangeLabel,
+            note
+        );
     }
 
     private int normalizeRetentionValue(Integer value) {

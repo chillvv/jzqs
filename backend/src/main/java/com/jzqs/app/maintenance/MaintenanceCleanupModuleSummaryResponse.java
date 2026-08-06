@@ -1,5 +1,7 @@
 package com.jzqs.app.maintenance;
 
+import java.util.List;
+
 public record MaintenanceCleanupModuleSummaryResponse(
     String moduleKey,
     String moduleLabel,
@@ -7,6 +9,7 @@ public record MaintenanceCleanupModuleSummaryResponse(
     int deletedCount,
     int failedCount,
     String timeRangeLabel,
-    String summary
+    String summary,
+    List<MaintenanceCleanupModuleDetailItemResponse> details
 ) {
 }

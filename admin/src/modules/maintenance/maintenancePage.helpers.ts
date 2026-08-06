@@ -1,4 +1,8 @@
-import type { MaintenanceLogItemResponse, MaintenanceOverviewResponse } from "../../shared/api/types";
+import type {
+  MaintenanceCleanupModuleDetailItem,
+  MaintenanceLogItemResponse,
+  MaintenanceOverviewResponse
+} from "../../shared/api/types";
 import { formatDateTimeLabel } from "../../shared/utils/dateTime";
 
 export type MaintenanceTone = "green" | "orange" | "red" | "gray";
@@ -13,6 +17,17 @@ export type MaintenanceLogRow = {
   summary: string;
   message: string;
   errorDetail: string | null;
+};
+
+export type MaintenanceLogDetailSection = {
+  moduleKey: string;
+  moduleLabel: string;
+  timeRangeLabel: string;
+  scannedCount: number;
+  deletedCount: number;
+  failedCount: number;
+  summary: string;
+  details: MaintenanceCleanupModuleDetailItem[];
 };
 
 export function resolveMaintenanceStatusTone(status: string): MaintenanceTone {
@@ -118,5 +133,34 @@ export function buildMaintenanceLogRows(items: MaintenanceLogItemResponse[]): Ma
     summary: buildMaintenanceResultSummary(item),
     message: item.message || "-",
     errorDetail: item.errorDetail
+  }));
+}
+
+export function formatMaintenanceDurationLabel(durationMs: number | null | undefined) {
+  if (!durationMs || durationMs <= 0) {
+    return "-";
+  }
+  const totalSeconds = Math.round(durationMs / 1000);
+  if (totalSeconds < 60) {
+    return `${totalSeconds} 秒`;
+  }
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds > 0 ? `${minutes} 分 ${seconds} 秒` : `${minutes} 分钟`;
+}
+
+export function buildMaintenanceLogDetailSections(item: MaintenanceLogItemResponse | null | undefined): MaintenanceLogDetailSection[] {
+  if (!item) {
+    return [];
+  }
+  return (item.moduleSummaries || []).map((summary) => ({
+    moduleKey: summary.moduleKey,
+    moduleLabel: summary.moduleLabel,
+    timeRangeLabel: summary.timeRangeLabel,
+    scannedCount: summary.scannedCount,
+    deletedCount: summary.deletedCount,
+    failedCount: summary.failedCount,
+    summary: summary.summary,
+    details: summary.details || []
   }));
 }

@@ -71,6 +71,6 @@ public class MaintenanceController {
 
     @GetMapping("/logs")
     public ApiResponse<List<MaintenanceLogItemResponse>> getLogs() {
-        return ApiResponse.success(dataCleanupService.fetchRecentLogs(20));
+        return ApiResponse.success(dataCleanupService.fetchRecentLogs(DataCleanupService.MAINTENANCE_LOG_KEEP_COUNT));
     }
 }

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { CheckCircle, Clock3, Database, ShieldCheck, SlidersHorizontal, Trash2 } from "lucide-react";
+import { CheckCircle, ChevronRight, Clock3, Database, ShieldCheck, SlidersHorizontal, Trash2 } from "lucide-react";
 import {
   swrFetcher,
   triggerDataCleanup,
@@ -13,7 +13,9 @@ import type {
   MaintenanceOverviewResponse
 } from "../../shared/api/types";
 import {
+  buildMaintenanceLogDetailSections,
   buildMaintenanceLogRows,
+  formatMaintenanceDurationLabel,
   normalizeMaintenanceOverview,
   resolveMaintenanceStatusLabel,
   type MaintenanceTone
@@ -68,6 +70,130 @@ function resolveToneTagClass(tone: MaintenanceTone) {
   if (tone === "orange") return "tag-orange";
   if (tone === "red") return "tag-red";
   return "tag-gray";
+}
+
+function MaintenanceLogDetail({ item }: { item: MaintenanceLogItemResponse }) {
+  const row = useMemo(() => buildMaintenanceLogRows([item])[0], [item]);
+  const sections = useMemo(() => buildMaintenanceLogDetailSections(item), [item]);
+
+  return (
+    <div className="maintenance-log-detail">
+      <div className="maintenance-log-detail__hero">
+        <div className="maintenance-log-detail__hero-main">
+          <div className="maintenance-log-detail__title">
+            {row.jobLabel}
+            <span className="maintenance-log-detail__trigger">{row.triggerLabel}</span>
+          </div>
+          <div className="maintenance-log-detail__subtitle">
+            {row.timeLabel}
+            {item.finishedAt && item.startedAt ? ` · 耗时 ${formatMaintenanceDurationLabel(item.durationMs)}` : ""}
+          </div>
+        </div>
+        <span className={`tag ${resolveToneTagClass(row.tone)}`}>{row.statusLabel}</span>
+      </div>
+
+      <div className="maintenance-log-detail__stats">
+        <div className="maintenance-log-detail__stat">
+          <div className="maintenance-log-detail__stat-label">扫描</div>
+          <div className="maintenance-log-detail__stat-value">{item.scannedCount}</div>
+        </div>
+        <div className="maintenance-log-detail__stat">
+          <div className="maintenance-log-detail__stat-label">清理</div>
+          <div className="maintenance-log-detail__stat-value maintenance-log-detail__stat-value--danger">{item.deletedCount}</div>
+        </div>
+        <div className="maintenance-log-detail__stat">
+          <div className="maintenance-log-detail__stat-label">失败</div>
+          <div className={`maintenance-log-detail__stat-value ${item.failedCount > 0 ? "maintenance-log-detail__stat-value--danger" : ""}`}>
+            {item.failedCount}
+          </div>
+        </div>
+      </div>
+
+      <div className="maintenance-log-detail__meta">
+        <div className="maintenance-log-detail__meta-item">
+          <span className="maintenance-log-detail__meta-label">清理范围</span>
+          <span className="maintenance-log-detail__meta-value">{row.rangeLabel}</span>
+        </div>
+        <div className="maintenance-log-detail__meta-item">
+          <span className="maintenance-log-detail__meta-label">开始时间</span>
+          <span className="maintenance-log-detail__meta-value">{formatDateTimeLabel(item.startedAt)}</span>
+        </div>
+        <div className="maintenance-log-detail__meta-item">
+          <span className="maintenance-log-detail__meta-label">结束时间</span>
+          <span className="maintenance-log-detail__meta-value">{formatDateTimeLabel(item.finishedAt)}</span>
+        </div>
+        <div className="maintenance-log-detail__meta-item">
+          <span className="maintenance-log-detail__meta-label">执行摘要</span>
+          <span className="maintenance-log-detail__meta-value">{item.message || "-"}</span>
+        </div>
+      </div>
+
+      {item.errorDetail ? (
+        <div className="maintenance-log-detail__error">
+          <div className="maintenance-log-detail__error-title">异常信息</div>
+          <div className="maintenance-log-detail__error-body">{item.errorDetail}</div>
+        </div>
+      ) : null}
+
+      <div className="maintenance-log-detail__sections-title">各板块清理明细</div>
+      {sections.length > 0 ? (
+        <div className="maintenance-log-detail__sections">
+          {sections.map((section) => (
+            <div key={section.moduleKey} className="maintenance-log-detail__module">
+              <div className="maintenance-log-detail__module-head">
+                <div>
+                  <div className="maintenance-log-detail__module-title">{section.moduleLabel}</div>
+                  <div className="maintenance-log-detail__module-range">{section.timeRangeLabel || "-"}</div>
+                </div>
+                <div className="maintenance-log-detail__module-counts">
+                  <span>扫描 {section.scannedCount}</span>
+                  <span>清理 {section.deletedCount}</span>
+                  <span className={section.failedCount > 0 ? "is-danger" : ""}>失败 {section.failedCount}</span>
+                </div>
+              </div>
+              <div className="maintenance-log-detail__module-summary">{section.summary}</div>
+              {section.details.length > 0 ? (
+                <div className="table-responsive">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>数据来源</TableHead>
+                        <TableHead>数据表</TableHead>
+                        <TableHead>清理范围</TableHead>
+                        <TableHead className="maintenance-log-detail__num-cell">扫描</TableHead>
+                        <TableHead className="maintenance-log-detail__num-cell">清理</TableHead>
+                        <TableHead className="maintenance-log-detail__num-cell">失败</TableHead>
+                        <TableHead>说明</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {section.details.map((detail, index) => (
+                        <TableRow key={`${section.moduleKey}-${detail.tableName}-${index}`}>
+                          <TableCell>{detail.scopeLabel}</TableCell>
+                          <TableCell>
+                            <code className="maintenance-log-detail__table-name">{detail.tableName}</code>
+                          </TableCell>
+                          <TableCell>{detail.rangeLabel || "-"}</TableCell>
+                          <TableCell className="maintenance-log-detail__num-cell">{detail.scannedCount}</TableCell>
+                          <TableCell className="maintenance-log-detail__num-cell">{detail.deletedCount}</TableCell>
+                          <TableCell className="maintenance-log-detail__num-cell">{detail.failedCount}</TableCell>
+                          <TableCell>{detail.note || "-"}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="maintenance-log-detail__empty">
+          该日志没有更细的板块明细，仅保留了整体扫描 / 清理 / 失败数量。
+        </div>
+      )}
+    </div>
+  );
 }
 
 function areRulesEqual(
@@ -146,6 +272,7 @@ export function MaintenanceSectionContent({ embedded = false }: MaintenanceSecti
   const [result, setResult] = useState<{ status: string; message: string } | null>(null);
   const [isCleanupConfirmOpen, setIsCleanupConfirmOpen] = useState(false);
   const [isRuleDialogOpen, setIsRuleDialogOpen] = useState(false);
+  const [selectedLog, setSelectedLog] = useState<MaintenanceLogItemResponse | null>(null);
 
   useEffect(() => {
     if (overviewData && !rulesInitialized) {
@@ -365,7 +492,9 @@ export function MaintenanceSectionContent({ embedded = false }: MaintenanceSecti
         <div className="maintenance-log-table__header">
           <div>
             <div className="maintenance-log-table__title">维护执行日志</div>
-            <div className="maintenance-log-table__note">只要执行过，就会在这里记录清理了什么、清了多少、是否异常。</div>
+            <div className="maintenance-log-table__note">
+              系统仅保留最近 10 条执行记录，点击任意一条可查看各板块的详细清理明细。
+            </div>
           </div>
         </div>
 
@@ -390,7 +519,11 @@ export function MaintenanceSectionContent({ embedded = false }: MaintenanceSecti
               </TableHeader>
               <TableBody>
                 {logRows.map((row) => (
-                  <TableRow key={row.id}>
+                  <TableRow
+                    key={row.id}
+                    className="maintenance-log-table__row"
+                    onClick={() => setSelectedLog(logs.find((item) => item.id === row.id) || null)}
+                  >
                     <TableCell>
                       <div className="maintenance-log-table__job">{row.jobLabel}</div>
                       <div className="maintenance-log-table__trigger">{row.triggerLabel}</div>
@@ -406,7 +539,15 @@ export function MaintenanceSectionContent({ embedded = false }: MaintenanceSecti
                       <div className="maintenance-log-table__summary">{row.summary}</div>
                       <div className="maintenance-log-table__message">{row.message}</div>
                     </TableCell>
-                    <TableCell>{row.timeLabel}</TableCell>
+                    <TableCell>
+                      <div className="maintenance-log-table__time">
+                        {row.timeLabel}
+                        <span className="maintenance-log-table__view">
+                          查看详情
+                          <ChevronRight size={13} />
+                        </span>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -531,6 +672,19 @@ export function MaintenanceSectionContent({ embedded = false }: MaintenanceSecti
             <span className="delete-confirm-details__value">按当前保留时长逐项检查，并把每个板块的结果写入日志</span>
           </div>
         </div>
+      </AdminDialog>
+
+      <AdminDialog
+        open={selectedLog !== null}
+        title={selectedLog ? `维护执行日志 #${selectedLog.id}` : "维护执行日志详情"}
+        description="记录每次执行清理了什么、各数据来源清了多少，颗粒度到数据表和落盘文件。"
+        width={860}
+        onClose={() => setSelectedLog(null)}
+        footer={(
+          <button className="btn btn-outline" onClick={() => setSelectedLog(null)}>关闭</button>
+        )}
+      >
+        {selectedLog ? <MaintenanceLogDetail item={selectedLog} /> : null}
       </AdminDialog>
     </div>
   );
