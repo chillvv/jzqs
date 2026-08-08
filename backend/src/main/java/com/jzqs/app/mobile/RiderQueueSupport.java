@@ -290,12 +290,14 @@ class RiderQueueSupport {
                 ) AS item_status,
                 CASE WHEN dr.id IS NULL THEN 'PENDING' ELSE 'UPLOADED' END AS receipt_status,
                 COALESCE(dr.receipt_url, '') AS receipt_url,
-                COALESCE(dr.receipt_note, '') AS receipt_note
+                COALESCE(dr.receipt_note, '') AS receipt_note,
+                COALESCE(ari.reference_image_url, '') AS reference_image_url
             FROM dispatch_assignments da
             JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
             JOIN daily_orders doo ON doo.id = mso.daily_order_id
             JOIN customers c ON c.id = doo.customer_id
             JOIN customer_addresses ca ON ca.id = mso.address_id
+            LEFT JOIN address_reference_images ari ON ari.customer_address_id = mso.address_id
             LEFT JOIN dispatch_batch_items dbi ON dbi.meal_slot_order_id = mso.id
             LEFT JOIN dispatch_batches db ON db.id = dbi.batch_id
             LEFT JOIN menu_week_items ms ON ms.serve_date = doo.serve_date
@@ -326,7 +328,8 @@ class RiderQueueSupport {
             rs.getString("item_status"),
             rs.getString("receipt_status"),
             rs.getString("receipt_url"),
-            rs.getString("receipt_note")
+            rs.getString("receipt_note"),
+            rs.getString("reference_image_url")
         ), riderName, targetDate);
         Map<Long, OrderNoteProjection> projections = loadOrderNoteProjections(rows.stream().map(RiderQueueRow::mealSlotOrderId).toList());
         List<RiderQueueItemResponse> items = rows.stream()
@@ -445,7 +448,8 @@ class RiderQueueSupport {
             rs.getString("item_status"),
             rs.getString("receipt_status"),
             rs.getString("receipt_url"),
-            rs.getString("receipt_note")
+            rs.getString("receipt_note"),
+            ""
         ), shouldUseMealSlotOrderFallback ? resolvedMealSlotOrderId : queueItemId, riderName, targetDate);
         if (results.isEmpty()) {
             return null;
@@ -629,7 +633,8 @@ class RiderQueueSupport {
             row.itemStatus(),
             row.receiptStatus(),
             row.receiptUrl(),
-            row.receiptNote()
+            row.receiptNote(),
+            row.referenceImageUrl()
         );
     }
 
@@ -871,11 +876,13 @@ class RiderQueueSupport {
         }
         jdbcTemplate.update("""
             UPDATE dispatch_batches
-            SET delivered_count = ?,
+            SET total_count = ?,
+                delivered_count = ?,
                 current_sequence = ?,
                 batch_status = ?
             WHERE id = ?
             """,
+            totalCount == null ? 0 : totalCount,
             deliveredCount == null ? 0 : deliveredCount,
             nextSequence == null ? 0 : nextSequence,
             batchStatus,
@@ -1065,7 +1072,8 @@ class RiderQueueSupport {
         String itemStatus,
         String receiptStatus,
         String receiptUrl,
-        String receiptNote
+        String receiptNote,
+        String referenceImageUrl
     ) {}
 
     private record OrderNoteProjection(String userNote, String adminNote, boolean hasOrderNotes) {}

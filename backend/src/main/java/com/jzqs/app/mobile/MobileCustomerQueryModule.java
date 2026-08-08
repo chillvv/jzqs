@@ -249,7 +249,8 @@ class MobileCustomerQueryModule {
             statusText = !isBlank(notice) ? notice : "当前自助下单已截止，请联系专属客服微信";
         } else if (lunchItem == null && dinnerItem == null) {
             canOrder = false;
-            statusText = "明日菜单待发布或店休，暂不提供配送服务";
+            String restNotice = findRestNotice(tomorrow);
+            statusText = !isBlank(restNotice) ? restNotice : "明日菜单待发布或店休，暂不提供配送服务";
         } else if (!selfOrderEnabled) {
             canOrder = false;
             statusText = selfOrderNotice;
@@ -295,9 +296,13 @@ class MobileCustomerQueryModule {
                     ca.address_line AS delivery_address,
                     do.source,
                     mso.status,
+                    COALESCE(mso.quantity, 1) AS quantity,
+                    COALESCE(rp2.rider_name, '') AS rider_name,
+                    COALESCE(rp2.phone, '') AS rider_phone,
                     COALESCE(dr.receipt_url, '') AS receipt_url,
                     COALESCE(dr.receipt_note, '') AS receipt_note,
                     dr.delivered_at AS delivered_at,
+                    dr.visible_at AS visible_at,
                     CASE
                         WHEN ac.status IN ('PENDING', 'PROCESSING', 'APPROVED') THEN TRUE
                         ELSE FALSE
@@ -319,6 +324,8 @@ class MobileCustomerQueryModule {
                     AND ms.slot_status = 'ACTIVE'
                     AND EXISTS (SELECT 1 FROM menu_weeks mw2 WHERE mw2.id = ms.week_id AND mw2.status = 'PUBLISHED')
                 LEFT JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
+                LEFT JOIN dispatch_assignments da2 ON da2.meal_slot_order_id = mso.id
+                LEFT JOIN rider_profiles rp2 ON rp2.id = da2.rider_profile_id
                 LEFT JOIN aftersale_cases ac ON ac.id = (
                     SELECT ac2.id
                     FROM aftersale_cases ac2
@@ -344,10 +351,11 @@ class MobileCustomerQueryModule {
                 rs.getString("status"),
                 resolveUserVisibleStatus(
                     rs.getString("status"),
-                    rs.getString("meal_period"),
-                    rs.getDate("serve_date").toLocalDate(),
-                    timestampToLocalDateTime(rs.getTimestamp("delivered_at"))
+                    timestampToLocalDateTime(rs.getTimestamp("visible_at"))
                 ),
+                rs.getInt("quantity"),
+                rs.getString("rider_name"),
+                rs.getString("rider_phone"),
                 rs.getString("receipt_url"),
                 rs.getString("receipt_note"),
                 formatTimestamp(rs.getTimestamp("delivered_at")),
@@ -424,12 +432,32 @@ class MobileCustomerQueryModule {
         return value == null ? null : value.toLocalDateTime();
     }
 
-    private String resolveUserVisibleStatus(String actualStatus, String mealPeriod, LocalDate serveDate, LocalDateTime deliveredAt) {
-        if (!"DELIVERED".equals(actualStatus) || serveDate == null || deliveredAt == null) {
+    private String findRestNotice(LocalDate serveDate) {
+        List<String> notices = jdbcTemplate.query(
+            """
+                SELECT COALESCE(merchant_note, '')
+                FROM menu_week_items mwi
+                JOIN menu_weeks mw ON mw.id = mwi.week_id
+                WHERE mwi.serve_date = ?
+                  AND mwi.slot_status = 'REST'
+                  AND COALESCE(mwi.merchant_note, '') <> ''
+                  AND mw.status = 'PUBLISHED'
+                ORDER BY CASE WHEN mwi.meal_period = 'LUNCH' THEN 1 ELSE 2 END, mwi.id
+                LIMIT 1
+                """,
+            (rs, rowNum) -> rs.getString(1),
+            serveDate
+        );
+        return notices.isEmpty() ? "" : notices.get(0);
+    }
+
+    private String resolveUserVisibleStatus(String actualStatus, LocalDateTime receiptVisibleAt) {
+        // 送达后、回执对用户可见时间（默认午餐11:30 / 晚餐17:00，后台可手动提前释放）之前，
+        // 用户端仍显示"待配送"，避免收到订阅消息前状态不一致。
+        if (!"DELIVERED".equals(actualStatus) || receiptVisibleAt == null) {
             return actualStatus;
         }
-        LocalDateTime gate = deliverySubscriptionModule.resolveDeliveryNotifyThreshold(serveDate, mealPeriod);
-        return LocalDateTime.now().isBefore(gate) ? "PENDING_DISPATCH" : "DELIVERED";
+        return receiptVisibleAt.isAfter(LocalDateTime.now()) ? "PENDING_DISPATCH" : "DELIVERED";
     }
 
     private String resolveChangeAddressMode(LocalDate serveDate) {
@@ -490,7 +518,8 @@ class MobileCustomerQueryModule {
                     serveDate.toString(),
                     weekdayLabel(serveDate),
                     slotStatus,
-                    List.of()
+                    List.of(),
+                    ""
                 ));
             }
             return days;
@@ -548,10 +577,22 @@ class MobileCustomerQueryModule {
                 serveDate.toString(),
                 weekdayLabel(serveDate),
                 slotStatus,
-                items
+                items,
+                resolveRestNotice(slotStatus, rows)
             ));
         }
         return days;
+    }
+
+    private String resolveRestNotice(String slotStatus, List<CurrentWeekMenuRow> rows) {
+        if (!"REST".equals(slotStatus)) {
+            return "";
+        }
+        return rows.stream()
+            .map(CurrentWeekMenuRow::merchantNote)
+            .filter(note -> note != null && !note.isBlank() && !"-".equals(note))
+            .findFirst()
+            .orElse("");
     }
 
     private Long findPublishedWeekId(LocalDate monday) {

@@ -668,6 +668,46 @@ a {
   gap: 10px;
 }
 
+/* 餐次结构拆分为午餐/晚餐两张卡片，并与下方"查看餐次"切换联动 */
+.stat-val--orange { color: #f97316; }
+.stat-val--green { color: #16a34a; }
+.stat-val--blue { color: var(--primary-color); }
+.stat-val--red { color: var(--error-color); }
+
+.stat-card--meal {
+  position: relative;
+  transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+.stat-card--meal:hover {
+  transform: translateY(-1px);
+}
+.stat-card--meal:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+.stat-card--meal.is-active {
+  border-color: rgba(59, 130, 246, 0.55);
+  background: linear-gradient(180deg, rgba(239, 246, 255, 0.99) 0%, rgba(250, 252, 255, 0.96) 100%);
+  box-shadow: 0 6px 20px rgba(var(--primary-rgb), 0.16);
+}
+.stat-card--meal.is-active::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  border: 2px solid rgba(59, 130, 246, 0.55);
+  pointer-events: none;
+}
+.stat-meal-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.stat-meal-badge--lunch { background: rgba(249, 115, 22, 0.12); color: #ea580c; }
+.stat-meal-badge--dinner { background: rgba(22, 163, 74, 0.12); color: #15803d; }
+
 .toolbar {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.99) 0%, rgba(249, 251, 255, 0.96) 100%);
   border: 1px solid rgba(226, 232, 240, 0.92);
@@ -933,6 +973,12 @@ a {
   color: var(--success-color);
 }
 
+.dispatch-stat-card__footer {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
 .dispatch-order-list {
   display: grid;
   gap: 10px;
@@ -1024,6 +1070,156 @@ a {
   justify-content: space-between;
   gap: 12px;
   align-items: flex-start;
+}
+
+/* 订单卡片：姓名地址突出、备注直显、编辑态多选 */
+.dispatch-order-tile__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.dispatch-order-tile__handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: #b6bcc8;
+  flex-shrink: 0;
+}
+
+.dispatch-order-tile__handle.active {
+  color: #f97316;
+  background: rgba(251, 146, 60, 0.15);
+  cursor: grab;
+}
+
+.dispatch-order-tile__handle.active:active {
+  cursor: grabbing;
+}
+
+.dispatch-order-tile__checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1.5px solid #cbd5e1;
+  background: #fff;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.dispatch-order-tile__checkbox.checked {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #fff;
+}
+
+.dispatch-order-tile__seq {
+  font-size: 12px;
+  font-weight: 700;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.dispatch-order-tile__name {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-strong, #1e293b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dispatch-order-tile__address {
+  font-size: 14px;
+  font-weight: 500;
+  color: #334155;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.dispatch-order-tile__note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  min-width: 0;
+}
+
+.dispatch-order-tile__note-label {
+  flex-shrink: 0;
+  font-weight: 700;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.dispatch-order-tile__note-text {
+  color: #475569;
+  word-break: break-all;
+  white-space: pre-wrap;
+}
+
+.dispatch-order-tile__note.note-user {
+  background: rgba(59, 130, 246, 0.08);
+}
+.dispatch-order-tile__note.note-user .dispatch-order-tile__note-label {
+  background: rgba(59, 130, 246, 0.15);
+  color: #1d4ed8;
+}
+.dispatch-order-tile__note.note-merchant {
+  background: rgba(249, 115, 22, 0.08);
+}
+.dispatch-order-tile__note.note-merchant .dispatch-order-tile__note-label {
+  background: rgba(249, 115, 22, 0.15);
+  color: #c2410c;
+}
+.dispatch-order-tile__note.note-rider {
+  background: rgba(16, 185, 129, 0.08);
+}
+.dispatch-order-tile__note.note-rider .dispatch-order-tile__note-label {
+  background: rgba(16, 185, 129, 0.15);
+  color: #047857;
+}
+
+/* 编辑态选中高亮 */
+.dispatch-order-tile.selected {
+  border-color: #3b82f6 !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25) !important;
+  background: rgba(59, 130, 246, 0.06) !important;
+}
+
+/* 编辑态批量操作条 */
+.dispatch-batch-bar {
+  position: sticky;
+  bottom: 0;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 -4px 20px rgba(15, 23, 42, 0.06);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  z-index: 10;
+}
+
+.dispatch-batch-bar__info {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
 }
 
 .dispatch-order-tile.is-current {
@@ -1323,7 +1519,12 @@ a {
 }
 
 .dispatch-area-orders__item.no-drag {
-  cursor: default;
+  cursor: pointer;
+}
+
+.dispatch-area-orders__item.no-drag:hover {
+  border-color: rgba(147, 197, 253, 0.9);
+  box-shadow: 0 6px 18px rgba(59, 130, 246, 0.1);
 }
 
 .dispatch-area-orders__item.reordering {
@@ -1659,11 +1860,13 @@ a {
 
 .admin-modal {
   width: min(100%, 560px);
+  max-height: calc(100vh - 48px);
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: 24px;
   box-shadow: var(--shadow-modal);
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 20px;
   padding: 24px;
   opacity: 0;
@@ -1725,6 +1928,9 @@ a {
 .admin-modal__body {
   display: grid;
   gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .admin-modal__footer {
@@ -1959,6 +2165,14 @@ a {
   color: var(--text-muted);
   font-weight: 600;
   text-align: center;
+}
+
+.menu-day-rest-editor {
+  margin-top: 12px;
+  padding: 16px;
+  border-radius: 16px;
+  border: 1px dashed var(--border-color);
+  background: var(--bg-page);
 }
 
 .menu-week-day-card__actions {

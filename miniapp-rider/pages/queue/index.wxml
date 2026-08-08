@@ -169,17 +169,26 @@
             <text class="address-icon">📍</text>
             <text class="address-text-content {{!item.deliveryAddress ? 'no-address' : ''}}"><text wx:if="{{item.buildingInfo}}" class="building-info-text">{{item.buildingInfo}}</text>{{item.deliveryAddress || '地址未提供'}}</text>
           </view>
+
+          <!-- 地址参考图：直接展示，无需点击进入详情 -->
+          <view wx:if="{{item.referenceImageUrl}}" class="ref-thumb-wrap" catchtap="previewRefImage" data-url="{{item.referenceImageUrl}}">
+            <image class="ref-thumb-img" src="{{item.referenceImageUrl}}" mode="aspectFill" lazy-load="{{true}}"></image>
+            <view class="ref-thumb-tag">参考图</view>
+          </view>
         </view>
       </view>
     </view>
 
-    <!-- 空状态 -->
+    <!-- 空状态 / 加载失败 -->
     <view wx:if="{{currentMealItems.length === 0 && !loading}}" class="empty-state">
       <view class="empty-icon">
-        <text class="material-symbols-outlined" style="font-size: 96rpx;">📭</text>
+        <text class="material-symbols-outlined" style="font-size: 96rpx;">{{queueError ? '⚠️' : '📭'}}</text>
       </view>
       <view class="empty-text">
-        {{currentStatusFilter === 'PENDING' ? '暂无待配送订单' : currentStatusFilter === 'DELIVERED' ? '暂无已完成订单' : '暂无订单'}}
+        {{queueError ? (queueErrorMessage || '加载失败，请检查网络后重试') : (currentStatusFilter === 'PENDING' ? '暂无待配送订单' : currentStatusFilter === 'DELIVERED' ? '暂无已完成订单' : '暂无订单')}}
+      </view>
+      <view wx:if="{{queueError}}" class="empty-retry" bindtap="onScrollRefresh">
+        <text class="empty-retry__text">点击重试</text>
       </view>
     </view>
     <view wx:if="{{batchReferenceMode}}" class="batch-action-safe-spacer"></view>

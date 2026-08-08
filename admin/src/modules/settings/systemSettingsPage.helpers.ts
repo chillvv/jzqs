@@ -126,7 +126,7 @@ export function handleAdminImageFallback(event: { currentTarget: HTMLImageElemen
 
 export function buildCustomerFacingSettingHints(settings: OperationSettingsResponse) {
   const subscribeHint = settings.deliverySubscribeEnabled
-    ? `午餐 ${settings.deliverySubscribeLunchTime}、晚餐 ${settings.deliverySubscribeDinnerTime}；命中设置时间后才会发送取餐提醒订阅消息。`
+    ? `订单送达且到餐期释放时间（午餐 ${settings.deliverySubscribeLunchTime}、晚餐 ${settings.deliverySubscribeDinnerTime}）后自动发送取餐提醒；特殊提前送达可在骑手配送中心对个别订单“立即释放”。`
     : "取餐提醒订阅已关闭，顾客不会在午餐或晚餐时段收到订阅消息。";
   return {
     bannerHint: `顾客首页将展示 ${countEnabledBannerImages(settings.bannerImages || "")} 张启用中的轮播图，并按 ${Math.max(1, settings.bannerIntervalSeconds || 3)} 秒轮播。`,

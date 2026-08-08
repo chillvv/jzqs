@@ -538,11 +538,16 @@ Page({
       content: this.data.home ? this.data.home.name : '',
       success: async (res) => {
         if (res.confirm && res.content) {
+          const trimmedName = String(res.content || '').trim();
+          if (!/^[\u4e00-\u9fa5·]{2,20}$/.test(trimmedName)) {
+            wx.showToast({ title: '姓名仅支持汉字（2-20个字符）', icon: 'none' });
+            return;
+          }
           try {
             await request({
               url: '/api/mobile/customer/profile',
               method: 'POST',
-              data: { name: res.content }
+              data: { name: trimmedName }
             });
             wx.showToast({ title: '修改成功', icon: 'success' });
             this.loadProfile();

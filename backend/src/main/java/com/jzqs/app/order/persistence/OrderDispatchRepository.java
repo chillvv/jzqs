@@ -107,10 +107,17 @@ public class OrderDispatchRepository {
             """
                 UPDATE dispatch_batches
                 SET total_count = (
-                        SELECT COUNT(*) FROM dispatch_batch_items WHERE batch_id = ?
+                        SELECT COALESCE(SUM(mso.quantity), 0)
+                        FROM dispatch_batch_items dbi
+                        JOIN meal_slot_orders mso ON mso.id = dbi.meal_slot_order_id
+                        WHERE dbi.batch_id = ?
                     ),
                     delivered_count = (
-                        SELECT COUNT(*) FROM dispatch_batch_items WHERE batch_id = ? AND item_status = 'DELIVERED'
+                        SELECT COALESCE(SUM(mso.quantity), 0)
+                        FROM dispatch_batch_items dbi
+                        JOIN meal_slot_orders mso ON mso.id = dbi.meal_slot_order_id
+                        WHERE dbi.batch_id = ?
+                          AND dbi.item_status = 'DELIVERED'
                     )
                 WHERE id = ?
                 """,

@@ -95,7 +95,10 @@ Page({
           ...day,
           shortDate: day.serveDate.slice(5).replace('-', '.'),
           isRestDay: day.slotStatus === 'REST',
-          isPendingDay: day.slotStatus === 'UNCONFIGURED'
+          isPendingDay: day.slotStatus === 'UNCONFIGURED',
+          restText: day.slotStatus === 'REST'
+            ? (day.restNotice || `${day.weekdayLabel}固定店休，法定节假日不出餐`)
+            : ''
         }))
       });
 

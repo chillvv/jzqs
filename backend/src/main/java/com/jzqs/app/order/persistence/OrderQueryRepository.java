@@ -52,6 +52,12 @@ public class OrderQueryRepository {
               AND sr.start_date <= ?
               AND sr.end_date >= ?
               AND FIND_IN_SET(?, sr.week_days) > 0
+              AND NOT EXISTS (
+                SELECT 1 FROM menu_week_items mi
+                WHERE mi.serve_date = ?
+                  AND mi.meal_period = 'LUNCH'
+                  AND mi.slot_status = 'REST'
+              )
 
             UNION ALL
 
@@ -76,6 +82,12 @@ public class OrderQueryRepository {
               AND sr.start_date <= ?
               AND sr.end_date >= ?
               AND FIND_IN_SET(?, sr.week_days) > 0
+              AND NOT EXISTS (
+                SELECT 1 FROM menu_week_items mi
+                WHERE mi.serve_date = ?
+                  AND mi.meal_period = 'DINNER'
+                  AND mi.slot_status = 'REST'
+              )
 
             ORDER BY customer_id, meal_period
             """;
@@ -92,7 +104,7 @@ public class OrderQueryRepository {
             rs.getString("merchant_remark"),
             rs.getInt("remaining_meals"),
             rs.getBoolean("has_balance")
-        ), targetDate, targetDate, targetDayOfWeek, targetDate, targetDate, targetDayOfWeek);
+        ), targetDate, targetDate, targetDayOfWeek, targetDate, targetDate, targetDate, targetDayOfWeek, targetDate);
     }
 
     public OrderPrepStatsResponse loadPrepStats() {

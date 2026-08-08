@@ -29,6 +29,7 @@ class MiniappOrderModule {
     private final DispatchService dispatchService;
     private final OrderNoteSnapshotService orderNoteSnapshotService;
     private final RealtimeAudienceModule realtimeAudienceModule;
+    private final RiderQueueSupport riderQueueSupport;
     private final LocalTime selfOrderCutoffTime;
 
     MiniappOrderModule(
@@ -36,12 +37,14 @@ class MiniappOrderModule {
         DispatchService dispatchService,
         OrderNoteSnapshotService orderNoteSnapshotService,
         RealtimeAudienceModule realtimeAudienceModule,
+        RiderQueueSupport riderQueueSupport,
         @org.springframework.beans.factory.annotation.Value("${app.mobile.self-order-cutoff:23:00}") String selfOrderCutoff
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.dispatchService = dispatchService;
         this.orderNoteSnapshotService = orderNoteSnapshotService;
         this.realtimeAudienceModule = realtimeAudienceModule;
+        this.riderQueueSupport = riderQueueSupport;
         this.selfOrderCutoffTime = LocalTime.parse(selfOrderCutoff);
     }
 
@@ -52,18 +55,34 @@ class MiniappOrderModule {
         String deliveryAddress,
         String note
     ) {
+        return createOrder(customerId, serveDate, mealPeriod, deliveryAddress, note, 1);
+    }
+
+    MobileCreateOrderResponse createOrder(
+        long customerId,
+        String serveDate,
+        String mealPeriod,
+        String deliveryAddress,
+        String note,
+        int quantity
+    ) {
         ensureOrderingEnabled();
         LocalDate orderDate = LocalDate.parse(serveDate);
         String normalizedMealPeriod = normalizeMealPeriod(mealPeriod);
         ensureSelfOrderAllowed(orderDate);
         requirePublishedMenu(orderDate, normalizedMealPeriod);
-        return createOrder(
-            customerId,
-            orderDate,
-            normalizedMealPeriod,
-            deliveryAddress,
-            normalizeNote(note)
-        );
+        int units = Math.max(1, quantity);
+        MobileCreateOrderResponse response = null;
+        for (int i = 0; i < units; i++) {
+            response = createOrder(
+                customerId,
+                orderDate,
+                normalizedMealPeriod,
+                deliveryAddress,
+                normalizeNote(note)
+            );
+        }
+        return response;
     }
 
     MobileCreateOrderResponse createOrder(
@@ -122,6 +141,8 @@ class MiniappOrderModule {
             );
             jdbcTemplate.execute("/* force flush */ SELECT 1");
             attemptAutoAssignPendingOrders(mealPeriod, mergeTargetOrderId, customerId);
+            attemptRefreshQueueState(mergeTargetOrderId);
+            attemptPublishDispatchEvent("dispatch.queue.changed", mergeTargetOrderId);
             attemptPublishCustomerEvent("customer.order.changed", customerId, mergeTargetOrderId);
             attemptPublishCustomerEvent("customer.wallet.changed", customerId, mergeTargetOrderId);
             return new MobileCreateOrderResponse(mergeTargetOrderId, "MERGED", "RESERVED");
@@ -162,6 +183,7 @@ class MiniappOrderModule {
             mealSlotOrderId
         );
 
+        attemptPublishDispatchEvent("dispatch.queue.changed", mealSlotOrderId);
         attemptPublishCustomerEvent("customer.order.changed", customerId, mealSlotOrderId);
         attemptPublishCustomerEvent("customer.wallet.changed", customerId, mealSlotOrderId);
         return new MobileCreateOrderResponse(
@@ -169,6 +191,19 @@ class MiniappOrderModule {
             currentStatus != null ? currentStatus : "PENDING_DISPATCH",
             "RESERVED"
         );
+    }
+
+    private void attemptRefreshQueueState(long mealSlotOrderId) {
+        try {
+            riderQueueSupport.refreshQueueStateForOrder(mealSlotOrderId);
+        } catch (RuntimeException ex) {
+            log.warn(
+                "miniapp create order queue refresh skipped orderId={} reason={}",
+                mealSlotOrderId,
+                ex.getMessage(),
+                ex
+            );
+        }
     }
 
     private void attemptAutoAssignPendingOrders(String mealPeriod, long orderId, long customerId) {
@@ -194,6 +229,20 @@ class MiniappOrderModule {
                 "miniapp create order realtime publish skipped eventType={} customerId={} orderId={} reason={}",
                 eventType,
                 customerId,
+                orderId,
+                ex.getMessage(),
+                ex
+            );
+        }
+    }
+
+    private void attemptPublishDispatchEvent(String eventType, Object orderId) {
+        try {
+            realtimeAudienceModule.publishDispatchEvent(eventType, null, null, orderId);
+        } catch (RuntimeException ex) {
+            log.warn(
+                "miniapp create order dispatch realtime publish skipped eventType={} orderId={} reason={}",
+                eventType,
                 orderId,
                 ex.getMessage(),
                 ex
@@ -317,7 +366,7 @@ class MiniappOrderModule {
                   AND do.serve_date = ?
                   AND mso.meal_period = ?
                   AND mso.address_id = ?
-                  AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
+                  AND mso.status NOT IN ('CANCELLED', 'REFUNDED', 'DELIVERED')
                   AND NOT EXISTS (
                       SELECT 1
                       FROM aftersale_cases ac

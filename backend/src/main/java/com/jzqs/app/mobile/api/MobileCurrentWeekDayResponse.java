@@ -6,6 +6,7 @@ public record MobileCurrentWeekDayResponse(
     String serveDate,
     String weekdayLabel,
     String slotStatus,
-    List<MobileMenuItemResponse> items
+    List<MobileMenuItemResponse> items,
+    String restNotice
 ) {
 }

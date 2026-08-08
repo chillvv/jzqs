@@ -11,6 +11,7 @@ import com.jzqs.app.common.api.BatchOperationResponse;
 import com.jzqs.app.common.api.ApiResponse;
 import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.common.security.AdminRequestContextSupport;
+import com.jzqs.app.mobile.DeliveryReleaseSupport;
 import com.jzqs.app.order.service.OrderPrepService;
 import com.jzqs.app.subscription.api.SubscriptionPreviewCheckResponse;
 import jakarta.validation.Valid;
@@ -30,10 +31,16 @@ import java.util.List;
 public class OrderPrepController {
     private final OrderPrepService orderPrepService;
     private final AftersaleService aftersaleService;
+    private final DeliveryReleaseSupport deliveryReleaseSupport;
 
-    public OrderPrepController(OrderPrepService orderPrepService, AftersaleService aftersaleService) {
+    public OrderPrepController(
+        OrderPrepService orderPrepService,
+        AftersaleService aftersaleService,
+        DeliveryReleaseSupport deliveryReleaseSupport
+    ) {
         this.orderPrepService = orderPrepService;
         this.aftersaleService = aftersaleService;
+        this.deliveryReleaseSupport = deliveryReleaseSupport;
     }
 
     @GetMapping("/subscription-preview")
@@ -251,5 +258,18 @@ public class OrderPrepController {
     @AuditAction(module = "ORDER", action = "CONSUME")
     public ApiResponse<BatchOperationResponse> consume(@Valid @RequestBody BatchConsumeOrdersRequest request) {
         return ApiResponse.success(orderPrepService.consumeOrders(request.orderIds()));
+    }
+
+    @GetMapping("/delivery-release-pending")
+    public ApiResponse<List<DeliveryReleasePendingItem>> deliveryReleasePending() {
+        return ApiResponse.success(deliveryReleaseSupport.pendingReleaseOrders());
+    }
+
+    @PostMapping("/{orderId}/delivery-release")
+    @RateLimit(key = "admin:orders:delivery-release", maxRequests = 6, windowSeconds = 10)
+    @Idempotent(key = "admin:orders:delivery-release", ttlSeconds = 5, includeBody = false)
+    @AuditAction(module = "ORDER", action = "DELIVERY_RELEASE")
+    public ApiResponse<DeliveryReleaseResult> deliveryRelease(@PathVariable long orderId) {
+        return ApiResponse.success(deliveryReleaseSupport.releaseOrder(orderId));
     }
 }

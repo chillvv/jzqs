@@ -575,7 +575,7 @@ export function MenuSchedulePage() {
               <div className="menu-week-day-card__content">
                 {isRest ? (
                   <div className="menu-week-day-card__slot-preview menu-week-day-card__slot-preview--rest">
-                    <strong>今日状态：</strong>全天休息
+                    <strong>今日状态：</strong>全天休息{draft?.lunch?.merchantNote ? `：${draft.lunch.merchantNote}` : ""}
                   </div>
                 ) : (
                   <>
@@ -601,7 +601,21 @@ export function MenuSchedulePage() {
                     <span className="menu-day-status-editor__hint">{draft.lunch.slotStatus === "REST" ? "休息则全天休息，午餐和晚餐都不出餐" : "状态同时应用于午餐和晚餐"}</span>
                   </div>
                   {draft.lunch.slotStatus === "REST" && draft.dinner.slotStatus === "REST" ? (
-                    <div className="menu-day-rest-hint">🌿 今日休息，不提供餐食</div>
+                    <div className="menu-day-rest-editor">
+                      <div className="form-group">
+                        <label className="form-label">休息提示文案（用户端展示）</label>
+                        <SafeInput
+                          className="form-control"
+                          value={draft.lunch.merchantNote || ""}
+                          onValueChange={(value) => {
+                            updateSlot(day.serveDate, "lunch", "merchantNote", value);
+                            updateSlot(day.serveDate, "dinner", "merchantNote", value);
+                          }}
+                          placeholder="如：今日店休，明日正常营业"
+                        />
+                      </div>
+                      <div className="menu-day-rest-hint">🌿 今日休息，不提供餐食</div>
+                    </div>
                   ) : (
                     <>
                       {renderDishEditor(day.serveDate, "lunch", draft.lunch)}

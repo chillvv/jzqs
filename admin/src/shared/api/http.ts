@@ -54,7 +54,9 @@ import type {
   SubscriptionRuleFormData,
   LowBalanceSubscriptionItem,
   SubscriptionPreviewCheckResponse,
-  ManualCreateCustomerSearchResponse
+  ManualCreateCustomerSearchResponse,
+  DeliveryReleasePendingItem,
+  DeliveryReleaseResult
 } from "./types";
 import { ADMIN_AUTH_STORAGE_KEY, parseAdminAuthSession } from "../../modules/auth/adminAuth.helpers";
 
@@ -1057,6 +1059,20 @@ export async function recordDeliveryReceipt(payload: {
 export async function deleteDeliveryReceipt(orderId: number) {
   const response = await http.post<ApiResponse<{ orderStatus: string; receiptUrl: string; deleted: boolean }>>(
     `/api/admin/orders/${orderId}/receipt/delete`
+  );
+  return response.data.data;
+}
+
+export async function fetchDeliveryReleasePending() {
+  const response = await http.get<ApiResponse<DeliveryReleasePendingItem[]>>(
+    "/api/admin/orders/delivery-release-pending"
+  );
+  return response.data.data;
+}
+
+export async function releaseDeliveredOrder(orderId: number) {
+  const response = await http.post<ApiResponse<DeliveryReleaseResult>>(
+    `/api/admin/orders/${orderId}/delivery-release`
   );
   return response.data.data;
 }

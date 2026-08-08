@@ -20,6 +20,7 @@ const DispatchHomePage = lazy(() => import("../modules/dispatch/DispatchHomePage
 const DispatchProgressPage = lazy(() => import("../modules/dispatch/DispatchProgressPage").then((m) => ({ default: m.DispatchProgressPage })));
 const DispatchAreasPage = lazy(() => import("../modules/dispatch/DispatchAreasPage").then((m) => ({ default: m.DispatchAreasPage })));
 const DispatchRidersPage = lazy(() => import("../modules/dispatch/DispatchRidersPage").then((m) => ({ default: m.DispatchRidersPage })));
+const DispatchReleasePage = lazy(() => import("../modules/dispatch/DispatchReleasePage").then((m) => ({ default: m.DispatchReleasePage })));
 const SystemSettingsSectionPage = lazy(() => import("../modules/settings/SystemSettingsSectionPage").then((m) => ({ default: m.SystemSettingsSectionPage })));
 const OperationsAnalysisPage = lazy(() => import("../modules/analysis/OperationsAnalysisPage").then((m) => ({ default: m.OperationsAnalysisPage })));
 const AftersalePage = lazy(() => import("../modules/aftersales/AftersalePage").then((m) => ({ default: m.AftersalePage })));
@@ -85,7 +86,8 @@ export const appRoutes: RouteObject[] = [
           { index: true, element: <Suspense fallback={<PageFallback />}><DispatchHomePage /></Suspense> },
           { path: "progress", element: <Suspense fallback={<PageFallback />}><DispatchProgressPage /></Suspense> },
           { path: "areas", element: <Suspense fallback={<PageFallback />}><DispatchAreasPage /></Suspense> },
-          { path: "riders", element: <Suspense fallback={<PageFallback />}><DispatchRidersPage /></Suspense> }
+          { path: "riders", element: <Suspense fallback={<PageFallback />}><DispatchRidersPage /></Suspense> },
+          { path: "release", element: <Suspense fallback={<PageFallback />}><DispatchReleasePage /></Suspense> }
         ]
       },
       { path: "analysis", element: <Suspense fallback={<PageFallback />}><OperationsAnalysisPage /></Suspense> },

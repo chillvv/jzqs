@@ -25,7 +25,9 @@ export type OrderPrepTab = "CONFIRMATION" | "ORDERS" | "SUBSCRIPTION_MANAGEMENT"
 export type OrderPrepCompactSummaryItem = {
   label: string;
   value: string;
-  tone: "blue" | "orange" | "red";
+  tone: "blue" | "orange" | "red" | "green";
+  /** 关联下方"查看餐次"切换的餐次，存在则该卡片可点击并随选中态高亮 */
+  mealPeriod?: "LUNCH" | "DINNER";
 };
 
 export type OrderRemarkLabelItem = {
@@ -241,6 +243,13 @@ export function buildOrderPrepSummary(
     .filter(item => resolveMealPeriod(item) === "DINNER")
     .reduce((sum, item) => sum + item.quantity, 0);
 
+  const lunchRemarkedCount = items
+    .filter((item) => resolveMealPeriod(item) === "LUNCH" && hasRemark(item))
+    .length;
+  const dinnerRemarkedCount = items
+    .filter((item) => resolveMealPeriod(item) === "DINNER" && hasRemark(item))
+    .length;
+
   return {
     totalOrders: items.length,
     totalMeals,
@@ -249,6 +258,8 @@ export function buildOrderPrepSummary(
     pendingDispatchCount: items.filter((item) => item.status === "PENDING_DISPATCH").length,
     priorityOrderCount: items.filter((item) => item.priorityCustomer).length,
     remarkedOrderCount: items.filter((item) => hasRemark(item)).length,
+    lunchRemarkedCount,
+    dinnerRemarkedCount,
     confirmationCount: confirmationItems.length,
     priorityConfirmationCount: confirmationItems.filter((item) => Boolean(item.priority)).length
   };
@@ -268,9 +279,16 @@ export function buildOrderPrepCompactSummary(
       tone: "blue"
     },
     {
-      label: "餐次结构",
-      value: `${summary.lunchCount} / ${summary.dinnerCount}`,
-      tone: "orange"
+      label: "午餐",
+      value: `${summary.lunchCount} 份`,
+      tone: "orange",
+      mealPeriod: "LUNCH"
+    },
+    {
+      label: "晚餐",
+      value: `${summary.dinnerCount} 份`,
+      tone: "green",
+      mealPeriod: "DINNER"
     },
     {
       label: "待确认固定订餐",

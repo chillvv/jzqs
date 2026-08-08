@@ -88,7 +88,7 @@ function normalizeCustomerPhone(value: string) {
 }
 
 function isValidCustomerName(value: string) {
-  return /^[\u4e00-\u9fa5A-Za-z·\s]{2,20}$/.test(normalizeCustomerName(value));
+  return /^[\u4e00-\u9fa5·]{2,20}$/.test(normalizeCustomerName(value));
 }
 
 function isValidCustomerPhone(value: string) {
@@ -100,7 +100,7 @@ function validateCustomerForm(input: { name: string; phone: string; addressLine?
     return "请填写客户姓名";
   }
   if (!isValidCustomerName(input.name)) {
-    return "请填写正确的客户姓名";
+    return "姓名仅支持汉字（2-20个字符）";
   }
   if (!normalizeCustomerPhone(input.phone)) {
     return "请填写手机号";

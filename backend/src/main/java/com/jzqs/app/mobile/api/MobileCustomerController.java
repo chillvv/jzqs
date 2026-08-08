@@ -89,7 +89,8 @@ public class MobileCustomerController {
             request.serveDate(),
             request.mealPeriod(),
             request.deliveryAddress(),
-            request.note()
+            request.note(),
+            request.quantityOrDefault()
         );
         return ApiResponse.success(response);
     }

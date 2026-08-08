@@ -59,7 +59,7 @@ export function SystemSettingsOverview({
           <div className="stat-val">{settings.packageExpiryReminderDays} <span>天</span></div>
           <div className="stat-footer">
             低餐量阈值 {settings.packageLowBalanceThreshold} 餐 · 订阅
-            {settings.deliverySubscribeEnabled ? ` 午餐 ${settings.deliverySubscribeLunchTime} / 晚餐 ${settings.deliverySubscribeDinnerTime}` : " 已关闭"}
+            {settings.deliverySubscribeEnabled ? ` 已开启（午餐 ${settings.deliverySubscribeLunchTime}、晚餐 ${settings.deliverySubscribeDinnerTime}）` : " 已关闭"}
           </div>
         </div>
       </div>
@@ -98,7 +98,7 @@ export function SystemSettingsOverview({
               剩余餐数小于等于 {settings.packageLowBalanceThreshold} 餐时标记为餐数不足
             </div>
             <div className="settings-card__detail settings-card__detail--sub">
-              上线提醒弹窗{settings.mealReminderPopupEnabled ? "已开启" : "已关闭"}，订阅通知{settings.deliverySubscribeEnabled ? `午餐 ${settings.deliverySubscribeLunchTime}、晚餐 ${settings.deliverySubscribeDinnerTime} 按设置时间扫描发送` : "已关闭"}
+              上线提醒弹窗{settings.mealReminderPopupEnabled ? "已开启" : "已关闭"}，订阅通知{settings.deliverySubscribeEnabled ? `按午餐 ${settings.deliverySubscribeLunchTime}、晚餐 ${settings.deliverySubscribeDinnerTime} 释放时间自动发送` : "已关闭"}
             </div>
             <span className="settings-card__hint">{customerHints.reminderHint}</span>
           </div>

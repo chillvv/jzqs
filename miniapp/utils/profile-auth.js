@@ -3,7 +3,7 @@ function isValidPhone(phone) {
 }
 
 function isValidNickname(nickname) {
-  return /^[\u4e00-\u9fa5A-Za-z·\s]{2,20}$/.test(String(nickname || '').trim());
+  return /^[\u4e00-\u9fa5·]{2,20}$/.test(String(nickname || '').trim());
 }
 
 function resolvePhoneAuthResult(detail) {
@@ -29,7 +29,7 @@ function getSubmitProfileError({ mode, nickname, phoneNumber }) {
   }
 
   if (finalMode === 'register' && !isValidNickname(nickname)) {
-    return '请输入正确的姓名';
+    return '姓名仅支持汉字（2-20个字符）';
   }
 
   if (!String(phoneNumber || '').trim()) {

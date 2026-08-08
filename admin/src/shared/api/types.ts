@@ -711,6 +711,24 @@ export type DeliveryReceiptUploadResponse = {
   size: number;
 };
 
+export type DeliveryReleasePendingItem = {
+  orderId: number;
+  serveDate: string;
+  mealPeriod: string;
+  quantity: number;
+  customerName: string;
+  customerPhone: string;
+  deliveryAddress: string;
+  deliveredAt: string;
+  subscriptionStatus: string;
+};
+
+export type DeliveryReleaseResult = {
+  orderId: number;
+  released: boolean;
+  subscriptionSent: boolean;
+};
+
 export type SubscriptionRuleResponse = {
   id: number;
   customerId: number;
@@ -718,6 +736,7 @@ export type SubscriptionRuleResponse = {
   customerPhone: string;
   startDate: string;
   endDate: string;
+  weekDays: string;
   lunchEnabled: boolean;
   lunchQuantity: number;
   lunchDeliveryMealPeriod: string;
@@ -740,6 +759,7 @@ export type SubscriptionRuleFormData = {
   customerId: number;
   startDate: string;
   endDate: string;
+  weekDays: string;
   lunchEnabled: boolean;
   lunchQuantity: number;
   lunchDeliveryMealPeriod: string;
@@ -748,7 +768,6 @@ export type SubscriptionRuleFormData = {
   dinnerDeliveryMealPeriod: string;
   defaultAddressId: number | null;
   merchantRemark: string;
-  isPriorityFollow: boolean;
 };
 
 export type LowBalanceSubscriptionItem = {

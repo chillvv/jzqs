@@ -61,7 +61,8 @@ public class GlobalExceptionHandler {
                  ORDER_NOTE_INVALID,
                  WX_PHONE_AUTH_REQUIRED,
                  INVALID_DATE_RANGE,
-                 NO_MEAL_ENABLED -> HttpStatus.UNPROCESSABLE_ENTITY;
+                 NO_MEAL_ENABLED,
+                 INVALID_WEEK_DAYS -> HttpStatus.UNPROCESSABLE_ENTITY;
             case RATE_LIMITED -> HttpStatus.TOO_MANY_REQUESTS;
             case VALIDATION_ERROR -> HttpStatus.BAD_REQUEST;
         };

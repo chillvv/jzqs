@@ -8,6 +8,10 @@ public record MobileCreateOrderRequest(
     @NotBlank(message = "mealPeriod is required")
     String mealPeriod,
     String deliveryAddress,
-    String note
+    String note,
+    Integer quantity
 ) {
+    public int quantityOrDefault() {
+        return quantity == null || quantity <= 0 ? 1 : quantity;
+    }
 }

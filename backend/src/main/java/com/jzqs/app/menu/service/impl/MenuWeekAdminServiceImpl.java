@@ -329,7 +329,8 @@ public class MenuWeekAdminServiceImpl implements MenuWeekAdminService {
     }
 
     private String normalizeNullable(String slotStatus, String value) {
-        if (!"ACTIVE".equals(slotStatus)) {
+        // ACTIVE 保存商家备注；REST 保存自定义休息提示文案（供小程序展示）
+        if (!"ACTIVE".equals(slotStatus) && !"REST".equals(slotStatus)) {
             return null;
         }
         return value == null || value.isBlank() ? null : value.trim();

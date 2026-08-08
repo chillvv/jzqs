@@ -2,6 +2,7 @@ package com.jzqs.app.mobile;
 
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
+import com.jzqs.app.common.realtime.RealtimeAudienceModule;
 import com.jzqs.app.delivery.api.DeliveryReceiptDeleteResponse;
 import com.jzqs.app.delivery.api.DeliveryReceiptRecordResponse;
 import com.jzqs.app.delivery.service.DeliveryService;
@@ -25,19 +26,22 @@ class RiderDeliveryEvidenceModule {
     private final RiderQueueSupport riderQueueSupport;
     private final RiderReceiptStorageSupport riderReceiptStorageSupport;
     private final DeliverySubscriptionModule deliverySubscriptionModule;
+    private final RealtimeAudienceModule realtimeAudienceModule;
 
     RiderDeliveryEvidenceModule(
         JdbcTemplate jdbcTemplate,
         DeliveryService deliveryService,
         RiderQueueSupport riderQueueSupport,
         RiderReceiptStorageSupport riderReceiptStorageSupport,
-        DeliverySubscriptionModule deliverySubscriptionModule
+        DeliverySubscriptionModule deliverySubscriptionModule,
+        RealtimeAudienceModule realtimeAudienceModule
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.deliveryService = deliveryService;
         this.riderQueueSupport = riderQueueSupport;
         this.riderReceiptStorageSupport = riderReceiptStorageSupport;
         this.deliverySubscriptionModule = deliverySubscriptionModule;
+        this.realtimeAudienceModule = realtimeAudienceModule;
     }
 
     RiderAddressReferenceResponse riderAddressReference(String riderName, long addressId) {
@@ -137,11 +141,9 @@ class RiderDeliveryEvidenceModule {
         } catch (Exception ignored) {
             // Keep receipt submission successful even if reference-image auto-save fails.
         }
-        try {
-            deliverySubscriptionModule.sendAfterReceiptIfNeeded(mealSlotOrderId, deliveredDateTime);
-        } catch (Exception ignored) {
-            // Keep receipt submission successful even if notification delivery fails.
-        }
+        // 送达后不再即时发送订阅消息：统一由定时任务在餐期释放时间点（午餐11:30 / 晚餐17:00）发送，
+        // 或由后台对个别订单手动"立即释放"后发送，确保用户收到消息时订单状态已为"已送达"。
+        publishDeliveryStateEvents(mealSlotOrderId);
         return result;
     }
 
@@ -211,6 +213,27 @@ class RiderDeliveryEvidenceModule {
     private void requireRiderName(String riderName) {
         if (isBlank(riderName)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "骑手姓名不能为空");
+        }
+    }
+
+    private void publishDeliveryStateEvents(long mealSlotOrderId) {
+        try {
+            Long customerId = jdbcTemplate.query(
+                """
+                    SELECT do.customer_id
+                    FROM meal_slot_orders mso
+                    JOIN daily_orders do ON do.id = mso.daily_order_id
+                    WHERE mso.id = ?
+                    """,
+                ps -> ps.setLong(1, mealSlotOrderId),
+                rs -> rs.next() ? rs.getLong(1) : null
+            );
+            if (customerId != null && customerId > 0) {
+                realtimeAudienceModule.publishCustomerEvent("customer.order.changed", customerId, mealSlotOrderId);
+            }
+            realtimeAudienceModule.publishDispatchEvent("dispatch.queue.changed", null, null, mealSlotOrderId);
+        } catch (RuntimeException ex) {
+            // Keep receipt submission successful even if realtime publish fails.
         }
     }
 
@@ -311,6 +334,7 @@ class RiderDeliveryEvidenceModule {
     }
 
     private LocalDateTime resolveReceiptVisibleAt(long mealSlotOrderId, LocalDateTime deliveredDateTime) {
+        // 送达后回执先对用户隐藏，到餐期释放时间（午餐11:30 / 晚餐17:00）或后台手动提前释放后才可见。
         MealSlotContext row = loadMealSlotContext(mealSlotOrderId);
         LocalDateTime threshold = deliverySubscriptionModule.resolveDeliveryNotifyThreshold(row.serveDate(), row.mealPeriod());
         return deliveredDateTime.isBefore(threshold) ? threshold : deliveredDateTime;

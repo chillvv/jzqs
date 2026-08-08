@@ -56,6 +56,18 @@ public class OrderSubscriptionServiceImpl implements OrderSubscriptionService {
 
         for (SubscriptionImportItem item : items) {
             try {
+                // 店铺休息日不出餐：休息日的固定订餐不生成订单、不扣餐
+                if (orderSubscriptionRepository.isMealSlotRest(serveDate, item.mealPeriod())) {
+                    failures.add(new SubscriptionBulkImportResponse.FailureItem(
+                        item.customerId(),
+                        fallbackCustomerName(item.customerId()),
+                        "当天该餐次为休息日，不出餐",
+                        orderSubscriptionRepository.findRemainingMeals(item.customerId()) == null ? 0 : orderSubscriptionRepository.findRemainingMeals(item.customerId()),
+                        1
+                    ));
+                    continue;
+                }
+
                 Integer remainingMeals = orderSubscriptionRepository.findRemainingMeals(item.customerId());
                 String customerName = fallbackCustomerName(item.customerId());
                 if (remainingMeals == null || remainingMeals <= 0) {

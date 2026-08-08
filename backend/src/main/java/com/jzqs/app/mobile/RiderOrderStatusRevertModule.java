@@ -2,6 +2,7 @@ package com.jzqs.app.mobile;
 
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
+import com.jzqs.app.common.realtime.RealtimeAudienceModule;
 import com.jzqs.app.mobile.api.RiderOrderStatusRevertResponse;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
@@ -12,9 +13,11 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 class RiderOrderStatusRevertModule {
     private final JdbcTemplate jdbcTemplate;
+    private final RealtimeAudienceModule realtimeAudienceModule;
 
-    RiderOrderStatusRevertModule(JdbcTemplate jdbcTemplate) {
+    RiderOrderStatusRevertModule(JdbcTemplate jdbcTemplate, RealtimeAudienceModule realtimeAudienceModule) {
         this.jdbcTemplate = jdbcTemplate;
+        this.realtimeAudienceModule = realtimeAudienceModule;
     }
 
     @Transactional
@@ -82,6 +85,34 @@ class RiderOrderStatusRevertModule {
             mealSlotOrderId
         );
 
+        jdbcTemplate.update(
+            "UPDATE dispatch_assignments SET status = 'DISPATCHING' WHERE meal_slot_order_id = ?",
+            mealSlotOrderId
+        );
+
+        publishStateEvents(mealSlotOrderId);
+
         return new RiderOrderStatusRevertResponse(mealSlotOrderId, "PENDING");
+    }
+
+    private void publishStateEvents(long mealSlotOrderId) {
+        try {
+            Long customerId = jdbcTemplate.query(
+                """
+                    SELECT do.customer_id
+                    FROM meal_slot_orders mso
+                    JOIN daily_orders do ON do.id = mso.daily_order_id
+                    WHERE mso.id = ?
+                    """,
+                ps -> ps.setLong(1, mealSlotOrderId),
+                rs -> rs.next() ? rs.getLong(1) : null
+            );
+            if (customerId != null && customerId > 0) {
+                realtimeAudienceModule.publishCustomerEvent("customer.order.changed", customerId, mealSlotOrderId);
+            }
+            realtimeAudienceModule.publishDispatchEvent("dispatch.queue.changed", null, null, mealSlotOrderId);
+        } catch (RuntimeException ex) {
+            // Keep revert successful even if realtime publish fails.
+        }
     }
 }

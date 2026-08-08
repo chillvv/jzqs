@@ -10,7 +10,8 @@ function appendServeDateQuery(url, serveDate) {
   if (!normalized || normalized === "undefined" || normalized === "null") {
     return url;
   }
-  return `${url}&serveDate=${encodeURIComponent(normalized)}`;
+  const separator = String(url).indexOf("?") >= 0 ? "&" : "?";
+  return `${url}${separator}serveDate=${encodeURIComponent(normalized)}`;
 }
 
 function resolveQueueItemIdentity(item) {

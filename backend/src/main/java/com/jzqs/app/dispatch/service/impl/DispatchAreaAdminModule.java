@@ -27,10 +27,12 @@ class DispatchAreaAdminModule {
         Long backupRiderId,
         String updatedBy
     ) {
+        String normalizedAreaCode = areaCode == null ? null : areaCode.trim();
+        ensureRiderAreaUniqueness(normalizedAreaCode, defaultRiderId, backupRiderId);
         Integer existing = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM dispatch_area_bindings WHERE area_code = ?",
             Integer.class,
-            areaCode
+            normalizedAreaCode
         );
         String status = "UPDATED";
         if (existing != null && existing > 0) {
@@ -48,7 +50,7 @@ class DispatchAreaAdminModule {
                 defaultRiderId,
                 backupRiderId,
                 updatedBy,
-                areaCode
+                normalizedAreaCode
             );
         } else {
             jdbcTemplate.update(
@@ -63,7 +65,7 @@ class DispatchAreaAdminModule {
                     )
                     VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
-                areaCode,
+                normalizedAreaCode,
                 keywords,
                 defaultRiderId,
                 backupRiderId,
@@ -74,18 +76,49 @@ class DispatchAreaAdminModule {
         if (defaultRiderId != null && defaultRiderId > 0) {
             jdbcTemplate.update(
                 "UPDATE rider_profiles SET default_area_code = ?, assigned_by = ?, assigned_at = CURRENT_TIMESTAMP WHERE id = ?",
-                areaCode,
+                normalizedAreaCode,
                 updatedBy,
                 defaultRiderId
             );
         }
         return new DispatchAreaBindingUpdateResultResponse(
-            areaCode,
+            normalizedAreaCode,
             keywords,
             defaultRiderId,
             backupRiderId,
             status
         );
+    }
+
+    /**
+     * 同一骑手不允许同时绑定到多个区域（默认/备用均不允许）。
+     */
+    private void ensureRiderAreaUniqueness(String areaCode, Long defaultRiderId, Long backupRiderId) {
+        for (Long riderId : new Long[] { defaultRiderId, backupRiderId }) {
+            if (riderId == null || riderId <= 0) {
+                continue;
+            }
+            List<String> boundAreas = jdbcTemplate.query(
+                """
+                    SELECT area_code
+                    FROM dispatch_area_bindings
+                    WHERE (default_rider_profile_id = ? OR backup_rider_profile_id = ?)
+                      AND area_code <> ?
+                    ORDER BY area_code
+                    LIMIT 1
+                    """,
+                (rs, rowNum) -> rs.getString("area_code"),
+                riderId,
+                riderId,
+                areaCode == null ? "" : areaCode
+            );
+            if (!boundAreas.isEmpty()) {
+                throw new BusinessException(
+                    ErrorCode.VALIDATION_ERROR,
+                    "该骑手已绑定区域「" + boundAreas.get(0) + "」，不允许同一骑手负责多个区域，请先解除原区域绑定"
+                );
+            }
+        }
     }
 
     DispatchAreaBindingRemoveResponse removeAreaBinding(String areaCode, long riderId) {

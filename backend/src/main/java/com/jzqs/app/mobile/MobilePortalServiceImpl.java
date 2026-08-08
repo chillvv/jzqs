@@ -145,14 +145,14 @@ public class MobilePortalServiceImpl implements MobilePortalService {
 
     @Override
     @Transactional
-    public MobileCreateOrderResponse createMiniappOrder(String phone, String serveDate, String mealPeriod, String deliveryAddress, String note) {
-        return createMiniappOrder(findCustomerIdByPhone(phone), serveDate, mealPeriod, deliveryAddress, note);
+    public MobileCreateOrderResponse createMiniappOrder(String phone, String serveDate, String mealPeriod, String deliveryAddress, String note, int quantity) {
+        return createMiniappOrder(findCustomerIdByPhone(phone), serveDate, mealPeriod, deliveryAddress, note, quantity);
     }
 
     @Override
     @Transactional
-    public MobileCreateOrderResponse createMiniappOrder(long customerId, String serveDate, String mealPeriod, String deliveryAddress, String note) {
-        return miniappOrderModule.createOrder(customerId, serveDate, mealPeriod, deliveryAddress, note);
+    public MobileCreateOrderResponse createMiniappOrder(long customerId, String serveDate, String mealPeriod, String deliveryAddress, String note, int quantity) {
+        return miniappOrderModule.createOrder(customerId, serveDate, mealPeriod, deliveryAddress, note, quantity);
     }
 
     @Override
@@ -240,6 +240,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         OrderActionResponse result = orderPrepService.cancelOrder(orderId);
         publishCustomerEvent("customer.order.changed", customerId, orderId);
         publishCustomerEvent("customer.wallet.changed", customerId, orderId);
+        publishDispatchQueueChanged(orderId);
         return result;
     }
 
@@ -526,6 +527,10 @@ public class MobilePortalServiceImpl implements MobilePortalService {
 
     private void publishCustomerEvent(String eventType, long customerId, Object orderId) {
         realtimeAudienceModule.publishCustomerEvent(eventType, customerId, orderId);
+    }
+
+    private void publishDispatchQueueChanged(Object orderId) {
+        realtimeAudienceModule.publishDispatchEvent("dispatch.queue.changed", null, null, orderId);
     }
 
     private void publishCustomerOrderChanged(long mealSlotOrderId) {

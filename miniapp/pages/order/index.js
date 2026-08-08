@@ -354,7 +354,8 @@ Page({
           serveDate: this.data.serveDate,
           mealPeriod: 'LUNCH',
           deliveryAddress: selectedAddress.addressLine,
-          note: this.data.remark
+          note: this.data.remark,
+          quantity: this.data.qty1
         }
       }));
     }
@@ -367,7 +368,8 @@ Page({
           serveDate: this.data.serveDate,
           mealPeriod: 'DINNER',
           deliveryAddress: selectedAddress.addressLine,
-          note: this.data.remark
+          note: this.data.remark,
+          quantity: this.data.qty2
         }
       }));
     }

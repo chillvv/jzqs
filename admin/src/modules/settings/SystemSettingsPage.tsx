@@ -715,11 +715,14 @@ export function SystemSettingsPage() {
               checked={packageReminderForm.deliverySubscribeEnabled}
               onChange={(e) => setPackageReminderForm({ ...packageReminderForm, deliverySubscribeEnabled: e.target.checked })}
             />
-            <span>{packageReminderForm.deliverySubscribeEnabled ? "开启后按午餐、晚餐各自时间扫描并发送顾客订阅通知" : "关闭后不发送顾客订阅通知"}</span>
+            <span>{packageReminderForm.deliverySubscribeEnabled ? "订单送达且到餐期释放时间后自动发送顾客订阅通知" : "关闭后不发送顾客订阅通知"}</span>
+          </div>
+          <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 8 }}>
+            释放时间即下方午餐/晚餐时间，到点后所有已送达订单对顾客统一变为“已送达”并发送提醒；特殊提前送达可在骑手配送中心对个别订单“立即释放”。
           </div>
         </div>
         <div className="form-group">
-          <label className="form-label">午餐订阅时间</label>
+          <label className="form-label">午餐释放时间</label>
           <SafeInput
             className="form-control"
             type="time"
@@ -727,11 +730,11 @@ export function SystemSettingsPage() {
             onValueChange={(value) => setPackageReminderForm({ ...packageReminderForm, deliverySubscribeLunchTime: value })}
           />
           <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 8 }}>
-            仅午餐订阅消息在命中该时间时发送，例如 11:30。
+            午餐订单送达后，顾客端在此时点前仍显示“待配送”，到点后统一变为“已送达”并发送取餐提醒。
           </div>
         </div>
         <div className="form-group">
-          <label className="form-label">晚餐订阅时间</label>
+          <label className="form-label">晚餐释放时间</label>
           <SafeInput
             className="form-control"
             type="time"
@@ -739,7 +742,7 @@ export function SystemSettingsPage() {
             onValueChange={(value) => setPackageReminderForm({ ...packageReminderForm, deliverySubscribeDinnerTime: value })}
           />
           <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 8 }}>
-            仅晚餐订阅消息在命中该时间时发送，例如 17:30。
+            晚餐订单送达后，顾客端在此时点前仍显示“待配送”，到点后统一变为“已送达”并发送取餐提醒。
           </div>
         </div>
       </SettingsModal>

@@ -234,4 +234,5 @@
     </view>
     <button class="inline-auth-sheet__primary" bindtap="goProfileAuth">手机号快捷登录</button>
   </view>
+  <view class="tabbar-spacer"></view>
 </view>

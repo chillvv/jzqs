@@ -17,6 +17,9 @@ import org.springframework.stereotype.Component;
 class DeliverySubscriptionModule {
     private static final Logger log = LoggerFactory.getLogger(DeliverySubscriptionModule.class);
     private static final int DELIVERY_SUBSCRIPTION_RETENTION_DAYS = 30;
+    /** 餐期送达状态对用户可见/订阅消息发送的释放时间默认值；实际以 admin_settings 配置（delivery_subscribe_lunch_time / delivery_subscribe_dinner_time）为准 */
+    static final LocalTime RELEASE_LUNCH_TIME_DEFAULT = LocalTime.of(11, 30);
+    static final LocalTime RELEASE_DINNER_TIME_DEFAULT = LocalTime.of(17, 0);
 
     private final JdbcTemplate jdbcTemplate;
     private final WeChatService weChatService;
@@ -70,6 +73,9 @@ class DeliverySubscriptionModule {
     }
 
     int sendAllDeliveredPendingSubscriptions() {
+        LocalDateTime now = LocalDateTime.now().withNano(0);
+        String lunchReleaseTime = resolveConfiguredReleaseTime("LUNCH").toString();
+        String dinnerReleaseTime = resolveConfiguredReleaseTime("DINNER").toString();
         List<Long> orderIds = jdbcTemplate.query(
             """
             SELECT cds.meal_slot_order_id
@@ -80,12 +86,19 @@ class DeliverySubscriptionModule {
             WHERE cds.status IN ('AUTHORIZED', 'FAILED')
               AND mso.status = 'DELIVERED'
               AND COALESCE(c.current_openid, c.openid, '') <> ''
+              AND (
+                    (mso.meal_period = 'LUNCH' AND TIMESTAMP(do.serve_date, ?) <= ?)
+                 OR (mso.meal_period = 'DINNER' AND TIMESTAMP(do.serve_date, ?) <= ?)
+              )
             ORDER BY cds.meal_slot_order_id
             """,
-            (rs, rowNum) -> rs.getLong(1)
+            (rs, rowNum) -> rs.getLong(1),
+            lunchReleaseTime,
+            Timestamp.valueOf(now),
+            dinnerReleaseTime,
+            Timestamp.valueOf(now)
         );
         int sentCount = 0;
-        LocalDateTime now = LocalDateTime.now().withNano(0);
         for (Long orderId : orderIds) {
             if (trySendDeliverySubscription(orderId, now)) {
                 sentCount++;
@@ -94,15 +107,47 @@ class DeliverySubscriptionModule {
         return sentCount;
     }
 
-    void sendAfterReceiptIfNeeded(long mealSlotOrderId, LocalDateTime deliveredDateTime) {
-        if (isDeliverySubscribeFixedTimeEnabled()) {
-            return;
+    /**
+     * 后台手动"立即释放"：将订单回执对用户可见，并立即发送取餐提醒订阅消息。
+     * 返回是否实际发送了订阅消息（无授权订阅时不发送，仅释放状态）。
+     */
+    boolean releaseAndSend(long mealSlotOrderId) {
+        int updated = jdbcTemplate.update(
+            """
+                UPDATE delivery_receipts
+                SET visible_at = CURRENT_TIMESTAMP,
+                    visible_to_customer = TRUE
+                WHERE meal_slot_order_id = ?
+                """,
+            mealSlotOrderId
+        );
+        if (updated == 0) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_FOUND, "未找到该订单的回执记录");
         }
-        trySendDeliverySubscription(mealSlotOrderId, deliveredDateTime);
+        return trySendDeliverySubscription(mealSlotOrderId, LocalDateTime.now().withNano(0));
+    }
+
+    /** 餐期释放时间：优先取系统设置里配置的订阅发送时间，未配置/异常时回退默认值 */
+    LocalTime resolveConfiguredReleaseTime(String mealPeriod) {
+        String column = "DINNER".equalsIgnoreCase(mealPeriod)
+            ? "delivery_subscribe_dinner_time"
+            : "delivery_subscribe_lunch_time";
+        try {
+            String configured = jdbcTemplate.queryForObject(
+                "SELECT " + column + " FROM admin_settings WHERE id = 1",
+                String.class
+            );
+            if (configured != null && !configured.isBlank()) {
+                return LocalTime.parse(configured.trim());
+            }
+        } catch (RuntimeException ex) {
+            log.warn("读取餐期释放时间配置失败 mealPeriod={} reason={}", mealPeriod, ex.getMessage());
+        }
+        return "DINNER".equalsIgnoreCase(mealPeriod) ? RELEASE_DINNER_TIME_DEFAULT : RELEASE_LUNCH_TIME_DEFAULT;
     }
 
     LocalDateTime resolveDeliveryNotifyThreshold(LocalDate serveDate, String mealPeriod) {
-        LocalTime cutoff = "DINNER".equalsIgnoreCase(mealPeriod) ? LocalTime.of(17, 0) : LocalTime.of(11, 30);
+        LocalTime cutoff = resolveConfiguredReleaseTime(mealPeriod);
         return LocalDateTime.of(serveDate, cutoff);
     }
 
@@ -114,6 +159,7 @@ class DeliverySubscriptionModule {
     }
 
     private int sendScheduledMessagesInternal(String mealPeriod, LocalDate serveDate, LocalDateTime now) {
+        String releaseTime = resolveConfiguredReleaseTime(mealPeriod).toString();
         List<Long> orderIds = jdbcTemplate.query(
             """
             SELECT cds.meal_slot_order_id
@@ -124,11 +170,14 @@ class DeliverySubscriptionModule {
               AND mso.status = 'DELIVERED'
               AND mso.meal_period = ?
               AND do.serve_date = ?
+              AND TIMESTAMP(do.serve_date, ?) <= ?
             ORDER BY cds.meal_slot_order_id
             """,
             (rs, rowNum) -> rs.getLong(1),
             mealPeriod,
-            serveDate
+            serveDate,
+            releaseTime,
+            Timestamp.valueOf(now)
         );
         int sentCount = 0;
         for (Long orderId : orderIds) {
@@ -149,7 +198,7 @@ class DeliverySubscriptionModule {
                 context.openid(),
                 weChatService.buildDeliveryPage(mealSlotOrderId),
                 "简知轻食",
-                "您的餐食已送达，可查看回执照片与备注"
+                "您的餐食已送达，请于半小时内取餐"
             );
             jdbcTemplate.update(
                 "UPDATE customer_delivery_subscriptions SET status = 'SENT', sent_at = ?, last_error_message = NULL WHERE id = ?",
@@ -221,18 +270,6 @@ class DeliverySubscriptionModule {
                 )
                 : null
         );
-    }
-
-    private boolean isDeliverySubscribeFixedTimeEnabled() {
-        Boolean enabled = jdbcTemplate.query(
-            """
-            SELECT delivery_subscribe_enabled
-            FROM admin_settings
-            WHERE id = 1
-            """,
-            rs -> rs.next() ? rs.getBoolean("delivery_subscribe_enabled") : Boolean.FALSE
-        );
-        return Boolean.TRUE.equals(enabled);
     }
 
     private String normalizeMealPeriod(String mealPeriod) {

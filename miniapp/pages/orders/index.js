@@ -172,6 +172,19 @@ Page({
     });
   },
 
+  callRider(e) {
+    const { phone } = e.currentTarget.dataset;
+    if (!phone) {
+      return;
+    }
+    wx.makePhoneCall({
+      phoneNumber: String(phone),
+      fail: () => {
+        wx.showToast({ title: '暂无法拨打电话', icon: 'none' });
+      }
+    });
+  },
+
   changeAddress(e) {
     const { id, mode } = e.currentTarget.dataset;
     if (mode === 'CONTACT_SUPPORT') {

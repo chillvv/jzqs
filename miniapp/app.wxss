@@ -495,3 +495,8 @@ button:active, .btn-submit:active, .btn-checkout:active, .action-btn:active, .su
   font-weight: 600;
   padding-bottom: 6rpx;
 }
+
+/* 自定义底部栏加高后，为 Tab 页面内容预留滚动空间 */
+.tabbar-spacer {
+  height: 220rpx;
+}

@@ -7,6 +7,8 @@ interface DatePickerProps {
   value?: string | Date | null;
   onChange: (date: string) => void;
   showTomorrowShortcut?: boolean;
+  /** 最小可选日期（YYYY-MM-DD），早于该日期的不可选 */
+  minDate?: string;
 }
 
 function normalizeDateString(value: string | Date | null | undefined) {
@@ -16,7 +18,18 @@ function normalizeDateString(value: string | Date | null | undefined) {
   return "";
 }
 
-export function DatePicker({ value, onChange, showTomorrowShortcut = true }: DatePickerProps) {
+function parseDateString(value: string | null | undefined) {
+  if (!value) {
+    return undefined;
+  }
+  const [year, month, day] = value.split("-").map(Number);
+  if ([year, month, day].every((item) => Number.isFinite(item))) {
+    return new Date(year, month - 1, day);
+  }
+  return undefined;
+}
+
+export function DatePicker({ value, onChange, showTomorrowShortcut = true, minDate }: DatePickerProps) {
   // 解析日期字符串，避免时区问题
   const selectedDate = React.useMemo(() => {
     if (!value) {
@@ -60,6 +73,7 @@ export function DatePicker({ value, onChange, showTomorrowShortcut = true }: Dat
         selected={selectedDate}
         onChange={handleChange}
         dateFormat="yyyy-MM-dd"
+        minDate={parseDateString(minDate)}
         className="input-box date-picker-input"
       />
       {showTomorrowShortcut && (

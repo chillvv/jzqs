@@ -127,7 +127,7 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
     @Override
     @Transactional
     public SubscriptionRuleResponse createRule(SubscriptionRuleRequest request) {
-        validateRule(request);
+        validateRule(request, false);
 
         SubscriptionRuleEntity entity = new SubscriptionRuleEntity();
         entity.setCustomerId(request.customerId());
@@ -156,12 +156,14 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
     @Override
     @Transactional
     public SubscriptionRuleResponse updateRule(long id, SubscriptionRuleRequest request) {
-        validateRule(request);
-
         SubscriptionRuleEntity entity = subscriptionRuleMapper.selectById(id);
         if (entity == null) {
             throw new BusinessException(ErrorCode.SUBSCRIPTION_RULE_NOT_FOUND, "固定订餐计划不存在");
         }
+
+        // 计划若已开始（原开始日期早于明天），编辑时允许保留原开始日期，不强制"明天起"
+        boolean alreadyStarted = entity.getStartDate().isBefore(LocalDate.now().plusDays(1));
+        validateRule(request, alreadyStarted);
 
         entity.setCustomerId(request.customerId());
         entity.setStartDate(request.startDate());
@@ -286,7 +288,7 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
         return getRuleByCustomerId(customerId);
     }
 
-    private void validateRule(SubscriptionRuleRequest request) {
+    private void validateRule(SubscriptionRuleRequest request, boolean allowPastStart) {
         // 检查客户是否存在
         Integer customerCount = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM customers WHERE id = ?",
@@ -306,7 +308,10 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
             throw new BusinessException(ErrorCode.ADDRESS_NOT_FOUND, "该客户暂无地址，请先去客户地址管理补充");
         }
 
-        // 检查日期范围
+        // 检查日期范围：开始日期最早为明天（今天不能开始订餐）；已开始的计划编辑时允许保留原值
+        if (request.startDate().isBefore(LocalDate.now().plusDays(1)) && !allowPastStart) {
+            throw new BusinessException(ErrorCode.INVALID_DATE_RANGE, "开始日期最早为明天（今天不能开始订餐）");
+        }
         if (request.startDate().isAfter(request.endDate())) {
             throw new BusinessException(ErrorCode.INVALID_DATE_RANGE, "开始日期不能晚于结束日期");
         }
@@ -314,6 +319,14 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
         // 检查至少启用一个餐次
         if (!request.lunchEnabled() && !request.dinnerEnabled()) {
             throw new BusinessException(ErrorCode.NO_MEAL_ENABLED, "至少需要启用午餐或晚餐");
+        }
+
+        // 检查每周配送日：至少勾选一天，且只能为 1-7 的合法组合
+        if (request.weekDays() != null && !request.weekDays().trim().isEmpty()) {
+            String weekDays = request.weekDays().trim();
+            if (!weekDays.matches("^[1-7](,[1-7])*$")) {
+                throw new BusinessException(ErrorCode.INVALID_WEEK_DAYS, "每周配送日格式不正确");
+            }
         }
 
         // 检查地址是否属于该客户

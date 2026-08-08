@@ -62,4 +62,21 @@ public class OrderSubscriptionRepository {
         );
         return rows.isEmpty() ? null : rows.get(0);
     }
+
+    /** 判断指定日期、指定餐期是否为店铺休息日（菜单排期 slot_status = REST） */
+    public boolean isMealSlotRest(String serveDate, String mealPeriod) {
+        Integer count = jdbcTemplate.queryForObject(
+            """
+                SELECT COUNT(*)
+                FROM menu_week_items
+                WHERE serve_date = ?
+                  AND meal_period = ?
+                  AND slot_status = 'REST'
+                """,
+            Integer.class,
+            java.sql.Date.valueOf(serveDate),
+            mealPeriod
+        );
+        return count != null && count > 0;
+    }
 }

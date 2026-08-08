@@ -3,6 +3,7 @@ package com.jzqs.app.order.service.impl;
 import com.jzqs.app.common.api.BatchOperationResponse;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
+import com.jzqs.app.common.realtime.RealtimeAudienceModule;
 import com.jzqs.app.order.api.ManualCreateOrderResponse;
 import com.jzqs.app.order.api.OrderActionResponse;
 import com.jzqs.app.order.api.OrderMerchantRemarkUpdateRequest;
@@ -26,15 +27,18 @@ import org.springframework.transaction.annotation.Transactional;
 public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implements OrderOperationService {
     private final OrderOperationRepository orderOperationRepository;
     private final OrderNoteSnapshotService orderNoteSnapshotService;
+    private final RealtimeAudienceModule realtimeAudienceModule;
 
     public OrderOperationServiceImpl(
         OrderSupportRepository orderSupportRepository,
         OrderOperationRepository orderOperationRepository,
-        OrderNoteSnapshotService orderNoteSnapshotService
+        OrderNoteSnapshotService orderNoteSnapshotService,
+        RealtimeAudienceModule realtimeAudienceModule
     ) {
         super(orderSupportRepository);
         this.orderOperationRepository = orderOperationRepository;
         this.orderNoteSnapshotService = orderNoteSnapshotService;
+        this.realtimeAudienceModule = realtimeAudienceModule;
     }
 
     @Override
@@ -271,6 +275,7 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
                 "SUBSCRIPTION".equals(source) ? "固定订餐自动扣餐" : "代客录单加餐占用餐次",
                 mergeTargetOrderId
             );
+            refreshBatchAndPublishEvents(customerId, mergeTargetOrderId);
             return new ManualCreateOrderResponse(mergeTargetOrderId, "MERGED");
         }
 
@@ -304,6 +309,20 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
             List.of(),
             snapshotTime
         );
+        refreshBatchAndPublishEvents(customerId, mealSlotOrderId);
         return new ManualCreateOrderResponse(mealSlotOrderId, "PENDING_DISPATCH");
+    }
+
+    private void refreshBatchAndPublishEvents(long customerId, long mealSlotOrderId) {
+        try {
+            List<Long> batchIds = orderOperationRepository.findDispatchBatchIds(mealSlotOrderId);
+            for (Long batchId : batchIds) {
+                orderOperationRepository.refreshDispatchBatchMetrics(batchId);
+            }
+            realtimeAudienceModule.publishDispatchEvent("dispatch.queue.changed", null, null, mealSlotOrderId);
+            realtimeAudienceModule.publishCustomerEvent("customer.order.changed", customerId, mealSlotOrderId);
+        } catch (RuntimeException ex) {
+            // Keep manual create successful even if batch refresh or realtime publish fails.
+        }
     }
 }

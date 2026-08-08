@@ -80,12 +80,13 @@
             </block>
           </view>
           <view wx:elif="{{item.slotStatus === 'UNCONFIGURED'}}" class="rest-card" style="margin-bottom: 0;">{{item.weekdayLabel}}菜单待配置，请稍后查看</view>
-          <view wx:else class="rest-card" style="margin-bottom: 0;">🌿 {{item.weekdayLabel}}固定店休，法定节假日不出餐</view>
+          <view wx:else class="rest-card" style="margin-bottom: 0;">🌿 {{item.restText}}</view>
         </block>
         <view wx:if="{{!weekCards.length && !loading}}" class="rest-card">暂无菜单数据</view>
       </block>
     </view>
   </view>
+  <view class="tabbar-spacer"></view>
 </view>
 <view wx:if="{{showMealReminderPopup}}" class="meal-reminder-popup">
   <view class="meal-reminder-popup__mask" bindtap="closeMealReminderPopup"></view>

@@ -6,6 +6,7 @@ const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const taskService = require('../../services/task.service');
 const { createWorkbenchDateOptions, formatDateYMD } = require('../../utils/formatter');
 const { resolveQueueItemIdentity, resolveQueueItemRequestId } = require('../../utils/rider-queue');
+const { resolveMediaUrl } = require('../../utils/media-url');
 const realtime = require('../../utils/realtime');
 const AUTO_REFRESH_MS = 8000;
 
@@ -57,6 +58,10 @@ Page({
     // 数据
     allItems: [],
     currentMealItems: [],
+
+    // 加载失败提示（区别于空列表）
+    queueError: false,
+    queueErrorMessage: '',
 
     // 统计
     lunchStats: { totalCount: 0, deliveredCount: 0, remainingCount: 0 },
@@ -152,10 +157,18 @@ Page({
     try {
       const page = await taskService.getQueue(serveDate);
       const items = page.items || [];
-      this.setData({ allItems: items });
+      this.setData({
+        allItems: items,
+        queueError: false,
+        queueErrorMessage: ''
+      });
       this.calculateMealStats(items);
       this.filterCurrentMealItems();
     } catch (error) {
+      this.setData({
+        queueError: true,
+        queueErrorMessage: error.message || '加载失败，请检查网络后重试'
+      });
       if (!silent) {
         wx.showToast({ title: error.message || '加载失败', icon: 'none' });
       }
@@ -239,6 +252,8 @@ Page({
       return true;
     });
     const selectedSet = new Set(selectedReferenceItemIds);
+    const app = getApp();
+    const apiBaseUrl = (app && app.globalData && app.globalData.apiBaseUrl) || '';
     const normalizedItems = items.map(item => {
       const attentionSources = Array.isArray(item.attentionSources)
         ? item.attentionSources.filter(Boolean)
@@ -256,6 +271,9 @@ Page({
 
       return {
         ...item,
+        referenceImageUrl: item.referenceImageUrl
+          ? resolveMediaUrl(item.referenceImageUrl, apiBaseUrl)
+          : '',
         queueItemIdentity: resolveQueueItemIdentity(item),
         detailItemId: resolveQueueItemRequestId(item.batchItemId, item.mealSlotOrderId),
         attentionSources,
@@ -590,12 +608,19 @@ Page({
     });
   },
 
+  previewRefImage(e) {
+    const url = e.currentTarget.dataset.url;
+    if (!url) return;
+    wx.previewImage({ urls: [url], current: url });
+  },
+
   resetQueueState() {
     this.setData({
       loading: false, isEditMode: false, allItems: [], currentMealItems: [],
       batchReferenceMode: false, batchSubmitting: false, selectedReferenceItemIds: [],
       dragging: false, dragIndex: -1, dragOriginIndex: -1, dragTranslateY: 0,
       showDatePicker: false,
+      queueError: false, queueErrorMessage: '',
       lunchStats: { totalCount: 0, deliveredCount: 0, remainingCount: 0 },
       dinnerStats: { totalCount: 0, deliveredCount: 0, remainingCount: 0 }
     });

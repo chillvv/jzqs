@@ -62,9 +62,17 @@
             <text class="detail-label">内容</text>
             <text class="detail-value">{{item.mealDetail}}</text>
           </view>
+          <view class="detail-row" wx:if="{{item.quantity}}">
+            <text class="detail-label">份数</text>
+            <text class="detail-value">×{{item.quantity}}</text>
+          </view>
           <view class="detail-row">
             <text class="detail-label">地址</text>
             <text class="detail-value">{{item.deliveryAddress}}</text>
+          </view>
+          <view class="detail-row" wx:if="{{item.riderPhone}}">
+            <text class="detail-label">骑手电话</text>
+            <text class="detail-value rider-phone" data-phone="{{item.riderPhone}}" bindtap="callRider">{{item.riderPhone}}</text>
           </view>
           <view class="detail-row" wx:if="{{item.note && item.note !== '-'}}">
             <text class="detail-label">备注</text>
@@ -91,7 +99,6 @@
 
   <view wx:elif="{{!loading}}" class="subpage-card">
     <view class="empty-state-wrap">
-      <image class="empty-icon" src="../../assets/icons/order.png" mode="aspectFit"></image>
       <view class="empty-title">{{targetOrderId ? '未找到对应的关联订单' : '当前筛选条件下暂无订单'}}</view>
       <view class="empty-desc">去看看今天的营养菜单吧</view>
       <button class="btn-go-order" bindtap="goToOrder">去点餐</button>

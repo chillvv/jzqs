@@ -26,6 +26,7 @@ public record RiderQueueItemResponse(
     String itemStatus,
     String receiptStatus,
     String receiptUrl,
-    String receiptNote
+    String receiptNote,
+    String referenceImageUrl
 ) {
 }

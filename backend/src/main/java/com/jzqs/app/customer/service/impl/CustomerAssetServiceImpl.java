@@ -843,8 +843,8 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
 
     private String requireCustomerName(String name) {
         String value = blankToDefault(name, "").trim();
-        if (!value.matches("^[\\u4e00-\\u9fa5A-Za-z·\\s]{2,20}$")) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请填写正确的客户姓名");
+        if (!value.matches("^[\\u4e00-\\u9fa5·]{2,20}$")) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "姓名仅支持汉字（2-20个字符）");
         }
         return value;
     }

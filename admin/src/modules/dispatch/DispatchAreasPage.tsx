@@ -73,9 +73,10 @@ export function DispatchAreasPage() {
   const [activeAreaCode, setActiveAreaCode] = useState<string | null>(null);
   const [assignRiderAreaCode, setAssignRiderAreaCode] = useState<string | null>(null);
   const [selectedRiderId, setSelectedRiderId] = useState("");
-  const [moveState, setMoveState] = useState<{ areaCode: string; orderId: number; targetAreaCode: string } | null>(null);
   const [isReordering, setIsReordering] = useState(false);
   const [localOrders, setLocalOrders] = useState<DispatchAreaOrderItemResponse[]>([]);
+  const [selectedOrderIds, setSelectedOrderIds] = useState<number[]>([]);
+  const [batchMoving, setBatchMoving] = useState(false);
   const [orderDetailId, setOrderDetailId] = useState<number | null>(null);
   const [orderRiderChangeState, setOrderRiderChangeState] = useState<{ orderId: number; riderId: string } | null>(null);
   const [deleteConfirmState, setDeleteConfirmState] = useState<{ orderId: number; customerName: string } | null>(null);
@@ -101,6 +102,30 @@ export function DispatchAreasPage() {
     [riders]
   );
 
+  // 已绑定为某区域默认骑手的骑手，不允许再绑定到其他区域
+  const boundRiderIds = useMemo(() => {
+    const ids = new Set<string>();
+    bindings.forEach((b) => {
+      if (b.defaultRiderId) {
+        ids.add(String(b.defaultRiderId));
+      }
+    });
+    return ids;
+  }, [bindings]);
+
+  const assignableRiderOptions = useMemo(() => {
+    const currentArea = assignRiderAreaCode
+      ? bindings.find((b) => b.areaCode === assignRiderAreaCode)
+      : null;
+    const currentRiderId = currentArea?.defaultRiderId ? String(currentArea.defaultRiderId) : null;
+    return riderOptions.filter((option) => {
+      if (currentRiderId && option.value === currentRiderId) {
+        return true;
+      }
+      return !boundRiderIds.has(option.value);
+    });
+  }, [riderOptions, boundRiderIds, bindings, assignRiderAreaCode]);
+
   const areaStats = useMemo(() => buildDispatchAreaStats(bindings), [bindings]);
   const createAreaNameError = showCreateAreaErrors ? validateAreaName(newArea.name) : "";
 
@@ -118,6 +143,7 @@ export function DispatchAreasPage() {
     if (activeAreaCode) {
       setLocalOrders([]);
       setIsReordering(false);
+      setSelectedOrderIds([]);
     }
   }, [activeAreaCode]); // 只依赖 activeAreaCode
   
@@ -178,23 +204,6 @@ export function DispatchAreasPage() {
     }
   }
 
-  async function handleMoveOrder() {
-    if (!moveState || !moveState.targetAreaCode) return;
-    setSavingArea(moveState.areaCode);
-    try {
-      await moveOrderToArea(moveState.areaCode, moveState.orderId, {
-        targetAreaCode: moveState.targetAreaCode
-      });
-      setMoveState(null);
-      await reload();
-      toast("订单已移到目标区域");
-    } catch (err: any) {
-      toast(getErrorMessage(err, "移出订单失败"), "error");
-    } finally {
-      setSavingArea(null);
-    }
-  }
-
   async function handleDeleteOrder(orderId: number, customerName: string) {
     setDeleteConfirmState({ orderId, customerName });
   }
@@ -222,7 +231,14 @@ export function DispatchAreasPage() {
     } else {
       setIsReordering(true);
       setLocalOrders([...activeAreaOrders]);
+      setSelectedOrderIds([]);
     }
+  }
+
+  function cancelReorder() {
+    setIsReordering(false);
+    setLocalOrders([]);
+    setSelectedOrderIds([]);
   }
 
   async function saveOrderSequence() {
@@ -241,11 +257,35 @@ export function DispatchAreasPage() {
       await reload();
       setIsReordering(false);
       setLocalOrders([]);
+      setSelectedOrderIds([]);
       toast("区域内订单顺序已更新");
     } catch (err: any) {
       toast(getErrorMessage(err, "保存排序失败"), "error");
     } finally {
       setSavingArea(null);
+    }
+  }
+
+  async function handleBatchMoveOrders(targetAreaCode: string) {
+    if (!activeArea || selectedOrderIds.length === 0 || !targetAreaCode || batchMoving) return;
+    const orderIds = [...selectedOrderIds];
+    const sourceAreaCode = activeArea.areaCode;
+    setBatchMoving(true);
+    try {
+      await Promise.all(
+        orderIds.map((orderId) =>
+          moveOrderToArea(sourceAreaCode, orderId, { targetAreaCode })
+        )
+      );
+      setIsReordering(false);
+      setLocalOrders([]);
+      setSelectedOrderIds([]);
+      await reload();
+      toast(`已将 ${orderIds.length} 单移到「${targetAreaCode}」`);
+    } catch (err: any) {
+      toast(getErrorMessage(err, "批量移区失败"), "error");
+    } finally {
+      setBatchMoving(false);
     }
   }
 
@@ -492,7 +532,7 @@ export function DispatchAreasPage() {
           <AppSelect
             value={newArea.riderId}
             placeholder="可选：立即添加骑手"
-            options={[{ label: "暂不添加骑手", value: "" }, ...riderOptions]}
+            options={[{ label: "暂不添加骑手", value: "" }, ...assignableRiderOptions]}
             onChange={(value) => setNewArea((prev) => ({ ...prev, riderId: value }))}
             style={selectStyle}
           />
@@ -504,10 +544,16 @@ export function DispatchAreasPage() {
         mealPeriod={mealPeriod}
         isReordering={isReordering}
         displayOrders={displayOrders}
+        selectedOrderIds={selectedOrderIds}
+        batchMoving={batchMoving}
+        targetAreaOptions={bindings
+          .filter((item) => item.areaCode !== activeArea?.areaCode)
+          .map((item) => ({ value: item.areaCode, label: item.areaCode }))}
         onClose={() => {
           setActiveAreaCode(null);
           setIsReordering(false);
           setLocalOrders([]);
+          setSelectedOrderIds([]);
         }}
         onOpenAssignRider={() => {
           if (!activeArea) return;
@@ -518,12 +564,15 @@ export function DispatchAreasPage() {
         onStartRename={() => activeArea && startRename(activeArea.areaCode)}
         onRequestDeleteArea={() => activeArea && setDeletingArea(activeArea.areaCode)}
         onToggleReorder={toggleReorderMode}
+        onCancelReorder={cancelReorder}
         onDragEnd={handleDragEnd}
         onSelectOrderDetail={setOrderDetailId}
-        onMoveOrder={(orderId) => {
-          if (!activeArea) return;
-          setMoveState({ areaCode: activeArea.areaCode, orderId, targetAreaCode: "" });
-        }}
+        onToggleSelect={(orderId) =>
+          setSelectedOrderIds((prev) =>
+            prev.includes(orderId) ? prev.filter((id) => id !== orderId) : [...prev, orderId]
+          )
+        }
+        onBatchMove={handleBatchMoveOrders}
       />
       <DispatchAreaAiCorrectionDialog
         open={showAiCorrectionDialog && Boolean(activeArea)}
@@ -668,45 +717,17 @@ export function DispatchAreasPage() {
           <AppSelect
             value={selectedRiderId}
             placeholder="搜索骑手姓名"
-            options={riderOptions}
+            options={assignableRiderOptions}
             showSearch
             onChange={(value) => setSelectedRiderId(value)}
             style={selectStyle}
           />
         </label>
-      </AdminDialog>
-
-      <AdminDialog
-        open={Boolean(moveState)}
-        title="移出订单"
-        description={moveState ? `将订单 #${moveState.orderId} 移到其他区域` : undefined}
-        zOffset={10}
-        onClose={() => setMoveState(null)}
-        footer={
-          <>
-            <button className="btn btn-outline" onClick={() => setMoveState(null)}>取消</button>
-            <button
-              className="btn btn-primary"
-              disabled={!moveState?.targetAreaCode || savingArea === moveState?.areaCode}
-              onClick={handleMoveOrder}
-            >
-              确认移出
-            </button>
-          </>
-        }
-      >
-        <label className="admin-field">
-          <span className="admin-field-label">目标区域</span>
-          <AppSelect
-            value={moveState?.targetAreaCode || ""}
-            placeholder="选择目标区域"
-            options={bindings
-              .filter((item) => item.areaCode !== moveState?.areaCode)
-              .map((item) => ({ label: item.areaCode, value: item.areaCode }))}
-            onChange={(value) => setMoveState((prev) => prev ? { ...prev, targetAreaCode: value } : prev)}
-            style={selectStyle}
-          />
-        </label>
+        {assignableRiderOptions.length < riderOptions.length ? (
+          <div className="dispatch-inline-note" style={{ marginTop: 8 }}>
+            已绑定其他区域的骑手不可选（同一骑手不允许负责多个区域）
+          </div>
+        ) : null}
       </AdminDialog>
 
       <AdminDialog

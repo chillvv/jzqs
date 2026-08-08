@@ -18,7 +18,7 @@ public record RiderRegisterRequest(
     
     @NotBlank(message = "姓名不能为空")
     @Size(min = 2, max = 20, message = "姓名长度需在2到20个字符之间")
-    @Pattern(regexp = "^[\\u4e00-\\u9fa5A-Za-z·\\s]{2,20}$", message = "请输入正确的骑手姓名")
+    @Pattern(regexp = "^[\\u4e00-\\u9fa5·]{2,20}$", message = "骑手姓名仅支持汉字（2-20个字符）")
     @Schema(description = "骑手姓名", example = "张三")
     String name,
     

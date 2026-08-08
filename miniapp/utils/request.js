@@ -11,6 +11,26 @@ function showGlobalLoading() {
   requestCount++;
 }
 
+function toErrorMessage(value) {
+  if (value === null || value === undefined) return '请求失败';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    // 后端可能返回 { message: "...", errors: [...] } 或校验错误对象
+    if (value.message && typeof value.message === 'string') return value.message;
+    if (Array.isArray(value.errors) && value.errors.length) {
+      const first = value.errors[0];
+      return typeof first === 'string' ? first : (first && first.message) || '请求失败';
+    }
+    try {
+      const str = JSON.stringify(value);
+      return str.length > 80 ? '请求失败' : str;
+    } catch (e) {
+      return '请求失败';
+    }
+  }
+  return String(value);
+}
+
 function hideGlobalLoading() {
   if (requestCount > 0) {
     requestCount--;
@@ -60,7 +80,7 @@ function request({ url, method = 'GET', data, header, requireAuth = true, hideLo
           if (body.code === 'UNAUTHORIZED') {
             app.handleUnauthorized();
           }
-          const errorMsg = body.message || '请求失败';
+          const errorMsg = toErrorMessage(body.message);
           if (!hideErrorToast && typeof wx.showToast === 'function') {
             wx.showToast({ title: errorMsg, icon: 'none', duration: 2000 });
           }

@@ -75,6 +75,7 @@ import { SafeInput, SafeTextarea } from "../../shared/components/SafeInput";
 import { DatePicker } from "../../shared/components/DatePicker";
 import { toast } from "../../shared/components/Toast";
 import { formatLocalDateInputValue } from "../../shared/utils/dateTime";
+import { useServeDate } from "../../shared/hooks/useServeDate";
 import { SubscriptionManagementTab, type SubscriptionManagementFilters, type SubscriptionMealPeriod, type SubscriptionStatusFilter } from "./SubscriptionManagementTab";
 
 function defaultFilterDate() {
@@ -149,7 +150,7 @@ export function OrderPrepPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [activeTab, setActiveTab] = useState<OrderPrepTab>("ORDERS");
   const [hasManualTabSelection, setHasManualTabSelection] = useState(false);
-  const [filterDate, setFilterDate] = useState(DEFAULT_FILTER_DATE);
+  const [filterDate, setFilterDate] = useServeDate();
   const [mealPeriodFilter, setMealPeriodFilter] = useState<OrderPrepMealPeriodFilter>(() => resolveStoredOrderMealPeriod());
   const [sourceFilter, setSourceFilter] = useState<OrderPrepSourceFilter>("ALL");
   const [statusFilter, setStatusFilter] = useState<OrderPrepStatusFilter>("ALL");
@@ -981,19 +982,49 @@ export function OrderPrepPage() {
       </div>
 
       <div className="stat-row">
-        {compactSummary.map((item) => (
-          <div key={item.label} className="stat-card">
-            <div className="stat-title">{item.label}</div>
-            <div className="stat-val">{item.value}</div>
-            <div className="stat-footer">
-              {item.label === "当前待出餐"
-                ? `有备注 ${summary.remarkedOrderCount} 单`
-                : item.label === "餐次结构"
-                  ? "按午餐 / 晚餐拆分"
-                  : `重点客户待确认 ${summary.priorityConfirmationCount} 人`}
+        {compactSummary.map((item) => {
+          const isMealCard = item.mealPeriod !== undefined;
+          const isActive = isMealCard && mealPeriodFilter === item.mealPeriod;
+          const mealKey = item.mealPeriod as "LUNCH" | "DINNER";
+          return (
+            <div
+              key={item.label}
+              className={`stat-card${isMealCard ? " stat-card--meal" : ""}${isActive ? " is-active" : ""}`}
+              role={isMealCard ? "button" : undefined}
+              tabIndex={isMealCard ? 0 : undefined}
+              onClick={isMealCard ? () => setMealPeriodFilter(mealKey) : undefined}
+              onKeyDown={isMealCard ? (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  setMealPeriodFilter(mealKey);
+                }
+              } : undefined}
+            >
+              <div className="stat-title">
+                {item.label}
+                {isMealCard && (
+                  <span className={`stat-meal-badge stat-meal-badge--${mealKey === "DINNER" ? "dinner" : "lunch"}`}>
+                    {isActive ? "查看中" : "点击查看"}
+                  </span>
+                )}
+              </div>
+              <div className={`stat-val stat-val--${item.tone}`}>{item.value}</div>
+              <div className="stat-footer">
+                {item.label === "当前待出餐"
+                  ? `有备注 ${summary.remarkedOrderCount} 单`
+                  : item.label === "午餐"
+                    ? `有备注 ${summary.lunchRemarkedCount} 单`
+                    : item.label === "晚餐"
+                      ? `有备注 ${summary.dinnerRemarkedCount} 单`
+                      : item.label === "待确认固定订餐"
+                        ? `重点客户待确认 ${summary.priorityConfirmationCount} 人`
+                        : isActive
+                          ? `正在查看${item.label}订单`
+                          : `点击切换到${item.label}订单`}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <div className="admin-panel-note" style={{ marginBottom: "16px" }}>
         顾客端下单后会先进入待配送，取消和售后结果会同步回订单页与钱包页。
@@ -1233,7 +1264,7 @@ export function OrderPrepPage() {
           />
         ) : activeTab === "CONFIRMATION" ? (
           <div style={{ display: "grid", gap: "12px", padding: "20px" }}>
-            {confirmationItems.map((item) => (
+            {confirmationItems.map((item: SubscriptionConfirmationItem) => (
               <div key={item.id} className="address-card" style={{ cursor: "default" }}>
                 <div className="address-content">
                   <div className="address-title">

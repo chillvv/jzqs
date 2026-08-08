@@ -124,8 +124,19 @@ public class OrderOperationRepository {
         jdbcTemplate.update(
             """
                 UPDATE dispatch_batches
-                SET total_count = (SELECT COUNT(*) FROM dispatch_batch_items WHERE batch_id = ?),
-                    delivered_count = (SELECT COUNT(*) FROM dispatch_batch_items WHERE batch_id = ? AND item_status = 'DELIVERED')
+                SET total_count = (
+                        SELECT COALESCE(SUM(mso.quantity), 0)
+                        FROM dispatch_batch_items dbi
+                        JOIN meal_slot_orders mso ON mso.id = dbi.meal_slot_order_id
+                        WHERE dbi.batch_id = ?
+                    ),
+                    delivered_count = (
+                        SELECT COALESCE(SUM(mso.quantity), 0)
+                        FROM dispatch_batch_items dbi
+                        JOIN meal_slot_orders mso ON mso.id = dbi.meal_slot_order_id
+                        WHERE dbi.batch_id = ?
+                          AND dbi.item_status = 'DELIVERED'
+                    )
                 WHERE id = ?
                 """,
             batchId,
@@ -301,7 +312,7 @@ public class OrderOperationRepository {
                   AND mso.meal_period = ?
                   AND mso.delivery_meal_period = ?
                   AND mso.address_id = ?
-                  AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
+                  AND mso.status NOT IN ('CANCELLED', 'REFUNDED', 'DELIVERED')
                   AND NOT EXISTS (
                       SELECT 1
                       FROM aftersale_cases ac

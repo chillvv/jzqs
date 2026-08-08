@@ -41,7 +41,8 @@ export function buildDispatchWorkspaceNav() {
     { label: "分单工作台", value: "" },
     { label: "骑手进度", value: "progress" },
     { label: "区域管理", value: "areas" },
-    { label: "骑手管理", value: "riders" }
+    { label: "骑手管理", value: "riders" },
+    { label: "待释放送达", value: "release" }
   ];
 }
 

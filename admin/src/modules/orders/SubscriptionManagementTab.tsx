@@ -29,6 +29,36 @@ function formatSubscriptionDateRange(startDate?: string, endDate?: string) {
   return `${startLabel} - ${endLabel}`;
 }
 
+const WEEK_DAY_LABELS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+
+function formatWeekDaysSummary(weekDays?: string) {
+  if (!weekDays) {
+    return "每天";
+  }
+  const days = weekDays
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isFinite(item) && item >= 1 && item <= 7)
+    .sort((a, b) => a - b);
+  if (days.length === 0 || days.length === 7) {
+    return "每天";
+  }
+  const ranges: string[] = [];
+  let rangeStart = days[0];
+  let prev = days[0];
+  for (let i = 1; i <= days.length; i++) {
+    const current = days[i];
+    if (current === prev + 1) {
+      prev = current;
+    } else {
+      ranges.push(rangeStart === prev ? WEEK_DAY_LABELS[rangeStart - 1] : `${WEEK_DAY_LABELS[rangeStart - 1]}~${WEEK_DAY_LABELS[prev - 1]}`);
+      rangeStart = current;
+      prev = current;
+    }
+  }
+  return ranges.join("、");
+}
+
 type SubscriptionManagementTabProps = {
   filters: SubscriptionManagementFilters;
   queryVersion: number;
@@ -203,7 +233,10 @@ export function SubscriptionManagementTab({ filters, queryVersion, onVisibleCoun
                     </td>
                     <td>{item.customerPhone}</td>
                     <td>
-                      {formatSubscriptionDateRange(item.startDate, item.endDate)}
+                      <div>{formatSubscriptionDateRange(item.startDate, item.endDate)}</div>
+                      <div style={{ fontSize: "12px", color: "var(--text-sub)", marginTop: "2px" }}>
+                        每周：{formatWeekDaysSummary(item.weekDays)}
+                      </div>
                     </td>
                     <td style={{ maxWidth: "220px" }}>{merchantRemark}</td>
                     <td>

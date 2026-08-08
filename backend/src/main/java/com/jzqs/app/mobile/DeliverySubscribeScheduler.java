@@ -2,7 +2,6 @@ package com.jzqs.app.mobile;
 
 import com.jzqs.app.settings.api.OperationSettingsResponse;
 import com.jzqs.app.settings.service.SettingsService;
-import java.time.LocalTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -27,32 +26,17 @@ public class DeliverySubscribeScheduler {
         if (!settings.deliverySubscribeEnabled()) {
             return;
         }
-        LocalTime now = LocalTime.now().withSecond(0).withNano(0);
-        int lunchCount = 0;
-        int dinnerCount = 0;
-        if (matchesConfiguredTriggerTime(settings.deliverySubscribeLunchTime(), now)) {
-            lunchCount = mobilePortalService.sendScheduledDeliverySubscribeMessages("LUNCH");
-        }
-        if (matchesConfiguredTriggerTime(settings.deliverySubscribeDinnerTime(), now)) {
-            dinnerCount = mobilePortalService.sendScheduledDeliverySubscribeMessages("DINNER");
-        }
+        // 每分钟扫描一次：仅在订单送达且已到餐期释放时间（午餐 11:30 / 晚餐 17:00）后发送，
+        // 保证用户收到订阅消息时订单状态已是"已送达"、回执图片可见。
+        int lunchCount = mobilePortalService.sendScheduledDeliverySubscribeMessages("LUNCH");
+        int dinnerCount = mobilePortalService.sendScheduledDeliverySubscribeMessages("DINNER");
         if (lunchCount == 0 && dinnerCount == 0) {
             return;
         }
         log.info(
-            "送达订阅通知扫描完成, lunchTriggerTime={}, dinnerTriggerTime={}, lunchCount={}, dinnerCount={}",
-            settings.deliverySubscribeLunchTime(),
-            settings.deliverySubscribeDinnerTime(),
+            "送达订阅通知扫描完成, lunchCount={}, dinnerCount={}",
             lunchCount,
             dinnerCount
         );
-    }
-
-    private boolean matchesConfiguredTriggerTime(String configuredTime, LocalTime now) {
-        try {
-            return LocalTime.parse(configuredTime).withSecond(0).withNano(0).equals(now);
-        } catch (Exception ex) {
-            return false;
-        }
     }
 }

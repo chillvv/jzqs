@@ -15,6 +15,27 @@ type AddressOption = {
 
 type SelectedCustomerSummary = Pick<CustomerAssetResponse, "id" | "name" | "phone" | "remainingMeals">;
 
+const WEEK_DAY_OPTIONS = [
+  { value: "1", label: "周一" },
+  { value: "2", label: "周二" },
+  { value: "3", label: "周三" },
+  { value: "4", label: "周四" },
+  { value: "5", label: "周五" },
+  { value: "6", label: "周六" },
+  { value: "7", label: "周日" }
+];
+
+const ALL_WEEK_DAYS = WEEK_DAY_OPTIONS.map((option) => option.value).join(",");
+
+function formatTomorrowDate() {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function resolveSelectableAddressId(addresses: AddressOption[], preferredAddressId?: number | null) {
   if (preferredAddressId && addresses.some((address) => address.id === preferredAddressId)) {
     return preferredAddressId;
@@ -33,6 +54,7 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
     customerId: 0,
     startDate: "",
     endDate: "",
+    weekDays: ALL_WEEK_DAYS,
     lunchEnabled: false,
     lunchQuantity: 1,
     lunchDeliveryMealPeriod: "LUNCH",
@@ -40,8 +62,7 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
     dinnerQuantity: 1,
     dinnerDeliveryMealPeriod: "DINNER",
     defaultAddressId: null,
-    merchantRemark: "",
-    isPriorityFollow: false
+    merchantRemark: ""
   });
 
   const [customerKeyword, setCustomerKeyword] = useState("");
@@ -77,6 +98,7 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
       customerId: item.customerId,
       startDate: item.startDate,
       endDate: item.endDate,
+      weekDays: item.weekDays || ALL_WEEK_DAYS,
       lunchEnabled: item.lunchEnabled,
       lunchQuantity: item.lunchQuantity,
       lunchDeliveryMealPeriod: item.lunchDeliveryMealPeriod,
@@ -84,8 +106,7 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
       dinnerQuantity: item.dinnerQuantity,
       dinnerDeliveryMealPeriod: item.dinnerDeliveryMealPeriod,
       defaultAddressId: item.defaultAddressId,
-      merchantRemark: item.merchantRemark || "",
-      isPriorityFollow: item.isPriorityFollow
+      merchantRemark: item.merchantRemark || ""
     });
     setCustomerKeyword(`${item.customerName}（${item.customerPhone}）`);
     loadAddresses(item.customerId);
@@ -144,6 +165,16 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
     loadAddresses(c.id);
   }
 
+  function toggleWeekDay(day: string) {
+    const current = new Set(form.weekDays.split(",").map((item) => item.trim()).filter(Boolean));
+    if (current.has(day)) {
+      current.delete(day);
+    } else {
+      current.add(day);
+    }
+    setForm({ ...form, weekDays: Array.from(current).sort().join(",") });
+  }
+
   async function handleSubmit() {
     if (!form.customerId) {
       toast("请选择客户", "error");
@@ -159,6 +190,10 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
     }
     if (!form.lunchEnabled && !form.dinnerEnabled) {
       toast("至少启用午餐或晚餐之一", "error");
+      return;
+    }
+    if (!form.weekDays || form.weekDays.split(",").filter(Boolean).length === 0) {
+      toast("请至少勾选一个每周配送日", "error");
       return;
     }
     if (addresses.length === 0) {
@@ -309,13 +344,18 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
                 value={form.startDate}
                 onChange={(d) => setForm({ ...form, startDate: d })}
                 showTomorrowShortcut={false}
+                minDate={formatTomorrowDate()}
               />
               <span style={{ color: "var(--text-sub)", fontSize: "13px", flexShrink: 0 }}>至</span>
               <DatePicker
                 value={form.endDate}
                 onChange={(d) => setForm({ ...form, endDate: d })}
                 showTomorrowShortcut={false}
+                minDate={form.startDate || formatTomorrowDate()}
               />
+            </div>
+            <div style={{ marginTop: "6px", fontSize: "12px", color: "var(--text-sub)" }}>
+              最早从明天开始生效（今天不可开始）；结束日期当天正常配送。
             </div>
           </div>
 
@@ -343,7 +383,7 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
                     type="checkbox"
                     checked={form.lunchEnabled}
                     onChange={(e) => setForm({ ...form, lunchEnabled: e.target.checked })}
-                    style={{ width: "16px", height: "16px", accentColor: "var(--primary-color)" }}
+                    style={{ width: "18px", height: "18px", accentColor: "var(--primary-color)" }}
                   />
                   <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-main)" }}>午餐</span>
                   <span style={{
@@ -389,7 +429,7 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
                     type="checkbox"
                     checked={form.dinnerEnabled}
                     onChange={(e) => setForm({ ...form, dinnerEnabled: e.target.checked })}
-                    style={{ width: "16px", height: "16px", accentColor: "var(--primary-color)" }}
+                    style={{ width: "18px", height: "18px", accentColor: "var(--primary-color)" }}
                   />
                   <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-main)" }}>晚餐</span>
                   <span style={{
@@ -421,6 +461,44 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* 每周配送日 */}
+          <div className="form-group" style={{ marginBottom: 0 }}>
+            <label className="form-label">每周配送日</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+              {WEEK_DAY_OPTIONS.map((option) => {
+                const checked = form.weekDays.split(",").includes(option.value);
+                return (
+                  <label
+                    key={option.value}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      padding: "6px 12px",
+                      borderRadius: "999px",
+                      cursor: "pointer",
+                      border: checked ? "1px solid var(--primary-color)" : "1px solid rgba(203,213,225,0.8)",
+                      background: checked ? "rgba(239,246,255,0.8)" : "transparent"
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleWeekDay(option.value)}
+                      style={{ width: "18px", height: "18px", accentColor: "var(--primary-color)" }}
+                    />
+                    <span style={{ fontSize: "13px", fontWeight: checked ? 600 : 400, color: "var(--text-main)" }}>
+                      {option.label}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: "6px", fontSize: "12px", color: "var(--text-sub)" }}>
+              只在勾选的星期几生成订单并扣餐；店铺休息日（菜单排期标为休息）自动跳过，不扣餐。
             </div>
           </div>
 
@@ -509,20 +587,6 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
               onValueChange={(value) => setForm({ ...form, merchantRemark: value })}
               placeholder="计划期内自动生成的每一单都会带上"
             />
-          </div>
-
-          {/* 优先跟进 */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <input
-              type="checkbox"
-              id="priority-follow"
-              checked={form.isPriorityFollow}
-              onChange={(e) => setForm({ ...form, isPriorityFollow: e.target.checked })}
-              style={{ width: "16px", height: "16px", accentColor: "var(--primary-color)" }}
-            />
-            <label htmlFor="priority-follow" style={{ fontSize: "14px", color: "var(--text-main)", cursor: "pointer" }}>
-              优先跟进
-            </label>
           </div>
 
         </div>

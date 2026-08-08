@@ -68,6 +68,15 @@
         </view>
       </view>
 
+      <!-- 参考图直接展示，无需点击即可看到 -->
+      <view wx:if="{{hasReferenceImage && referenceImageUrl}}" class="reference-inline" bindtap="previewReferenceImage">
+        <image class="reference-inline-img" src="{{referenceImageUrl}}" mode="aspectFill" lazy-load="{{true}}"></image>
+        <view class="reference-inline-hint">
+          <text class="material-symbols-outlined reference-inline-hint-icon">🔍</text>
+          <text class="reference-inline-hint-text">点击查看大图</text>
+        </view>
+      </view>
+
       <view class="customer-info">
         <view class="customer-details">
           <text class="customer-name">{{order.customerName}}{{order.quantity > 1 ? ' ×' + order.quantity : ''}}</text>

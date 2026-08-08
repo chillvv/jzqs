@@ -1,17 +1,19 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { LayoutDashboard, MapPinned, UserCog } from "lucide-react";
+import { LayoutDashboard, MapPinned, UserCog, Hourglass } from "lucide-react";
 import { buildDispatchWorkspaceNav, DispatchMealPeriod, mealPeriodLabel } from "./dispatchCenterLayout.helpers";
 import { DispatchProvider, useDispatchContext } from "./DispatchContext";
 import { DatePicker } from "../../shared/components/DatePicker";
 
 const navIcons: Record<string, React.ComponentType<{ size?: number | string }>> = {
-  "配送工作台": LayoutDashboard,
+  "分单工作台": LayoutDashboard,
+  "骑手进度": LayoutDashboard,
   "区域管理": MapPinned,
-  "骑手管理": UserCog
+  "骑手管理": UserCog,
+  "待释放送达": Hourglass
 };
 
-// 骑手管理页不需要日期/餐期筛选
-const DATE_FILTER_HIDDEN_PATHS = ["/dispatch/riders"];
+// 骑手管理、待释放送达页不需要日期/餐期筛选
+const DATE_FILTER_HIDDEN_PATHS = ["/dispatch/riders", "/dispatch/release"];
 
 function DispatchCenterInner() {
   const navItems = buildDispatchWorkspaceNav();
