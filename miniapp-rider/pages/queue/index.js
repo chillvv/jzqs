@@ -8,6 +8,8 @@ const { createWorkbenchDateOptions, formatDateYMD } = require('../../utils/forma
 const { resolveQueueItemIdentity, resolveQueueItemRequestId } = require('../../utils/rider-queue');
 const { resolveMediaUrl } = require('../../utils/media-url');
 const realtime = require('../../utils/realtime');
+const guide = require('../../utils/guide');
+const demo = require('../../utils/demo');
 const AUTO_REFRESH_MS = 8000;
 
 function buildWorkbenchDateState(selectedDate) {
@@ -31,6 +33,7 @@ Page({
     statusBarHeight: 0,
     navBarHeight: 0,
     loading: false,
+    demoActive: false,
     viewState: 'checking',
     isEditMode: false,
     batchReferenceMode: false,
@@ -101,9 +104,58 @@ Page({
       app.globalData.queueMealFilter = null;
     }
 
+    if (guide.shouldShow('rider_queue_v1') && !demo.isActive()) {
+      demo.start();
+    }
     this.startAutoRefresh();
     this.startRealtimeSync();
+    await this.loadQueue();
+    this.showGuide();
+  },
+
+  showGuide() {
+    const steps = [
+      { selector: '.gm-never', centered: true, title: '骑手工作台', desc: '这里是你当天要送的订单。演示环境里订单都是假的，花 20 秒了解怎么传图回执，随时可点「跳过」。' },
+      { selector: '.batch-btn-inline', fallbacks: ['.batch-action', '.order-action-bar'], title: '批量传图', desc: '同一楼栋的多笔订单，可批量上传同一张参考图，省时省力。' },
+      { selector: '.order-card', fallbacks: ['.queue-list', '.workbench', '.order-list'], title: '点订单进详情', desc: '点任意订单卡片进入详情，上传送达照片作为回执。' }
+    ];
+    this.setData({ demoActive: demo.isActive() });
+    guide.runGuide(this, 'rider_queue_v1', steps, '#185FA5', {
+      interactive: demo.isActive(),
+      onSkip: () => {
+        guide.markAllDismissed();
+        demo.end();
+        this.setData({ demoActive: false });
+      },
+      onDone: () => {
+        demo.end();
+        this.setData({ demoActive: false });
+      }
+    });
+  },
+
+  applyDemoQueue() {
+    const items = demo.getMockQueueItems();
+    this.setData({
+      allItems: items,
+      queueError: false,
+      queueErrorMessage: '',
+      demoActive: true,
+      loading: false
+    });
+    this.calculateMealStats(items);
+    this.filterCurrentMealItems();
+  },
+
+  exitDemo() {
+    demo.end();
+    this.setData({ demoActive: false });
     this.loadQueue();
+  },
+
+  hideGuideMask() {
+    const comp = this.selectComponent('#guideMask');
+    if (comp) comp.hide();
   },
 
   onHide() {
@@ -138,6 +190,10 @@ Page({
 
   async loadQueue(options = {}) {
     const { silent = false } = options;
+    if (demo.isActive()) {
+      this.applyDemoQueue();
+      return;
+    }
     const app = getApp();
     const riderName = app.getActiveRiderName();
     const serveDate = this.data.selectedDate || formatDateYMD();
@@ -269,15 +325,26 @@ Page({
         ? item.hasAttentionMark
         : fallbackNeedAttention;
 
+      const resolvedReferenceUrl = item.referenceImageUrl
+        ? resolveMediaUrl(item.referenceImageUrl, apiBaseUrl)
+        : '';
+      const resolvedReceiptUrl = item.receiptUrl
+        ? resolveMediaUrl(item.receiptUrl, apiBaseUrl)
+        : '';
+      const showDeliveryPhoto = item.itemStatus === 'DELIVERED' && resolvedReceiptUrl;
+      const displayThumbUrl = showDeliveryPhoto ? resolvedReceiptUrl : resolvedReferenceUrl;
+      const displayThumbLabel = showDeliveryPhoto ? '送达图' : '参考图';
+
       return {
         ...item,
-        referenceImageUrl: item.referenceImageUrl
-          ? resolveMediaUrl(item.referenceImageUrl, apiBaseUrl)
-          : '',
+        referenceImageUrl: resolvedReferenceUrl,
+        receiptUrl: resolvedReceiptUrl,
+        displayThumbUrl,
+        displayThumbLabel,
         queueItemIdentity: resolveQueueItemIdentity(item),
         detailItemId: resolveQueueItemRequestId(item.batchItemId, item.mealSlotOrderId),
         attentionSources,
-        attentionLabel: item.attentionLabel || (needAttention ? '需留意' : ''),
+        attentionLabel: item.attentionLabel || (needAttention ? '有备注' : ''),
         needAttention,
         hasRemark: needAttention,
         batchSelected: selectedSet.has(resolveQueueItemIdentity(item))
@@ -392,6 +459,10 @@ Page({
   },
 
   async handleBatchReferenceUpload() {
+    if (demo.isActive()) {
+      wx.showToast({ title: '演示模式：批量传图仅展示，不会真实上传', icon: 'none' });
+      return;
+    }
     const { batchSubmitting, selectedReferenceItemIds, currentMealItems } = this.data;
     if (batchSubmitting) return;
     if (!selectedReferenceItemIds.length) {
@@ -572,6 +643,10 @@ Page({
   },
 
   async saveOrderSequence() {
+    if (demo.isActive()) {
+      wx.showToast({ title: '演示模式：排序仅展示，不会真实保存', icon: 'none' });
+      return;
+    }
     const { currentMealItems, currentMealPeriod } = this.data;
     const app = getApp();
     const riderName = app.getActiveRiderName();
@@ -593,7 +668,11 @@ Page({
     if (this.data.isEditMode || this.data.dragging) {
       return;
     }
-    
+
+    if (demo.isActive()) {
+      this.hideGuideMask();
+    }
+
     const itemId = Number(e.currentTarget.dataset.itemId);
     const item = this.data.currentMealItems.find(i => i.detailItemId === itemId);
     if (!item) return;

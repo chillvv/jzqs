@@ -1,0 +1,27 @@
+<view wx:if="{{visible}}" class="gm-root {{interactive ? 'gm-root--interactive' : ''}}" catchtap="onMaskTap">
+  <view
+    class="gm-dim"
+    wx:for="{{maskRects}}"
+    wx:key="index"
+    style="left:{{item.left}}px;top:{{item.top}}px;width:{{item.width}}px;height:{{item.height}}px;"
+  ></view>
+  <view
+    wx:if="{{!centered}}"
+    class="gm-ring"
+    style="left:{{hole.left}}px;top:{{hole.top}}px;width:{{hole.width}}px;height:{{hole.height}}px;box-shadow:0 0 0 2px {{accent}};"
+  ></view>
+  <view
+    class="gm-tip"
+    catchtap="noop"
+    style="left:{{tip.left}}px;top:{{tip.top}}px;width:{{tip.width}}px;"
+  >
+    <view wx:if="{{!centered}}" class="gm-arrow gm-arrow-{{placement}}" style="left:{{arrowLeft}}px;"></view>
+    <view class="gm-count">{{current+1}} / {{total}}</view>
+    <view class="gm-tip-title">{{step.title}}</view>
+    <view class="gm-tip-desc">{{step.desc}}</view>
+    <view class="gm-tip-actions">
+      <text class="gm-skip" catchtap="onSkip">跳过</text>
+      <view class="gm-next" catchtap="next" style="background:{{accent}};">{{isLast ? '完成' : '下一步'}}</view>
+    </view>
+  </view>
+</view>

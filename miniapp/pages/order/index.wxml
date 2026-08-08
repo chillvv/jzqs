@@ -15,7 +15,7 @@
       <view class="menu-top-title">预订明日餐食</view>
       <view class="menu-top-row">
         <view class="date-tag">{{serveDateText}}</view>
-        <view class="menu-top-desc">{{canOrder ? '提前一天预订，保证食材新鲜' : statusText}}</view>
+        <view class="menu-top-desc">{{canOrder ? '提前一天预订，保证食材新鲜' : ''}}</view>
       </view>
     </view>
 
@@ -234,5 +234,27 @@
     </view>
     <button class="inline-auth-sheet__primary" bindtap="goProfileAuth">手机号快捷登录</button>
   </view>
+
+  <!-- 下单成功弹窗 -->
+  <view class="success-mask {{showOrderSuccess ? 'show' : ''}}" wx:if="{{showOrderSuccess}}" bindtap="closeOrderSuccess">
+    <view class="success-card" catchtap="noop">
+      <view class="success-icon">✓</view>
+      <view class="success-title">预订成功</view>
+      <view class="success-desc">{{orderSuccessMsg}}</view>
+      <view class="success-tip">
+        <view class="success-tip-head">🛵 联系骑手小贴士</view>
+        <view class="success-tip-body">配送途中遇到延误、送错或位置不清等情况，直接拨打骑手电话最快解决。</view>
+      </view>
+      <view class="success-actions">
+        <button class="success-btn ghost" bindtap="closeOrderSuccess">继续逛逛</button>
+        <button class="success-btn primary" bindtap="confirmOrderSuccess">查看预订</button>
+      </view>
+    </view>
+  </view>
   <view class="tabbar-spacer"></view>
 </view>
+
+<!-- 新手演示模式：退出浮窗 -->
+<view wx:if="{{demoActive}}" class="demo-exit-fab" catchtap="exitDemo">退出演示</view>
+
+<guide-mask id="guideMask" />

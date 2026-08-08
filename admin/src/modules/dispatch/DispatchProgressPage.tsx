@@ -338,7 +338,7 @@ export function DispatchProgressPage() {
                         </span>
                       </div>
                       <div className="dispatch-chip-list">
-                        {hasOrderAttention(order) && <span className="tag tag-amber">需留意</span>}
+                        {hasOrderAttention(order) && <span className="tag tag-amber">有备注</span>}
                         {hasDisplayValue(order.userNote) && <span className="tag tag-gray">用户备注</span>}
                         {hasDisplayValue(order.merchantRemark) && <span className="tag tag-gray">商家备注</span>}
                         {hasDisplayValue(order.referenceImageUrl) && <span className="tag tag-gray">参照图</span>}

@@ -11,6 +11,8 @@ const { resolveMediaUrl } = require('../../utils/media-url');
 const { formatCurrentDateTime, formatDateMMDD, formatDateYMD, getMealPeriodLabel } = require('../../utils/formatter');
 const { EXCEPTION_TYPE_OPTIONS } = require('../../utils/constants');
 const realtime = require('../../utils/realtime');
+const guide = require('../../utils/guide');
+const demo = require('../../utils/demo');
 
 function isStoredReceiptReference(value) {
   return /^https?:\/\//i.test(value) || value.startsWith('cloud://') || value.startsWith('/uploads/');
@@ -39,9 +41,9 @@ Page({
     referenceUploading: false,
     referenceImageUrl: '',
     hasReferenceImage: false,
-    showReferenceSheet: false,
     refreshInterval: null,
-    currentDateLabel: ''
+    currentDateLabel: '',
+    demoActive: false
   },
 
   /**
@@ -70,7 +72,7 @@ Page({
         return;
       }
       if (!this._isPaused() && this.data.order) {
-        this.loadOrderDetail(this.data.order.batchItemId, this.data.order.mealSlotOrderId);
+        this.loadOrderDetail(this.data.order.batchItemId, this.data.order.mealSlotOrderId, { silent: true });
       }
     }, 8000);
   },
@@ -94,7 +96,7 @@ Page({
       if (this._isPaused() || !this.data.order) {
         return;
       }
-      this.loadOrderDetail(this.data.order.batchItemId, this.data.order.mealSlotOrderId);
+      this.loadOrderDetail(this.data.order.batchItemId, this.data.order.mealSlotOrderId, { silent: true });
     });
   },
 
@@ -109,8 +111,8 @@ Page({
    * 判断是否暂停刷新（有进行中的交互）
    */
   _isPaused() {
-    const { submitting, deferring, isEditingReceipt, referenceUploading, showReferenceSheet } = this.data;
-    return submitting || deferring || isEditingReceipt || referenceUploading || showReferenceSheet;
+    const { submitting, deferring, isEditingReceipt, referenceUploading } = this.data;
+    return submitting || deferring || isEditingReceipt || referenceUploading;
   },
 
   _syncCurrentDateLabel() {
@@ -157,31 +159,74 @@ Page({
     }
 
     await this.loadOrderDetail(Number(batchItemId), Number(mealSlotOrderId));
+    this.showGuide();
+  },
+
+  showGuide() {
+    const steps = [
+      { selector: '.gm-never', centered: true, title: '送达回执怎么传', desc: '送达后在这里拍一张照片作为回执。下面两步带你过一遍，演示环境不会真实上传，随时可点「跳过」。' },
+      { selector: '.photo-upload-btn', fallbacks: ['.delivery-section', '.detail-body', '.receipt-area'], title: '上传送达照片', desc: '点这里拍照或选图，作为送达回执留证。' },
+      { selector: '.reference-summary-action', fallbacks: ['.reference-summary', '.reference-area'], title: '保存参考图', desc: '也可为这个地址存一张参考图，下次直接复用，不用重复拍。' }
+    ];
+    this.setData({ demoActive: demo.isActive() });
+    guide.runGuide(this, 'rider_order_detail_v1', steps, '#185FA5', {
+      interactive: demo.isActive(),
+      onSkip: () => {
+        guide.markAllDismissed();
+        this.finishDemo();
+      },
+      onDone: () => {
+        this.finishDemo();
+      }
+    });
+  },
+
+  finishDemo() {
+    try {
+      wx.removeStorageSync('demo_active_r1');
+    } catch (e) {}
+    this.setData({ demoActive: false });
+    wx.navigateBack();
   },
 
   /**
    * 加载订单详情
    */
-  async loadOrderDetail(batchItemId, mealSlotOrderId) {
+  async loadOrderDetail(batchItemId, mealSlotOrderId, options = {}) {
+    const { silent = false } = options;
+    if (demo.isActive()) {
+      this.applyDemoDetail(batchItemId, mealSlotOrderId);
+      return;
+    }
     const app = getApp();
     const riderName = app.getActiveRiderName();
     const serveDate = app.getWorkbenchDate() || formatDateYMD();
 
     if (!riderName) {
-      wx.showToast({ title: '骑手信息未就绪', icon: 'none' });
-      setTimeout(() => wx.navigateBack(), 1500);
+      if (!silent) {
+        wx.showToast({ title: '骑手信息未就绪', icon: 'none' });
+        setTimeout(() => wx.navigateBack(), 1500);
+      }
       return;
     }
 
-    this.setData({ loading: true });
+    // 防止并发刷新互相覆盖（轮询 + 实时消息可能同时触发）
+    if (this._detailLoading) return;
+    this._detailLoading = true;
+
+    if (!silent) {
+      this.setData({ loading: true });
+    }
 
     try {
       // 直接查单个订单详情，不依赖全量队列数据
       const order = await taskService.getOrderDetail(batchItemId, serveDate, mealSlotOrderId);
 
       if (!order) {
-        wx.showToast({ title: '订单不存在', icon: 'none' });
-        setTimeout(() => wx.navigateBack(), 1500);
+        if (!silent) {
+          wx.showToast({ title: '订单不存在', icon: 'none' });
+          setTimeout(() => wx.navigateBack(), 1500);
+        }
         return;
       }
 
@@ -194,6 +239,12 @@ Page({
         merchantNote: normalizeOptionalText(order.merchantNote || order.adminNote),
         receiptNote: normalizeOptionalText(order.receiptNote)
       };
+
+      // 无感刷新：只更新订单数据，保留用户的编辑态与参考图，不触发 loading 闪烁
+      if (silent) {
+        this.setData({ order: normalizedOrder, loading: false });
+        return;
+      }
 
       let isEditingReceipt = false;
       let originalReceiptUrl = '';
@@ -216,16 +267,48 @@ Page({
         referenceImageLoading: false,
         referenceUploading: false,
         referenceImageUrl: '',
-        hasReferenceImage: false,
-        showReferenceSheet: false
+        hasReferenceImage: false
       });
       this.loadReferenceImage({ silent: true });
 
     } catch (error) {
       console.error('[订单详情] 加载失败', error);
-      wx.showToast({ title: error.message || '加载失败', icon: 'none' });
-      setTimeout(() => wx.navigateBack(), 1500);
+      if (!silent) {
+        wx.showToast({ title: error.message || '加载失败', icon: 'none' });
+        setTimeout(() => wx.navigateBack(), 1500);
+      }
+    } finally {
+      this._detailLoading = false;
     }
+  },
+
+  /**
+   * 演示模式：用沙盒假数据填充详情，绝不调真实接口
+   */
+  applyDemoDetail(batchItemId, mealSlotOrderId) {
+    const order = demo.getMockOrderDetail(batchItemId, mealSlotOrderId);
+    const app = getApp();
+    const normalizedOrder = {
+      ...order,
+      receiptUrl: resolveMediaUrl(order.receiptUrl, app.globalData.apiBaseUrl),
+      mealLabel: getMealPeriodLabel(order.mealPeriod),
+      customerNote: normalizeOptionalText(order.customerNote || order.note),
+      merchantNote: normalizeOptionalText(order.merchantNote || order.adminNote),
+      receiptNote: normalizeOptionalText(order.receiptNote)
+    };
+    this.setData({
+      order: normalizedOrder,
+      loading: false,
+      isEditingReceipt: false,
+      originalReceiptUrl: '',
+      receiptTempFilePath: normalizedOrder.receiptUrl || '',
+      receiptNote: normalizedOrder.receiptNote || '',
+      referenceImageLoading: false,
+      referenceUploading: false,
+      referenceImageUrl: '',
+      hasReferenceImage: false,
+      demoActive: true
+    });
   },
 
   /**
@@ -374,20 +457,6 @@ Page({
     }
   },
 
-  async handleViewReferenceImage() {
-    const { order } = this.data;
-    if (!order || !order.addressId) {
-      wx.showToast({ title: '当前地址不可用', icon: 'none' });
-      return;
-    }
-    this.setData({ showReferenceSheet: true });
-    await this.loadReferenceImage({ silent: true });
-  },
-
-  closeReferenceSheet() {
-    this.setData({ showReferenceSheet: false });
-  },
-
   previewReferenceImage() {
     const { referenceImageUrl } = this.data;
     if (!referenceImageUrl) {
@@ -398,6 +467,10 @@ Page({
   },
 
   async handleUploadReferenceImage() {
+    if (demo.isActive()) {
+      wx.showToast({ title: '演示保存参考图（未真实上传）', icon: 'none' });
+      return;
+    }
     const { order, referenceImageLoading, referenceUploading } = this.data;
     if (referenceImageLoading || referenceUploading) return;
     if (!order || !order.addressId) {
@@ -512,6 +585,10 @@ Page({
    * 删除已提交的回执照片
    */
   async deleteSubmittedReceipt() {
+    if (demo.isActive()) {
+      wx.showToast({ title: '演示删除回执（未真实提交）', icon: 'none' });
+      return;
+    }
     const { order } = this.data;
     if (!order || order.itemStatus !== 'DELIVERED') {
       wx.showToast({ title: '该订单未送达', icon: 'none' });
@@ -581,6 +658,10 @@ Page({
    * 提交送达回执
    */
   async handleSubmitReceipt() {
+    if (demo.isActive()) {
+      wx.showToast({ title: '演示提交成功（未真实上传）', icon: 'none' });
+      return;
+    }
     const { order, receiptTempFilePath, receiptNote, submitting, isEditingReceipt } = this.data;
 
     if (submitting) return;
@@ -672,6 +753,10 @@ Page({
    * 撤回送达（允许骑手修改误触的送达状态）
    */
   async handleUndoDelivery() {
+    if (demo.isActive()) {
+      wx.showToast({ title: '演示撤回送达（未真实提交）', icon: 'none' });
+      return;
+    }
     const { order } = this.data;
 
     if (!order || order.itemStatus !== 'DELIVERED') {
@@ -724,6 +809,10 @@ Page({
    * 稍后送这单
    */
   async handleDefer() {
+    if (demo.isActive()) {
+      wx.showToast({ title: '演示稍后送（未真实提交）', icon: 'none' });
+      return;
+    }
     const { order, deferring } = this.data;
 
     if (deferring) return;
@@ -776,6 +865,10 @@ Page({
    * 上报异常
    */
   async handleReportException() {
+    if (demo.isActive()) {
+      wx.showToast({ title: '演示上报异常（未真实提交）', icon: 'none' });
+      return;
+    }
     const { order } = this.data;
 
     if (!order) {

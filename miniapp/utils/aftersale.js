@@ -1,4 +1,4 @@
-const { canCancelMiniappOrder } = require("./order-guards");
+const { canCancelMiniappOrder, resolveSupportRefundStage } = require("./order-guards");
 const { request } = require("./request");
 const { statusLabel, transactionLabel } = require("./mobile");
 
@@ -7,10 +7,21 @@ function resolveOrderActions({ status, userVisibleStatus, serveDate, now, afterS
   if (afterSaleOpen) {
     return { canCancel: false, canApplyAftersale: false, isAftersaleProcessing: true, actionText: "处理中" };
   }
+  // 前一天 23:00 之前：允许自助秒退款
   if (canCancelMiniappOrder({ status: visibleStatus, serveDate, now })) {
     return { canCancel: true, canApplyAftersale: false, actionText: "取消订单" };
   }
-  if (visibleStatus === "PENDING_DISPATCH" || visibleStatus === "DELIVERED") {
+  // 送餐当天未送达：不给自助退款，引导联系客服
+  const supportRefundStage = resolveSupportRefundStage({ status: visibleStatus, serveDate, now });
+  if (supportRefundStage) {
+    return {
+      canCancel: false,
+      canApplyAftersale: false,
+      supportRefundStage,
+      actionText: "申请退款"
+    };
+  }
+  if (visibleStatus === "DELIVERED") {
     return { canCancel: false, canApplyAftersale: true, actionText: "申请售后" };
   }
   return { canCancel: false, canApplyAftersale: false, actionText: "" };

@@ -955,6 +955,13 @@ export async function updateHolidayNotice(title: string, description: string) {
   return response.data.data;
 }
 
+export async function updateRestNoticeTemplate(template: string) {
+  const response = await http.post<ApiResponse<OperationSettingsResponse>>("/api/admin/settings/rest-notice-template", {
+    template
+  });
+  return response.data.data;
+}
+
 export async function updateBannerImages(bannerImages: string, bannerIntervalSeconds: number) {
   try {
     const response = await http.post<ApiResponse<OperationSettingsResponse>>("/api/admin/settings/banner-images", {
@@ -1038,6 +1045,14 @@ export async function cancelOrder(orderId: number) {
 
 export async function deleteOrder(orderId: number) {
   const response = await http.post<ApiResponse<{ orderId: number; status: string }>>(`/api/admin/orders/${orderId}/delete`);
+  return response.data.data;
+}
+
+export async function changeOrderAddress(orderId: number, payload: { addressId: number; customerId?: number | null }) {
+  const response = await http.post<ApiResponse<{ orderId: number; addressId: number; status: string }>>(
+    `/api/admin/orders/${orderId}/change-address`,
+    payload
+  );
   return response.data.data;
 }
 

@@ -259,11 +259,12 @@ export type OrderPrepItemResponse = {
   canAssign: boolean;
   canCancel: boolean;
   canReceipt: boolean;
-  walletStatusLabel: string;
   referenceImageUrl?: string;
   receiptUrl?: string;
   receiptNote?: string;
   deliveredAt?: string | null;
+  customerId?: number;
+  serveDate?: string;
 };
 
 export type AdminAftersaleItemResponse = {
@@ -591,6 +592,7 @@ export type OperationSettingsResponse = {
   deliverySubscribeDinnerTime: string;
   popupAnnouncementEnabled: boolean;
   popupAnnouncementContent: string;
+  restNoticeTemplate: string;
 };
 
 export type DispatchAiSettingsResponse = {

@@ -113,8 +113,9 @@ public class SettingsServiceImpl implements SettingsService {
                        delivery_subscribe_enabled,
                        delivery_subscribe_lunch_time,
                        delivery_subscribe_dinner_time,
-                       popup_announcement_enabled,
-                       popup_announcement_content
+                popup_announcement_enabled,
+                popup_announcement_content,
+                COALESCE(rest_notice_template, '') AS rest_notice_template
                 FROM admin_settings
                 WHERE id = 1
                 """,
@@ -131,7 +132,8 @@ public class SettingsServiceImpl implements SettingsService {
                 rs.getObject("delivery_subscribe_lunch_time"),
                 rs.getObject("delivery_subscribe_dinner_time"),
                 rs.getBoolean("popup_announcement_enabled"),
-                rs.getString("popup_announcement_content")
+                rs.getString("popup_announcement_content"),
+                rs.getString("rest_notice_template")
             )
         );
         boolean orderingEnabled = settings != null && settings.orderingEnabled();
@@ -150,7 +152,8 @@ public class SettingsServiceImpl implements SettingsService {
             normalizeTimeSetting(settings == null ? null : settings.deliverySubscribeLunchTime(), DEFAULT_DELIVERY_SUBSCRIBE_LUNCH_TIME),
             normalizeTimeSetting(settings == null ? null : settings.deliverySubscribeDinnerTime(), DEFAULT_DELIVERY_SUBSCRIBE_DINNER_TIME),
             settings != null && settings.popupAnnouncementEnabled(),
-            safeString(settings == null ? null : settings.popupAnnouncementContent())
+            safeString(settings == null ? null : settings.popupAnnouncementContent()),
+            safeString(settings == null ? null : settings.restNoticeTemplate())
         );
     }
 
@@ -553,6 +556,18 @@ public class SettingsServiceImpl implements SettingsService {
     @Transactional
     public OperationSettingsResponse updateHolidayNotice(String title, String desc) {
         jdbcTemplate.update("UPDATE admin_settings SET holiday_notice_title = ?, holiday_notice_desc = ?, updated_at = ? WHERE id = 1", title, desc, Timestamp.valueOf(LocalDateTime.now()));
+        publishHomeEvent("system.announcement.changed");
+        return operationSettings();
+    }
+
+    @Override
+    @Transactional
+    public OperationSettingsResponse updateRestNoticeTemplate(String template) {
+        String normalized = safeString(template).trim();
+        if (normalized.length() > 255) {
+            normalized = normalized.substring(0, 255);
+        }
+        jdbcTemplate.update("UPDATE admin_settings SET rest_notice_template = ?, updated_at = ? WHERE id = 1", normalized, Timestamp.valueOf(LocalDateTime.now()));
         publishHomeEvent("system.announcement.changed");
         return operationSettings();
     }
@@ -1270,7 +1285,8 @@ public class SettingsServiceImpl implements SettingsService {
         Object deliverySubscribeLunchTime,
         Object deliverySubscribeDinnerTime,
         boolean popupAnnouncementEnabled,
-        String popupAnnouncementContent
+        String popupAnnouncementContent,
+        String restNoticeTemplate
     ) {
     }
 

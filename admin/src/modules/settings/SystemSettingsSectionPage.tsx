@@ -17,6 +17,7 @@ import {
   updateDispatchAiWorkbench,
   updatePackageReminderSettings,
   updatePopupAnnouncement,
+  updateRestNoticeTemplate,
   uploadBannerImage,
   simulateRouteLab,
   deleteDispatchAiJobLogs
@@ -156,7 +157,8 @@ export function SystemSettingsSectionPage() {
     deliverySubscribeLunchTime: "11:30",
     deliverySubscribeDinnerTime: "17:30",
     popupAnnouncementEnabled: false,
-    popupAnnouncementContent: ""
+    popupAnnouncementContent: "",
+    restNoticeTemplate: ""
   });
 
   const [popupForm, setPopupForm] = useState(EMPTY_POPUP);
@@ -174,7 +176,7 @@ export function SystemSettingsSectionPage() {
   const [areaMemoryForm, setAreaMemoryForm] = useState(EMPTY_AREA_MEMORY_FORM);
   const [areaMemorySourceData, setAreaMemorySourceData] = useState<DispatchAreaMemorySourceListResponse | null>(null);
 
-  const [modal, setModal] = useState<"banner" | "popup" | "packageReminder" | "routeWorkbench" | "aiConfig" | "productionRun" | "routeLab" | "areaMemoryHub" | "areaMemory" | "areaMemorySources" | null>(null);
+  const [modal, setModal] = useState<"banner" | "popup" | "packageReminder" | "routeWorkbench" | "aiConfig" | "productionRun" | "routeLab" | "areaMemoryHub" | "areaMemory" | "areaMemorySources" | "restNotice" | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [bannerUploading, setBannerUploading] = useState(false);
   const [popupSubmitting, setPopupSubmitting] = useState(false);
@@ -190,6 +192,8 @@ export function SystemSettingsSectionPage() {
   const [areaMemoryLoading, setAreaMemoryLoading] = useState(false);
   const [areaMemorySubmitting, setAreaMemorySubmitting] = useState(false);
   const [areaMemorySourceLoading, setAreaMemorySourceLoading] = useState(false);
+  const [restNoticeForm, setRestNoticeForm] = useState("");
+  const [restNoticeSubmitting, setRestNoticeSubmitting] = useState(false);
   const [selectedLogId, setSelectedLogId] = useState<number | null>(null);
   const [runTypeFilter, setRunTypeFilter] = useState<"PRODUCTION" | "TEST">("PRODUCTION");
   const [previewBannerImage, setPreviewBannerImage] = useState("");
@@ -304,6 +308,29 @@ export function SystemSettingsSectionPage() {
 
   function closeModal() {
     setModal(null);
+  }
+
+  function openRestNotice() {
+    setRestNoticeForm(settings.restNoticeTemplate || "");
+    openModal("restNotice");
+  }
+
+  async function submitRestNotice() {
+    const template = restNoticeForm.trim();
+    if (!template) {
+      toast("休息提示模板不能为空", "error");
+      return;
+    }
+    setRestNoticeSubmitting(true);
+    try {
+      setSettings(await updateRestNoticeTemplate(template));
+      closeModal();
+      toast("休息提示模板已更新");
+    } catch (err: any) {
+      showError(err);
+    } finally {
+      setRestNoticeSubmitting(false);
+    }
   }
 
   function openPopup() {
@@ -810,6 +837,24 @@ export function SystemSettingsSectionPage() {
           onOpenBanner={openBanner}
           onPreviewBanner={setPreviewBannerImage}
         />
+        <div className="settings-card" style={{ marginTop: 16 }}>
+          <div className="settings-card__title">
+            <Megaphone size={18} /> 休息提示模板
+          </div>
+          <div className="settings-card__body">
+            <div className="settings-card__detail">
+              周菜单把某天设为「休息」时自动套用，也可针对当天单独改写。
+            </div>
+            <div className="settings-card__detail settings-card__detail--sub">
+              当前模板：{settings.restNoticeTemplate || "（未设置）"}
+            </div>
+          </div>
+          <div className="settings-card__actions">
+            <button className="btn btn-outline" style={{ width: "100%" }} onClick={openRestNotice}>
+              编辑休息提示模板
+            </button>
+          </div>
+        </div>
       </>
     );
   }
@@ -1678,6 +1723,34 @@ export function SystemSettingsSectionPage() {
           {!bannerForm.length && (
             <div className="banner-grid__empty">暂未上传轮播图</div>
           )}
+        </div>
+      </SettingsModal>
+
+      <SettingsModal
+        open={modal === "restNotice"}
+        title="编辑休息提示模板"
+        onClose={closeModal}
+        onSubmit={submitRestNotice}
+        submitLabel="保存模板"
+        submitting={restNoticeSubmitting}
+      >
+        <div className="settings-form-callout">
+          留空则用户端不展示默认休息语；保存后，下次在周菜单把某天设为「休息」会自动填入此模板，商家仍可针对当天单独修改。
+        </div>
+        <div className="form-group">
+          <label className="form-label">
+            <span className="required">*</span>休息提示模板
+          </label>
+          <SafeTextarea
+            className="form-control"
+            style={{ height: 120 }}
+            value={restNoticeForm}
+            onValueChange={setRestNoticeForm}
+            placeholder="例如：今日休息，不提供餐食"
+          />
+          <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 8 }}>
+            用户端展示上限 255 字；超出会自动截断。
+          </div>
         </div>
       </SettingsModal>
 

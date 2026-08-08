@@ -122,8 +122,15 @@ export function resolveOrderDisplayStatusLabel(status: string) {
   return "待配送";
 }
 
-export function resolveOrderStatusTone(status: string): "orange" | "blue" | "green" | "red" {
-  if (status === "REFUND_PROCESSING" || status === "REFUNDED" || status === "CANCELLED") {
+/**
+ * 状态配色与顾客端保持同一套语义：
+ * 待配送=橙、配送中=蓝、已送达=绿、退款相关=红（需要注意）、已取消=灰（弱化）。
+ */
+export function resolveOrderStatusTone(status: string): "orange" | "blue" | "green" | "red" | "gray" {
+  if (status === "CANCELLED") {
+    return "gray";
+  }
+  if (status === "REFUND_PROCESSING" || status === "REFUNDED") {
     return "red";
   }
   if (status === "DISPATCHING") {

@@ -14,6 +14,7 @@ public record OperationSettingsResponse(
     String deliverySubscribeLunchTime,
     String deliverySubscribeDinnerTime,
     boolean popupAnnouncementEnabled,
-    String popupAnnouncementContent
+    String popupAnnouncementContent,
+    String restNoticeTemplate
 ) {
 }

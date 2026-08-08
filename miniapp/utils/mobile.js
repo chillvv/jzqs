@@ -11,29 +11,45 @@ function periodLabel(mealPeriod) {
   return mealPeriod === 'DINNER' ? '晚餐' : '午餐';
 }
 
+// 用户端只对外呈现两个履约状态：待配送 / 已送达。
+// 后台与骑手端仍保留 DISPATCHING / DISPATCHED 等细分状态用于调度，
+// 但对顾客而言「没送到」就是待配送，不再区分是否已分配骑手。
+const CUSTOMER_UNDELIVERED_STATUSES = ['PENDING_DISPATCH', 'DISPATCHING', 'DISPATCHED'];
+
+function normalizeCustomerStatus(status) {
+  if (CUSTOMER_UNDELIVERED_STATUSES.indexOf(status) !== -1) {
+    return 'PENDING_DISPATCH';
+  }
+  return status;
+}
+
+function isUndeliveredStatus(status) {
+  return CUSTOMER_UNDELIVERED_STATUSES.indexOf(status) !== -1;
+}
+
 function statusLabel(status) {
-  switch (status) {
+  switch (normalizeCustomerStatus(status)) {
     case 'PENDING_DISPATCH':
       return '待配送';
-    case 'DISPATCHING':
-      return '配送中';
     case 'DELIVERED':
       return '已送达';
     case 'CANCELLED':
       return '已取消';
+    case 'REFUNDED':
+      return '已退款';
     default:
       return status || '未知状态';
   }
 }
 
 function statusClass(status) {
-  switch (status) {
+  switch (normalizeCustomerStatus(status)) {
     case 'DELIVERED':
       return 'delivered';
-    case 'DISPATCHING':
-      return 'dispatching';
     case 'CANCELLED':
       return 'cancelled';
+    case 'REFUNDED':
+      return 'refunded';
     default:
       return 'pending';
   }
@@ -72,6 +88,9 @@ function transactionLabel(type) {
 }
 
 module.exports = {
+  CUSTOMER_UNDELIVERED_STATUSES,
+  normalizeCustomerStatus,
+  isUndeliveredStatus,
   formatMonthDay,
   periodLabel,
   statusLabel,

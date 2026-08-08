@@ -12,6 +12,9 @@ const {
   composeRemark,
   resolveInitialRemark
 } = require('../../utils/order-remark');
+const guide = require('../../utils/guide');
+const demo = require('../../utils/demo');
+const auth = require('../../utils/auth');
 
 function tomorrowDate() {
   const date = new Date();
@@ -79,7 +82,11 @@ Page({
     showInlineAuth: false,
     pendingAction: '',
     statusBarHeight: 0,
-    navBarHeight: 44
+    navBarHeight: 44,
+    showOrderSuccess: false,
+    orderSuccessMsg: '',
+    orderSuccessIds: [],
+    demoActive: false
   },
 
   onLoad() {
@@ -97,6 +104,9 @@ Page({
       })
     }
     this.restoreRemarkDraft();
+    if (auth.globalData && auth.globalData.registered && guide.shouldShow('customer_order_v1') && !demo.isActive()) {
+      demo.start();
+    }
     this.loadOrderData();
   },
 
@@ -105,6 +115,13 @@ Page({
   },
 
   async loadOrderData() {
+    if (demo.isActive()) {
+      this.applyDemoOrderData();
+      this.setData({ loading: false });
+      wx.stopPullDownRefresh();
+      this.showGuide();
+      return;
+    }
     const app = getApp();
     await app.waitForAuth();
     this.setData({ loading: true });
@@ -156,7 +173,62 @@ Page({
     } finally {
       this.setData({ loading: false });
       wx.stopPullDownRefresh();
+      this.showGuide();
     }
+  },
+
+  showGuide() {
+    if (!(auth.globalData && auth.globalData.registered)) {
+      return;
+    }
+    const steps = [
+      { selector: '.gm-never', centered: true, title: '这一页就能下单', desc: '选好份数、点「去结算」即可。当前是演示环境，所有操作都不会真实提交或扣费。' },
+      { selector: '.meal-item', fallbacks: ['.meal-list', '.menu-area', '.order-content'], title: '选好餐品', desc: '点 + 选择午餐或晚餐的份数，价格会实时算好。' },
+      { selector: '.cart-bar', fallbacks: ['.bottom-bar', '.checkout-bar', '.submit-bar'], title: '去结算', desc: '选好后点这里完成下单，之后在「我的预订」里跟踪配送状态。' }
+    ];
+    this.setData({ demoActive: demo.isActive() });
+    guide.runGuide(this, 'customer_order_v1', steps, '#639922', {
+      interactive: demo.isActive(),
+      onSkip: () => {
+        guide.markAllDismissed();
+        demo.end();
+        this.setData({ demoActive: false });
+      },
+      onDone: () => {
+        demo.end();
+        this.setData({ demoActive: false });
+      }
+    });
+  },
+
+  applyDemoOrderData() {
+    const { serveDate, serveDateText, home, lunchItem, dinnerItem, menuItems, addresses } = demo.getMockOrderPageData();
+    const defaultAddress = addresses[0];
+    this.setData({
+      home,
+      isGuest: false,
+      serveDate,
+      serveDateText,
+      selfOrderEnabled: true,
+      selfOrderNotice: '',
+      canOrder: true,
+      statusText: '',
+      menuItems,
+      lunchItem,
+      dinnerItem,
+      addresses,
+      defaultRemark: home && home.defaultUserRemark ? String(home.defaultUserRemark).trim() : '',
+      selectedAddressId: defaultAddress ? defaultAddress.id : null,
+      selectedAddressText: defaultAddress ? defaultAddress.addressLine : '请先选择地址',
+      selectedContactText: defaultAddress ? `${defaultAddress.contactName} ${defaultAddress.contactPhone}` : '暂无地址'
+    });
+    this.syncCheckoutState();
+  },
+
+  exitDemo() {
+    demo.end();
+    this.setData({ demoActive: false });
+    this.loadOrderData();
   },
 
   updateCart1Minus() {
@@ -219,6 +291,10 @@ Page({
   },
 
   async toggleDefaultRemark() {
+    if (demo.isActive()) {
+      wx.showToast({ title: '演示模式不支持保存备注', icon: 'none' });
+      return;
+    }
     if (!getApp().globalData.token) {
       openInlineAuth(this, 'order');
       return;
@@ -332,6 +408,16 @@ Page({
   },
 
   async submitOrder() {
+    if (demo.isActive()) {
+      wx.showToast({ title: '演示下单成功（未真实提交）', icon: 'none' });
+      this.setData({
+        showCheckout: false,
+        showOrderSuccess: true,
+        orderSuccessMsg: '演示下单成功，未真实提交任何数据',
+        orderSuccessIds: ['demo-order']
+      });
+      return;
+    }
     if (this.data.submitting) {
       return;
     }
@@ -399,28 +485,13 @@ Page({
         });
       }
 
-      wx.showModal({
-        title: '下单成功',
-        content: mergedCount > 0
-          ? `同地址餐次已自动加到原订单，共扣减 ${this.data.totalQty} 餐。`
-          : `已成功预订明天的餐食，共扣减 ${this.data.totalQty} 餐。`,
-        showCancel: false,
-        confirmText: '查看预订',
-        confirmColor: '#B8D060',
-        success: async () => {
-          this.setData({
-            showCheckout: false,
-            qty1: 0,
-            qty2: 0
-          });
-          this.syncCheckoutState();
-          this.loadOrderData();
-          wx.navigateTo({
-            url: orderIds.length
-              ? `/pages/orders/index?orderId=${orderIds[0]}`
-              : '/pages/orders/index'
-          });
-        }
+      const successMsg = mergedCount > 0
+        ? `同地址餐次已自动合并到原订单，共扣减 ${this.data.totalQty} 餐。`
+        : `已成功预订明天的餐食，共扣减 ${this.data.totalQty} 餐。`;
+      this.setData({
+        showOrderSuccess: true,
+        orderSuccessMsg: successMsg,
+        orderSuccessIds: orderIds
       });
     } catch (error) {
       if (error.message && (error.message.includes('不足') || error.message.includes('INSUFFICIENT_MEALS'))) {
@@ -462,6 +533,36 @@ Page({
   goProfileAuth() {
     this.closeInlineAuth();
     wx.switchTab({ url: '/pages/profile/index' });
+  },
+
+  noop() {},
+
+  confirmOrderSuccess() {
+    const orderIds = this.data.orderSuccessIds || [];
+    this.setData({
+      showOrderSuccess: false,
+      showCheckout: false,
+      qty1: 0,
+      qty2: 0
+    });
+    this.syncCheckoutState();
+    this.loadOrderData();
+    wx.navigateTo({
+      url: orderIds.length
+        ? `/pages/orders/index?orderId=${orderIds[0]}`
+        : '/pages/orders/index'
+    });
+  },
+
+  closeOrderSuccess() {
+    this.setData({
+      showOrderSuccess: false,
+      showCheckout: false,
+      qty1: 0,
+      qty2: 0
+    });
+    this.syncCheckoutState();
+    this.loadOrderData();
   },
 
   promptAuth() {

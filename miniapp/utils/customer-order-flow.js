@@ -1,13 +1,3 @@
-function buildOrderStatusGuidance(status) {
-  if (status === 'PENDING_DISPATCH') {
-    return '订单已生成，商家正在安排配送。';
-  }
-  if (status === 'DELIVERED') {
-    return '骑手已完成配送，可查看送达回执。';
-  }
-  return '订单状态更新中，请稍后查看。';
-}
-
 function buildWalletHint({ walletDelta }) {
   if (walletDelta < 0) {
     return `本次预订已扣减 ${Math.abs(walletDelta)} 餐。`;
@@ -23,7 +13,6 @@ function buildAftersaleNotice(type) {
 }
 
 module.exports = {
-  buildOrderStatusGuidance,
   buildWalletHint,
   buildAftersaleNotice
 };

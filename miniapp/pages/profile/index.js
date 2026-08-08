@@ -469,7 +469,7 @@ Page({
           phoneNumber: ''
         }
       });
-      this.refreshPage();
+      wx.switchTab({ url: '/pages/home/index' });
     } catch (error) {
       wx.showToast({ title: error.message || '注册失败', icon: 'none' });
     } finally {
@@ -507,7 +507,7 @@ Page({
           phoneNumber: ''
         }
       });
-      this.refreshPage();
+      wx.switchTab({ url: '/pages/home/index' });
     } catch (error) {
       wx.showToast({ title: error.message || '保存失败', icon: 'none' });
     } finally {

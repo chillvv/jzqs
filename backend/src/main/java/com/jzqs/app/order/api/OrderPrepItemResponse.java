@@ -18,11 +18,12 @@ public record OrderPrepItemResponse(
     String displayStatusLabel,
     boolean canAssign,
     boolean canCancel,
-    boolean canReceipt,
-    String walletStatusLabel,
-    String referenceImageUrl,
+        boolean canReceipt,
+        String referenceImageUrl,
     String receiptUrl,
     String receiptNote,
-    String deliveredAt
+    String deliveredAt,
+    long customerId,
+    String serveDate
 ) {
 }

@@ -60,6 +60,7 @@ import {
 } from "./manualCreateOrder.helpers";
 import { Printer, CheckCircle, Search, RotateCcw, UserPlus, X, Bot, MapPin, ChevronLeft, ChevronRight, Trash2, AlertTriangle, Copy, CalendarDays } from "lucide-react";
 import { OrderPrepAssignModal } from "./components/OrderPrepAssignModal";
+import { OrderPrepChangeAddressModal } from "./components/OrderPrepChangeAddressModal";
 import { OrderPrepEditModal } from "./components/OrderPrepEditModal";
 import { OrderPrepSpecialProcessModal } from "./components/OrderPrepSpecialProcessModal";
 import { OrderPrepReceiptModal } from "./components/OrderPrepReceiptModal";
@@ -130,6 +131,7 @@ export function OrderPrepPage() {
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isOrderDetailOpen, setIsOrderDetailOpen] = useState(false);
   const [isRemarkLabelOpen, setIsRemarkLabelOpen] = useState(false);
+  const [isChangeAddressOpen, setIsChangeAddressOpen] = useState(false);
   const [activeItem, setActiveItem] = useState<OrderPrepItemResponse | null>(null);
   const [orderAftersaleItem, setOrderAftersaleItem] = useState<OrderPrepItemResponse | null>(null);
   const [orderAftersaleForm, setOrderAftersaleForm] = useState({
@@ -262,6 +264,11 @@ export function OrderPrepPage() {
   function openDeleteConfirm(item: OrderPrepItemResponse) {
     setActiveItem(item);
     setIsDeleteConfirmOpen(true);
+  }
+
+  function openChangeAddressModal(item: OrderPrepItemResponse) {
+    setActiveItem(item);
+    setIsChangeAddressOpen(true);
   }
 
   useEffect(() => {
@@ -1356,10 +1363,7 @@ export function OrderPrepPage() {
                           </td>
                           <td><span className={`tag ${sourceLabel === "后台录入" ? "tag-gray" : "tag-blue"}`}>{sourceLabel}</span></td>
                           <td>
-                            <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                              {renderStatus(item)}
-                              <span style={{ color: "var(--text-sub)", fontSize: "12px", whiteSpace: "nowrap" }}>{item.walletStatusLabel}</span>
-                            </div>
+                            {renderStatus(item)}
                           </td>
                           <td>{renderActions(item)}</td>
                         </tr>
@@ -1390,9 +1394,6 @@ export function OrderPrepPage() {
                       <div>
                         {renderStatus(item)}
                       </div>
-                    </div>
-                    <div style={{ padding: "0 12px", color: "var(--text-sub)", fontSize: "12px" }}>
-                      {item.walletStatusLabel}
                     </div>
                     <div className="mobile-card-row">
                       <div className="mobile-card-label">用户备注</div>
@@ -1508,6 +1509,15 @@ export function OrderPrepPage() {
         />
       )}
 
+      {isChangeAddressOpen && activeItem && (
+        <OrderPrepChangeAddressModal
+          isOpen={isChangeAddressOpen}
+          onClose={() => setIsChangeAddressOpen(false)}
+          onSuccess={() => reloadOrders()}
+          activeItem={activeItem}
+        />
+      )}
+
       {isSpecialProcessOpen && activeItem && (
         <OrderPrepSpecialProcessModal
           isOpen={isSpecialProcessOpen}
@@ -1556,10 +1566,6 @@ export function OrderPrepPage() {
                   <div className="order-detail-view__item">
                     <span className="order-detail-view__label">电话</span>
                     <span className="order-detail-view__value">{activeItem.customerPhone}</span>
-                  </div>
-                  <div className="order-detail-view__item">
-                    <span className="order-detail-view__label">钱包状态</span>
-                    <span className="order-detail-view__value">{activeItem.walletStatusLabel}</span>
                   </div>
                 </div>
               </div>
@@ -1647,6 +1653,15 @@ export function OrderPrepPage() {
                 }}
               >
                 编辑订单
+              </button>
+              <button
+                className="btn btn-outline"
+                onClick={() => {
+                  setIsOrderDetailOpen(false);
+                  openChangeAddressModal(activeItem);
+                }}
+              >
+                修改配送地址
               </button>
               <button
                 className="btn btn-outline"

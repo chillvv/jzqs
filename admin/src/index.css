@@ -1966,6 +1966,37 @@ a {
   font-weight: 600;
 }
 
+.menu-week-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 14px 18px;
+  border-radius: 10px;
+  border: 1px solid var(--warning-color);
+  background: color-mix(in srgb, var(--warning-color) 10%, transparent);
+}
+
+.menu-week-alert__text {
+  display: grid;
+  gap: 4px;
+  min-width: 260px;
+}
+
+.menu-week-alert__title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--warning-color);
+}
+
+.menu-week-alert__desc {
+  font-size: 13px;
+  color: var(--text-main);
+  line-height: 1.6;
+}
+
 .admin-table-cell {
   display: grid;
   gap: 4px;

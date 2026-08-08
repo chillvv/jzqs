@@ -8,33 +8,101 @@ function getCheckoutMealLimitMessage({ totalQty, remainingMeals }) {
   return '';
 }
 
+// 送餐当天联系客服的最后时限：过了这个点，餐已经出餐上路，客服也拦不下来。
+const SUPPORT_REFUND_CUTOFF_HOUR = 9;
+
+function parseDateTime(value) {
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function parseServeDay(serveDate) {
+  const parsed = new Date(`${serveDate}T00:00:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function startOfDay(date) {
+  const copy = new Date(date);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+
+/**
+ * 自助秒退款（取消预订）：只要送餐日还没到（即"前一天"及更早）即可操作，
+ * 送餐当天不可秒退、需联系商家协商。
+ * 判定标准与「换地址」保持一致（serveDate.isAfter(today)），不再复用下单截止 23:00。
+ * 状态上只要「还没送到」都放行 —— 后台已分配骑手（DISPATCHING）不应该堵住用户退款。
+ */
 function canCancelMiniappOrder({ status, serveDate, now }) {
-  if (status !== 'PENDING_DISPATCH') {
+  if (!isUndeliveredOrderStatus(status)) {
     return false;
   }
   if (!serveDate || !now) {
     return false;
   }
-  const current = new Date(now);
-  if (Number.isNaN(current.getTime())) {
+  const current = parseDateTime(now);
+  const serveDay = parseServeDay(serveDate);
+  if (!current || !serveDay) {
     return false;
   }
-  const tomorrow = new Date(current);
-  tomorrow.setHours(0, 0, 0, 0);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const serveDay = new Date(`${serveDate}T00:00:00`);
-  if (Number.isNaN(serveDay.getTime())) {
-    return false;
+  const today = startOfDay(current);
+  // serveDay 在"今天之后"= 送餐日还没到 = 前一天及更早，可秒退；当天/过期则不可。
+  return serveDay.getTime() > today.getTime();
+}
+
+function isUndeliveredOrderStatus(status) {
+  return status === 'PENDING_DISPATCH' || status === 'DISPATCHING' || status === 'DISPATCHED';
+}
+
+/**
+ * 未送达、但已不可自助秒退的订单，给一个"联系商家协商 / 申请售后"的出口，避免用户卡住没有任何按钮。
+ * 返回 '' 表示仍可自助（还能秒退或订单已完结）；
+ * 'SAME_DAY' 送餐当天，引导联系商家协商（委婉、以商家反馈为准）；
+ * 'AFTER_CUTOFF' 送餐日已过，引导签收后走售后。
+ */
+function resolveSupportRefundStage({ status, serveDate, now }) {
+  if (!isUndeliveredOrderStatus(status) || !serveDate || !now) {
+    return '';
   }
-  if (serveDay.getTime() !== tomorrow.getTime()) {
-    return false;
+  if (canCancelMiniappOrder({ status, serveDate, now })) {
+    return '';
   }
-  const cutoff = new Date(current);
-  cutoff.setHours(23, 0, 0, 0);
-  return current.getTime() < cutoff.getTime();
+  const current = parseDateTime(now);
+  const serveDay = parseServeDay(serveDate);
+  if (!current || !serveDay) {
+    return '';
+  }
+  const today = startOfDay(current);
+  // 送餐当天：当天不可秒退，引导联系商家协商
+  if (serveDay.getTime() === today.getTime()) {
+    return 'SAME_DAY';
+  }
+  // 送餐日已经过去：早就该送到了，走售后而不是退款
+  if (serveDay.getTime() < today.getTime()) {
+    return 'AFTER_CUTOFF';
+  }
+  // 理论上不会到这（canCancel 已覆盖所有未来日期），保险归为可协商
+  return 'SAME_DAY';
+}
+
+function buildSupportRefundNotice(stage) {
+  if (stage === 'SAME_DAY') {
+    return {
+      title: '送餐当天需联系商家',
+      content: '这单今天就要配送啦，系统暂时没法直接取消。您可以先和商家协商下，看能不能调整，能不能处理以商家反馈为准。'
+    };
+  }
+  return {
+    title: '建议送达后申请售后',
+    content: '这单可能已出餐或配送中，建议先签收。如有问题，可在送达后申请售后处理。'
+  };
 }
 
 module.exports = {
+  SUPPORT_REFUND_CUTOFF_HOUR,
   getCheckoutMealLimitMessage,
-  canCancelMiniappOrder
+  canCancelMiniappOrder,
+  isUndeliveredOrderStatus,
+  resolveSupportRefundStage,
+  buildSupportRefundNotice
 };

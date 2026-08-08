@@ -3,6 +3,7 @@
   "enablePullDownRefresh": true,
   "navigationStyle": "custom",
   "usingComponents": {
-    "subpage-navbar": "/components/subpage-navbar/index"
+    "subpage-navbar": "/components/subpage-navbar/index",
+    "guide-mask": "/components/guide-mask/index"
   }
 }

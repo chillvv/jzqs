@@ -2,5 +2,8 @@
   "enablePullDownRefresh": true,
   "backgroundTextStyle": "dark",
   "backgroundColor": "#f7f9ee",
-  "navigationBarTitleText": "首页"
+  "navigationBarTitleText": "首页",
+  "usingComponents": {
+    "guide-mask": "/components/guide-mask/index"
+  }
 }

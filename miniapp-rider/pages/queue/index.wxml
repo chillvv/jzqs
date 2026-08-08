@@ -58,7 +58,7 @@
             <text class="edit-text">{{isEditMode ? '完成' : '排序'}}</text>
           </view>
           <view class="batch-btn-inline {{isEditMode ? 'header-action-disabled' : ''}}" bindtap="toggleBatchReferenceMode">
-            <image class="action-icon" src="{{batchReferenceMode ? '/assets/icons/check.svg' : '/assets/icons/camera.svg'}}" mode="aspectFit"></image>
+            <image class="action-icon" src="{{batchReferenceMode ? '/assets/icons/check.svg' : '/assets/icons/camera-color.svg'}}" mode="aspectFit"></image>
             <text class="edit-text">{{batchReferenceMode ? '完成' : '批量传图'}}</text>
           </view>
         </view>
@@ -151,10 +151,15 @@
                 <view class="order-name {{item.itemStatus === 'DELIVERED' ? 'order-name-completed' : ''}}">
                   {{item.customerName}}
                 </view>
-                <view wx:if="{{item.needAttention}}" class="special-tag-inline">{{item.attentionLabel || '需留意'}}</view>
+                <view wx:if="{{item.needAttention}}" class="special-tag-inline">{{item.attentionLabel || '有备注'}}</view>
                 <view wx:if="{{item.quantity > 1}}" class="quantity-badge">
                   ×{{item.quantity}}
                 </view>
+              </view>
+
+              <view class="order-address-inline {{item.itemStatus === 'DELIVERED' ? 'order-address-completed' : ''}}">
+                <text class="address-icon-inline">📍</text>
+                <text class="address-text-content {{!item.deliveryAddress ? 'no-address' : ''}}"><text wx:if="{{item.buildingInfo}}" class="building-info-text">{{item.buildingInfo}}</text>{{item.deliveryAddress || '地址未提供'}}</text>
               </view>
             </view>
 
@@ -164,16 +169,11 @@
               </view>
             </view>
           </view>
-          
-          <view class="order-address {{item.itemStatus === 'DELIVERED' ? 'order-address-completed' : ''}}">
-            <text class="address-icon">📍</text>
-            <text class="address-text-content {{!item.deliveryAddress ? 'no-address' : ''}}"><text wx:if="{{item.buildingInfo}}" class="building-info-text">{{item.buildingInfo}}</text>{{item.deliveryAddress || '地址未提供'}}</text>
-          </view>
 
-          <!-- 地址参考图：直接展示，无需点击进入详情 -->
-          <view wx:if="{{item.referenceImageUrl}}" class="ref-thumb-wrap" catchtap="previewRefImage" data-url="{{item.referenceImageUrl}}">
-            <image class="ref-thumb-img" src="{{item.referenceImageUrl}}" mode="aspectFill" lazy-load="{{true}}"></image>
-            <view class="ref-thumb-tag">参考图</view>
+          <!-- 列表缩略图：已送达显示当天送达图，未送达显示地址参考图 -->
+          <view wx:if="{{item.displayThumbUrl}}" class="ref-thumb-wrap" catchtap="previewRefImage" data-url="{{item.displayThumbUrl}}">
+            <image class="ref-thumb-img" src="{{item.displayThumbUrl}}" mode="aspectFill" lazy-load="{{true}}"></image>
+            <view class="ref-thumb-tag">{{item.displayThumbLabel}}</view>
           </view>
         </view>
       </view>
@@ -227,3 +227,5 @@
 
   <!-- Bottom Spacing for TabBar (handled by padding-bottom in CSS) -->
 </view>
+<view wx:if="{{demoActive}}" class="demo-exit-fab" catchtap="exitDemo">退出演示</view>
+<guide-mask id="guideMask" />

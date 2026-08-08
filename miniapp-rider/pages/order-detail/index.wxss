@@ -255,6 +255,50 @@
   font-size: 32rpx;
 }
 
+/* 参考图：空状态 / 加载中（直接操作，无需弹层） */
+.reference-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 40rpx 28rpx;
+  border-radius: 22rpx;
+  background: var(--surface-container-low);
+  border: 1rpx dashed rgba(148, 163, 184, 0.5);
+}
+
+.reference-empty-icon {
+  width: 64rpx;
+  height: 64rpx;
+  opacity: 0.7;
+}
+
+.reference-empty-title {
+  margin-top: 16rpx;
+  font-size: 28rpx;
+  font-weight: 800;
+  color: var(--on-surface);
+}
+
+.reference-empty-copy {
+  margin-top: 10rpx;
+  font-size: 22rpx;
+  line-height: 1.7;
+  color: #64748b;
+}
+
+.reference-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12rpx;
+  padding: 40rpx 0;
+  border-radius: 22rpx;
+  background: var(--surface-container-low);
+  color: var(--on-surface-variant, #64748b);
+  font-size: 26rpx;
+}
+
 .customer-info {
   display: flex;
   justify-content: space-between;

@@ -57,6 +57,8 @@ public interface SettingsService {
 
     OperationSettingsResponse updateHolidayNotice(String title, String desc);
 
+    OperationSettingsResponse updateRestNoticeTemplate(String template);
+
     OperationSettingsResponse updateBannerImages(String bannerImages);
 
     OperationSettingsResponse updateBannerImages(String bannerImages, int bannerIntervalSeconds);

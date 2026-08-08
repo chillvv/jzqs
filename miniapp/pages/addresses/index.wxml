@@ -26,9 +26,14 @@
         <view wx:if="{{item.isDefault && !isManageMode}}" class="status-pill-default" style="white-space: nowrap; writing-mode: horizontal-tb;">默认地址</view>
       </view>
       <view wx:if="{{!isManageMode}}" class="action-row">
-        <button wx:if="{{selectOrderId}}" class="sub-btn primary" data-id="{{item.id}}" bindtap="selectAddressForOrder">使用这个地址</button>
-        <button class="sub-btn ghost" data-id="{{item.id}}" bindtap="editAddress" style="margin-left: 16rpx;">编辑</button>
-        <button class="sub-btn ghost" data-id="{{item.id}}" bindtap="deleteAddress" style="margin-left: 16rpx; color: #ff4d4f; border-color: #ff4d4f;">删除</button>
+        <block wx:if="{{selectOrderId}}">
+          <button wx:if="{{!item.isCurrentOrderAddress}}" class="sub-btn primary" data-id="{{item.id}}" bindtap="selectAddressForOrder">使用这个地址</button>
+          <view wx:else class="status-pill-default">当前配送地址</view>
+        </block>
+        <block wx:else>
+          <button class="sub-btn ghost" data-id="{{item.id}}" bindtap="editAddress" style="margin-left: 16rpx;">编辑</button>
+          <button class="sub-btn ghost" data-id="{{item.id}}" bindtap="deleteAddress" style="margin-left: 16rpx; color: #ff4d4f; border-color: #ff4d4f;">删除</button>
+        </block>
       </view>
     </view>
   </view>

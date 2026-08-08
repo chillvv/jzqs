@@ -42,9 +42,18 @@
   <view class="menu-section">
     <view class="poster-header">
       <view>
-        <view class="poster-title">本周主厨菜单</view>
+        <view class="poster-title">{{weekTitle}}</view>
       </view>
       <view class="poster-range">{{rangeText}}</view>
+    </view>
+    <view class="week-switch">
+      <view
+        wx:for="{{weekTabs}}"
+        wx:key="key"
+        class="week-switch-item {{weekTab === item.key ? 'is-active' : ''}}"
+        data-tab="{{item.key}}"
+        bindtap="switchWeekTab"
+      >{{item.label}}</view>
     </view>
     <view class="menu-list">
       <view wx:if="{{loading && !weekCards.length}}" class="skeleton-list">
@@ -61,7 +70,8 @@
       </view>
       <block wx:else>
         <view wx:if="{{home && !home.orderingEnabled}}" class="rest-card" style="margin-bottom: 0;">{{home.holidayNoticeTitle}}：{{home.holidayNoticeDesc}}</view>
-        <block wx:for="{{weekCards}}" wx:key="serveDate">
+        <view wx:if="{{weekUnpublished}}" class="rest-card" style="margin-bottom: 0;">{{weekTab === 1 ? '下周菜单还没配置，请稍后再来看看' : '本周菜单还没配置，请稍后再来看看'}}</view>
+        <block wx:if="{{!weekUnpublished}}" wx:for="{{weekCards}}" wx:key="serveDate">
           <view wx:if="{{item.slotStatus === 'ACTIVE'}}" class="day-card-full">
             <view class="day-card-header"><text class="day-title">{{item.weekdayLabel}}</text><text class="day-date">{{item.shortDate}}</text></view>
             <block wx:for="{{item.items}}" wx:key="id" wx:for-item="subitem">
@@ -82,7 +92,7 @@
           <view wx:elif="{{item.slotStatus === 'UNCONFIGURED'}}" class="rest-card" style="margin-bottom: 0;">{{item.weekdayLabel}}菜单待配置，请稍后查看</view>
           <view wx:else class="rest-card" style="margin-bottom: 0;">🌿 {{item.restText}}</view>
         </block>
-        <view wx:if="{{!weekCards.length && !loading}}" class="rest-card">暂无菜单数据</view>
+        <view wx:if="{{!weekUnpublished && !weekCards.length && !loading}}" class="rest-card">暂无菜单数据</view>
       </block>
     </view>
   </view>
@@ -102,3 +112,5 @@
   </view>
 </view>
 </block>
+<view wx:if="{{demoActive}}" class="demo-exit-fab" catchtap="exitDemo">退出演示</view>
+<guide-mask id="guideMask" />

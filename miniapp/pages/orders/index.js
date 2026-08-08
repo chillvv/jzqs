@@ -1,9 +1,12 @@
 const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const { request } = require('../../utils/request');
 const { mapOrderForDisplay, resolveVisibleOrders } = require('../../utils/order-list');
-const { buildOrderStatusGuidance } = require('../../utils/customer-order-flow');
+const { buildSupportRefundNotice } = require('../../utils/order-guards');
 const { buildRejectedAftersaleDetail } = require('../../utils/aftersale');
 const realtime = require('../../utils/realtime');
+const guide = require('../../utils/guide');
+const demo = require('../../utils/demo');
+const auth = require('../../utils/auth');
 
 Page({
   onShareAppMessage: shareAppMessage,
@@ -20,7 +23,8 @@ Page({
     targetOrderId: null,
     showingTargetOrderOnly: false,
     items: [],
-    loading: false
+    loading: false,
+    demoActive: false
   },
 
   onLoad(options) {
@@ -36,6 +40,9 @@ Page({
   },
 
   onShow() {
+    if (auth.globalData && auth.globalData.registered && guide.shouldShow('customer_orders_v1') && !demo.isActive()) {
+      demo.start();
+    }
     this.startRealtimeSync();
     this.loadOrders();
   },
@@ -54,18 +61,17 @@ Page({
 
   async loadOrders() {
     const { currentStatus, targetOrderId } = this.data;
+    if (demo.isActive()) {
+      this.applyDemoOrders();
+      this.showGuide();
+      return;
+    }
     this.setData({ loading: true });
     try {
       const response = await request({ url: '/api/mobile/customer/orders' });
-      let items = (response.items || []).map((item) => {
-        const displayItem = mapOrderForDisplay(item);
-        return {
-          ...displayItem,
-          guidanceText: buildOrderStatusGuidance(displayItem.userVisibleStatus || displayItem.status)
-        };
-      });
+      let items = (response.items || []).map((item) => mapOrderForDisplay(item));
       if (currentStatus) {
-        items = items.filter((item) => (item.userVisibleStatus || item.status) === currentStatus);
+        items = items.filter((item) => item.customerStatus === currentStatus);
       }
       items = resolveVisibleOrders(items, targetOrderId);
 
@@ -78,7 +84,48 @@ Page({
     } finally {
       this.setData({ loading: false });
       wx.stopPullDownRefresh();
+      this.showGuide();
     }
+  },
+
+  showGuide() {
+    if (!(auth.globalData && auth.globalData.registered)) {
+      return;
+    }
+    const steps = [
+      { selector: '.gm-never', centered: true, title: '我的预订都在这里', desc: '每笔下单的餐食、配送状态都汇总在这一页。演示环境里这条是假订单，下单后真实订单会出现在列表里。' },
+      { selector: '.subpage-navbar', title: '我的预订记录', desc: '顶部这里就是预订入口，随时回来看历史订单与状态。' },
+      { selector: '.subpage-card', fallbacks: ['.order-empty', '.subpage-body', '.order-list'], title: '订单卡片', desc: '每张卡片就是一笔预订，套餐、配送地址、状态一目了然。' }
+    ];
+    this.setData({ demoActive: demo.isActive() });
+    guide.runGuide(this, 'customer_orders_v1', steps, '#639922', {
+      interactive: demo.isActive(),
+      onSkip: () => {
+        guide.markAllDismissed();
+        demo.end();
+        this.setData({ demoActive: false });
+      },
+      onDone: () => {
+        demo.end();
+        this.setData({ demoActive: false });
+      }
+    });
+  },
+
+  applyDemoOrders() {
+    const mock = demo.getMockOrderDisplay();
+    this.setData({
+      items: [mock],
+      showingTargetOrderOnly: false,
+      demoActive: true,
+      loading: false
+    });
+  },
+
+  exitDemo() {
+    demo.end();
+    this.setData({ demoActive: false });
+    this.loadOrders();
   },
 
   startRealtimeSync() {
@@ -155,6 +202,19 @@ Page({
     });
   },
 
+  // 送餐当天不支持自助退款，按时间点给出不同语气的客服引导
+  requestSupportRefund(e) {
+    const { stage } = e.currentTarget.dataset;
+    const notice = buildSupportRefundNotice(stage);
+    wx.showModal({
+      title: notice.title,
+      content: notice.content,
+      showCancel: false,
+      confirmText: '我知道了',
+      confirmColor: '#92AA40'
+    });
+  },
+
   viewAftersale(e) {
     wx.showModal({
       title: '售后处理中',
@@ -189,8 +249,8 @@ Page({
     const { id, mode } = e.currentTarget.dataset;
     if (mode === 'CONTACT_SUPPORT') {
       wx.showModal({
-        title: '联系客服修改',
-        content: '送餐当天请联系客服微信，由商家后台手动修改地址。',
+        title: '送餐当天需联系商家',
+        content: '这单今天就要配送啦，地址没法在系统里直接改。您可以先和商家协商下，由商家后台帮您调整，能不能改以商家反馈为准。',
         showCancel: false,
         confirmText: '我知道了',
         confirmColor: '#92AA40'
@@ -201,9 +261,13 @@ Page({
       wx.showToast({ title: '当前订单不可修改地址', icon: 'none' });
       return;
     }
-    wx.navigateTo({
-      url: `/pages/addresses/index?selectOrderId=${id}`
-    });
+    const order = this.data.items.find((item) => item.id === id);
+    const currentAddressId = order && order.addressId ? Number(order.addressId) : '';
+    let url = `/pages/addresses/index?selectOrderId=${id}`;
+    if (currentAddressId) {
+      url += `&currentAddressId=${currentAddressId}`;
+    }
+    wx.navigateTo({ url });
   },
 
   showStatusDetail(e) {

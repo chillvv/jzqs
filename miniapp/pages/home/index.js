@@ -2,8 +2,49 @@ const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const { request } = require('../../utils/request');
 const { resolveMediaUrl } = require('../../utils/media-url');
 const realtime = require('../../utils/realtime');
+const guide = require('../../utils/guide');
+const demo = require('../../utils/demo');
+const auth = require('../../utils/auth');
 
 const MEAL_REMINDER_DISMISSED_PREFIX = 'miniapp_meal_reminder_dismissed_';
+
+const WEEK_TABS = [
+  { key: 0, label: '本周', title: '本周主厨菜单' },
+  { key: 1, label: '下周', title: '下周主厨菜单' }
+];
+
+function formatShortDate(dateText) {
+  return String(dateText || '').slice(5).replace('-', '.');
+}
+
+function decorateDay(day) {
+  return Object.assign({}, day, {
+    shortDate: formatShortDate(day.serveDate),
+    isRestDay: day.slotStatus === 'REST',
+    isPendingDay: day.slotStatus === 'UNCONFIGURED',
+    restText: day.slotStatus === 'REST'
+      ? (day.restNotice || `${day.weekdayLabel}固定店休，法定节假日不出餐`)
+      : ''
+  });
+}
+
+function buildWeekView(week) {
+  if (!week || !week.weekStartDate) {
+    return { rangeText: '', published: false, cards: [] };
+  }
+  return {
+    rangeText: `${formatShortDate(week.weekStartDate)} - ${formatShortDate(week.weekEndDate)}`,
+    // 后端未返回 published 时按「已发布」处理，避免老版本接口把菜单整周藏起来
+    published: week.published !== false,
+    cards: (week.days || []).map(decorateDay)
+  };
+}
+
+// 明天属于下一周时（即今天是周日），首页默认展示下周，
+// 这样客户在周日也能看到并提前预订下周一的餐。
+function defaultWeekTab() {
+  return new Date().getDay() === 0 ? 1 : 0;
+}
 
 function readMealReminderDismissed(key) {
   if (!key) {
@@ -37,13 +78,19 @@ Page({
     home: null,
     rangeText: '',
     weekCards: [],
+    weekTabs: WEEK_TABS,
+    weekTab: defaultWeekTab(),
+    weekTitle: WEEK_TABS[defaultWeekTab()].title,
+    weekUnpublished: false,
+    weekViews: [],
     loading: false,
     fullscreenAnnouncementLines: [],
     showMealReminderPopup: false,
     mealReminderChecked: false,
     mealReminderKey: '',
     statusBarHeight: 0,
-    navBarHeight: 44
+    navBarHeight: 44,
+    demoActive: false
   },
 
   onLoad() {
@@ -60,18 +107,28 @@ Page({
         selected: 0
       })
     }
+    if (auth.globalData && auth.globalData.registered && guide.shouldShow('customer_home_v1') && !demo.isActive()) {
+      demo.start();
+    }
     this.startRealtimeSync();
     this.loadPageData();
   },
 
   async loadPageData() {
+    if (demo.isActive()) {
+      this.applyDemoHomeData();
+      this.showGuide();
+      return;
+    }
     const app = getApp();
     await app.waitForAuth();
     this.setData({ loading: true });
     try {
-      const [home, currentWeek] = await Promise.all([
+      const [home, currentWeek, nextWeek] = await Promise.all([
         request({ url: '/api/mobile/customer/home', requireAuth: false }),
-        request({ url: '/api/mobile/customer/menu/current-week', requireAuth: false })
+        request({ url: '/api/mobile/customer/menu/current-week', requireAuth: false }),
+        // 下周菜单：即使没配置也会返回 7 天「待配置」占位，不会失败
+        request({ url: '/api/mobile/customer/menu/next-week', requireAuth: false }).catch(() => null)
       ]);
       const resolvedHome = {
         ...home,
@@ -88,19 +145,9 @@ Page({
           };
         })
       };
-      this.setData({
-        home: resolvedHome,
-        rangeText: `${currentWeek.weekStartDate.slice(5).replace('-', '.')} - ${currentWeek.weekEndDate.slice(5).replace('-', '.')}`,
-        weekCards: currentWeek.days.map((day) => ({
-          ...day,
-          shortDate: day.serveDate.slice(5).replace('-', '.'),
-          isRestDay: day.slotStatus === 'REST',
-          isPendingDay: day.slotStatus === 'UNCONFIGURED',
-          restText: day.slotStatus === 'REST'
-            ? (day.restNotice || `${day.weekdayLabel}固定店休，法定节假日不出餐`)
-            : ''
-        }))
-      });
+      const weekViews = [buildWeekView(currentWeek), buildWeekView(nextWeek)];
+      this.setData({ home: resolvedHome, weekViews });
+      this.applyWeekTab(this.data.weekTab);
 
       if (
         resolvedHome.popupAnnouncementEnabled &&
@@ -123,7 +170,87 @@ Page({
     } finally {
       this.setData({ loading: false });
       wx.stopPullDownRefresh();
+      this.showGuide();
     }
+  },
+
+  applyWeekTab(tab) {
+    const index = Number(tab) === 1 ? 1 : 0;
+    const views = this.data.weekViews || [];
+    const view = views[index] || { rangeText: '', published: true, cards: [] };
+    this.setData({
+      weekTab: index,
+      weekTitle: WEEK_TABS[index].title,
+      rangeText: view.rangeText,
+      weekCards: view.cards,
+      weekUnpublished: !view.published
+    });
+  },
+
+  switchWeekTab(e) {
+    const tab = Number(e.currentTarget.dataset.tab);
+    if (tab === this.data.weekTab) {
+      return;
+    }
+    this.applyWeekTab(tab);
+  },
+
+  showGuide() {
+    if (!(auth.globalData && auth.globalData.registered)) {
+      return;
+    }
+    const steps = [
+      { selector: '.gm-never', centered: true, title: '欢迎使用简知轻食', desc: '花 20 秒带你熟悉怎么看每周菜单、怎么点餐、怎么查订单。演示环境里数据都是假的，随时可点「跳过」结束指引。' },
+      { selector: '.poster-title', fallbacks: ['.week-card', '.menu-section', '.home-content'], title: '本周主厨菜单', desc: '点餐前先来这里看这一周每天的营养午餐和晚餐，每周都会更新。' }
+    ];
+    this.setData({ demoActive: demo.isActive() });
+    guide.runGuide(this, 'customer_home_v1', steps, '#639922', {
+      interactive: demo.isActive(),
+      onSkip: () => {
+        guide.markAllDismissed();
+        demo.end();
+        this.setData({ demoActive: false });
+      },
+      onDone: () => {
+        demo.end();
+        this.setData({ demoActive: false });
+      }
+    });
+  },
+
+  applyDemoHomeData() {
+    const { home, rangeText, weekCards } = demo.getMockHomeData();
+    const normalizedHome = Object.assign({}, home, {
+      bannerImages: [],
+      popupAnnouncementEnabled: false,
+      popupAnnouncementContent: '',
+      mealReminderPopupEnabled: false,
+      mealReminderKey: '',
+      mealReminderMessage: ''
+    });
+    const normalizedWeek = weekCards.map(decorateDay);
+    this.setData({
+      weekTab: 0,
+      weekTitle: WEEK_TABS[0].title,
+      weekUnpublished: false,
+      weekViews: [
+        { rangeText, published: true, cards: normalizedWeek },
+        { rangeText, published: true, cards: normalizedWeek }
+      ]
+    });
+    this.setData({
+      home: normalizedHome,
+      rangeText,
+      weekCards: normalizedWeek,
+      demoActive: true,
+      loading: false
+    });
+  },
+
+  exitDemo() {
+    demo.end();
+    this.setData({ demoActive: false });
+    this.loadPageData();
   },
 
   onPullDownRefresh() {

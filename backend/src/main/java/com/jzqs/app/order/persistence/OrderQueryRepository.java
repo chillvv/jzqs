@@ -166,6 +166,8 @@ public class OrderQueryRepository {
                 COALESCE(mso.merchant_remark, '') AS merchant_remark,
                 ca.address_line AS delivery_address,
                 do.source,
+                do.customer_id AS customer_id,
+                do.serve_date AS serve_date,
                 CASE WHEN c.is_priority_customer = TRUE OR mso.is_priority = TRUE THEN TRUE ELSE FALSE END AS priority_customer,
                 CASE WHEN mso.confirmed_from_subscription = TRUE THEN TRUE ELSE FALSE END AS fixed_subscription,
                 mso.status,
@@ -196,11 +198,6 @@ public class OrderQueryRepository {
                 CASE WHEN mso.status = 'PENDING_DISPATCH' THEN TRUE ELSE FALSE END AS can_assign,
                 CASE WHEN mso.status NOT IN ('CANCELLED', 'DELIVERED') THEN TRUE ELSE FALSE END AS can_cancel,
                 CASE WHEN mso.status = 'DISPATCHING' THEN TRUE ELSE FALSE END AS can_receipt,
-                CASE
-                    WHEN mso.status = 'CANCELLED' THEN '已释放餐次'
-                    WHEN mso.status = 'DELIVERED' THEN '已核销'
-                    ELSE '已占用'
-                END AS wallet_status_label,
                 COALESCE(ari.reference_image_url, '') AS reference_image_url,
                 COALESCE(dr.receipt_url, '') AS receipt_url,
                 COALESCE(dr.receipt_note, '') AS receipt_note,
@@ -252,11 +249,12 @@ public class OrderQueryRepository {
             rs.getBoolean("can_assign"),
             rs.getBoolean("can_cancel"),
             rs.getBoolean("can_receipt"),
-            rs.getString("wallet_status_label"),
             rs.getString("reference_image_url"),
             rs.getString("receipt_url"),
             rs.getString("receipt_note"),
-            formatTimestamp(rs.getTimestamp("delivered_at"))
+            formatTimestamp(rs.getTimestamp("delivered_at")),
+            rs.getLong("customer_id"),
+            rs.getString("serve_date")
         ), targetDate);
         Map<Long, OrderNoteProjection> noteProjections = loadOrderNoteProjections(rows.stream().map(PrepOrderRow::id).toList());
         List<OrderPrepItemResponse> items = rows.stream()
@@ -493,11 +491,12 @@ public class OrderQueryRepository {
             row.canAssign(),
             row.canCancel(),
             row.canReceipt(),
-            row.walletStatusLabel(),
             row.referenceImageUrl(),
             row.receiptUrl(),
             row.receiptNote(),
-            row.deliveredAt()
+            row.deliveredAt(),
+            row.customerId(),
+            row.serveDate()
         );
     }
 
@@ -552,11 +551,12 @@ public class OrderQueryRepository {
         boolean canAssign,
         boolean canCancel,
         boolean canReceipt,
-        String walletStatusLabel,
         String referenceImageUrl,
         String receiptUrl,
         String receiptNote,
-        String deliveredAt
+        String deliveredAt,
+        long customerId,
+        String serveDate
     ) {
     }
 

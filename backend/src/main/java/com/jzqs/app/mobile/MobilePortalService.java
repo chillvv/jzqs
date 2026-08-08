@@ -48,6 +48,8 @@ public interface MobilePortalService {
 
     MobileCurrentWeekResponse currentWeekMenu();
 
+    MobileCurrentWeekResponse nextWeekMenu();
+
     MobileTomorrowMenuResponse tomorrowMenu();
 
     List<MobileWeekMenuDayResponse> weekMenus(String startDate);
@@ -95,6 +97,8 @@ public interface MobilePortalService {
     MobileDefaultAddressResponse setDefaultAddress(long customerId, long addressId);
 
     MobileOrderAddressChangeResponse changeCustomerOrderAddress(long customerId, long orderId, long addressId);
+
+    MobileOrderAddressChangeResponse changeCustomerOrderAddressByMerchant(long customerId, long orderId, long addressId);
 
     PageResponse<WalletTransactionResponse> walletTransactions(String phone);
 

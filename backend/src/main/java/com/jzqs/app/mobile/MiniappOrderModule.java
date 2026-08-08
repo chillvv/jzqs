@@ -70,7 +70,7 @@ class MiniappOrderModule {
         LocalDate orderDate = LocalDate.parse(serveDate);
         String normalizedMealPeriod = normalizeMealPeriod(mealPeriod);
         ensureSelfOrderAllowed(orderDate);
-        requirePublishedMenu(orderDate, normalizedMealPeriod);
+        requireActiveMenu(orderDate, normalizedMealPeriod);
         int units = Math.max(1, quantity);
         MobileCreateOrderResponse response = null;
         for (int i = 0; i < units; i++) {
@@ -297,18 +297,19 @@ class MiniappOrderModule {
         }
     }
 
-    private void requirePublishedMenu(LocalDate serveDate, String mealPeriod) {
+    private void requireActiveMenu(LocalDate serveDate, String mealPeriod) {
         Integer count = jdbcTemplate.queryForObject(
             """
                 SELECT COUNT(*)
                 FROM menu_week_items mwi
                 JOIN menu_weeks mw ON mw.id = mwi.week_id
-                WHERE mwi.serve_date = ?
+                WHERE mw.week_start_date = ?
+                  AND mwi.serve_date = ?
                   AND mwi.meal_period = ?
                   AND mwi.slot_status = 'ACTIVE'
-                  AND mw.status = 'PUBLISHED'
                 """,
             Integer.class,
+            currentWeekMonday(serveDate),
             serveDate,
             mealPeriod
         );
@@ -627,6 +628,10 @@ class MiniappOrderModule {
             return current;
         }
         return current + "；" + incoming;
+    }
+
+    private LocalDate currentWeekMonday(LocalDate date) {
+        return date.minusDays(date.getDayOfWeek().getValue() - 1L);
     }
 
     private boolean isBlank(String value) {

@@ -1,5 +1,6 @@
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 import { createBrowserRouter, Navigate, useParams, type RouteObject } from "react-router-dom";
+import { lazyWithRetry } from "./lazyWithRetry";
 import { AdminLayout } from "./layout/AdminLayout";
 import { ADMIN_AUTH_STORAGE_KEY, parseAdminAuthSession } from "../modules/auth/adminAuth.helpers";
 import {
@@ -10,20 +11,20 @@ import {
 } from "../modules/settings/settingsSections";
 
 // 路由级懒加载：每个页面独立 chunk，首屏只加载布局 + 当前页
-const AdminLoginPage = lazy(() => import("../modules/auth/AdminLoginPage").then((m) => ({ default: m.AdminLoginPage })));
-const DashboardPage = lazy(() => import("../modules/dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })));
-const CustomerAssetPage = lazy(() => import("../modules/customers/CustomerAssetPage").then((m) => ({ default: m.CustomerAssetPage })));
-const MenuSchedulePage = lazy(() => import("../modules/menu/MenuSchedulePage").then((m) => ({ default: m.MenuSchedulePage })));
-const OrderPrepPage = lazy(() => import("../modules/orders/OrderPrepPage").then((m) => ({ default: m.OrderPrepPage })));
-const DispatchCenterLayout = lazy(() => import("../modules/dispatch/DispatchCenterLayout").then((m) => ({ default: m.DispatchCenterLayout })));
-const DispatchHomePage = lazy(() => import("../modules/dispatch/DispatchHomePage").then((m) => ({ default: m.DispatchHomePage })));
-const DispatchProgressPage = lazy(() => import("../modules/dispatch/DispatchProgressPage").then((m) => ({ default: m.DispatchProgressPage })));
-const DispatchAreasPage = lazy(() => import("../modules/dispatch/DispatchAreasPage").then((m) => ({ default: m.DispatchAreasPage })));
-const DispatchRidersPage = lazy(() => import("../modules/dispatch/DispatchRidersPage").then((m) => ({ default: m.DispatchRidersPage })));
-const DispatchReleasePage = lazy(() => import("../modules/dispatch/DispatchReleasePage").then((m) => ({ default: m.DispatchReleasePage })));
-const SystemSettingsSectionPage = lazy(() => import("../modules/settings/SystemSettingsSectionPage").then((m) => ({ default: m.SystemSettingsSectionPage })));
-const OperationsAnalysisPage = lazy(() => import("../modules/analysis/OperationsAnalysisPage").then((m) => ({ default: m.OperationsAnalysisPage })));
-const AftersalePage = lazy(() => import("../modules/aftersales/AftersalePage").then((m) => ({ default: m.AftersalePage })));
+const AdminLoginPage = lazyWithRetry(() => import("../modules/auth/AdminLoginPage").then((m) => ({ default: m.AdminLoginPage })));
+const DashboardPage = lazyWithRetry(() => import("../modules/dashboard/DashboardPage").then((m) => ({ default: m.DashboardPage })));
+const CustomerAssetPage = lazyWithRetry(() => import("../modules/customers/CustomerAssetPage").then((m) => ({ default: m.CustomerAssetPage })));
+const MenuSchedulePage = lazyWithRetry(() => import("../modules/menu/MenuSchedulePage").then((m) => ({ default: m.MenuSchedulePage })));
+const OrderPrepPage = lazyWithRetry(() => import("../modules/orders/OrderPrepPage").then((m) => ({ default: m.OrderPrepPage })));
+const DispatchCenterLayout = lazyWithRetry(() => import("../modules/dispatch/DispatchCenterLayout").then((m) => ({ default: m.DispatchCenterLayout })));
+const DispatchHomePage = lazyWithRetry(() => import("../modules/dispatch/DispatchHomePage").then((m) => ({ default: m.DispatchHomePage })));
+const DispatchProgressPage = lazyWithRetry(() => import("../modules/dispatch/DispatchProgressPage").then((m) => ({ default: m.DispatchProgressPage })));
+const DispatchAreasPage = lazyWithRetry(() => import("../modules/dispatch/DispatchAreasPage").then((m) => ({ default: m.DispatchAreasPage })));
+const DispatchRidersPage = lazyWithRetry(() => import("../modules/dispatch/DispatchRidersPage").then((m) => ({ default: m.DispatchRidersPage })));
+const DispatchReleasePage = lazyWithRetry(() => import("../modules/dispatch/DispatchReleasePage").then((m) => ({ default: m.DispatchReleasePage })));
+const SystemSettingsSectionPage = lazyWithRetry(() => import("../modules/settings/SystemSettingsSectionPage").then((m) => ({ default: m.SystemSettingsSectionPage })));
+const OperationsAnalysisPage = lazyWithRetry(() => import("../modules/analysis/OperationsAnalysisPage").then((m) => ({ default: m.OperationsAnalysisPage })));
+const AftersalePage = lazyWithRetry(() => import("../modules/aftersales/AftersalePage").then((m) => ({ default: m.AftersalePage })));
 
 function RequireAdminAuth({ children }: { children: JSX.Element }) {
   if (typeof window === "undefined") {

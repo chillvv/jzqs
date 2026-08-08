@@ -41,6 +41,9 @@ Page({
     saving: false,
     showPopup: false,
     selectOrderId: null,
+    currentAddressId: null,
+    currentOrderDeliveryAddress: '',
+    noOtherAddress: false,
     isManageMode: false,
     selectedDefaultId: null,
     statusBarHeight: 0,
@@ -59,8 +62,64 @@ Page({
       navBarHeight: app.globalData.navBarHeight
     });
     if (options.selectOrderId) {
-      this.setData({ selectOrderId: Number(options.selectOrderId) });
+      const selectOrderId = Number(options.selectOrderId);
+      this.setData({
+        selectOrderId,
+        currentAddressId: options.currentAddressId ? Number(options.currentAddressId) : null
+      });
       wx.setNavigationBarTitle({ title: '选择配送地址' });
+      // 主动去订单列表里查这条订单的"地址文本"，再和地址列表逐条比对——
+      // 即使后端 list 接口还没把 addressId 字段返回、或者上游入口漏传 currentAddressId，
+      // 选择页依然能精准标记哪个是当前订单地址，避免出现"只有一个地址还是当前地址却显示使用这个地址"的自相矛盾。
+      this.loadOrderAddressContext(selectOrderId);
+    }
+  },
+
+  async loadOrderAddressContext(orderId) {
+    try {
+      const response = await request({ url: '/api/mobile/customer/orders' });
+      const items = (response && response.items) || [];
+      const target = items.find((item) => Number(item.id) === Number(orderId));
+      if (!target) {
+        return;
+      }
+      const patch = {};
+      if (this.data.currentAddressId == null && target.addressId != null && target.addressId !== '') {
+        patch.currentAddressId = Number(target.addressId);
+      }
+      if (target.deliveryAddress) {
+        patch.currentOrderDeliveryAddress = String(target.deliveryAddress);
+      }
+      if (Object.keys(patch).length > 0) {
+        this.setData(patch, () => {
+          // 标记变了之后强制重打一次 items 标签，确保 isCurrentOrderAddress 反映最新判定
+          if (this.data.items.length > 0) {
+            this.refreshCurrentOrderFlag();
+          }
+        });
+      }
+    } catch (error) {
+      // 拉不到也无妨，已有 currentAddressId / deliveryAddress 文本兜底，不打扰用户
+    }
+  },
+
+  refreshCurrentOrderFlag() {
+    const { currentAddressId, currentOrderDeliveryAddress, items } = this.data;
+    let nextItems = items;
+    let matches = 0;
+    nextItems = items.map((item) => {
+      const isCurrentOrderAddress =
+        (currentAddressId != null && Number(item.id) === currentAddressId) ||
+        (!!currentOrderDeliveryAddress && String(item.addressLine || '').trim() === currentOrderDeliveryAddress.trim());
+      if (isCurrentOrderAddress) {
+        matches += 1;
+      }
+      return Object.assign({}, item, { isCurrentOrderAddress });
+    });
+    const noOtherAddress = this.data.selectOrderId != null
+      && nextItems.filter((item) => !item.isCurrentOrderAddress).length === 0;
+    if (matches > 0 || noOtherAddress) {
+      this.setData({ items: nextItems, noOtherAddress });
     }
   },
 
@@ -109,7 +168,17 @@ Page({
       });
       // Sort items to put default at the top
       items.sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0));
-      this.setData({ items });
+      const { currentAddressId, currentOrderDeliveryAddress } = this.data;
+      const normalizedDeliveryAddress = currentOrderDeliveryAddress ? currentOrderDeliveryAddress.trim() : '';
+      items.forEach((item) => {
+        const matchesById = currentAddressId != null && Number(item.id) === currentAddressId;
+        const matchesByText = !!normalizedDeliveryAddress
+          && String(item.addressLine || '').trim() === normalizedDeliveryAddress;
+        item.isCurrentOrderAddress = matchesById || matchesByText;
+      });
+      const noOtherAddress = this.data.selectOrderId != null
+        && items.filter((item) => !item.isCurrentOrderAddress).length === 0;
+      this.setData({ items, noOtherAddress });
     } catch (error) {
       wx.showToast({ title: error.message || '加载失败', icon: 'none' });
     } finally {
@@ -289,8 +358,12 @@ Page({
 
   async selectAddressForOrder(e) {
     const { id } = e.currentTarget.dataset;
-    const { selectOrderId } = this.data;
+    const { selectOrderId, currentAddressId } = this.data;
     if (!selectOrderId) {
+      return;
+    }
+    if (currentAddressId != null && Number(id) === currentAddressId) {
+      wx.showToast({ title: '已经是当前配送地址', icon: 'none' });
       return;
     }
     try {

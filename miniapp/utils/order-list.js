@@ -1,4 +1,4 @@
-const { formatMonthDay, periodLabel, statusClass } = require('./mobile');
+const { formatMonthDay, periodLabel, statusClass, normalizeCustomerStatus } = require('./mobile');
 const { resolveOrderActions, resolveOrderStatusText } = require('./aftersale');
 const { getReceiptDisplayState } = require('./receipt-display');
 
@@ -16,27 +16,35 @@ function buildOrderMetaText(item, sourceText) {
   return sourceText;
 }
 
+function resolveDisplayStatusClass(item, visibleStatus) {
+  // 售后状态优先覆盖履约状态，让用户一眼看出订单卡在哪一步
+  if (item.afterSaleStatus === 'REJECTED') {
+    return 'rejected';
+  }
+  if (item.afterSaleStatus === 'PENDING' || item.afterSaleStatus === 'PROCESSING') {
+    return 'aftersale';
+  }
+  return statusClass(visibleStatus);
+}
+
 function mapOrderForDisplay(item) {
   const receiptState = getReceiptDisplayState(item);
+  const visibleStatus = normalizeCustomerStatus(item.userVisibleStatus || item.status);
   const actionState = resolveOrderActions({
     status: item.status,
+    userVisibleStatus: visibleStatus,
     serveDate: item.serveDate,
     now: new Date().toISOString(),
     afterSaleOpen: item.afterSaleOpen
   });
-
-  const visibleStatus = item.userVisibleStatus || item.status;
-  let displayStatusClass = statusClass(visibleStatus === 'REFUNDED' ? 'CANCELLED' : visibleStatus);
-  if (item.afterSaleStatus === 'REJECTED') {
-    displayStatusClass = 'cancelled';
-  }
 
   return {
     ...item,
     serveDateText: formatMonthDay(item.serveDate),
     periodText: periodLabel(item.mealPeriod),
     statusText: resolveOrderStatusText(item),
-    statusClass: displayStatusClass,
+    statusClass: resolveDisplayStatusClass(item, visibleStatus),
+    customerStatus: visibleStatus,
     sourceText: resolveOrderSourceText(item.source),
     showReceiptImage: receiptState.canShowReceiptImage,
     receiptHint: receiptState.receiptHint,
@@ -44,6 +52,7 @@ function mapOrderForDisplay(item) {
     canCancel: actionState.canCancel,
     canApplyAftersale: actionState.canApplyAftersale,
     isAftersaleProcessing: actionState.isAftersaleProcessing,
+    supportRefundStage: actionState.supportRefundStage || '',
     actionText: actionState.actionText,
     orderPrimaryActionText: '订单详情',
     orderMetaText: buildOrderMetaText(item, resolveOrderSourceText(item.source))

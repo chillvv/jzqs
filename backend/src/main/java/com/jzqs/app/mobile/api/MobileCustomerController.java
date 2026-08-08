@@ -60,6 +60,11 @@ public class MobileCustomerController {
         return ApiResponse.success(mobilePortalService.currentWeekMenu());
     }
 
+    @GetMapping("/menu/next-week")
+    public ApiResponse<MobileCurrentWeekResponse> nextWeekMenu() {
+        return ApiResponse.success(mobilePortalService.nextWeekMenu());
+    }
+
     @GetMapping("/menu/tomorrow")
     public ApiResponse<MobileTomorrowMenuResponse> tomorrowMenu() {
         return ApiResponse.success(mobilePortalService.tomorrowMenu());

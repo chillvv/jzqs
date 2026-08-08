@@ -10,11 +10,16 @@ import com.jzqs.app.common.aop.annotation.RateLimit;
 import com.jzqs.app.common.api.BatchOperationResponse;
 import com.jzqs.app.common.api.ApiResponse;
 import com.jzqs.app.common.api.PageResponse;
+import com.jzqs.app.common.error.BusinessException;
+import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.common.security.AdminRequestContextSupport;
 import com.jzqs.app.mobile.DeliveryReleaseSupport;
+import com.jzqs.app.mobile.MobilePortalService;
+import com.jzqs.app.mobile.api.MobileOrderAddressChangeResponse;
 import com.jzqs.app.order.service.OrderPrepService;
 import com.jzqs.app.subscription.api.SubscriptionPreviewCheckResponse;
 import jakarta.validation.Valid;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,15 +37,51 @@ public class OrderPrepController {
     private final OrderPrepService orderPrepService;
     private final AftersaleService aftersaleService;
     private final DeliveryReleaseSupport deliveryReleaseSupport;
+    private final MobilePortalService mobilePortalService;
+    private final JdbcTemplate jdbcTemplate;
 
     public OrderPrepController(
         OrderPrepService orderPrepService,
         AftersaleService aftersaleService,
-        DeliveryReleaseSupport deliveryReleaseSupport
+        DeliveryReleaseSupport deliveryReleaseSupport,
+        MobilePortalService mobilePortalService,
+        JdbcTemplate jdbcTemplate
     ) {
         this.orderPrepService = orderPrepService;
         this.aftersaleService = aftersaleService;
         this.deliveryReleaseSupport = deliveryReleaseSupport;
+        this.mobilePortalService = mobilePortalService;
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @PostMapping("/{orderId}/change-address")
+    @AuditAction(module = "ORDER", action = "ADMIN_CHANGE_ADDRESS")
+    public ApiResponse<MobileOrderAddressChangeResponse> adminChangeAddress(
+        @PathVariable long orderId,
+        @Valid @RequestBody AdminChangeAddressRequest request
+    ) {
+        // 商家后台代客修改配送地址：需 admin 鉴权，复用用户端改址逻辑（含同地址拦截、区域重分配）
+        AdminRequestContextSupport.requireOperatorName();
+        Long customerId = request.customerId();
+        if (customerId == null) {
+            List<Long> ids = jdbcTemplate.query(
+                "SELECT do.customer_id FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE mso.id = ?",
+                (rs, rn) -> rs.getLong(1),
+                orderId
+            );
+            customerId = ids.isEmpty() ? null : ids.get(0);
+        }
+        if (customerId == null) {
+            throw new BusinessException(ErrorCode.ORDER_NOT_FOUND, "未找到该订单");
+        }
+        // 商家后台代客改址：复用改址逻辑（含同地址拦截、区域重分配），但跳过「送餐当天不可改」的顾客端时间窗口，
+        // 由商家在收到顾客当天协商后再操作。
+        MobileOrderAddressChangeResponse response = mobilePortalService.changeCustomerOrderAddressByMerchant(
+            customerId,
+            orderId,
+            request.addressId()
+        );
+        return ApiResponse.success(response);
     }
 
     @GetMapping("/subscription-preview")

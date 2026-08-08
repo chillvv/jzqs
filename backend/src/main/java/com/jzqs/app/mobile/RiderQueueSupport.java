@@ -954,7 +954,7 @@ class RiderQueueSupport {
     }
 
     private String buildAttentionLabel(List<String> attentionSources) {
-        return attentionSources.isEmpty() ? "" : "需留意";
+        return attentionSources.isEmpty() ? "" : "有备注";
     }
 
     private String normalizeSpecialValue(String value) {

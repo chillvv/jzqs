@@ -4,6 +4,7 @@ import { fetchSubscriptionPreview, bulkImportSubscription, checkSubscriptionPrev
 import { SafeInput } from "../../../shared/components/SafeInput";
 import { toast } from "../../../shared/components/Toast";
 import type { SubscriptionPreviewItem, SubscriptionPreviewCheckResponse } from "../../../shared/api/types";
+import { mealPeriodLabel } from "../orderPrepPage.helpers";
 
 interface Props {
   isOpen: boolean;
@@ -18,6 +19,7 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
   const [previewItems, setPreviewItems] = useState<SubscriptionPreviewItem[]>([]);
   const [previewCheckResult, setPreviewCheckResult] = useState<SubscriptionPreviewCheckResponse | null>(null);
   const [viewState, setViewState] = useState<"LOADING" | "CHECK" | "PREVIEW">("LOADING");
+  const [mealPeriodFilter, setMealPeriodFilter] = useState<"LUNCH" | "DINNER">("LUNCH");
 
   useEffect(() => {
     if (isOpen) {
@@ -79,21 +81,27 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
     }
   }
 
-  const handleTogglePreviewItem = (index: number) => {
+  const handleTogglePreviewItem = (customerId: number, mealPeriod: string) => {
     const newItems = [...previewItems];
-    if (newItems[index].hasBalance) {
-      newItems[index].selected = !newItems[index].selected;
+    const targetIndex = newItems.findIndex((i) => i.customerId === customerId && i.mealPeriod === mealPeriod);
+    if (targetIndex !== -1 && newItems[targetIndex].hasBalance) {
+      newItems[targetIndex].selected = !newItems[targetIndex].selected;
       setPreviewItems(newItems);
     }
   };
 
-  const handleUpdatePreviewNote = (index: number, val: string) => {
+  const handleUpdatePreviewNote = (customerId: number, mealPeriod: string, val: string) => {
     const newItems = [...previewItems];
-    newItems[index].merchantRemark = val;
-    setPreviewItems(newItems);
+    const targetIndex = newItems.findIndex((i) => i.customerId === customerId && i.mealPeriod === mealPeriod);
+    if (targetIndex !== -1) {
+      newItems[targetIndex].merchantRemark = val;
+      setPreviewItems(newItems);
+    }
   };
 
   if (!isOpen) return null;
+
+  const visibleItems = previewItems.filter((i) => i.mealPeriod === mealPeriodFilter);
 
   if (viewState === "LOADING") {
     return (
@@ -119,7 +127,22 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
             <div style={{ marginBottom: "16px", padding: "12px", background: "#FEF3C7", borderRadius: "8px", color: "#92400E" }}>
               共 {previewCheckResult.totalCount} 人，其中 {previewCheckResult.insufficientCount} 人余额不足
             </div>
-            {previewCheckResult.insufficientCustomers.length > 0 && (
+            <div className="filter-item subscription-meal-toggle" style={{ marginBottom: "12px" }}>
+              <span className="filter-label">查看餐次:</span>
+              <div className="segmented-control" role="tablist" aria-label="预检餐次切换">
+                {(["LUNCH", "DINNER"] as const).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    className={`segmented-control__item ${mealPeriodFilter === value ? "is-active" : ""}`}
+                    onClick={() => setMealPeriodFilter(value)}
+                  >
+                    {mealPeriodLabel(value)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {previewCheckResult.insufficientCustomers.filter((c) => c.mealPeriod === mealPeriodFilter).length > 0 ? (
               <div className="table-container">
                 <table className="data-table">
                   <thead>
@@ -132,7 +155,7 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
                     </tr>
                   </thead>
                   <tbody>
-                    {previewCheckResult.insufficientCustomers.map((customer, index) => (
+                    {previewCheckResult.insufficientCustomers.filter((c) => c.mealPeriod === mealPeriodFilter).map((customer, index) => (
                       <tr key={index}>
                         <td>{customer.customerName}</td>
                         <td>{customer.customerPhone}</td>
@@ -147,6 +170,10 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
                     ))}
                   </tbody>
                 </table>
+              </div>
+            ) : (
+              <div className="empty-state" style={{ padding: "20px", textAlign: "center", color: "var(--text-sub)" }}>
+                当前餐次没有余额不足的学员
               </div>
             )}
           </div>
@@ -172,19 +199,34 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
           <div style={{ padding: "16px 24px", color: "var(--text-sub)", fontSize: "14px" }}>
             请核对明日的包月名单。取消勾选即可跳过请假用户，或在右侧直接补充临时口味备注。
           </div>
+          <div className="filter-item subscription-meal-toggle" style={{ padding: "0 24px 12px" }}>
+            <span className="filter-label">查看餐次:</span>
+            <div className="segmented-control" role="tablist" aria-label="导入餐次切换">
+              {(["LUNCH", "DINNER"] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={`segmented-control__item ${mealPeriodFilter === value ? "is-active" : ""}`}
+                  onClick={() => setMealPeriodFilter(value)}
+                >
+                  {mealPeriodLabel(value)}
+                </button>
+              ))}
+            </div>
+          </div>
           <div style={{ margin: "0 24px 16px", padding: "14px 16px", borderRadius: "16px", background: "#FFFFFF", border: "1px solid var(--border-color)", display: "flex", gap: "24px", flexWrap: "wrap" }}>
-            <div style={{ color: "var(--text-sub)", fontSize: "13px" }}>可导入 <span style={{ color: "var(--text-main)", fontWeight: 800, fontSize: "18px" }}>{previewItems.filter(i => i.hasBalance).length}</span></div>
-            <div style={{ color: "var(--text-sub)", fontSize: "13px" }}>余额不足 <span style={{ color: "var(--error-color)", fontWeight: 800, fontSize: "18px" }}>{previewItems.filter(i => !i.hasBalance).length}</span></div>
-            <div style={{ color: "var(--text-sub)", fontSize: "13px" }}>已勾选 <span style={{ color: "var(--primary-color)", fontWeight: 800, fontSize: "18px" }}>{previewItems.filter(i => i.selected && i.hasBalance).length}</span></div>
+            <div style={{ color: "var(--text-sub)", fontSize: "13px" }}>可导入 <span style={{ color: "var(--text-main)", fontWeight: 800, fontSize: "18px" }}>{visibleItems.filter(i => i.hasBalance).length}</span></div>
+            <div style={{ color: "var(--text-sub)", fontSize: "13px" }}>余额不足 <span style={{ color: "var(--error-color)", fontWeight: 800, fontSize: "18px" }}>{visibleItems.filter(i => !i.hasBalance).length}</span></div>
+            <div style={{ color: "var(--text-sub)", fontSize: "13px" }}>已勾选 <span style={{ color: "var(--primary-color)", fontWeight: 800, fontSize: "18px" }}>{visibleItems.filter(i => i.selected && i.hasBalance).length}</span></div>
           </div>
           <div className="table-responsive">
             <table style={{ background: "#FFFFFF", borderTop: "1px solid var(--border-color)", borderBottom: "1px solid var(--border-color)" }}>
             <thead>
               <tr>
                 <th style={{ width: "40px", paddingLeft: "24px" }}>
-                  <input type="checkbox" checked={previewItems.every(i => !i.hasBalance || i.selected)} onChange={(e) => {
+                  <input type="checkbox" checked={visibleItems.length > 0 && visibleItems.every(i => !i.hasBalance || i.selected)} onChange={(e) => {
                     const val = e.target.checked;
-                    setPreviewItems(previewItems.map(i => i.hasBalance ? { ...i, selected: val } : i));
+                    setPreviewItems(previewItems.map(i => (i.mealPeriod === mealPeriodFilter && i.hasBalance) ? { ...i, selected: val } : i));
                   }} />
                 </th>
                 <th>姓名</th>
@@ -194,7 +236,7 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
               </tr>
             </thead>
             <tbody>
-              {previewItems.map((item, index) => {
+              {visibleItems.map((item) => {
                 const isDisabled = !item.hasBalance;
                 const isSelected = item.selected && !isDisabled;
                 return (
@@ -204,7 +246,7 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
                         type="checkbox" 
                         checked={isSelected} 
                         disabled={isDisabled} 
-                        onChange={() => handleTogglePreviewItem(index)} 
+                        onChange={() => handleTogglePreviewItem(item.customerId, item.mealPeriod)} 
                       />
                     </td>
                     <td style={{ textDecoration: !isSelected ? "line-through" : "none" }}>{item.customerName}</td>
@@ -227,7 +269,7 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
                           className="input-box" 
                           style={{ width: "160px", height: "30px", padding: "4px 8px" }} 
                           value={item.merchantRemark || ""} 
-                          onValueChange={(value) => handleUpdatePreviewNote(index, value)} 
+                          onValueChange={(value) => handleUpdatePreviewNote(item.customerId, item.mealPeriod, value)} 
                           list="subscription-note-suggestions"
                           disabled={!isSelected}
                           placeholder="例如: 少饭"
@@ -237,9 +279,9 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
                   </tr>
                 );
               })}
-              {previewItems.length === 0 && (
+              {visibleItems.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="empty-state">没有需要导入的包月规则</td>
+                  <td colSpan={5} className="empty-state">当前餐次没有需要导入的包月规则</td>
                 </tr>
               )}
             </tbody>
@@ -247,8 +289,8 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
         </div>
         <div className="modal-footer" style={{ justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ color: "var(--text-sub)", fontSize: "14px", fontWeight: 500 }}>
-            已选: <span style={{ color: "var(--primary-color)", fontWeight: 600 }}>{previewItems.filter(i => i.selected && i.hasBalance).length}</span> 人 | 
-            跳过: <span style={{ color: "var(--text-main)", fontWeight: 600 }}>{previewItems.filter(i => !i.selected || !i.hasBalance).length}</span> 人
+            已选: <span style={{ color: "var(--primary-color)", fontWeight: 600 }}>{visibleItems.filter(i => i.selected && i.hasBalance).length}</span> 人 |
+            跳过: <span style={{ color: "var(--text-main)", fontWeight: 600 }}>{visibleItems.filter(i => !i.selected || !i.hasBalance).length}</span> 人
           </div>
           <div style={{ display: "flex", gap: "12px" }}>
             <button className="btn btn-outline" disabled={isSubmittingImport} onClick={onClose}>取消</button>

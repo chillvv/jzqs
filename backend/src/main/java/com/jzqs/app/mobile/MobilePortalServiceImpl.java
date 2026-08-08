@@ -124,6 +124,11 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     }
 
     @Override
+    public MobileCurrentWeekResponse nextWeekMenu() {
+        return mobileCustomerQueryModule.nextWeekMenu();
+    }
+
+    @Override
     public MobileTomorrowMenuResponse tomorrowMenu() {
         return mobileCustomerQueryModule.tomorrowMenu();
     }
@@ -349,6 +354,14 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     @Transactional
     public MobileOrderAddressChangeResponse changeCustomerOrderAddress(long customerId, long orderId, long addressId) {
         MobileOrderAddressChangeResponse response = mobileAddressModule.changeCustomerOrderAddress(customerId, orderId, addressId);
+        publishCustomerEvent("customer.order.changed", customerId, orderId);
+        return response;
+    }
+
+    @Override
+    @Transactional
+    public MobileOrderAddressChangeResponse changeCustomerOrderAddressByMerchant(long customerId, long orderId, long addressId) {
+        MobileOrderAddressChangeResponse response = mobileAddressModule.changeCustomerOrderAddressByMerchant(customerId, orderId, addressId);
         publishCustomerEvent("customer.order.changed", customerId, orderId);
         return response;
     }

@@ -10,7 +10,7 @@
       </view>
       <view class="order-detail-nav-right">
         <view class="status-badge" wx:if="{{order && order.itemStatus === 'DELIVERED'}}">已送达</view>
-        <view class="status-badge status-badge-pending" wx:elif="{{order}}">配送中</view>
+        <view class="status-badge status-badge-pending" wx:elif="{{order}}">待配送</view>
       </view>
     </view>
   </view>
@@ -41,42 +41,7 @@
         {{order.deliveryAddress}}
       </view>
 
-      <!-- Remarks embedded in Order Info -->
-      <view class="inline-remarks" wx:if="{{(order.customerNote && order.customerNote !== '-') || (order.merchantNote && order.merchantNote !== '-')}}">
-        <view class="inline-remark-item" wx:if="{{order.customerNote && order.customerNote !== '-'}}">
-          <text class="inline-remark-label text-primary">用户备注：</text>
-          <text class="inline-remark-value">{{order.customerNote}}</text>
-        </view>
-        <view class="inline-remark-item" wx:if="{{order.merchantNote && order.merchantNote !== '-'}}">
-          <text class="inline-remark-label text-warning">商家嘱咐：</text>
-          <text class="inline-remark-value">{{order.merchantNote}}</text>
-        </view>
-      </view>
-
-      <view class="reference-summary-card" bindtap="handleViewReferenceImage">
-        <view class="reference-summary-icon">
-          <text class="material-symbols-outlined">🖼️</text>
-        </view>
-        <view class="reference-summary-copy">
-          <text class="reference-summary-label">参考图</text>
-          <text class="reference-summary-value" wx:if="{{hasReferenceImage}}">已保存，可查看或重新上传</text>
-          <text class="reference-summary-value reference-summary-empty" wx:else>暂无参考图</text>
-        </view>
-        <view class="reference-summary-action">
-          {{referenceImageLoading ? '加载中...' : (hasReferenceImage ? '查看' : '上传')}}
-          <text class="material-symbols-outlined arrow-icon">›</text>
-        </view>
-      </view>
-
-      <!-- 参考图直接展示，无需点击即可看到 -->
-      <view wx:if="{{hasReferenceImage && referenceImageUrl}}" class="reference-inline" bindtap="previewReferenceImage">
-        <image class="reference-inline-img" src="{{referenceImageUrl}}" mode="aspectFill" lazy-load="{{true}}"></image>
-        <view class="reference-inline-hint">
-          <text class="material-symbols-outlined reference-inline-hint-icon">🔍</text>
-          <text class="reference-inline-hint-text">点击查看大图</text>
-        </view>
-      </view>
-
+      <!-- 客户信息：名字 + 联系/导航（放在地址下方、备注与参照图上方） -->
       <view class="customer-info">
         <view class="customer-details">
           <text class="customer-name">{{order.customerName}}{{order.quantity > 1 ? ' ×' + order.quantity : ''}}</text>
@@ -93,6 +58,54 @@
           </view>
         </view>
       </view>
+
+      <!-- Remarks embedded in Order Info -->
+      <view class="inline-remarks" wx:if="{{(order.customerNote && order.customerNote !== '-') || (order.merchantNote && order.merchantNote !== '-')}}">
+        <view class="inline-remark-item" wx:if="{{order.customerNote && order.customerNote !== '-'}}">
+          <text class="inline-remark-label text-primary">用户备注：</text>
+          <text class="inline-remark-value">{{order.customerNote}}</text>
+        </view>
+        <view class="inline-remark-item" wx:if="{{order.merchantNote && order.merchantNote !== '-'}}">
+          <text class="inline-remark-label text-warning">商家嘱咐：</text>
+          <text class="inline-remark-value">{{order.merchantNote}}</text>
+        </view>
+      </view>
+
+      <!-- 参考图：直接展示，无需点击查看；支持更改/上传 -->
+      <view class="reference-summary-card">
+        <view class="reference-summary-icon">
+          <text class="material-symbols-outlined">🖼️</text>
+        </view>
+        <view class="reference-summary-copy">
+          <text class="reference-summary-label">参考图</text>
+          <text class="reference-summary-value" wx:if="{{hasReferenceImage}}">已保存，可更改或查看大图</text>
+          <text class="reference-summary-value reference-summary-empty" wx:else>暂无参考图</text>
+        </view>
+        <view class="reference-summary-action" bindtap="handleUploadReferenceImage">
+          {{referenceUploading ? '上传中...' : (hasReferenceImage ? '更改' : '上传')}}
+        </view>
+      </view>
+
+      <!-- 参考图直接展示，无需点击即可看到 -->
+      <view wx:if="{{hasReferenceImage && referenceImageUrl}}" class="reference-inline" bindtap="previewReferenceImage">
+        <image class="reference-inline-img" src="{{referenceImageUrl}}" mode="aspectFill" lazy-load="{{true}}"></image>
+        <view class="reference-inline-hint">
+          <text class="material-symbols-outlined reference-inline-hint-icon">🔍</text>
+          <text class="reference-inline-hint-text">点击查看大图</text>
+        </view>
+      </view>
+
+      <view wx:elif="{{!referenceImageLoading}}" class="reference-empty" bindtap="handleUploadReferenceImage">
+        <image class="reference-empty-icon" src="/assets/icons/camera.svg" mode="aspectFit"></image>
+        <text class="reference-empty-title">暂无参考图</text>
+        <text class="reference-empty-copy">首次送达的回执图会默认沉淀为参考图，也可以现在单独补一张。</text>
+      </view>
+
+      <view wx:else class="reference-loading">
+        <text class="material-symbols-outlined">⌛</text>
+        <text class="reference-loading-text">参考图加载中...</text>
+      </view>
+
     </view>
 
     <!-- 送达信息 -->
@@ -214,34 +227,7 @@
       <text>该订单已送达</text>
     </view>
   </view>
-
-  <view class="reference-sheet-mask {{showReferenceSheet ? 'show' : ''}}" bindtap="closeReferenceSheet"></view>
-  <view class="reference-sheet {{showReferenceSheet ? 'show' : ''}}">
-    <view class="reference-sheet-header">
-      <view>
-        <view class="reference-sheet-title">参考图</view>
-        <view class="reference-sheet-subtitle">仅在这里管理参考图，不影响本次送达凭证</view>
-      </view>
-      <view class="reference-sheet-close" bindtap="closeReferenceSheet">×</view>
-    </view>
-
-    <view class="reference-sheet-body">
-      <view wx:if="{{hasReferenceImage && referenceImageUrl}}" class="reference-sheet-preview" bindtap="previewReferenceImage">
-        <image class="reference-sheet-image" src="{{referenceImageUrl}}" mode="aspectFill"></image>
-        <view class="reference-sheet-preview-hint">点击查看大图</view>
-      </view>
-      <view wx:else class="reference-sheet-empty">
-        <image class="reference-sheet-empty-icon" src="/assets/icons/camera.svg" mode="aspectFit"></image>
-        <text class="reference-sheet-empty-title">暂无参考图</text>
-        <text class="reference-sheet-empty-copy">首次送达上传的回执图会默认沉淀为参考图，也可以现在单独补一张。</text>
-      </view>
-    </view>
-
-    <view class="reference-sheet-footer">
-      <button class="reference-sheet-primary" bindtap="handleUploadReferenceImage" loading="{{referenceUploading}}" disabled="{{referenceUploading}}">
-        {{referenceUploading ? '上传中...' : (hasReferenceImage ? '重新上传参考图' : '上传参考图')}}
-      </button>
-    </view>
-  </view>
+<view wx:if="{{demoActive}}" class="demo-exit-fab" catchtap="exitDemo">退出演示</view>
+<guide-mask id="guideMask" />
 
 </view>

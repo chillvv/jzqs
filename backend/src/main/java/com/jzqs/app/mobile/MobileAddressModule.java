@@ -142,6 +142,18 @@ class MobileAddressModule {
     }
 
     MobileOrderAddressChangeResponse changeCustomerOrderAddress(long customerId, long orderId, long addressId) {
+        return changeCustomerOrderAddressInternal(customerId, orderId, addressId, true);
+    }
+
+    /**
+     * 商家后台代客改址：跳过「送餐当天不可改」的时间窗口限制（顾客端仍受限制），
+     * 但保留同地址校验与派单区域重分配，避免误操作。顾客当天来联系时，由商家判断后再改。
+     */
+    MobileOrderAddressChangeResponse changeCustomerOrderAddressByMerchant(long customerId, long orderId, long addressId) {
+        return changeCustomerOrderAddressInternal(customerId, orderId, addressId, false);
+    }
+
+    private MobileOrderAddressChangeResponse changeCustomerOrderAddressInternal(long customerId, long orderId, long addressId, boolean enforceWindow) {
         CustomerOrderAddressRow order = jdbcTemplate.query(
             """
                 SELECT mso.address_id, do.serve_date
@@ -166,7 +178,7 @@ class MobileAddressModule {
         if (order == null) {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "未找到该订单");
         }
-        if (!canChangeAddress(order.serveDate())) {
+        if (enforceWindow && !canChangeAddress(order.serveDate())) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "送餐当天请联系客服修改地址");
         }
         Integer addressCount = jdbcTemplate.queryForObject(
@@ -178,8 +190,54 @@ class MobileAddressModule {
         if (addressCount == null || addressCount == 0) {
             throw new BusinessException(ErrorCode.ADDRESS_NOT_FOUND, "未找到该地址");
         }
+        if (order.addressId() == addressId) {
+            return new MobileOrderAddressChangeResponse(orderId, addressId, "ADDRESS_UNCHANGED");
+        }
         jdbcTemplate.update("UPDATE meal_slot_orders SET address_id = ? WHERE id = ?", addressId, orderId);
+        // 换地址后让派单区域与新地址接轨：自动派单本身是实时 JOIN 新 address_id 的，
+        // 这里主要修正「已派单订单」的 dispatch_assignments 区域快照，避免改址后派单区域错乱。
+        reconcileDispatchArea(orderId, addressId);
         return new MobileOrderAddressChangeResponse(orderId, addressId, "ADDRESS_UPDATED");
+    }
+
+    /**
+     * 换地址后的区域重分配：让 dispatch_assignments 的区域与新地址一致。
+     * - 新地址之前派过单 → 直接取其区域；
+     * - 新地址从未派过单 → 沿用该订单原区域，并补一条「地址变更待确认」的绑定记录，由商家后台复核；
+     * - 若订单尚未派单（无 dispatch_assignments 行），自动派单环节会基于新 address_id 实时 JOIN，无需处理。
+     */
+    private void reconcileDispatchArea(long orderId, long newAddressId) {
+        String newArea = jdbcTemplate.query(
+            "SELECT area_code FROM rider_address_bindings WHERE address_id = ? ORDER BY id DESC LIMIT 1",
+            (rs, rn) -> rs.getString("area_code"),
+            newAddressId
+        ).stream().findFirst().orElse(null);
+        if (newArea == null) {
+            String oldArea = jdbcTemplate.query(
+                "SELECT area_code FROM dispatch_assignments WHERE meal_slot_order_id = ? LIMIT 1",
+                (rs, rn) -> rs.getString("area_code"),
+                orderId
+            ).stream().findFirst().orElse(null);
+            if (oldArea != null) {
+                jdbcTemplate.update(
+                    "INSERT INTO rider_address_bindings (customer_id, address_id, address_fingerprint, area_code, manually_confirmed, updated_reason, updated_at) "
+                        + "SELECT customer_id, ?, '', ?, FALSE, 'ADDRESS_CHANGED_PENDING_CONFIRM', CURRENT_TIMESTAMP "
+                        + "FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE mso.id = ? "
+                        + "ON DUPLICATE KEY UPDATE area_code = VALUES(area_code), updated_reason = VALUES(updated_reason), updated_at = CURRENT_TIMESTAMP",
+                    newAddressId,
+                    oldArea,
+                    orderId
+                );
+                newArea = oldArea;
+            }
+        }
+        if (newArea != null) {
+            jdbcTemplate.update(
+                "UPDATE dispatch_assignments SET area_code = ? WHERE meal_slot_order_id = ?",
+                newArea,
+                orderId
+            );
+        }
     }
 
     private ContactSnapshot resolveCustomerAddressContact(long customerId) {

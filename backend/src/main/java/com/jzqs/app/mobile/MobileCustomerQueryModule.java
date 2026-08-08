@@ -182,6 +182,7 @@ class MobileCustomerQueryModule {
     }
 
     PageResponse<MobileMenuItemResponse> publishedMenus(String serveDate) {
+        LocalDate serve = LocalDate.parse(serveDate);
         List<MobileMenuItemResponse> items = jdbcTemplate.query(
             """
                 SELECT
@@ -194,7 +195,7 @@ class MobileCustomerQueryModule {
                     slot_status AS status
                 FROM menu_week_items mwi
                 JOIN menu_weeks mw ON mw.id = mwi.week_id
-                WHERE mw.status = 'PUBLISHED'
+                WHERE mw.week_start_date = ?
                   AND mwi.slot_status = 'ACTIVE'
                   AND mwi.serve_date = ?
                 ORDER BY CASE WHEN meal_period = 'LUNCH' THEN 1 ELSE 2 END, mwi.id
@@ -208,17 +209,32 @@ class MobileCustomerQueryModule {
                 rs.getString("merchant_note"),
                 rs.getString("status")
             ),
-            LocalDate.parse(serveDate)
+            currentWeekMonday(serve),
+            serve
         );
         return PageResponse.of(items, 1, 20, items.size());
     }
 
     MobileCurrentWeekResponse currentWeekMenu() {
-        LocalDate monday = currentWeekMonday(LocalDate.now());
+        return weekMenuByOffset(0);
+    }
+
+    MobileCurrentWeekResponse nextWeekMenu() {
+        return weekMenuByOffset(1);
+    }
+
+    /**
+     * 按「周偏移」查询整周菜单：0 = 本周，1 = 下周。
+     * 以「是否有 ACTIVE 餐槽」作为是否可见的依据，不再依赖 menu_weeks.status。
+     * 没有配置过的周返回 7 天「待配置」占位，供小程序正常展示。
+     */
+    MobileCurrentWeekResponse weekMenuByOffset(int weekOffset) {
+        LocalDate monday = currentWeekMonday(LocalDate.now()).plusWeeks(weekOffset);
         LocalDate sunday = monday.plusDays(6);
         return new MobileCurrentWeekResponse(
             monday.toString(),
             sunday.toString(),
+            findVisibleWeekId(monday) != null,
             buildCurrentWeekDays(monday)
         );
     }
@@ -249,8 +265,7 @@ class MobileCustomerQueryModule {
             statusText = !isBlank(notice) ? notice : "当前自助下单已截止，请联系专属客服微信";
         } else if (lunchItem == null && dinnerItem == null) {
             canOrder = false;
-            String restNotice = findRestNotice(tomorrow);
-            statusText = !isBlank(restNotice) ? restNotice : "明日菜单待发布或店休，暂不提供配送服务";
+            statusText = resolveTomorrowUnavailableNotice(tomorrow, settings.restNoticeTemplate());
         } else if (!selfOrderEnabled) {
             canOrder = false;
             statusText = selfOrderNotice;
@@ -294,6 +309,7 @@ class MobileCustomerQueryModule {
                     COALESCE(ms.merchant_note, '-') AS merchant_note,
                     COALESCE(mso.user_note, mso.note, '-') AS note,
                     ca.address_line AS delivery_address,
+                    mso.address_id AS address_id,
                     do.source,
                     mso.status,
                     COALESCE(mso.quantity, 1) AS quantity,
@@ -311,6 +327,10 @@ class MobileCustomerQueryModule {
                     COALESCE(ac.issue_type, '') AS aftersale_type,
                     COALESCE(ac.admin_remark, '') AS aftersale_admin_remark,
                     CASE
+                        WHEN dr.id IS NULL THEN FALSE
+                        ELSE TRUE
+                    END AS receipt_ever_existed,
+                    CASE
                         WHEN dr.visible_at IS NULL THEN FALSE
                         WHEN dr.visible_at <= CURRENT_TIMESTAMP THEN TRUE
                         ELSE FALSE
@@ -322,7 +342,6 @@ class MobileCustomerQueryModule {
                 LEFT JOIN menu_week_items ms ON ms.serve_date = do.serve_date
                     AND ms.meal_period = mso.meal_period
                     AND ms.slot_status = 'ACTIVE'
-                    AND EXISTS (SELECT 1 FROM menu_weeks mw2 WHERE mw2.id = ms.week_id AND mw2.status = 'PUBLISHED')
                 LEFT JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
                 LEFT JOIN dispatch_assignments da2 ON da2.meal_slot_order_id = mso.id
                 LEFT JOIN rider_profiles rp2 ON rp2.id = da2.rider_profile_id
@@ -347,6 +366,7 @@ class MobileCustomerQueryModule {
                 rs.getString("merchant_note"),
                 rs.getString("note"),
                 rs.getString("delivery_address"),
+                rs.getLong("address_id"),
                 rs.getString("source"),
                 rs.getString("status"),
                 resolveUserVisibleStatus(
@@ -360,6 +380,7 @@ class MobileCustomerQueryModule {
                 rs.getString("receipt_note"),
                 formatTimestamp(rs.getTimestamp("delivered_at")),
                 rs.getBoolean("receipt_visible"),
+                rs.getBoolean("receipt_ever_existed"),
                 canChangeAddress(rs.getDate("serve_date").toLocalDate()),
                 resolveChangeAddressMode(rs.getDate("serve_date").toLocalDate()),
                 rs.getBoolean("aftersale_open"),
@@ -432,16 +453,47 @@ class MobileCustomerQueryModule {
         return value == null ? null : value.toLocalDateTime();
     }
 
+    /**
+     * 明日无可售餐时的提示文案。
+     * 不再依赖 menu_weeks.status，只看该日期的餐槽实际状态：
+     * 1) 该日被标记为休息 -> 使用休息文案；
+     * 2) 该日没有可售餐且不是休息 -> 使用「菜单待发布」文案。
+     */
+    private String resolveTomorrowUnavailableNotice(LocalDate serveDate, String restNoticeTemplate) {
+        String restNotice = findRestNotice(serveDate);
+        if (!isBlank(restNotice)) {
+            return restNotice;
+        }
+        if (isRestDay(serveDate)) {
+            return isBlank(restNoticeTemplate)
+                ? "明日门店休息，暂不提供配送服务"
+                : restNoticeTemplate;
+        }
+        return "明日菜单尚未发布，请稍后再来看看";
+    }
+
+    private boolean isRestDay(LocalDate serveDate) {
+        Integer restSlots = jdbcTemplate.queryForObject(
+            """
+                SELECT COUNT(*)
+                FROM menu_week_items mwi
+                WHERE mwi.serve_date = ?
+                  AND mwi.slot_status = 'REST'
+                """,
+            Integer.class,
+            serveDate
+        );
+        return restSlots != null && restSlots > 0;
+    }
+
     private String findRestNotice(LocalDate serveDate) {
         List<String> notices = jdbcTemplate.query(
             """
                 SELECT COALESCE(merchant_note, '')
                 FROM menu_week_items mwi
-                JOIN menu_weeks mw ON mw.id = mwi.week_id
                 WHERE mwi.serve_date = ?
                   AND mwi.slot_status = 'REST'
                   AND COALESCE(mwi.merchant_note, '') <> ''
-                  AND mw.status = 'PUBLISHED'
                 ORDER BY CASE WHEN mwi.meal_period = 'LUNCH' THEN 1 ELSE 2 END, mwi.id
                 LIMIT 1
                 """,
@@ -484,9 +536,10 @@ class MobileCustomerQueryModule {
                        banner_interval_seconds,
                        COALESCE(package_expiry_reminder_days, 7) AS package_expiry_reminder_days,
                        COALESCE(package_low_balance_threshold, 3) AS package_low_balance_threshold,
-                       popup_announcement_enabled,
-                       COALESCE(popup_announcement_content, '') AS popup_announcement_content,
-                       meal_reminder_popup_enabled
+                popup_announcement_enabled,
+                COALESCE(popup_announcement_content, '') AS popup_announcement_content,
+                meal_reminder_popup_enabled,
+                COALESCE(rest_notice_template, '') AS rest_notice_template
                 FROM admin_settings
                 WHERE id = 1
                 """,
@@ -501,14 +554,15 @@ class MobileCustomerQueryModule {
                     rs.getInt("package_low_balance_threshold"),
                     rs.getBoolean("popup_announcement_enabled"),
                     rs.getString("popup_announcement_content"),
-                    rs.getBoolean("meal_reminder_popup_enabled")
+                    rs.getBoolean("meal_reminder_popup_enabled"),
+                    rs.getString("rest_notice_template")
                 )
-                : new AdminSettingsSnapshot(false, "", "", null, null, 7, 3, false, "", false)
+                : new AdminSettingsSnapshot(false, "", "", null, null, 7, 3, false, "", false, "")
         );
     }
 
     private List<MobileCurrentWeekDayResponse> buildCurrentWeekDays(LocalDate monday) {
-        Long weekId = findPublishedWeekId(monday);
+        Long weekId = findVisibleWeekId(monday);
         List<MobileCurrentWeekDayResponse> days = new ArrayList<>();
         if (weekId == null) {
             for (int i = 0; i < 7; i++) {
@@ -525,6 +579,7 @@ class MobileCustomerQueryModule {
             return days;
         }
         Map<LocalDate, List<CurrentWeekMenuRow>> grouped = new HashMap<>();
+        String restNoticeTemplate = loadAdminSettingsSnapshot().restNoticeTemplate();
         jdbcTemplate.query(
             """
                 SELECT
@@ -578,26 +633,38 @@ class MobileCustomerQueryModule {
                 weekdayLabel(serveDate),
                 slotStatus,
                 items,
-                resolveRestNotice(slotStatus, rows)
+                resolveRestNotice(slotStatus, rows, restNoticeTemplate)
             ));
         }
         return days;
     }
 
-    private String resolveRestNotice(String slotStatus, List<CurrentWeekMenuRow> rows) {
+    private String resolveRestNotice(String slotStatus, List<CurrentWeekMenuRow> rows, String restNoticeTemplate) {
         if (!"REST".equals(slotStatus)) {
             return "";
         }
-        return rows.stream()
+        String note = rows.stream()
             .map(CurrentWeekMenuRow::merchantNote)
-            .filter(note -> note != null && !note.isBlank() && !"-".equals(note))
+            .filter(n -> n != null && !n.isBlank() && !"-".equals(n))
             .findFirst()
             .orElse("");
+        return !note.isBlank() ? note : restNoticeTemplate;
     }
 
-    private Long findPublishedWeekId(LocalDate monday) {
+    private Long findVisibleWeekId(LocalDate monday) {
         return jdbcTemplate.query(
-            "SELECT id FROM menu_weeks WHERE week_start_date = ? AND status = 'PUBLISHED' ORDER BY id DESC LIMIT 1",
+            """
+                SELECT mw.id
+                FROM menu_weeks mw
+                WHERE mw.week_start_date = ?
+                  AND EXISTS (
+                      SELECT 1
+                      FROM menu_week_items mwi
+                      WHERE mwi.week_id = mw.id AND mwi.slot_status = 'ACTIVE'
+                  )
+                ORDER BY mw.id DESC
+                LIMIT 1
+                """,
             ps -> ps.setObject(1, monday),
             rs -> rs.next() ? rs.getLong(1) : null
         );
@@ -780,7 +847,8 @@ class MobileCustomerQueryModule {
         int packageLowBalanceThreshold,
         boolean popupAnnouncementEnabled,
         String popupAnnouncementContent,
-        boolean mealReminderPopupEnabled
+        boolean mealReminderPopupEnabled,
+        String restNoticeTemplate
     ) {
     }
 

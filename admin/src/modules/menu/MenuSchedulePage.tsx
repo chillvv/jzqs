@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { useBlocker } from "react-router-dom";
-import { swrFetcher, createNextMenuWeek, copyMenuWeekFromLastWeek, publishMenuWeek, saveMenuWeekDay } from "../../shared/api/http";
-import type { AdminMenuWeekDay, AdminMenuWeekResponse, AdminMenuWeekSlot } from "../../shared/api/types";
-import { buildMenuWeekSummary, resolveWeekStatusLabel } from "./menuSchedulePage.helpers";
+import { swrFetcher, createNextMenuWeek, copyMenuWeekFromLastWeek, saveMenuWeekDay, fetchOperationSettings, updateRestNoticeTemplate } from "../../shared/api/http";
+import type { AdminMenuWeekDay, AdminMenuWeekResponse, AdminMenuWeekSlot, OperationSettingsResponse } from "../../shared/api/types";
+import { buildMenuWeekSummary } from "./menuSchedulePage.helpers";
 import { formatDateLabel, formatLocalDateInputValue, shiftLocalDateInputValue } from "../../shared/utils/dateTime";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { AsyncContentView, type AsyncContentViewStatus } from "../../shared/components/AsyncContentView";
@@ -74,10 +74,8 @@ export function MenuSchedulePage() {
   const [drafts, setDrafts] = useState<Record<string, DayDraft>>({});
   const [currentWeekId, setCurrentWeekId] = useState<number | null>(null);
 
-  const [isPublishConfirmOpen, setIsPublishConfirmOpen] = useState(false);
   const [copyingLastWeek, setCopyingLastWeek] = useState(false);
   const [creatingNextWeek, setCreatingNextWeek] = useState(false);
-  const [publishing, setPublishing] = useState(false);
   const [savingDay, setSavingDay] = useState<string | null>(null);
   const [savingDirtyDays, setSavingDirtyDays] = useState(false);
   const [unsavedDialog, setUnsavedDialog] = useState<{
@@ -96,6 +94,38 @@ export function MenuSchedulePage() {
 
   const week = response?.data as AdminMenuWeekResponse | undefined | null;
   const selectedDate = targetDate || week?.weekStartDate || "";
+
+  const { data: settingsResponse } = useSWR("/api/admin/settings/operation-status", swrFetcher, { revalidateOnFocus: false });
+  const restNoticeTemplate = (settingsResponse?.data as OperationSettingsResponse | undefined)?.restNoticeTemplate?.trim() || "";
+
+  // 明日餐可预订性自检：跨周（周日看下周一）时最容易踩坑——
+  // 下一周的记录默认是 DRAFT，只「保存」不「发布」的话客户端查不到菜单，也就无法提前一天预订。
+  const tomorrowDate = useMemo(() => shiftLocalDateInputValue(formatLocalDateInputValue(new Date()), 1), []);
+  const { data: tomorrowWeekResponse, mutate: mutateTomorrowWeek } = useSWR(
+    `/api/admin/menu-weeks/current?targetDate=${encodeURIComponent(tomorrowDate)}`,
+    swrFetcher,
+    { revalidateOnFocus: false }
+  );
+  const tomorrowAlert = useMemo(() => {
+    const tomorrowWeek = tomorrowWeekResponse?.data as AdminMenuWeekResponse | undefined | null;
+    if (!tomorrowWeek) {
+      return null;
+    }
+    const day = tomorrowWeek.days.find((item) => item.serveDate === tomorrowDate);
+    const isRest = day ? day.lunch.slotStatus === "REST" && day.dinner.slotStatus === "REST" : false;
+    if (isRest) {
+      return null;
+    }
+    const hasMeal = day ? day.lunch.slotStatus === "ACTIVE" || day.dinner.slotStatus === "ACTIVE" : false;
+    if (!hasMeal) {
+      return {
+        weekStartDate: tomorrowWeek.weekStartDate,
+        title: `明日（${tomorrowDate}）菜单还没配置`,
+        desc: "明日的午餐和晚餐都还没配置，客户在小程序里看不到明日菜单，也无法提前一天预订。请切换到该周并点击「去处理」。"
+      };
+    }
+    return null;
+  }, [tomorrowWeekResponse, tomorrowDate]);
 
   useEffect(() => {
     if (error) {
@@ -269,32 +299,6 @@ export function MenuSchedulePage() {
     }
   }
 
-  async function handlePublish() {
-    if (!week) return;
-    if (publishing) {
-      return;
-    }
-    setPublishing(true);
-    try {
-      setIsPublishConfirmOpen(false);
-      await persistDraftDaysBeforePublish(week.weekId);
-      await publishMenuWeek(week.weekId);
-      await mutate();
-      toast(`${week.weekStartDate} ~ ${week.weekEndDate} 菜单已发布`, "success");
-    } catch (err: any) {
-      toast(err?.response?.data?.message || err.message || String(err), "error");
-    } finally {
-      setPublishing(false);
-    }
-  }
-
-  const isPublished = week?.status === "PUBLISHED";
-  const publishButtonText = isPublished ? "更新菜单" : "发布菜单";
-  const publishConfirmTitle = isPublished ? "确认更新菜单" : "确认发布菜单";
-  const publishConfirmMessage = isPublished
-    ? `确认更新「${week?.weekStartDate} ~ ${week?.weekEndDate}」的菜单？\n小程序将立即展示更新后的内容。`
-    : `确认发布「${week?.weekStartDate} ~ ${week?.weekEndDate}」的菜单？\n发布后小程序将立即展示新菜单。`;
-
   function updateSlot(serveDate: string, mealPeriod: "lunch" | "dinner", key: keyof SlotDraft, value: SlotDraft[keyof SlotDraft]) {
     setDrafts((current) => ({
       ...current,
@@ -311,11 +315,13 @@ export function MenuSchedulePage() {
   function setDayStatus(serveDate: string, status: DayStatus) {
     setDrafts((current) => {
       const day = current[serveDate];
+      const lunchNote = status === "REST" && !day.lunch.merchantNote?.trim() ? restNoticeTemplate : day.lunch.merchantNote;
+      const dinnerNote = status === "REST" && !day.dinner.merchantNote?.trim() ? restNoticeTemplate : day.dinner.merchantNote;
       return {
         ...current,
         [serveDate]: {
-          lunch: { ...day.lunch, slotStatus: status },
-          dinner: { ...day.dinner, slotStatus: status }
+          lunch: { ...day.lunch, slotStatus: status, merchantNote: lunchNote },
+          dinner: { ...day.dinner, slotStatus: status, merchantNote: dinnerNote }
         }
       };
     });
@@ -325,8 +331,8 @@ export function MenuSchedulePage() {
     setDrafts((current) => ({
       ...current,
       [serveDate]: {
-        lunch: { ...cloneSlot(current[serveDate].lunch), slotStatus: "REST", dishItems: [], totalCalories: null, merchantNote: "", imageUrl: "" },
-        dinner: { ...cloneSlot(current[serveDate].dinner), slotStatus: "REST", dishItems: [], totalCalories: null, merchantNote: "", imageUrl: "" }
+        lunch: { ...cloneSlot(current[serveDate].lunch), slotStatus: "REST", dishItems: [], totalCalories: null, merchantNote: restNoticeTemplate, imageUrl: "" },
+        dinner: { ...cloneSlot(current[serveDate].dinner), slotStatus: "REST", dishItems: [], totalCalories: null, merchantNote: restNoticeTemplate, imageUrl: "" }
       }
     }));
   }
@@ -395,7 +401,11 @@ export function MenuSchedulePage() {
     setSavingDay(serveDate);
     try {
       await saveMenuWeekDay(week.weekId, serveDate, drafts[serveDate]);
-      await mutate();
+      const savedDay = drafts[serveDate];
+      if (savedDay.lunch.slotStatus === "REST" && savedDay.lunch.merchantNote?.trim()) {
+        updateRestNoticeTemplate(savedDay.lunch.merchantNote.trim()).catch(() => undefined);
+      }
+      await Promise.all([mutate(), mutateTomorrowWeek()]);
       setExpandedDate(serveDate);
       toast("保存成功", "success");
     } catch (err: any) {
@@ -403,16 +413,6 @@ export function MenuSchedulePage() {
     } finally {
       setSavingDay(null);
     }
-  }
-
-  async function persistDraftDaysBeforePublish(weekId: number) {
-    const draftEntries = Object.entries(drafts);
-    if (draftEntries.length === 0) {
-      return;
-    }
-    await Promise.all(
-      draftEntries.map(([serveDate, draft]) => saveMenuWeekDay(weekId, serveDate, draft))
-    );
   }
 
   function handlePickWeek(targetDate: string) {
@@ -485,14 +485,25 @@ export function MenuSchedulePage() {
       <div className="page-header">
         <div>
           <h2 className="page-title">{pageTitle}</h2>
-          <p className="page-subtitle">周菜单配置、休息日与发布状态</p>
+          <p className="page-subtitle">周菜单配置与休息日</p>
         </div>
         <div className="page-header__actions">
           <button className="btn btn-outline" disabled={copyingLastWeek} onClick={() => guardUnsaved(() => { handleCopyFromLastWeek().catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error")); })}>{copyingLastWeek ? "复制中..." : "复制上周菜单到本周"}</button>
           <button className="btn btn-outline" disabled={creatingNextWeek} onClick={() => guardUnsaved(() => { handleCreateNextWeek().catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error")); })}>{creatingNextWeek ? "创建中..." : "新建下周空白模板"}</button>
-          <button className="btn btn-primary" onClick={() => setIsPublishConfirmOpen(true)} disabled={!week || publishing}>{publishing ? (isPublished ? "更新中..." : "发布中...") : publishButtonText}</button>
         </div>
       </div>
+      {tomorrowAlert && (
+        <div className="menu-week-alert">
+          <div className="menu-week-alert__text">
+            <div className="menu-week-alert__title">⚠️ {tomorrowAlert.title}</div>
+            <div className="menu-week-alert__desc">{tomorrowAlert.desc}</div>
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={() => handlePickWeekGuarded(tomorrowAlert.weekStartDate)}
+          >去处理</button>
+        </div>
+      )}
       <div className="stat-row">
         <div className="stat-card">
           <div className="stat-title">已配置餐槽</div>
@@ -508,13 +519,6 @@ export function MenuSchedulePage() {
           <div className="stat-title">已完成天数</div>
           <div className="stat-val stat-val--primary">{weekSummary.configuredDayCount} <span>天</span></div>
           <div className="stat-footer">含休息日 {weekSummary.restDayCount} 天</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-title">周状态</div>
-          <div className={`stat-val ${isPublished ? "stat-val--success" : "stat-val--warning"}`} style={{ fontSize: "22px", fontWeight: 800 }}>
-            {week ? resolveWeekStatusLabel(week.status) : "加载中"}
-          </div>
-          <div className="stat-footer">{week ? `${week.weekStartDate} ~ ${week.weekEndDate}` : "等待数据"}</div>
         </div>
       </div>
 
@@ -614,7 +618,7 @@ export function MenuSchedulePage() {
                           placeholder="如：今日店休，明日正常营业"
                         />
                       </div>
-                      <div className="menu-day-rest-hint">🌿 今日休息，不提供餐食</div>
+                      <div className="menu-day-rest-hint">🌿 {draft.lunch.merchantNote || restNoticeTemplate || "今日休息，不提供餐食"}</div>
                     </div>
                   ) : (
                     <>
@@ -635,27 +639,6 @@ export function MenuSchedulePage() {
           );
         }))}
       </div>
-
-      {isPublishConfirmOpen && (
-        <AdminDialog
-          open={isPublishConfirmOpen}
-          title={publishConfirmTitle}
-          width={460}
-          disableOverlayClose={publishing}
-          closeDisabled={publishing}
-          onClose={() => setIsPublishConfirmOpen(false)}
-          footer={
-            <>
-              <button className="btn btn-outline" disabled={publishing} onClick={() => setIsPublishConfirmOpen(false)}>取消</button>
-              <button className="btn btn-primary" disabled={publishing} onClick={() => handlePublish().catch((err) => toast(err?.response?.data?.message || err.message || String(err), "error"))}>
-                {publishing ? (isPublished ? "更新中..." : "发布中...") : isPublished ? "确认更新" : "确认发布"}
-              </button>
-            </>
-          }
-        >
-          <p style={{ whiteSpace: "pre-line", lineHeight: 1.6, margin: 0 }}>{publishConfirmMessage}</p>
-        </AdminDialog>
-      )}
 
       {unsavedDialog && (
         <AdminDialog

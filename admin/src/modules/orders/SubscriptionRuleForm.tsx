@@ -27,14 +27,20 @@ const WEEK_DAY_OPTIONS = [
 
 const ALL_WEEK_DAYS = WEEK_DAY_OPTIONS.map((option) => option.value).join(",");
 
-function formatTomorrowDate() {
+function formatDateOffset(days: number) {
   const date = new Date();
-  date.setDate(date.getDate() + 1);
+  date.setDate(date.getDate() + days);
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
+
+function formatTomorrowDate() {
+  return formatDateOffset(1);
+}
+
+const DEFAULT_PLAN_DURATION_DAYS = 10;
 
 function resolveSelectableAddressId(addresses: AddressOption[], preferredAddressId?: number | null) {
   if (preferredAddressId && addresses.some((address) => address.id === preferredAddressId)) {
@@ -52,8 +58,8 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
   const isEdit = Boolean(item);
   const [form, setForm] = useState<SubscriptionRuleFormData>({
     customerId: 0,
-    startDate: "",
-    endDate: "",
+    startDate: formatDateOffset(1),
+    endDate: formatDateOffset(DEFAULT_PLAN_DURATION_DAYS),
     weekDays: ALL_WEEK_DAYS,
     lunchEnabled: false,
     lunchQuantity: 1,

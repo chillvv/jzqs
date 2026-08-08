@@ -149,6 +149,14 @@ public class SettingsController {
         return ApiResponse.success(settingsService.updateHolidayNotice(request.title(), request.description()));
     }
 
+    @PostMapping("/rest-notice-template")
+    @RateLimit(key = "admin:settings:rest-notice-template", maxRequests = 4, windowSeconds = 10)
+    @Idempotent(key = "admin:settings:rest-notice-template", ttlSeconds = 5, includeBody = true)
+    @AuditAction(module = "SETTINGS", action = "REST_NOTICE_TEMPLATE")
+    public ApiResponse<OperationSettingsResponse> updateRestNoticeTemplate(@RequestBody RestNoticeTemplateUpdateRequest request) {
+        return ApiResponse.success(settingsService.updateRestNoticeTemplate(request.template()));
+    }
+
     @PostMapping("/banner-images")
     @RateLimit(key = "admin:settings:banner-images", maxRequests = 3, windowSeconds = 10)
     @Idempotent(key = "admin:settings:banner-images", ttlSeconds = 5, includeBody = true)

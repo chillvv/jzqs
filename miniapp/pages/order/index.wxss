@@ -343,3 +343,115 @@
 .check-icon { color: var(--brand-primary); font-size: 32rpx; font-weight: 700; }
 .popup-footer { padding: 24rpx 32rpx; border-top: 2rpx solid var(--border); }
 .btn-add-address { background: var(--brand-light); color: var(--brand-dark); border: 2rpx solid var(--brand-dark); border-radius: 44rpx; height: 88rpx; line-height: 84rpx; font-size: 30rpx; font-weight: 700; display: flex; justify-content: center; align-items: center; width: 100% !important; margin: 0; box-sizing: border-box; }
+
+/* =========================================
+   下单成功弹窗
+   ========================================= */
+.success-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.25s ease, visibility 0.25s ease;
+  z-index: 2000;
+}
+.success-mask.show {
+  opacity: 1;
+  visibility: visible;
+}
+.success-card {
+  width: 560rpx;
+  background: var(--bg-card);
+  border-radius: 32rpx;
+  padding: 48rpx 40rpx 40rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  box-shadow: 0 24rpx 60rpx rgba(0, 0, 0, 0.18);
+  transform: translateY(24rpx) scale(0.96);
+  transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.success-mask.show .success-card {
+  transform: translateY(0) scale(1);
+}
+.success-icon {
+  width: 96rpx;
+  height: 96rpx;
+  border-radius: 50%;
+  background: var(--brand-light);
+  color: var(--brand-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 56rpx;
+  font-weight: 700;
+  margin-bottom: 24rpx;
+}
+.success-title {
+  font-size: 36rpx;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 12rpx;
+}
+.success-desc {
+  font-size: 26rpx;
+  color: var(--text-sub);
+  text-align: center;
+  line-height: 1.6;
+  margin-bottom: 24rpx;
+}
+.success-tip {
+  width: 100%;
+  background: #fff7ed;
+  border: 2rpx solid #fde9c8;
+  border-radius: 20rpx;
+  padding: 20rpx 22rpx;
+  margin-bottom: 32rpx;
+  box-sizing: border-box;
+}
+.success-tip-head {
+  font-size: 24rpx;
+  font-weight: 700;
+  color: #b45309;
+  margin-bottom: 10rpx;
+}
+.success-tip-body {
+  font-size: 22rpx;
+  color: #b45309;
+  line-height: 1.6;
+}
+.success-actions {
+  display: flex;
+  gap: 20rpx;
+  width: 100%;
+}
+.success-btn {
+  flex: 1;
+  height: 80rpx;
+  line-height: 80rpx;
+  border-radius: 40rpx;
+  font-size: 28rpx;
+  font-weight: 700;
+  border: none;
+  padding: 0;
+  margin: 0;
+}
+.success-btn::after {
+  border: none;
+}
+.success-btn.ghost {
+  background: #f5f6f7;
+  color: var(--text-sub);
+}
+.success-btn.primary {
+  background: var(--brand-primary);
+  color: #111111;
+  box-shadow: 0 8rpx 20rpx rgba(184, 208, 96, 0.25);
+}

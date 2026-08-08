@@ -76,6 +76,7 @@ public class MenuWeekAdminServiceImpl implements MenuWeekAdminService {
         saveSlot(weekId, targetDate, "LUNCH", request.lunch());
         saveSlot(weekId, targetDate, "DINNER", request.dinner());
         jdbcTemplate.update("UPDATE menu_weeks SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", weekId);
+        publishWeekRecord(weekId);
         return new MenuWeekDaySaveResponse(
             weekId,
             serveDate,
@@ -164,12 +165,13 @@ public class MenuWeekAdminServiceImpl implements MenuWeekAdminService {
         }
 
         jdbcTemplate.update("UPDATE menu_weeks SET updated_at = CURRENT_TIMESTAMP WHERE id = ?", targetWeekId);
+        publishWeekRecord(targetWeekId);
 
         return new MenuWeekCopyResponse(
             targetWeekId,
             thisWeekStart.toString(),
             thisWeekStart.plusDays(6).toString(),
-            "DRAFT",
+            "PUBLISHED",
             lastWeekStart.toString()
         );
     }
@@ -194,6 +196,13 @@ public class MenuWeekAdminServiceImpl implements MenuWeekAdminService {
             operatorName, weekId
         );
         return new MenuWeekPublishResponse(weekId, "PUBLISHED");
+    }
+
+    private void publishWeekRecord(long weekId) {
+        jdbcTemplate.update(
+            "UPDATE menu_weeks SET status = 'PUBLISHED', published_at = COALESCE(published_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            weekId
+        );
     }
 
     private void createDefaultSlots(long weekId, LocalDate weekStart) {
