@@ -45,7 +45,11 @@ const EMPTY_PACKAGE_REMINDER = {
   mealReminderPopupEnabled: true,
   deliverySubscribeEnabled: true,
   deliverySubscribeLunchTime: "11:30",
-  deliverySubscribeDinnerTime: "17:30"
+  deliverySubscribeDinnerTime: "17:30",
+  nightlyReminderEnabled: true,
+  nightlyReminderTime: "20:00",
+  nightlyReminderDescription: "再忙也要好好吃饭哟🍽",
+  nightlyReminderTip: "需要明日餐食的宝子现在可以下单喽～"
 };
 const EMPTY_DISPATCH_AI_FORM = {
   autoScheduleEnabled: false,
@@ -71,6 +75,10 @@ function normalizeTriggerTime(value: string) {
   return /^([01]\d|2[0-3]):([0-5]\d)$/.test(normalized) ? normalized : "";
 }
 
+function graphemeLength(value: string) {
+  return [...(value || "")].length;
+}
+
 export function SystemSettingsPage() {
   const [settings, setSettings] = useState<OperationSettingsResponse>({
     orderingEnabled: true,
@@ -86,6 +94,10 @@ export function SystemSettingsPage() {
     deliverySubscribeEnabled: true,
     deliverySubscribeLunchTime: "11:30",
     deliverySubscribeDinnerTime: "17:30",
+    nightlyReminderEnabled: true,
+    nightlyReminderTime: "20:00",
+    nightlyReminderDescription: "再忙也要好好吃饭哟🍽",
+    nightlyReminderTip: "需要明日餐食的宝子现在可以下单喽～",
     popupAnnouncementEnabled: false,
     popupAnnouncementContent: "",
     restNoticeTemplate: "今日休息，不提供餐食"
@@ -201,7 +213,11 @@ export function SystemSettingsPage() {
       mealReminderPopupEnabled: settings.mealReminderPopupEnabled !== false,
       deliverySubscribeEnabled: settings.deliverySubscribeEnabled !== false,
       deliverySubscribeLunchTime: normalizeTriggerTime(settings.deliverySubscribeLunchTime || "11:30") || "11:30",
-      deliverySubscribeDinnerTime: normalizeTriggerTime(settings.deliverySubscribeDinnerTime || "17:30") || "17:30"
+      deliverySubscribeDinnerTime: normalizeTriggerTime(settings.deliverySubscribeDinnerTime || "17:30") || "17:30",
+      nightlyReminderEnabled: settings.nightlyReminderEnabled !== false,
+      nightlyReminderTime: normalizeTriggerTime(settings.nightlyReminderTime || "20:00") || "20:00",
+      nightlyReminderDescription: settings.nightlyReminderDescription || "再忙也要好好吃饭哟🍽",
+      nightlyReminderTip: settings.nightlyReminderTip || "需要明日餐食的宝子现在可以下单喽～"
     });
     openModal("packageReminder");
   }
@@ -229,8 +245,15 @@ export function SystemSettingsPage() {
     const packageLowBalanceThreshold = Math.max(1, Number(packageReminderForm.packageLowBalanceThreshold) || 0);
     const deliverySubscribeLunchTime = normalizeTriggerTime(packageReminderForm.deliverySubscribeLunchTime);
     const deliverySubscribeDinnerTime = normalizeTriggerTime(packageReminderForm.deliverySubscribeDinnerTime);
+    const nightlyReminderTime = normalizeTriggerTime(packageReminderForm.nightlyReminderTime || "20:00") || "20:00";
     if (!packageExpiryReminderDays || !packageLowBalanceThreshold || !deliverySubscribeLunchTime || !deliverySubscribeDinnerTime) {
       toast("请填写有效的提醒阈值以及午餐、晚餐订阅时间", "error");
+      return;
+    }
+    const description = (packageReminderForm.nightlyReminderDescription || "").trim();
+    const tip = (packageReminderForm.nightlyReminderTip || "").trim();
+    if (graphemeLength(description) > 20 || graphemeLength(tip) > 20) {
+      toast("每晚提醒的描述与温馨提示均不能超过 20 个字", "error");
       return;
     }
     setPackageSubmitting(true);
@@ -241,7 +264,11 @@ export function SystemSettingsPage() {
         mealReminderPopupEnabled: packageReminderForm.mealReminderPopupEnabled,
         deliverySubscribeEnabled: packageReminderForm.deliverySubscribeEnabled,
         deliverySubscribeLunchTime,
-        deliverySubscribeDinnerTime
+        deliverySubscribeDinnerTime,
+        nightlyReminderEnabled: packageReminderForm.nightlyReminderEnabled,
+        nightlyReminderTime,
+        nightlyReminderDescription: description,
+        nightlyReminderTip: tip
       }));
       closeModal();
       toast("餐包提醒已更新");
@@ -766,6 +793,59 @@ export function SystemSettingsPage() {
           <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 8 }}>
             释放时间即下方午餐/晚餐时间，到点后所有已送达订单对顾客统一变为“已送达”并发送提醒；特殊提前送达可在骑手配送中心对个别订单“立即释放”。
           </div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">每晚用餐提醒</label>
+          <div className="toggle-row">
+            <input
+              type="checkbox"
+              checked={packageReminderForm.nightlyReminderEnabled}
+              onChange={(e) => setPackageReminderForm({ ...packageReminderForm, nightlyReminderEnabled: e.target.checked })}
+            />
+            <span>{packageReminderForm.nightlyReminderEnabled ? "开启后每晚定时向已授权顾客发送「明日用餐还剩多少餐」提醒" : "关闭后每晚不发送用餐提醒"}</span>
+          </div>
+          {packageReminderForm.nightlyReminderEnabled && (
+            <div className="nightly-reminder-config">
+              <div className="form-group" style={{ marginTop: 12 }}>
+                <label className="form-label">发送时间</label>
+                <SafeInput
+                  className="form-control"
+                  type="time"
+                  value={packageReminderForm.nightlyReminderTime}
+                  onValueChange={(value) => setPackageReminderForm({ ...packageReminderForm, nightlyReminderTime: value })}
+                />
+                <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 8 }}>
+                  系统会在该时间点群发提醒。注意：<b>明天是否发餐取决于后台「菜单」是否配置了对应日期的排期</b>（即明天是否营业）。若未配置菜单，当晚会自动跳过，请商家及时配置菜单，避免提醒失效。
+                </div>
+              </div>
+              <div className="form-group" style={{ marginTop: 12 }}>
+                <label className="form-label">描述内容（thing3，限 20 字）</label>
+                <SafeInput
+                  className="form-control"
+                  value={packageReminderForm.nightlyReminderDescription}
+                  maxLength={20}
+                  placeholder="再忙也要好好吃饭哟🍽"
+                  onValueChange={(value) => setPackageReminderForm({ ...packageReminderForm, nightlyReminderDescription: value })}
+                />
+                <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 6 }}>
+                  当前 {graphemeLength(packageReminderForm.nightlyReminderDescription || "")}/20 字
+                </div>
+              </div>
+              <div className="form-group" style={{ marginTop: 12 }}>
+                <label className="form-label">温馨提示内容（thing6，限 20 字）</label>
+                <SafeInput
+                  className="form-control"
+                  value={packageReminderForm.nightlyReminderTip}
+                  maxLength={20}
+                  placeholder="需要明日餐食的宝子现在可以下单喽～"
+                  onValueChange={(value) => setPackageReminderForm({ ...packageReminderForm, nightlyReminderTip: value })}
+                />
+                <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 6 }}>
+                  当前 {graphemeLength(packageReminderForm.nightlyReminderTip || "")}/20 字
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         <div className="form-group">
           <label className="form-label">午餐释放时间</label>

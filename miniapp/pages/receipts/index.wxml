@@ -60,7 +60,7 @@
       </view>
     </block>
     <block wx:else>
-      <view wx:for="{{items}}" wx:key="id" class="subpage-card">
+      <view wx:for="{{items}}" wx:key="id" class="subpage-card receipt-card">
         <view class="order-head">
           <view>
             <view class="section-label">{{item.serveDateText}} {{item.periodText}}</view>
@@ -68,11 +68,23 @@
           </view>
           <view class="status-pill delivered">已送达</view>
         </view>
+
         <view class="detail-line">配送地址：{{item.deliveryAddress}}</view>
-        <view class="detail-line rider-note-line">骑手备注：{{item.receiptNote || '回执文本已清理，仅保留送达状态'}}</view>
-        <view class="action-row">
-          <button class="sub-btn primary" data-id="{{item.id}}" bindtap="openOrderDetail">查看订单详情</button>
+
+        <view class="detail-line rider-note-line" wx:if="{{item.receiptNote}}">骑手备注：{{item.receiptNote}}</view>
+
+        <view wx:if="{{item.canShowReceiptImage}}" class="receipt-photo-panel">
+          <image
+            class="receipt-photo"
+            src="{{item.receiptUrl}}"
+            mode="widthFix"
+            bindtap="previewReceipt"
+            data-url="{{item.receiptUrl}}"
+            lazy-load="true"
+          />
+          <view class="receipt-photo-hint">点击图片可查看大图</view>
         </view>
+        <view wx:else class="receipt-inline-hint">{{item.receiptHint || '当前暂无可查看回执图片'}}</view>
       </view>
     </block>
   </view>

@@ -64,7 +64,9 @@ public interface MobilePortalService {
 
     MobileDeliverySubscriptionAuthorizeResponse authorizeDeliverySubscription(long customerId, long orderId, String templateId, String acceptResult);
 
-    MobileSubscribeMessageTestResponse sendSubscribeMessageTest(long customerId, String templateId, String acceptResult);
+    MobileDeliverySubscriptionAuthorizeResponse authorizeNightlySubscription(long customerId, String templateId, String acceptResult);
+
+    MobileSubscribeMessageTestResponse sendSubscribeMessageTest(long customerId, String templateId, String acceptResult, String type);
 
     int sendScheduledDeliverySubscribeMessages(String mealPeriod);
 

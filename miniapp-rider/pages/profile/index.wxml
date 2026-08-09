@@ -63,7 +63,20 @@
       <text class="list-arrow">›</text>
     </view>
   </view>
-  
+
+  <view class="menu-group">
+    <view class="list-item" bindtap="onNewbieGuideTap">
+      <view class="list-icon-wrap">
+        <text class="list-icon">🧭</text>
+        <view class="list-copy">
+          <view class="list-title">新手指引</view>
+          <view class="list-desc">完整走一遍工作台到上传回执的流程</view>
+        </view>
+      </view>
+      <text class="list-arrow">›</text>
+    </view>
+  </view>
+
   <view class="logout-section" wx:if="{{viewState === 'active' || viewState === 'pending' || viewState === 'blocked'}}">
     <button class="btn-logout" bindtap="logout">退出登录</button>
   </view>

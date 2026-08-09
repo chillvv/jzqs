@@ -10,6 +10,7 @@ const { resolveMediaUrl } = require('../../utils/media-url');
 const realtime = require('../../utils/realtime');
 const guide = require('../../utils/guide');
 const demo = require('../../utils/demo');
+const onboarding = require('../../utils/onboarding');
 const AUTO_REFRESH_MS = 8000;
 
 function buildWorkbenchDateState(selectedDate) {
@@ -73,6 +74,7 @@ Page({
 
   async onShow() {
     const app = getApp();
+    onboarding.ensureCleanDemo();
     const nextSelectedDate = app.getWorkbenchDate() || this.data.selectedDate || formatDateYMD();
     
     this.setData({ 
@@ -104,9 +106,7 @@ Page({
       app.globalData.queueMealFilter = null;
     }
 
-    if (guide.shouldShow('rider_queue_v1') && !demo.isActive()) {
-      demo.start();
-    }
+    onboarding.maybeAutoStart();
     this.startAutoRefresh();
     this.startRealtimeSync();
     await this.loadQueue();
@@ -114,24 +114,9 @@ Page({
   },
 
   showGuide() {
-    const steps = [
-      { selector: '.gm-never', centered: true, title: '骑手工作台', desc: '这里是你当天要送的订单。演示环境里订单都是假的，花 20 秒了解怎么传图回执，随时可点「跳过」。' },
-      { selector: '.batch-btn-inline', fallbacks: ['.batch-action', '.order-action-bar'], title: '批量传图', desc: '同一楼栋的多笔订单，可批量上传同一张参考图，省时省力。' },
-      { selector: '.order-card', fallbacks: ['.queue-list', '.workbench', '.order-list'], title: '点订单进详情', desc: '点任意订单卡片进入详情，上传送达照片作为回执。' }
-    ];
-    this.setData({ demoActive: demo.isActive() });
-    guide.runGuide(this, 'rider_queue_v1', steps, '#185FA5', {
-      interactive: demo.isActive(),
-      onSkip: () => {
-        guide.markAllDismissed();
-        demo.end();
-        this.setData({ demoActive: false });
-      },
-      onDone: () => {
-        demo.end();
-        this.setData({ demoActive: false });
-      }
-    });
+    if (onboarding.shouldRunStageHere('flow_queue')) {
+      onboarding.runCurrentStage(this);
+    }
   },
 
   applyDemoQueue() {
@@ -145,12 +130,6 @@ Page({
     });
     this.calculateMealStats(items);
     this.filterCurrentMealItems();
-  },
-
-  exitDemo() {
-    demo.end();
-    this.setData({ demoActive: false });
-    this.loadQueue();
   },
 
   hideGuideMask() {
@@ -190,7 +169,7 @@ Page({
 
   async loadQueue(options = {}) {
     const { silent = false } = options;
-    if (demo.isActive()) {
+    if (demo.isActive() && onboarding.isRunningFlow()) {
       this.applyDemoQueue();
       return;
     }

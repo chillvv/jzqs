@@ -8,9 +8,14 @@ const {
   openPrivacyContract
 } = require('../../utils/privacy-auth');
 const {
-  requestDeliverySubscribeAuthorization
+  DELIVERY_TEMPLATE_ID,
+  NIGHTLY_TEMPLATE_ID,
+  requestDeliverySubscribeAuthorization,
+  requestNightlySubscribeAuthorization,
+  sendSubscribeMessageTest
 } = require('../../utils/delivery-subscription');
 const auth = require('../../utils/auth');
+const onboarding = require('../../utils/onboarding');
 
 const AGREEMENT_ACCEPTED_KEY = 'miniapp_customer_auth_agreement_accepted_v1';
 
@@ -77,7 +82,8 @@ Page({
     agreementSheetChecked: false,
     showAgreementSheet: false,
     pendingAgreementAction: '',
-    sendingSubscribeMessageTest: false,
+    sendingDelivery: false,
+    sendingNightly: false,
     statusBarHeight: 0,
     navBarHeight: 44
   },
@@ -605,5 +611,51 @@ Page({
       content: '可在“联系客服”入口直接发起会话，或联系运营同事处理。',
       showCancel: false
     });
+  },
+
+  onNewbieGuideTap() {
+    wx.showModal({
+      title: '新手指引',
+      content: '将用演示数据带你完整走一遍「看菜单 → 点餐 → 查预订」的流程，约 1 分钟。确认开始吗？',
+      confirmText: '确认开始',
+      success: (res) => {
+        if (res.confirm) {
+          onboarding.startFromProfile();
+        }
+      }
+    });
+  },
+
+  async sendSubscriptionTest(e) {
+    if (this.data.onboarding) {
+      wx.showToast({ title: '请先登录后再测试订阅', icon: 'none' });
+      return;
+    }
+    const template = (e && e.currentTarget && e.currentTarget.dataset && e.currentTarget.dataset.template) || 'delivery';
+    const isDelivery = template === 'delivery';
+    const sendingKey = isDelivery ? 'sendingDelivery' : 'sendingNightly';
+    if (this.data[sendingKey]) {
+      return;
+    }
+    const templateId = isDelivery ? DELIVERY_TEMPLATE_ID : NIGHTLY_TEMPLATE_ID;
+    const label = isDelivery ? '送达' : '每晚提醒';
+    this.setData({ [sendingKey]: true });
+    try {
+      // 各自只弹自己这一个模板的授权框
+      const acceptResult = isDelivery
+        ? await requestDeliverySubscribeAuthorization()
+        : await requestNightlySubscribeAuthorization();
+      if (!acceptResult) {
+        wx.showToast({ title: `未授权${label}订阅，未发送`, icon: 'none' });
+        return;
+      }
+      const type = isDelivery ? 'delivery' : 'nightly';
+      const res = await sendSubscribeMessageTest(templateId, acceptResult, type);
+      wx.showToast({ title: `${label}订阅测试已发送`, icon: 'none' });
+    } catch (error) {
+      wx.showToast({ title: error.message || '订阅测试失败', icon: 'none' });
+    } finally {
+      this.setData({ [sendingKey]: false });
+    }
   }
 });

@@ -13,6 +13,10 @@ public record OperationSettingsResponse(
     boolean deliverySubscribeEnabled,
     String deliverySubscribeLunchTime,
     String deliverySubscribeDinnerTime,
+    boolean nightlyReminderEnabled,
+    String nightlyReminderTime,
+    String nightlyReminderDescription,
+    String nightlyReminderTip,
     boolean popupAnnouncementEnabled,
     String popupAnnouncementContent,
     String restNoticeTemplate

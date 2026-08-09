@@ -1,5 +1,5 @@
 import React from "react";
-import { Image as ImageIcon, Megaphone } from "lucide-react";
+import { Bell, Image as ImageIcon, Megaphone } from "lucide-react";
 import type { OperationSettingsResponse } from "../../../shared/api/types";
 import {
   countBannerImages,
@@ -21,6 +21,9 @@ interface SystemSettingsOverviewProps {
   onOpenPackageReminder: () => void;
   onOpenBanner: () => void;
   onPreviewBanner: (imageUrl: string) => void;
+  nightlyReminderDescription?: string;
+  nightlyReminderTip?: string;
+  onOpenNightlyTemplate?: () => void;
 }
 
 export function SystemSettingsOverview({
@@ -31,7 +34,10 @@ export function SystemSettingsOverview({
   onOpenPopup,
   onOpenPackageReminder,
   onOpenBanner,
-  onPreviewBanner
+  onPreviewBanner,
+  nightlyReminderDescription,
+  nightlyReminderTip,
+  onOpenNightlyTemplate
 }: SystemSettingsOverviewProps) {
   return (
     <>
@@ -64,7 +70,7 @@ export function SystemSettingsOverview({
         </div>
       </div>
 
-      <div className="settings-cards">
+      <div className="settings-cards" style={{ gridTemplateColumns: "repeat(3, 1fr)", gridAutoRows: "minmax(0, 1fr)" }}>
         <div className="settings-card settings-card--highlight">
           <div className="settings-card__title">
             <Megaphone size={18} /> 锁定公告
@@ -144,6 +150,29 @@ export function SystemSettingsOverview({
           <div className="settings-card__actions">
             <button className="btn btn-outline" style={{ width: "100%" }} onClick={onOpenBanner}>
               管理轮播图
+            </button>
+          </div>
+        </div>
+
+        <div className="settings-card">
+          <div className="settings-card__title">
+            <Bell size={18} /> 订阅模板
+          </div>
+          <div className="settings-card__body">
+            <span className="tag tag-blue">仅营业日发送</span>
+            <div className="settings-card__detail">
+              每晚向已订阅顾客推送「明日还剩多少餐」
+            </div>
+            <div className="settings-card__detail settings-card__detail--sub">
+              描述：{nightlyReminderDescription || "（未设置）"}
+            </div>
+            <div className="settings-card__detail settings-card__detail--sub">
+              提示：{nightlyReminderTip || "（未设置）"}
+            </div>
+          </div>
+          <div className="settings-card__actions">
+            <button className="btn btn-outline" style={{ width: "100%" }} onClick={() => onOpenNightlyTemplate?.()}>
+              编辑订阅模板
             </button>
           </div>
         </div>

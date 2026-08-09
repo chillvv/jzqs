@@ -189,7 +189,47 @@ async function compressImage(src, quality = 80) {
     });
     return result.tempFilePath;
   } catch (error) {
-    console.warn('[图片压缩] 失败，使用原图', error);
+    console.warn('[图片压缩] compressImage 失败，尝试画布转码为 jpg', error);
+    return convertToJpegViaCanvas(src);
+  }
+}
+
+/**
+ * 通过 canvas 把任意可解码图片重绘为 jpg，规避 HEIC/BMP 等
+ * 后端或小程序 <image> 无法直接渲染的格式（电脑端上传常见）。
+ * 仅在 compressImage 失败时作为兜底。
+ */
+async function convertToJpegViaCanvas(src) {
+  try {
+    const info = await callWxApi('getImageInfo', { src });
+    const canvas = wx.createOffscreenCanvas({ type: '2d', width: info.width, height: info.height });
+    const ctx = canvas.getContext('2d');
+    const image = canvas.createImage();
+    await new Promise((resolve, reject) => {
+      image.onload = resolve;
+      image.onerror = reject;
+      image.src = src;
+    });
+    ctx.drawImage(image, 0, 0, info.width, info.height);
+    const tempFilePath = `${wx.env.USER_DATA_PATH}/receipt_${Date.now()}.jpg`;
+    const res = await new Promise((resolve, reject) => {
+      canvas.toTempFilePath({
+        x: 0,
+        y: 0,
+        width: info.width,
+        height: info.height,
+        destWidth: info.width,
+        destHeight: info.height,
+        fileType: 'jpg',
+        quality: 0.8,
+        filePath: tempFilePath,
+        success: resolve,
+        fail: reject
+      });
+    });
+    return res.tempFilePath;
+  } catch (error) {
+    console.warn('[图片压缩] 画布转码失败，使用原图', error);
     return src;
   }
 }

@@ -71,7 +71,11 @@ public interface SettingsService {
         boolean mealReminderPopupEnabled,
         boolean deliverySubscribeEnabled,
         String deliverySubscribeLunchTime,
-        String deliverySubscribeDinnerTime
+        String deliverySubscribeDinnerTime,
+        boolean nightlyReminderEnabled,
+        String nightlyReminderTime,
+        String nightlyReminderDescription,
+        String nightlyReminderTip
     );
 
     BannerImageUploadResponse uploadBannerImage(MultipartFile file);

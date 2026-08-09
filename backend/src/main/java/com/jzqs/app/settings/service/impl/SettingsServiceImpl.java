@@ -47,6 +47,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -64,12 +65,15 @@ public class SettingsServiceImpl implements SettingsService {
     private static final String DEFAULT_DISPATCH_ANCHOR_ADDRESS = "五环天地";
     private static final String DEFAULT_DELIVERY_SUBSCRIBE_LUNCH_TIME = "11:30";
     private static final String DEFAULT_DELIVERY_SUBSCRIBE_DINNER_TIME = "17:30";
+    private static final String DEFAULT_NIGHTLY_REMINDER_TIME = "20:00";
+    private static final String DEFAULT_NIGHTLY_REMINDER_DESCRIPTION = "再忙也要好好吃饭哟🍽";
+    private static final String DEFAULT_NIGHTLY_REMINDER_TIP = "需要明日餐食的宝子现在可以下单喽～";
     private static final ZoneId APP_ZONE = ZoneId.of("Asia/Shanghai");
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final RealtimeAudienceModule realtimeAudienceModule;
-    private final MobilePortalService mobilePortalService;
+    private final ObjectProvider<MobilePortalService> mobilePortalServiceProvider;
     private final DispatchService dispatchService;
     private final DispatchAiJobLogModule dispatchAiJobLogModule;
     private final Path uploadRootDir;
@@ -79,7 +83,7 @@ public class SettingsServiceImpl implements SettingsService {
         JdbcTemplate jdbcTemplate,
         ObjectMapper objectMapper,
         RealtimeAudienceModule realtimeAudienceModule,
-        MobilePortalService mobilePortalService,
+        ObjectProvider<MobilePortalService> mobilePortalServiceProvider,
         DispatchService dispatchService,
         DispatchAiJobLogModule dispatchAiJobLogModule,
         @Value("${app.upload-dir:./uploads}") String uploadDir
@@ -87,7 +91,7 @@ public class SettingsServiceImpl implements SettingsService {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.realtimeAudienceModule = realtimeAudienceModule;
-        this.mobilePortalService = mobilePortalService;
+        this.mobilePortalServiceProvider = mobilePortalServiceProvider;
         this.dispatchService = dispatchService;
         this.dispatchAiJobLogModule = dispatchAiJobLogModule;
         this.uploadRootDir = Path.of(uploadDir).toAbsolutePath().normalize();
@@ -113,6 +117,10 @@ public class SettingsServiceImpl implements SettingsService {
                        delivery_subscribe_enabled,
                        delivery_subscribe_lunch_time,
                        delivery_subscribe_dinner_time,
+                nightly_reminder_enabled,
+                nightly_reminder_time,
+                nightly_reminder_description,
+                nightly_reminder_tip,
                 popup_announcement_enabled,
                 popup_announcement_content,
                 COALESCE(rest_notice_template, '') AS rest_notice_template
@@ -131,6 +139,10 @@ public class SettingsServiceImpl implements SettingsService {
                 rs.getBoolean("delivery_subscribe_enabled"),
                 rs.getObject("delivery_subscribe_lunch_time"),
                 rs.getObject("delivery_subscribe_dinner_time"),
+                rs.getBoolean("nightly_reminder_enabled"),
+                rs.getObject("nightly_reminder_time"),
+                rs.getObject("nightly_reminder_description"),
+                rs.getObject("nightly_reminder_tip"),
                 rs.getBoolean("popup_announcement_enabled"),
                 rs.getString("popup_announcement_content"),
                 rs.getString("rest_notice_template")
@@ -151,6 +163,10 @@ public class SettingsServiceImpl implements SettingsService {
             settings != null && settings.deliverySubscribeEnabled(),
             normalizeTimeSetting(settings == null ? null : settings.deliverySubscribeLunchTime(), DEFAULT_DELIVERY_SUBSCRIBE_LUNCH_TIME),
             normalizeTimeSetting(settings == null ? null : settings.deliverySubscribeDinnerTime(), DEFAULT_DELIVERY_SUBSCRIBE_DINNER_TIME),
+            settings != null && settings.nightlyReminderEnabled(),
+            normalizeTimeSetting(settings == null ? null : settings.nightlyReminderTime(), DEFAULT_NIGHTLY_REMINDER_TIME),
+            safeString(settings == null ? null : settings.nightlyReminderDescription()),
+            safeString(settings == null ? null : settings.nightlyReminderTip()),
             settings != null && settings.popupAnnouncementEnabled(),
             safeString(settings == null ? null : settings.popupAnnouncementContent()),
             safeString(settings == null ? null : settings.restNoticeTemplate())
@@ -628,7 +644,11 @@ public class SettingsServiceImpl implements SettingsService {
         boolean mealReminderPopupEnabled,
         boolean deliverySubscribeEnabled,
         String deliverySubscribeLunchTime,
-        String deliverySubscribeDinnerTime
+        String deliverySubscribeDinnerTime,
+        boolean nightlyReminderEnabled,
+        String nightlyReminderTime,
+        String nightlyReminderDescription,
+        String nightlyReminderTip
     ) {
         OperationSettingsResponse previousSettings = operationSettings();
         jdbcTemplate.update(
@@ -640,6 +660,10 @@ public class SettingsServiceImpl implements SettingsService {
                     delivery_subscribe_enabled = ?,
                     delivery_subscribe_lunch_time = ?,
                     delivery_subscribe_dinner_time = ?,
+                    nightly_reminder_enabled = ?,
+                    nightly_reminder_time = ?,
+                    nightly_reminder_description = ?,
+                    nightly_reminder_tip = ?,
                     updated_at = ?
                 WHERE id = 1
                 """,
@@ -649,10 +673,17 @@ public class SettingsServiceImpl implements SettingsService {
             deliverySubscribeEnabled,
             normalizeTimeSetting(deliverySubscribeLunchTime, DEFAULT_DELIVERY_SUBSCRIBE_LUNCH_TIME),
             normalizeTimeSetting(deliverySubscribeDinnerTime, DEFAULT_DELIVERY_SUBSCRIBE_DINNER_TIME),
+            nightlyReminderEnabled,
+            normalizeTimeSetting(nightlyReminderTime, DEFAULT_NIGHTLY_REMINDER_TIME),
+            normalizeStoredText(nightlyReminderDescription, 20, DEFAULT_NIGHTLY_REMINDER_DESCRIPTION),
+            normalizeStoredText(nightlyReminderTip, 20, DEFAULT_NIGHTLY_REMINDER_TIP),
             Timestamp.valueOf(LocalDateTime.now())
         );
         if (previousSettings.deliverySubscribeEnabled() && !deliverySubscribeEnabled) {
-            mobilePortalService.sendAllDeliveredPendingSubscriptions();
+            MobilePortalService mobilePortalService = mobilePortalServiceProvider.getIfAvailable();
+            if (mobilePortalService != null) {
+                mobilePortalService.sendAllDeliveredPendingSubscriptions();
+            }
         }
         publishHomeEvent("system.home.changed");
         return operationSettings();
@@ -1112,6 +1143,14 @@ public class SettingsServiceImpl implements SettingsService {
         }
     }
 
+    private String normalizeStoredText(String value, int maxLen, String fallback) {
+        String normalized = value == null ? "" : value.trim();
+        if (normalized.isEmpty()) {
+            return fallback;
+        }
+        return normalized.length() <= maxLen ? normalized : normalized.substring(0, maxLen);
+    }
+
     private void publishHomeEvent(String eventType) {
         realtimeAudienceModule.publishSystemEvent(eventType);
     }
@@ -1284,6 +1323,10 @@ public class SettingsServiceImpl implements SettingsService {
         boolean deliverySubscribeEnabled,
         Object deliverySubscribeLunchTime,
         Object deliverySubscribeDinnerTime,
+        boolean nightlyReminderEnabled,
+        Object nightlyReminderTime,
+        Object nightlyReminderDescription,
+        Object nightlyReminderTip,
         boolean popupAnnouncementEnabled,
         String popupAnnouncementContent,
         String restNoticeTemplate

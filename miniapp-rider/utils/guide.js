@@ -86,29 +86,30 @@ async function resolveSteps(pageCtx, candidates) {
 }
 
 // 在页面数据加载完成后调用；candidates: [{ selector, title, desc, fallbacks?, centered? }]
-// opts: { interactive, onSkip, onDone } —— interactive 让蒙层不拦截点击（供演示模式真实点进去）
+// opts: { force, interactive, onSkip, onDone }
+// - interactive 让蒙层不拦截点击（供演示模式真实点进页面按钮）
+// - force 跳过 shouldShow/markShown（供新手指引流程强制逐页讲解）
+// - 元素位置由 guide-mask 每步「懒定位」实时查询，适配视图切换
 async function runGuide(pageCtx, key, candidates, accent, opts) {
   opts = opts || {};
-  if (!shouldShow(key)) {
-    return;
+  if (!opts.force) {
+    if (!shouldShow(key)) {
+      return;
+    }
+    markShown(key);
   }
   pageCtx._guideKey = key;
-  // 等一帧，确保 setData 已渲染、元素位置可查
+  // 等一帧，确保 setData 已渲染
   await new Promise((r) => setTimeout(r, 120));
-  const steps = await resolveSteps(pageCtx, candidates);
-  if (!steps.length) {
-    markShown(key);
-    return;
-  }
-  // 先标记已展示，避免重复弹出
-  markShown(key);
   const comp = pageCtx.selectComponent('#guideMask');
   if (!comp) {
+    if (typeof opts.onDone === 'function') opts.onDone();
     return;
   }
   // 用户点「跳过」时，直接让所有引导不再出现（按当前用户记录）
-  comp.start(steps, accent, {
+  comp.start(candidates, accent, {
     interactive: !!opts.interactive,
+    pageCtx,
     onSkip: (typeof opts.onSkip === 'function') ? opts.onSkip : (() => markAllDismissed()),
     onDone: (typeof opts.onDone === 'function') ? opts.onDone : null
   });

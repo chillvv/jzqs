@@ -44,6 +44,12 @@ public class WeChatService {
     @Value("${wechat.subscribe.delivery-page:pages/orders/index}")
     private String deliveryPage;
 
+    @Value("${wechat.subscribe.nightly-template-id:}")
+    private String nightlyTemplateId;
+
+    @Value("${wechat.subscribe.nightly-page:pages/orders/index}")
+    private String nightlyPage;
+
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
@@ -145,7 +151,13 @@ public class WeChatService {
         }
     }
 
-    public void sendDeliverySubscribeMessage(String openid, String page, String merchantName, String hint) {
+    public void sendDeliverySubscribeMessage(
+            String openid,
+            String page,
+            String dishNames,
+            String riderPhone,
+            String pickupLocation,
+            String hint) {
         if (openid == null || openid.trim().isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "缺少订阅消息接收人");
         }
@@ -168,7 +180,9 @@ public class WeChatService {
                     deliveryTemplateId,
                     page,
                     new SubscribeMessageData(
-                        new SubscribeMessageValue(normalizeThingValue(merchantName)),
+                        new SubscribeMessageValue(normalizeThingValue(dishNames)),
+                        new SubscribeMessageValue(normalizePhoneValue(riderPhone)),
+                        new SubscribeMessageValue(normalizeThingValue(pickupLocation)),
                         new SubscribeMessageValue(normalizeThingValue(hint))
                     )
                 )
@@ -179,7 +193,7 @@ public class WeChatService {
             if (json.has("errcode") && json.get("errcode").asInt() != 0) {
                 String errmsg = json.path("errmsg").asText();
                 log.error("微信订阅消息发送失败：{}", errmsg);
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "发送订阅消息失败：" + errmsg);
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, translateWechatSendError("送达提醒：" + errmsg));
             }
         } catch (HttpStatusCodeException e) {
             log.error(
@@ -188,7 +202,7 @@ public class WeChatService {
                 e.getResponseBodyAsString(),
                 e
             );
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "发送订阅消息失败：" + e.getResponseBodyAsString());
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, translateWechatSendError("送达提醒：" + e.getResponseBodyAsString()));
         } catch (BusinessException e) {
             throw e;
         } catch (Exception e) {
@@ -199,6 +213,80 @@ public class WeChatService {
 
     public String buildDeliveryPage(long orderId) {
         return deliveryPage + "?orderId=" + orderId;
+    }
+
+    /**
+     * 发送每晚提醒订阅消息（优惠券过期提醒模板）。
+     * 字段：number7=剩余餐数, thing3=描述, thing6=温馨提示。
+     */
+    public void sendNightlySubscribeMessage(
+            String openid,
+            String page,
+            int remainingMeals,
+            String description,
+            String tip) {
+        if (openid == null || openid.trim().isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "缺少订阅消息接收人");
+        }
+        if (nightlyTemplateId == null || nightlyTemplateId.trim().isEmpty()) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "未配置每晚提醒模板");
+        }
+        if (devMode) {
+            log.info("开发模式：跳过每晚提醒发送 openid={}, page={}", openid, page);
+            return;
+        }
+        try {
+            String accessToken = getAccessToken();
+            String url = SEND_SUBSCRIBE_MESSAGE_URL + "?access_token=" + accessToken;
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            headers.setAccept(List.of(MediaType.APPLICATION_JSON));
+            String requestBody = objectMapper.writeValueAsString(
+                new NightlySubscribeMessageRequest(
+                    openid,
+                    nightlyTemplateId,
+                    page,
+                    new NightlySubscribeMessageData(
+                        new SubscribeMessageValue(String.valueOf(normalizeNumberValue(remainingMeals))),
+                        new SubscribeMessageValue(normalizeThingValue(description)),
+                        new SubscribeMessageValue(normalizeThingValue(tip))
+                    )
+                )
+            );
+            log.debug("每晚提醒订阅消息请求体：{}", requestBody);
+            String response = restTemplate.postForObject(url, new HttpEntity<>(requestBody, headers), String.class);
+            JsonNode json = objectMapper.readTree(response);
+            if (json.has("errcode") && json.get("errcode").asInt() != 0) {
+                String errmsg = json.get("errmsg").asText();
+                log.error("微信每晚提醒发送失败：{}", errmsg);
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, translateWechatSendError("每晚提醒：" + errmsg));
+            }
+        } catch (HttpStatusCodeException e) {
+            log.error(
+                "发送微信每晚提醒 HTTP 异常：status={}, body={}",
+                e.getStatusCode().value(),
+                e.getResponseBodyAsString(),
+                e
+            );
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, translateWechatSendError("每晚提醒：" + e.getResponseBodyAsString()));
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("发送微信每晚提醒异常", e);
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "发送每晚提醒失败，请稍后重试");
+        }
+    }
+
+    public String buildNightlyPage() {
+        return nightlyPage;
+    }
+
+    public String getDeliveryTemplateId() {
+        return deliveryTemplateId;
+    }
+
+    public String getNightlyTemplateId() {
+        return nightlyTemplateId;
     }
 
     /**
@@ -265,6 +353,42 @@ public class WeChatService {
         return normalized.length() <= 20 ? normalized : normalized.substring(0, 20);
     }
 
+    private String normalizePhoneValue(String value) {
+        String normalized = value == null ? "" : value.trim();
+        return normalized.length() <= 11 ? normalized : normalized.substring(0, 11);
+    }
+
+    private int normalizeNumberValue(int value) {
+        return Math.max(0, value);
+    }
+
+    /**
+     * 把微信订阅消息发送接口返回的英文错误信息转换成中文，方便普通用户理解。
+     */
+    private String translateWechatSendError(String raw) {
+        if (raw == null || raw.trim().isEmpty()) {
+            return "微信服务异常";
+        }
+        String s = raw.trim();
+        if (s.contains("user refuse to accept the msg")) {
+            return "用户关闭了订阅消息权限，请在微信→小程序设置→订阅消息中重新开启";
+        }
+        if (s.contains("invalid openid is empty")) {
+            return "用户身份无效，请重新登录后再试";
+        }
+        if (s.contains("invalid openid") || s.contains("invalid openid list")) {
+            return "用户身份无效（openid非法），请重新登录";
+        }
+        if (s.contains("invalid template_id")) {
+            return "订阅模板配置错误，请联系运营人员";
+        }
+        if (s.contains("request limit")) {
+            return "发送频率过高，请稍后再试";
+        }
+        // 其他错误保留原文，便于排查
+        return s;
+    }
+
     /**
      * 微信会话信息
      */
@@ -279,8 +403,25 @@ public class WeChatService {
     }
 
     private record SubscribeMessageData(
-        SubscribeMessageValue thing2,
-        SubscribeMessageValue thing11
+        SubscribeMessageValue thing6,
+        SubscribeMessageValue phone_number9,
+        SubscribeMessageValue thing10,
+        SubscribeMessageValue thing7
+    ) {
+    }
+
+    private record NightlySubscribeMessageData(
+        SubscribeMessageValue number7,
+        SubscribeMessageValue thing3,
+        SubscribeMessageValue thing6
+    ) {
+    }
+
+    private record NightlySubscribeMessageRequest(
+        String touser,
+        String template_id,
+        String page,
+        NightlySubscribeMessageData data
     ) {
     }
 

@@ -81,8 +81,10 @@ function request({ url, method = 'GET', data, header, requireAuth = true, hideLo
             app.handleUnauthorized();
           }
           const errorMsg = toErrorMessage(body.message);
+          // 把后端返回的完整错误打到控制台，便于定位（toast 一闪而过）
+          console.error(`[request] ${method} ${url} -> ${res.statusCode}`, JSON.stringify(body));
           if (!hideErrorToast && typeof wx.showToast === 'function') {
-            wx.showToast({ title: errorMsg, icon: 'none', duration: 2000 });
+            wx.showToast({ title: errorMsg, icon: 'none', duration: 2500 });
           }
           reject(new Error(errorMsg));
         },

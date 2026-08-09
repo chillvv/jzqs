@@ -116,6 +116,20 @@ public class MobileCustomerController {
         );
     }
 
+    @PostMapping("/nightly-subscription")
+    public ApiResponse<MobileDeliverySubscriptionAuthorizeResponse> authorizeNightlySubscription(
+        @RequestHeader("Authorization") String authorization,
+        @Valid @RequestBody MobileDeliverySubscriptionRequest request
+    ) {
+        return ApiResponse.success(
+            mobilePortalService.authorizeNightlySubscription(
+                extractCustomerId(authorization),
+                request.templateId(),
+                request.acceptResult()
+            )
+        );
+    }
+
     @PostMapping("/subscribe-message/test-send")
     public ApiResponse<MobileSubscribeMessageTestResponse> sendSubscribeMessageTest(
         @RequestHeader("Authorization") String authorization,
@@ -125,7 +139,8 @@ public class MobileCustomerController {
             mobilePortalService.sendSubscribeMessageTest(
                 extractCustomerId(authorization),
                 request.templateId(),
-                request.acceptResult()
+                request.acceptResult(),
+                request.type()
             )
         );
     }

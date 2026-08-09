@@ -254,7 +254,4 @@
   <view class="tabbar-spacer"></view>
 </view>
 
-<!-- 新手演示模式：退出浮窗 -->
-<view wx:if="{{demoActive}}" class="demo-exit-fab" catchtap="exitDemo">退出演示</view>
-
 <guide-mask id="guideMask" />

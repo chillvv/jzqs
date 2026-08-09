@@ -1,5 +1,6 @@
 const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const AGREEMENT_ACCEPTED_KEY = 'miniapp_rider_auth_agreement_accepted_v2';
+const onboarding = require('../../utils/onboarding');
 
 function maskPhone(phone) {
   const value = String(phone || '').trim();
@@ -123,6 +124,19 @@ Page({
     } else if (action === 'settings') {
       wx.showToast({ title: '设置功能开发中', icon: 'none' });
     }
+  },
+
+  onNewbieGuideTap() {
+    wx.showModal({
+      title: '新手指引',
+      content: '将用演示数据带你完整走一遍「工作台 → 上传送达回执」的流程，约 1 分钟。确认开始吗？',
+      confirmText: '确认开始',
+      success: (res) => {
+        if (res.confirm) {
+          onboarding.startFromProfile();
+        }
+      }
+    });
   },
 
   onPullDownRefresh() {

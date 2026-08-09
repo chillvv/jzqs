@@ -6,6 +6,7 @@ public record MobileSubscribeMessageTestRequest(
     @NotBlank(message = "templateId is required")
     String templateId,
     @NotBlank(message = "acceptResult is required")
-    String acceptResult
+    String acceptResult,
+    String type
 ) {
 }

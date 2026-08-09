@@ -207,7 +207,11 @@ public class SettingsController {
             request.mealReminderPopupEnabled(),
             request.deliverySubscribeEnabled(),
             request.deliverySubscribeLunchTime(),
-            request.deliverySubscribeDinnerTime()
+            request.deliverySubscribeDinnerTime(),
+            request.nightlyReminderEnabled(),
+            request.nightlyReminderTime(),
+            request.nightlyReminderDescription(),
+            request.nightlyReminderTip()
         ));
     }
 }

@@ -200,6 +200,14 @@
   word-break: break-all;
 }
 
+.list-sub {
+  margin-top: 6rpx;
+  font-size: 20rpx;
+  line-height: 1.4;
+  color: var(--text-sub);
+  word-break: break-all;
+}
+
 .list-desc {
   margin-top: 8rpx;
   font-size: 22rpx;
@@ -232,6 +240,11 @@
   justify-content: space-between !important;
   align-items: center !important;
   box-sizing: border-box !important;
+}
+
+/* 去掉微信 button 默认的外描边，使其与 view 行视觉/尺寸一致 */
+.list-item-btn::after {
+  border: none !important;
 }
 
 .member-copy,

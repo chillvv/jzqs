@@ -2,6 +2,7 @@ package com.jzqs.app.settings.api;
 
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 
 public record PackageReminderSettingsUpdateRequest(
     @Min(1) int packageExpiryReminderDays,
@@ -11,6 +12,10 @@ public record PackageReminderSettingsUpdateRequest(
     @NotBlank(message = "deliverySubscribeLunchTime is required")
     String deliverySubscribeLunchTime,
     @NotBlank(message = "deliverySubscribeDinnerTime is required")
-    String deliverySubscribeDinnerTime
+    String deliverySubscribeDinnerTime,
+    boolean nightlyReminderEnabled,
+    String nightlyReminderTime,
+    String nightlyReminderDescription,
+    String nightlyReminderTip
 ) {
 }

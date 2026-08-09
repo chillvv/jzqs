@@ -6,6 +6,7 @@ import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.common.realtime.RealtimeAudienceModule;
+import com.jzqs.app.common.wechat.WeChatService;
 import com.jzqs.app.customer.api.WalletTransactionResponse;
 import com.jzqs.app.delivery.api.DeliveryReceiptDeleteResponse;
 import com.jzqs.app.delivery.api.DeliveryReceiptRecordResponse;
@@ -61,8 +62,10 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     private final AftersaleService aftersaleService;
     private final RealtimeAudienceModule realtimeAudienceModule;
     private final DeliverySubscriptionModule deliverySubscriptionModule;
+    private final NightlyReminderModule nightlyReminderModule;
     private final MiniappOrderModule miniappOrderModule;
     private final MobileAddressModule mobileAddressModule;
+    private final WeChatService weChatService;
     private final LocalTime selfOrderCutoffTime;
 
     public MobilePortalServiceImpl(
@@ -71,6 +74,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         RiderQueueSupport riderQueueSupport,
         RiderReceiptStorageSupport riderReceiptStorageSupport,
         ObjectMapper objectMapper,
+        WeChatService weChatService,
         MobileCustomerQueryModule mobileCustomerQueryModule,
         RiderDeliveryEvidenceModule riderDeliveryEvidenceModule,
         RiderOrderStatusRevertModule riderOrderStatusRevertModule,
@@ -78,6 +82,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         AftersaleService aftersaleService,
         RealtimeAudienceModule realtimeAudienceModule,
         DeliverySubscriptionModule deliverySubscriptionModule,
+        NightlyReminderModule nightlyReminderModule,
         MiniappOrderModule miniappOrderModule,
         MobileAddressModule mobileAddressModule,
         @org.springframework.beans.factory.annotation.Value("${app.mobile.self-order-cutoff:23:00}") String selfOrderCutoff
@@ -93,8 +98,10 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         this.aftersaleService = aftersaleService;
         this.realtimeAudienceModule = realtimeAudienceModule;
         this.deliverySubscriptionModule = deliverySubscriptionModule;
+        this.nightlyReminderModule = nightlyReminderModule;
         this.miniappOrderModule = miniappOrderModule;
         this.mobileAddressModule = mobileAddressModule;
+        this.weChatService = weChatService;
         this.selfOrderCutoffTime = LocalTime.parse(selfOrderCutoff);
     }
 
@@ -186,12 +193,40 @@ public class MobilePortalServiceImpl implements MobilePortalService {
 
     @Override
     @Transactional
-    public MobileSubscribeMessageTestResponse sendSubscribeMessageTest(long customerId, String templateId, String acceptResult) {
+    public MobileDeliverySubscriptionAuthorizeResponse authorizeNightlySubscription(long customerId, String templateId, String acceptResult) {
+        if (!isAcceptedSubscribeResult(acceptResult)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "仅支持保存已同意的订阅授权");
+        }
+        nightlyReminderModule.authorizeNightlySubscription(customerId, templateId);
+        return new MobileDeliverySubscriptionAuthorizeResponse(customerId, "AUTHORIZED");
+    }
+
+    @Override
+    @Transactional
+    public MobileSubscribeMessageTestResponse sendSubscribeMessageTest(long customerId, String templateId, String acceptResult, String type) {
         if (!isAcceptedSubscribeResult(acceptResult)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "仅支持发送已同意的订阅测试消息");
         }
-        deliverySubscriptionModule.sendTestMessage(customerId);
-        return new MobileSubscribeMessageTestResponse("SENT", safeString(templateId).trim(), "pages/profile/index");
+        // 优先按前端显式传入的 type 路由，避免「模板 ID 字符串比对」在配置漂移时串味；
+        // 未传 type 时回退到 templateId 比对（兼容旧调用方）。
+        String normalizedType = type == null ? "" : type.trim().toUpperCase();
+        boolean routeByNightly = "NIGHTLY".equals(normalizedType)
+            || (!"DELIVERY".equals(normalizedType)
+                && weChatService.getNightlyTemplateId() != null
+                && weChatService.getNightlyTemplateId().equals(templateId));
+        if (routeByNightly) {
+            String page = nightlyReminderModule.sendTestMessage(customerId);
+            return new MobileSubscribeMessageTestResponse("SENT", templateId, page);
+        }
+        boolean routeByDelivery = "DELIVERY".equals(normalizedType)
+            || (!"NIGHTLY".equals(normalizedType)
+                && weChatService.getDeliveryTemplateId() != null
+                && weChatService.getDeliveryTemplateId().equals(templateId));
+        if (routeByDelivery) {
+            String page = deliverySubscriptionModule.sendTestMessage(customerId);
+            return new MobileSubscribeMessageTestResponse("SENT", templateId, page);
+        }
+        throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不支持的订阅模板：" + safeString(templateId) + " type=" + safeString(type));
     }
 
     @Override

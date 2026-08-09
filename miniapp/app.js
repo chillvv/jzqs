@@ -1,5 +1,10 @@
 const auth = require('./utils/auth');
 const {
+  requestCombinedSubscribeAuthorization,
+  cacheDeliveryAcceptResult,
+  saveNightlySubscription
+} = require('./utils/delivery-subscription');
+const {
   DEFAULT_API_BASE_URL,
   DEFAULT_CLOUD_ENV_ID,
   DEFAULT_SERVICE_HEADERS,
@@ -61,11 +66,10 @@ App({
     // 初始化统一认证
     try {
       await auth.init();
-      
-      // 根据认证状态决定页面跳转
-      if (auth.shouldRedirectToAuth()) {
-        // 未登录，跳转到个人中心（顾客端通常允许浏览）
-        // 实际跳转逻辑由页面自行处理
+      if (!auth.shouldRedirectToAuth()) {
+        // 已登录：合并申请「送达订阅」与「每晚用餐提醒」两个授权，
+        // 用户勾选「总是保持」后可无限下发，减少反复弹窗。
+        this.requestSubscriptionsOnLogin();
       }
     } catch (error) {
       console.error('[App] 认证初始化失败:', error);
@@ -78,6 +82,26 @@ App({
    */
   waitForAuth() {
     return auth.waitForAuth();
+  },
+
+  /**
+   * 登录后合并申请两个订阅授权（送达 + 每晚提醒）。
+   * 一次弹窗即可让用户同时开启，勾选「总是保持」后后台即可每晚自动发送。
+   */
+  requestSubscriptionsOnLogin() {
+    Promise.resolve()
+      .then(() => requestCombinedSubscribeAuthorization())
+      .then((results) => {
+        const { delivery, nightly } = results || {};
+        if (delivery) {
+          // 送达订阅结果缓存，下单时随订单一起提交（避免下单时再弹窗）。
+          cacheDeliveryAcceptResult(delivery);
+        }
+        if (nightly) {
+          saveNightlySubscription(nightly);
+        }
+      })
+      .catch(() => {});
   },
   
   /**

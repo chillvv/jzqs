@@ -280,6 +280,7 @@ public class OrderQueryRepository {
             JOIN customers c ON c.id = sc.customer_id
             LEFT JOIN customer_addresses ca ON ca.id = sc.address_id
             WHERE sc.serve_date = ?
+              AND sc.status = 'PENDING'
             ORDER BY sc.id
             """;
         return jdbcTemplate.query(sql, (rs, rowNum) -> new SubscriptionConfirmationItem(

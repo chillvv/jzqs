@@ -54,14 +54,20 @@ function getMockOrderPageData() {
     name: '香煎鸡胸藜麦碗',
     mealPeriod: 'LUNCH',
     price: 28,
-    description: '高蛋白低脂，适合工作日午餐'
+    description: '高蛋白低脂，适合工作日午餐',
+    dishItems: ['香煎鸡胸藜麦碗', '清炒时蔬', '糙米饭'],
+    totalCalories: 520,
+    merchantNote: '-'
   };
   const dinner = {
     id: 'demo-dinner',
     name: '番茄牛腩糙米饭',
     mealPeriod: 'DINNER',
     price: 32,
-    description: '慢炖牛腩配糙米，饱腹又营养'
+    description: '慢炖牛腩配糙米，饱腹又营养',
+    dishItems: ['番茄牛腩糙米饭', '凉拌黄瓜', '紫薯'],
+    totalCalories: 610,
+    merchantNote: '-'
   };
   const home = {
     customerId: 'demo',

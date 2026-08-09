@@ -22,6 +22,23 @@ export type OrderPrepFilters = {
 
 export type OrderPrepTab = "CONFIRMATION" | "ORDERS" | "SUBSCRIPTION_MANAGEMENT";
 
+/**
+ * 这些状态的订单属于"已处理完毕/已取消/已退款"，对运营出餐无意义，
+ * 不计入今日订单中心的列表展示与份数统计（秒退款、已取消、已退款均不显示）。
+ */
+export const ORDER_STATUSES_EXCLUDED_FROM_TODAY = ["CANCELLED", "REFUNDED"];
+
+/** 退款类订单需要运营主动处理，在列表中置顶展示，方便优先跟进。 */
+export const ORDER_STATUSES_PINNED_TO_TOP = ["REFUND_PROCESSING"];
+
+export function isOrderExcludedFromToday(item: OrderPrepItemResponse) {
+  return ORDER_STATUSES_EXCLUDED_FROM_TODAY.includes(resolveOrderDisplayStatus(item));
+}
+
+export function isOrderPinnedToTop(item: OrderPrepItemResponse) {
+  return ORDER_STATUSES_PINNED_TO_TOP.includes(resolveOrderDisplayStatus(item));
+}
+
 export type OrderPrepCompactSummaryItem = {
   label: string;
   value: string;
@@ -198,7 +215,9 @@ export function buildOrderPrepView(
   pageSize: number
 ) {
   const keyword = filters.keyword.trim();
-  const filteredItems = items.filter((item) => {
+  // 先剔除已取消/已退款订单（秒退款等无用信息不进入今日订单中心）
+  const visibleItems = items.filter((item) => !isOrderExcludedFromToday(item));
+  const filteredItems = visibleItems.filter((item) => {
     const matchesKeyword = keyword.length === 0
       || item.customerName.includes(keyword)
       || item.customerPhone.includes(keyword)
@@ -223,11 +242,16 @@ export function buildOrderPrepView(
     return matchesKeyword && matchesMealPeriod && matchesSource && matchesStatus && matchesRemark;
   });
 
-  const totalItems = filteredItems.length;
+  // 退款处理中等需要运营跟进的订单置顶，其余保持原有顺序
+  const pinnedItems = filteredItems.filter((item) => isOrderPinnedToTop(item));
+  const otherItems = filteredItems.filter((item) => !isOrderPinnedToTop(item));
+  const sortedItems = [...pinnedItems, ...otherItems];
+
+  const totalItems = sortedItems.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
   const safeCurrentPage = Math.min(Math.max(currentPage, 1), totalPages);
   const startIndex = (safeCurrentPage - 1) * pageSize;
-  const pageItems = filteredItems.slice(startIndex, startIndex + pageSize);
+  const pageItems = sortedItems.slice(startIndex, startIndex + pageSize);
 
   return {
     filteredItems,
@@ -240,35 +264,46 @@ export function buildOrderPrepView(
 
 export function buildOrderPrepSummary(
   items: OrderPrepItemResponse[],
-  confirmationItems: Array<{ priority?: boolean }>
+  confirmationItems: Array<{ mealPeriod?: string; priority?: boolean }>
 ) {
-  const totalMeals = items.reduce((sum, item) => sum + item.quantity, 0);
-  const lunchCount = items
+  // 已取消/已退款（含秒退款）不计入份数与订单统计
+  const countedItems = items.filter((item) => !isOrderExcludedFromToday(item));
+
+  const totalMeals = countedItems.reduce((sum, item) => sum + item.quantity, 0);
+  const lunchCount = countedItems
     .filter(item => resolveMealPeriod(item) === "LUNCH")
     .reduce((sum, item) => sum + item.quantity, 0);
-  const dinnerCount = items
+  const dinnerCount = countedItems
     .filter(item => resolveMealPeriod(item) === "DINNER")
     .reduce((sum, item) => sum + item.quantity, 0);
 
-  const lunchRemarkedCount = items
+  const lunchRemarkedCount = countedItems
     .filter((item) => resolveMealPeriod(item) === "LUNCH" && hasRemark(item))
     .length;
-  const dinnerRemarkedCount = items
+  const dinnerRemarkedCount = countedItems
     .filter((item) => resolveMealPeriod(item) === "DINNER" && hasRemark(item))
     .length;
 
+  // 待确认固定订餐按午餐/晚餐分别统计份数
+  const lunchConfirmationCount = confirmationItems
+    .filter((item) => item.mealPeriod === "LUNCH")
+    .reduce((sum, item) => sum + (item.quantity ?? 1), 0);
+  const dinnerConfirmationCount = confirmationItems
+    .filter((item) => item.mealPeriod === "DINNER")
+    .reduce((sum, item) => sum + (item.quantity ?? 1), 0);
+
   return {
-    totalOrders: items.length,
+    totalOrders: countedItems.length,
     totalMeals,
     lunchCount,
     dinnerCount,
-    pendingDispatchCount: items.filter((item) => item.status === "PENDING_DISPATCH").length,
-    priorityOrderCount: items.filter((item) => item.priorityCustomer).length,
-    remarkedOrderCount: items.filter((item) => hasRemark(item)).length,
+    pendingDispatchCount: countedItems.filter((item) => item.status === "PENDING_DISPATCH").length,
+    remarkedOrderCount: countedItems.filter((item) => hasRemark(item)).length,
     lunchRemarkedCount,
     dinnerRemarkedCount,
     confirmationCount: confirmationItems.length,
-    priorityConfirmationCount: confirmationItems.filter((item) => Boolean(item.priority)).length
+    lunchConfirmationCount,
+    dinnerConfirmationCount
   };
 }
 
@@ -277,7 +312,7 @@ export function buildOrderPrepCompactSummary(
     import("../../shared/api/types").OrderPrepStatsResponse,
     "totalMeals" | "lunchCount" | "dinnerCount"
   >,
-  summary: Pick<ReturnType<typeof buildOrderPrepSummary>, "confirmationCount" | "totalMeals" | "lunchCount" | "dinnerCount">
+  summary: Pick<ReturnType<typeof buildOrderPrepSummary>, "confirmationCount" | "totalMeals" | "lunchCount" | "dinnerCount" | "lunchConfirmationCount" | "dinnerConfirmationCount">
 ) : OrderPrepCompactSummaryItem[] {
   return [
     {
@@ -286,14 +321,14 @@ export function buildOrderPrepCompactSummary(
       tone: "blue"
     },
     {
-      label: "午餐",
-      value: `${summary.lunchCount} 份`,
+      label: "午餐待确认",
+      value: `${summary.lunchConfirmationCount} 份`,
       tone: "orange",
       mealPeriod: "LUNCH"
     },
     {
-      label: "晚餐",
-      value: `${summary.dinnerCount} 份`,
+      label: "晚餐待确认",
+      value: `${summary.dinnerConfirmationCount} 份`,
       tone: "green",
       mealPeriod: "DINNER"
     },

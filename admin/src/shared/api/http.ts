@@ -1124,6 +1124,10 @@ export async function updatePackageReminderSettings(payload: {
   deliverySubscribeEnabled: boolean;
   deliverySubscribeLunchTime: string;
   deliverySubscribeDinnerTime: string;
+  nightlyReminderEnabled: boolean;
+  nightlyReminderTime?: string;
+  nightlyReminderDescription?: string;
+  nightlyReminderTip?: string;
 }) {
   const response = await http.post<ApiResponse<OperationSettingsResponse>>("/api/admin/settings/package-reminders", {
     packageExpiryReminderDays: payload.packageExpiryReminderDays,
@@ -1131,7 +1135,11 @@ export async function updatePackageReminderSettings(payload: {
     mealReminderPopupEnabled: payload.mealReminderPopupEnabled,
     deliverySubscribeEnabled: payload.deliverySubscribeEnabled,
     deliverySubscribeLunchTime: payload.deliverySubscribeLunchTime,
-    deliverySubscribeDinnerTime: payload.deliverySubscribeDinnerTime
+    deliverySubscribeDinnerTime: payload.deliverySubscribeDinnerTime,
+    nightlyReminderEnabled: payload.nightlyReminderEnabled,
+    nightlyReminderTime: payload.nightlyReminderTime,
+    nightlyReminderDescription: payload.nightlyReminderDescription,
+    nightlyReminderTip: payload.nightlyReminderTip
   });
   return response.data.data;
 }

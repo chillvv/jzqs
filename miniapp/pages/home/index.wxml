@@ -112,5 +112,4 @@
   </view>
 </view>
 </block>
-<view wx:if="{{demoActive}}" class="demo-exit-fab" catchtap="exitDemo">退出演示</view>
 <guide-mask id="guideMask" />

@@ -82,7 +82,11 @@ const EMPTY_PACKAGE_REMINDER = {
   mealReminderPopupEnabled: true,
   deliverySubscribeEnabled: true,
   deliverySubscribeLunchTime: "11:30",
-  deliverySubscribeDinnerTime: "17:30"
+  deliverySubscribeDinnerTime: "17:30",
+  nightlyReminderEnabled: true,
+  nightlyReminderTime: "20:00",
+  nightlyReminderDescription: "再忙也要好好吃饭哟🍽",
+  nightlyReminderTip: "需要明日餐食的宝子现在可以下单喽～"
 };
 const EMPTY_ROUTE_WORKBENCH_FORM = {
   autoScheduleEnabled: false,
@@ -140,6 +144,11 @@ function normalizeTriggerTime(value: string) {
   return /^([01]\d|2[0-3]):([0-5]\d)$/.test(normalized) ? normalized : "";
 }
 
+// 按 Unicode 码点计数, 正确处理 emoji (如 🍽 占 1 个字符)
+function graphemeLength(value: string) {
+  return [...(value || "")].length;
+}
+
 export function SystemSettingsSectionPage() {
   const { section } = useParams();
   const [settings, setSettings] = useState<OperationSettingsResponse>({
@@ -156,6 +165,10 @@ export function SystemSettingsSectionPage() {
     deliverySubscribeEnabled: true,
     deliverySubscribeLunchTime: "11:30",
     deliverySubscribeDinnerTime: "17:30",
+    nightlyReminderEnabled: true,
+    nightlyReminderTime: "20:00",
+    nightlyReminderDescription: "再忙也要好好吃饭哟🍽",
+    nightlyReminderTip: "需要明日餐食的宝子现在可以下单喽～",
     popupAnnouncementEnabled: false,
     popupAnnouncementContent: "",
     restNoticeTemplate: ""
@@ -176,7 +189,7 @@ export function SystemSettingsSectionPage() {
   const [areaMemoryForm, setAreaMemoryForm] = useState(EMPTY_AREA_MEMORY_FORM);
   const [areaMemorySourceData, setAreaMemorySourceData] = useState<DispatchAreaMemorySourceListResponse | null>(null);
 
-  const [modal, setModal] = useState<"banner" | "popup" | "packageReminder" | "routeWorkbench" | "aiConfig" | "productionRun" | "routeLab" | "areaMemoryHub" | "areaMemory" | "areaMemorySources" | "restNotice" | null>(null);
+  const [modal, setModal] = useState<"banner" | "popup" | "packageReminder" | "routeWorkbench" | "aiConfig" | "productionRun" | "routeLab" | "areaMemoryHub" | "areaMemory" | "areaMemorySources" | "restNotice" | "nightlyTemplate" | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [bannerUploading, setBannerUploading] = useState(false);
   const [popupSubmitting, setPopupSubmitting] = useState(false);
@@ -194,6 +207,11 @@ export function SystemSettingsSectionPage() {
   const [areaMemorySourceLoading, setAreaMemorySourceLoading] = useState(false);
   const [restNoticeForm, setRestNoticeForm] = useState("");
   const [restNoticeSubmitting, setRestNoticeSubmitting] = useState(false);
+  const [nightlyTemplateForm, setNightlyTemplateForm] = useState({
+    nightlyReminderDescription: "",
+    nightlyReminderTip: ""
+  });
+  const [nightlyTemplateSubmitting, setNightlyTemplateSubmitting] = useState(false);
   const [selectedLogId, setSelectedLogId] = useState<number | null>(null);
   const [runTypeFilter, setRunTypeFilter] = useState<"PRODUCTION" | "TEST">("PRODUCTION");
   const [previewBannerImage, setPreviewBannerImage] = useState("");
@@ -333,6 +351,44 @@ export function SystemSettingsSectionPage() {
     }
   }
 
+  function openNightlyTemplate() {
+    setNightlyTemplateForm({
+      nightlyReminderDescription: settings.nightlyReminderDescription || "再忙也要好好吃饭哟🍽",
+      nightlyReminderTip: settings.nightlyReminderTip || "需要明日餐食的宝子现在可以下单喽～"
+    });
+    openModal("nightlyTemplate");
+  }
+
+  async function submitNightlyTemplate() {
+    const description = (nightlyTemplateForm.nightlyReminderDescription || "").trim();
+    const tip = (nightlyTemplateForm.nightlyReminderTip || "").trim();
+    if (graphemeLength(description) > 20 || graphemeLength(tip) > 20) {
+      toast("描述与温馨提示均不能超过 20 个字（微信订阅限制）", "error");
+      return;
+    }
+    setNightlyTemplateSubmitting(true);
+    try {
+      setSettings(await updatePackageReminderSettings({
+        packageExpiryReminderDays: settings.packageExpiryReminderDays,
+        packageLowBalanceThreshold: settings.packageLowBalanceThreshold,
+        mealReminderPopupEnabled: settings.mealReminderPopupEnabled !== false,
+        deliverySubscribeEnabled: settings.deliverySubscribeEnabled !== false,
+        deliverySubscribeLunchTime: settings.deliverySubscribeLunchTime,
+        deliverySubscribeDinnerTime: settings.deliverySubscribeDinnerTime,
+        nightlyReminderEnabled: settings.nightlyReminderEnabled !== false,
+        nightlyReminderTime: settings.nightlyReminderTime,
+        nightlyReminderDescription: description,
+        nightlyReminderTip: tip
+      }));
+      closeModal();
+      toast("正常营业提示模板已更新");
+    } catch (err: any) {
+      showError(err);
+    } finally {
+      setNightlyTemplateSubmitting(false);
+    }
+  }
+
   function openPopup() {
     setPopupForm({
       title: settings.holidayNoticeTitle || "",
@@ -381,7 +437,11 @@ export function SystemSettingsSectionPage() {
       mealReminderPopupEnabled: settings.mealReminderPopupEnabled !== false,
       deliverySubscribeEnabled: settings.deliverySubscribeEnabled !== false,
       deliverySubscribeLunchTime: normalizeTriggerTime(settings.deliverySubscribeLunchTime || "11:30") || "11:30",
-      deliverySubscribeDinnerTime: normalizeTriggerTime(settings.deliverySubscribeDinnerTime || "17:30") || "17:30"
+      deliverySubscribeDinnerTime: normalizeTriggerTime(settings.deliverySubscribeDinnerTime || "17:30") || "17:30",
+      nightlyReminderEnabled: settings.nightlyReminderEnabled !== false,
+      nightlyReminderTime: normalizeTriggerTime(settings.nightlyReminderTime || "20:00") || "20:00",
+      nightlyReminderDescription: settings.nightlyReminderDescription || "再忙也要好好吃饭哟🍽",
+      nightlyReminderTip: settings.nightlyReminderTip || "需要明日餐食的宝子现在可以下单喽～"
     });
     openModal("packageReminder");
   }
@@ -496,8 +556,15 @@ export function SystemSettingsSectionPage() {
     const packageLowBalanceThreshold = Math.max(1, Number(packageReminderForm.packageLowBalanceThreshold) || 0);
     const deliverySubscribeLunchTime = normalizeTriggerTime(packageReminderForm.deliverySubscribeLunchTime);
     const deliverySubscribeDinnerTime = normalizeTriggerTime(packageReminderForm.deliverySubscribeDinnerTime);
+    const nightlyReminderTime = normalizeTriggerTime(packageReminderForm.nightlyReminderTime || "20:00") || "20:00";
     if (!packageExpiryReminderDays || !packageLowBalanceThreshold || !deliverySubscribeLunchTime || !deliverySubscribeDinnerTime) {
       toast("请填写有效的提醒阈值以及午餐、晚餐订阅时间", "error");
+      return;
+    }
+    const description = (packageReminderForm.nightlyReminderDescription || "").trim();
+    const tip = (packageReminderForm.nightlyReminderTip || "").trim();
+    if (graphemeLength(description) > 20 || graphemeLength(tip) > 20) {
+      toast("每晚提醒的描述与温馨提示均不能超过 20 个字", "error");
       return;
     }
     setPackageSubmitting(true);
@@ -508,7 +575,11 @@ export function SystemSettingsSectionPage() {
         mealReminderPopupEnabled: packageReminderForm.mealReminderPopupEnabled,
         deliverySubscribeEnabled: packageReminderForm.deliverySubscribeEnabled,
         deliverySubscribeLunchTime,
-        deliverySubscribeDinnerTime
+        deliverySubscribeDinnerTime,
+        nightlyReminderEnabled: packageReminderForm.nightlyReminderEnabled,
+        nightlyReminderTime,
+        nightlyReminderDescription: description,
+        nightlyReminderTip: tip
       }));
       closeModal();
       toast("餐包提醒已更新");
@@ -836,25 +907,10 @@ export function SystemSettingsSectionPage() {
           onOpenPackageReminder={openPackageReminder}
           onOpenBanner={openBanner}
           onPreviewBanner={setPreviewBannerImage}
+          nightlyReminderDescription={settings.nightlyReminderDescription || ""}
+          nightlyReminderTip={settings.nightlyReminderTip || ""}
+          onOpenNightlyTemplate={openNightlyTemplate}
         />
-        <div className="settings-card" style={{ marginTop: 16 }}>
-          <div className="settings-card__title">
-            <Megaphone size={18} /> 休息提示模板
-          </div>
-          <div className="settings-card__body">
-            <div className="settings-card__detail">
-              周菜单把某天设为「休息」时自动套用，也可针对当天单独改写。
-            </div>
-            <div className="settings-card__detail settings-card__detail--sub">
-              当前模板：{settings.restNoticeTemplate || "（未设置）"}
-            </div>
-          </div>
-          <div className="settings-card__actions">
-            <button className="btn btn-outline" style={{ width: "100%" }} onClick={openRestNotice}>
-              编辑休息提示模板
-            </button>
-          </div>
-        </div>
       </>
     );
   }
@@ -1610,6 +1666,32 @@ export function SystemSettingsSectionPage() {
           </div>
         </div>
         <div className="form-group">
+          <label className="form-label">每晚用餐提醒</label>
+          <div className="toggle-row">
+            <Checkbox
+              checked={packageReminderForm.nightlyReminderEnabled}
+              onCheckedChange={(checked) => setPackageReminderForm({ ...packageReminderForm, nightlyReminderEnabled: !!checked })}
+            />
+            <span>{packageReminderForm.nightlyReminderEnabled ? "开启后每晚定时向已授权顾客发送「明日用餐还剩多少餐」提醒" : "关闭后每晚不发送用餐提醒"}</span>
+          </div>
+          {packageReminderForm.nightlyReminderEnabled && (
+            <div className="nightly-reminder-config">
+              <div className="form-group" style={{ marginTop: 12 }}>
+                <label className="form-label">发送时间</label>
+                <SafeInput
+                  className="form-control"
+                  type="time"
+                  value={packageReminderForm.nightlyReminderTime}
+                  onValueChange={(value) => setPackageReminderForm({ ...packageReminderForm, nightlyReminderTime: value })}
+                />
+                <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 8 }}>
+                  系统在该时间点群发。仅当明天配置了菜单（即营业日）才发送，休息日自动跳过。模板文案请在「正常营业提示模板」中编辑。
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="form-group">
           <label className="form-label">午餐订阅时间</label>
           <SafeInput
             className="form-control"
@@ -1728,18 +1810,18 @@ export function SystemSettingsSectionPage() {
 
       <SettingsModal
         open={modal === "restNotice"}
-        title="编辑休息提示模板"
+        title="编辑休息日提示模板"
         onClose={closeModal}
         onSubmit={submitRestNotice}
         submitLabel="保存模板"
         submitting={restNoticeSubmitting}
       >
         <div className="settings-form-callout">
-          留空则用户端不展示默认休息语；保存后，下次在周菜单把某天设为「休息」会自动填入此模板，商家仍可针对当天单独修改。
+          周菜单把某天设为「休息」时自动套用此模板，商家仍可针对当天单独改写。
         </div>
         <div className="form-group">
           <label className="form-label">
-            <span className="required">*</span>休息提示模板
+            <span className="required">*</span>休息日提示模板
           </label>
           <SafeTextarea
             className="form-control"
@@ -1750,6 +1832,45 @@ export function SystemSettingsSectionPage() {
           />
           <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 8 }}>
             用户端展示上限 255 字；超出会自动截断。
+          </div>
+        </div>
+      </SettingsModal>
+
+      <SettingsModal
+        open={modal === "nightlyTemplate"}
+        title="编辑订阅模板"
+        onClose={closeModal}
+        onSubmit={submitNightlyTemplate}
+        submitLabel="保存模板"
+        submitting={nightlyTemplateSubmitting}
+      >
+        <div className="settings-form-callout">
+          微信订阅消息（优惠券过期提醒模板），仅明天为营业日时发送，休息日自动跳过。描述与温馨提示各限 20 字。
+        </div>
+        <div className="form-group">
+          <label className="form-label">描述内容（thing3，限 20 字）</label>
+          <SafeInput
+            className="form-control"
+            value={nightlyTemplateForm.nightlyReminderDescription}
+            maxLength={20}
+            placeholder="再忙也要好好吃饭哟🍽"
+            onValueChange={(value) => setNightlyTemplateForm({ ...nightlyTemplateForm, nightlyReminderDescription: value })}
+          />
+          <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 6 }}>
+            当前 {graphemeLength(nightlyTemplateForm.nightlyReminderDescription || "")}/20 字
+          </div>
+        </div>
+        <div className="form-group" style={{ marginTop: 12 }}>
+          <label className="form-label">温馨提示（thing6，限 20 字）</label>
+          <SafeInput
+            className="form-control"
+            value={nightlyTemplateForm.nightlyReminderTip}
+            maxLength={20}
+            placeholder="需要明日餐食的宝子现在可以下单喽～"
+            onValueChange={(value) => setNightlyTemplateForm({ ...nightlyTemplateForm, nightlyReminderTip: value })}
+          />
+          <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 6 }}>
+            当前 {graphemeLength(nightlyTemplateForm.nightlyReminderTip || "")}/20 字
           </div>
         </div>
       </SettingsModal>

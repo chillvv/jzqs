@@ -214,7 +214,6 @@ export function OrderPrepPage() {
     quantity: "1",
     deliveryAddress: "",
     merchantRemark: "",
-    priorityCustomer: false,
     status: "PENDING_DISPATCH"
   });
   const [specialProcessForm, setSpecialProcessForm] = useState<{
@@ -247,7 +246,6 @@ export function OrderPrepPage() {
       quantity: String(item.quantity || 1),
       deliveryAddress: item.deliveryAddress || "",
       merchantRemark: item.merchantRemark || "",
-      priorityCustomer: Boolean(item.priorityCustomer),
       status: item.status || "PENDING_DISPATCH"
     });
     setIsEditOpen(true);
@@ -775,7 +773,6 @@ export function OrderPrepPage() {
         quantity: Number(editForm.quantity) || 1,
         deliveryAddress: trimmedAddress,
         merchantRemark: editForm.merchantRemark,
-        priorityCustomer: editForm.priorityCustomer,
         status: editForm.status
       });
       setIsEditOpen(false);
@@ -945,7 +942,7 @@ export function OrderPrepPage() {
 
   function getRowHighlightClass(item: OrderPrepItemResponse) {
     const displayStatus = resolveOrderDisplayStatus(item);
-    if (displayStatus === "AFTERSALE" || displayStatus === "REFUNDED") {
+    if (displayStatus === "AFTERSALE" || displayStatus === "REFUNDED" || displayStatus === "REFUND_PROCESSING") {
       return "row-danger-highlight";
     }
     if (item.userNote) {
@@ -1024,7 +1021,7 @@ export function OrderPrepPage() {
                     : item.label === "晚餐"
                       ? `有备注 ${summary.dinnerRemarkedCount} 单`
                       : item.label === "待确认固定订餐"
-                        ? `重点客户待确认 ${summary.priorityConfirmationCount} 人`
+                        ? `待生成 ${summary.confirmationCount} 份`
                         : isActive
                           ? `正在查看${item.label}订单`
                           : `点击切换到${item.label}订单`}
@@ -1086,9 +1083,7 @@ export function OrderPrepPage() {
                     { label: "待配送", value: "PENDING_DISPATCH" },
                     { label: "配送中", value: "DISPATCHING" },
                     { label: "已完成", value: "DELIVERED" },
-                    { label: "退款处理中", value: "REFUND_PROCESSING" },
-                    { label: "已退款", value: "REFUNDED" },
-                    { label: "已取消", value: "CANCELLED" }
+                    { label: "退款处理中", value: "REFUND_PROCESSING" }
                   ]}
                   onChange={(value) => setStatusFilter(value as OrderPrepStatusFilter)}
                 />
@@ -1258,7 +1253,6 @@ export function OrderPrepPage() {
           ) : (
             <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
               <span className="tag tag-red">待确认 {confirmationItems.length} 份</span>
-              <span className="tag tag-orange">重点客户 {summary.priorityConfirmationCount} 人</span>
             </div>
           )}
         </div>
@@ -1270,26 +1264,51 @@ export function OrderPrepPage() {
             onVisibleCountChange={setSubscriptionVisibleCount}
           />
         ) : activeTab === "CONFIRMATION" ? (
-          <div style={{ display: "grid", gap: "12px", padding: "20px" }}>
-            {confirmationItems.map((item: SubscriptionConfirmationItem) => (
-              <div key={item.id} className="address-card" style={{ cursor: "default" }}>
-                <div className="address-content">
-                  <div className="address-title">
-                    {item.customerName} / {item.customerPhone} / {item.mealPeriod === "LUNCH" ? "午餐" : "晚餐"}
+          <div style={{ display: "grid", gap: "20px", padding: "20px" }}>
+            {(["LUNCH", "DINNER"] as const).map((period) => {
+              const periodItems = confirmationItems.filter(
+                (item) => item.mealPeriod === period
+              );
+              if (periodItems.length === 0) return null;
+              const periodCount = periodItems.reduce(
+                (sum, item) => sum + (item.quantity ?? 1),
+                0
+              );
+              return (
+                <div key={period}>
+                  <div style={{
+                    fontWeight: 700,
+                    fontSize: "15px",
+                    marginBottom: "10px",
+                    paddingBottom: "6px",
+                    borderBottom: "1px solid var(--border-color)"
+                  }}>
+                    {period === "LUNCH" ? "午餐" : "晚餐"}待确认（{periodCount} 份）
                   </div>
-                  <div className="address-detail">{item.addressLine || "未设置地址"}</div>
-                  <div className="address-detail">用户备注：{item.userNote || "-"} / 商家备注：{item.merchantRemark || "-"}</div>
+                  <div style={{ display: "grid", gap: "12px" }}>
+                    {periodItems.map((item: SubscriptionConfirmationItem) => (
+                      <div key={item.id} className="address-card" style={{ cursor: "default" }}>
+                        <div className="address-content">
+                          <div className="address-title">
+                            {item.customerName} / {item.customerPhone} / {item.mealPeriod === "LUNCH" ? "午餐" : "晚餐"}
+                          </div>
+                          <div className="address-detail">{item.addressLine || "未设置地址"}</div>
+                          <div className="address-detail">用户备注：{item.userNote || "-"} / 商家备注：{item.merchantRemark || "-"}</div>
+                        </div>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          <button className="btn btn-outline" disabled={processingConfirmationId === item.id} onClick={() => handleCancelConfirmation(item.id).catch(() => undefined)}>
+                            {processingConfirmationId === item.id && processingConfirmationAction === "cancel" ? "取消中..." : "取消"}
+                          </button>
+                          <button className="btn btn-primary" disabled={processingConfirmationId === item.id} onClick={() => handleConfirmConfirmation(item.id).catch(() => undefined)}>
+                            {processingConfirmationId === item.id && processingConfirmationAction === "confirm" ? "生成中..." : "确认生成"}
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button className="btn btn-outline" disabled={processingConfirmationId === item.id} onClick={() => handleCancelConfirmation(item.id).catch(() => undefined)}>
-                    {processingConfirmationId === item.id && processingConfirmationAction === "cancel" ? "取消中..." : "取消"}
-                  </button>
-                  <button className="btn btn-primary" disabled={processingConfirmationId === item.id} onClick={() => handleConfirmConfirmation(item.id).catch(() => undefined)}>
-                    {processingConfirmationId === item.id && processingConfirmationAction === "confirm" ? "生成中..." : "确认生成"}
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <>
@@ -1339,7 +1358,6 @@ export function OrderPrepPage() {
                               <div style={{ fontWeight: 700, display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                                 <span>{item.customerName}</span>
                                 <span style={{ color: "var(--primary-color)", fontWeight: 700 }}>×{item.quantity}</span>
-                                {item.priorityCustomer && <span className="tag tag-orange">重点</span>}
                                 {item.fixedSubscription && <span className="tag tag-blue">固定订餐</span>}
                               </div>
                             </div>
@@ -1387,7 +1405,6 @@ export function OrderPrepPage() {
                         <span style={{ color: "var(--primary-color)", marginLeft: "4px", fontWeight: 700 }}>×{item.quantity}</span>
                         <span style={{ color: "var(--text-sub)", fontSize: "12px", marginLeft: "8px" }}>{item.customerPhone}</span>
                         <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "6px" }}>
-                          {item.priorityCustomer && <span className="tag tag-orange">重点客户</span>}
                           {item.fixedSubscription && <span className="tag tag-blue">固定订餐</span>}
                         </div>
                       </div>

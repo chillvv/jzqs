@@ -13,9 +13,27 @@ const { EXCEPTION_TYPE_OPTIONS } = require('../../utils/constants');
 const realtime = require('../../utils/realtime');
 const guide = require('../../utils/guide');
 const demo = require('../../utils/demo');
+const onboarding = require('../../utils/onboarding');
 
 function isStoredReceiptReference(value) {
+  if (!value) return false;
+  // 排除本地临时文件：开发者工具 __tmp__、真机 wxfile://tmp_ 等本地临时路径，
+  // 这些不是已存储的服务端资源，必须走真正的上传分支。
+  if (typeof value === 'string' && (value.includes('/__tmp__/') || value.startsWith('wxfile://tmp_'))) {
+    return false;
+  }
   return /^https?:\/\//i.test(value) || value.startsWith('cloud://') || value.startsWith('/uploads/');
+}
+
+// 把已存引用（可能带 apiBaseUrl 前缀，如 http://127.0.0.1:8081/uploads/...）
+// 还原成 /uploads/... 相对路径，避免把带机器地址的 URL 写回数据库制造脏数据。
+function stripApiBaseUrlPrefix(url, baseUrl) {
+  if (!url || !baseUrl) return url;
+  const root = String(baseUrl).replace(/\/+$/, '');
+  if (root && url.indexOf(root) === 0) {
+    return url.slice(root.length) || url;
+  }
+  return url;
 }
 
 function normalizeOptionalText(value) {
@@ -158,35 +176,15 @@ Page({
       this.setData({ deliverySectionExpanded: true });
     }
 
+    onboarding.ensureCleanDemo();
     await this.loadOrderDetail(Number(batchItemId), Number(mealSlotOrderId));
     this.showGuide();
   },
 
   showGuide() {
-    const steps = [
-      { selector: '.gm-never', centered: true, title: '送达回执怎么传', desc: '送达后在这里拍一张照片作为回执。下面两步带你过一遍，演示环境不会真实上传，随时可点「跳过」。' },
-      { selector: '.photo-upload-btn', fallbacks: ['.delivery-section', '.detail-body', '.receipt-area'], title: '上传送达照片', desc: '点这里拍照或选图，作为送达回执留证。' },
-      { selector: '.reference-summary-action', fallbacks: ['.reference-summary', '.reference-area'], title: '保存参考图', desc: '也可为这个地址存一张参考图，下次直接复用，不用重复拍。' }
-    ];
-    this.setData({ demoActive: demo.isActive() });
-    guide.runGuide(this, 'rider_order_detail_v1', steps, '#185FA5', {
-      interactive: demo.isActive(),
-      onSkip: () => {
-        guide.markAllDismissed();
-        this.finishDemo();
-      },
-      onDone: () => {
-        this.finishDemo();
-      }
-    });
-  },
-
-  finishDemo() {
-    try {
-      wx.removeStorageSync('demo_active_r1');
-    } catch (e) {}
-    this.setData({ demoActive: false });
-    wx.navigateBack();
+    if (onboarding.shouldRunStageHere('flow_order_detail')) {
+      onboarding.runCurrentStage(this);
+    }
   },
 
   /**
@@ -194,7 +192,7 @@ Page({
    */
   async loadOrderDetail(batchItemId, mealSlotOrderId, options = {}) {
     const { silent = false } = options;
-    if (demo.isActive()) {
+    if (demo.isActive() && onboarding.isRunningFlow()) {
       this.applyDemoDetail(batchItemId, mealSlotOrderId);
       return;
     }
@@ -704,8 +702,10 @@ Page({
           throw new Error('图片上传失败，请重试');
         }
       } else if (receiptTempFilePath && isStoredReceiptReference(receiptTempFilePath)) {
-        receiptFileKey = receiptTempFilePath;
-        console.log('[提交回执] 使用已有URL:', receiptFileKey);
+        // 已存引用：剥离 apiBaseUrl 前缀，只保留 /uploads/... 相对路径，
+        // 避免把 http://127.0.0.1:8081/uploads/... 这类带机器地址的 URL 写回数据库。
+        receiptFileKey = stripApiBaseUrlPrefix(receiptTempFilePath, app.globalData.apiBaseUrl);
+        console.log('[提交回执] 使用已有URL(已剥离前缀):', receiptFileKey);
       } else {
         // 没有选择图片，只使用文字说明
         receiptFileKey = '';

@@ -15,6 +15,7 @@ const {
 const guide = require('../../utils/guide');
 const demo = require('../../utils/demo');
 const auth = require('../../utils/auth');
+const onboarding = require('../../utils/onboarding');
 
 function tomorrowDate() {
   const date = new Date();
@@ -104,9 +105,7 @@ Page({
       })
     }
     this.restoreRemarkDraft();
-    if (auth.globalData && auth.globalData.registered && guide.shouldShow('customer_order_v1') && !demo.isActive()) {
-      demo.start();
-    }
+    onboarding.ensureCleanDemo();
     this.loadOrderData();
   },
 
@@ -115,7 +114,7 @@ Page({
   },
 
   async loadOrderData() {
-    if (demo.isActive()) {
+    if (demo.isActive() && onboarding.isRunningFlow()) {
       this.applyDemoOrderData();
       this.setData({ loading: false });
       wx.stopPullDownRefresh();
@@ -178,27 +177,9 @@ Page({
   },
 
   showGuide() {
-    if (!(auth.globalData && auth.globalData.registered)) {
-      return;
+    if (onboarding.shouldRunStageHere('flow_order')) {
+      onboarding.runCurrentStage(this);
     }
-    const steps = [
-      { selector: '.gm-never', centered: true, title: '这一页就能下单', desc: '选好份数、点「去结算」即可。当前是演示环境，所有操作都不会真实提交或扣费。' },
-      { selector: '.meal-item', fallbacks: ['.meal-list', '.menu-area', '.order-content'], title: '选好餐品', desc: '点 + 选择午餐或晚餐的份数，价格会实时算好。' },
-      { selector: '.cart-bar', fallbacks: ['.bottom-bar', '.checkout-bar', '.submit-bar'], title: '去结算', desc: '选好后点这里完成下单，之后在「我的预订」里跟踪配送状态。' }
-    ];
-    this.setData({ demoActive: demo.isActive() });
-    guide.runGuide(this, 'customer_order_v1', steps, '#639922', {
-      interactive: demo.isActive(),
-      onSkip: () => {
-        guide.markAllDismissed();
-        demo.end();
-        this.setData({ demoActive: false });
-      },
-      onDone: () => {
-        demo.end();
-        this.setData({ demoActive: false });
-      }
-    });
   },
 
   applyDemoOrderData() {
@@ -223,12 +204,6 @@ Page({
       selectedContactText: defaultAddress ? `${defaultAddress.contactName} ${defaultAddress.contactPhone}` : '暂无地址'
     });
     this.syncCheckoutState();
-  },
-
-  exitDemo() {
-    demo.end();
-    this.setData({ demoActive: false });
-    this.loadOrderData();
   },
 
   updateCart1Minus() {

@@ -7,6 +7,7 @@ const realtime = require('../../utils/realtime');
 const guide = require('../../utils/guide');
 const demo = require('../../utils/demo');
 const auth = require('../../utils/auth');
+const onboarding = require('../../utils/onboarding');
 
 Page({
   onShareAppMessage: shareAppMessage,
@@ -40,9 +41,7 @@ Page({
   },
 
   onShow() {
-    if (auth.globalData && auth.globalData.registered && guide.shouldShow('customer_orders_v1') && !demo.isActive()) {
-      demo.start();
-    }
+    onboarding.ensureCleanDemo();
     this.startRealtimeSync();
     this.loadOrders();
   },
@@ -61,7 +60,7 @@ Page({
 
   async loadOrders() {
     const { currentStatus, targetOrderId } = this.data;
-    if (demo.isActive()) {
+    if (demo.isActive() && onboarding.isRunningFlow()) {
       this.applyDemoOrders();
       this.showGuide();
       return;
@@ -89,27 +88,9 @@ Page({
   },
 
   showGuide() {
-    if (!(auth.globalData && auth.globalData.registered)) {
-      return;
+    if (onboarding.shouldRunStageHere('flow_orders')) {
+      onboarding.runCurrentStage(this);
     }
-    const steps = [
-      { selector: '.gm-never', centered: true, title: '我的预订都在这里', desc: '每笔下单的餐食、配送状态都汇总在这一页。演示环境里这条是假订单，下单后真实订单会出现在列表里。' },
-      { selector: '.subpage-navbar', title: '我的预订记录', desc: '顶部这里就是预订入口，随时回来看历史订单与状态。' },
-      { selector: '.subpage-card', fallbacks: ['.order-empty', '.subpage-body', '.order-list'], title: '订单卡片', desc: '每张卡片就是一笔预订，套餐、配送地址、状态一目了然。' }
-    ];
-    this.setData({ demoActive: demo.isActive() });
-    guide.runGuide(this, 'customer_orders_v1', steps, '#639922', {
-      interactive: demo.isActive(),
-      onSkip: () => {
-        guide.markAllDismissed();
-        demo.end();
-        this.setData({ demoActive: false });
-      },
-      onDone: () => {
-        demo.end();
-        this.setData({ demoActive: false });
-      }
-    });
   },
 
   applyDemoOrders() {
@@ -120,12 +101,6 @@ Page({
       demoActive: true,
       loading: false
     });
-  },
-
-  exitDemo() {
-    demo.end();
-    this.setData({ demoActive: false });
-    this.loadOrders();
   },
 
   startRealtimeSync() {

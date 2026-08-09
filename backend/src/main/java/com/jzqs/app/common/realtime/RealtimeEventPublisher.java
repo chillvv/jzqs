@@ -69,6 +69,13 @@ public class RealtimeEventPublisher {
         return writeMessage(new RealtimePongMessage("PONG"));
     }
 
+    public String errorMessage(String message) {
+        java.util.Map<String, Object> payload = new java.util.LinkedHashMap<>();
+        payload.put("type", "ERROR");
+        payload.put("message", message == null ? "实时连接发生错误" : message);
+        return writeMessage(payload);
+    }
+
     public RealtimeViewer resolveViewer(String token) {
         if (token == null || token.isBlank()) {
             throw new BusinessException(ErrorCode.UNAUTHORIZED, "缺少实时连接凭证");

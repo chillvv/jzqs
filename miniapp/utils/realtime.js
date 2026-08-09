@@ -51,9 +51,16 @@ function connect() {
   }
   manuallyStopped = false;
   clearReconnectTimer();
-  socketTask = wx.connectSocket({
+  const task = wx.connectSocket({
     url: resolveSocketUrl(app.globalData.apiBaseUrl)
   });
+  // 部分基础库版本在环境不支持或域名未配置时同步返回 undefined，
+  // 此时不能对 undefined 调 onOpen，避免连锁崩溃。
+  if (!task) {
+    console.error('[实时连接] connectSocket 未返回任务对象');
+    return;
+  }
+  socketTask = task;
   socketTask.onOpen(() => {
     socketTask.send({
       data: JSON.stringify({ type: 'AUTH', token, client: clientLabel })

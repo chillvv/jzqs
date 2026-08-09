@@ -5,6 +5,7 @@ const realtime = require('../../utils/realtime');
 const guide = require('../../utils/guide');
 const demo = require('../../utils/demo');
 const auth = require('../../utils/auth');
+const onboarding = require('../../utils/onboarding');
 
 const MEAL_REMINDER_DISMISSED_PREFIX = 'miniapp_meal_reminder_dismissed_';
 
@@ -107,15 +108,14 @@ Page({
         selected: 0
       })
     }
-    if (auth.globalData && auth.globalData.registered && guide.shouldShow('customer_home_v1') && !demo.isActive()) {
-      demo.start();
-    }
+    onboarding.ensureCleanDemo();
     this.startRealtimeSync();
+    onboarding.maybeAutoStart();
     this.loadPageData();
   },
 
   async loadPageData() {
-    if (demo.isActive()) {
+    if (demo.isActive() && onboarding.isRunningFlow()) {
       this.applyDemoHomeData();
       this.showGuide();
       return;
@@ -196,26 +196,9 @@ Page({
   },
 
   showGuide() {
-    if (!(auth.globalData && auth.globalData.registered)) {
-      return;
+    if (onboarding.shouldRunStageHere('flow_home')) {
+      onboarding.runCurrentStage(this);
     }
-    const steps = [
-      { selector: '.gm-never', centered: true, title: '欢迎使用简知轻食', desc: '花 20 秒带你熟悉怎么看每周菜单、怎么点餐、怎么查订单。演示环境里数据都是假的，随时可点「跳过」结束指引。' },
-      { selector: '.poster-title', fallbacks: ['.week-card', '.menu-section', '.home-content'], title: '本周主厨菜单', desc: '点餐前先来这里看这一周每天的营养午餐和晚餐，每周都会更新。' }
-    ];
-    this.setData({ demoActive: demo.isActive() });
-    guide.runGuide(this, 'customer_home_v1', steps, '#639922', {
-      interactive: demo.isActive(),
-      onSkip: () => {
-        guide.markAllDismissed();
-        demo.end();
-        this.setData({ demoActive: false });
-      },
-      onDone: () => {
-        demo.end();
-        this.setData({ demoActive: false });
-      }
-    });
   },
 
   applyDemoHomeData() {
@@ -245,12 +228,6 @@ Page({
       demoActive: true,
       loading: false
     });
-  },
-
-  exitDemo() {
-    demo.end();
-    this.setData({ demoActive: false });
-    this.loadPageData();
   },
 
   onPullDownRefresh() {

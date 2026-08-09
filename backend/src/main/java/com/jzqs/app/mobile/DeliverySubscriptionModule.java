@@ -1,5 +1,6 @@
 package com.jzqs.app.mobile;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.common.wechat.WeChatService;
@@ -23,10 +24,12 @@ class DeliverySubscriptionModule {
 
     private final JdbcTemplate jdbcTemplate;
     private final WeChatService weChatService;
+    private final ObjectMapper objectMapper;
 
-    DeliverySubscriptionModule(JdbcTemplate jdbcTemplate, WeChatService weChatService) {
+    DeliverySubscriptionModule(JdbcTemplate jdbcTemplate, WeChatService weChatService, ObjectMapper objectMapper) {
         this.jdbcTemplate = jdbcTemplate;
         this.weChatService = weChatService;
+        this.objectMapper = objectMapper;
     }
 
     void authorizeSubscription(long customerId, long orderId, String templateId) {
@@ -51,7 +54,7 @@ class DeliverySubscriptionModule {
         pruneOldDeliverySubscriptions();
     }
 
-    void sendTestMessage(long customerId) {
+    String sendTestMessage(long customerId) {
         DeliverySubscriptionSendContext context = findCustomerSubscribeMessageTestContext(customerId);
         if (context == null || isBlank(context.openid())) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前账号缺少可用的微信接收标识");
@@ -59,9 +62,12 @@ class DeliverySubscriptionModule {
         weChatService.sendDeliverySubscribeMessage(
             context.openid(),
             "pages/profile/index",
-            "简知轻食",
+            "今日套餐",
+            "",
+            "简知轻食取餐点",
             "请查看取餐测试提醒"
         );
+        return "pages/profile/index";
     }
 
     int sendScheduledMessages(String mealPeriod) {
@@ -197,8 +203,10 @@ class DeliverySubscriptionModule {
             weChatService.sendDeliverySubscribeMessage(
                 context.openid(),
                 weChatService.buildDeliveryPage(mealSlotOrderId),
-                "简知轻食",
-                "您的餐食已送达，请于半小时内取餐"
+                context.dishNames(),
+                context.riderPhone(),
+                context.pickupLocation(),
+                "防止他人误拿，请半小时内尽快取走哈"
             );
             jdbcTemplate.update(
                 "UPDATE customer_delivery_subscriptions SET status = 'SENT', sent_at = ?, last_error_message = NULL WHERE id = ?",
@@ -237,11 +245,19 @@ class DeliverySubscriptionModule {
             """
             SELECT
                 cds.id,
-                COALESCE(c.current_openid, c.openid, '') AS current_openid
+                COALESCE(c.current_openid, c.openid, '') AS current_openid,
+                mwi.dish_items_json AS dish_items_json,
+                rp.phone AS rider_phone,
+                ca.address_line AS pickup_location
             FROM customer_delivery_subscriptions cds
             JOIN meal_slot_orders mso ON mso.id = cds.meal_slot_order_id
             JOIN daily_orders do ON do.id = mso.daily_order_id
             JOIN customers c ON c.id = do.customer_id
+            LEFT JOIN menu_week_items mwi
+                ON mwi.serve_date = do.serve_date AND mwi.meal_period = mso.meal_period
+            LEFT JOIN dispatch_assignments da ON da.meal_slot_order_id = mso.id
+            LEFT JOIN rider_profiles rp ON rp.id = da.rider_profile_id
+            LEFT JOIN customer_addresses ca ON ca.id = mso.address_id
             WHERE cds.meal_slot_order_id = ?
               AND cds.status IN ('AUTHORIZED', 'FAILED')
             """,
@@ -249,10 +265,33 @@ class DeliverySubscriptionModule {
             rs -> rs.next()
                 ? new DeliverySubscriptionSendContext(
                     rs.getLong("id"),
-                    rs.getString("current_openid")
+                    rs.getString("current_openid"),
+                    parseDishNames(rs.getString("dish_items_json")),
+                    rs.getString("rider_phone"),
+                    rs.getString("pickup_location")
                 )
                 : null
         );
+    }
+
+    /** 解析 menu_week_items.dish_items_json（字符串数组），用「、」拼接为商品名；为空时回退为商家套餐描述 */
+    private String parseDishNames(String dishItemsJson) {
+        if (isBlank(dishItemsJson)) {
+            return "今日营养套餐";
+        }
+        try {
+            List<String> dishes = objectMapper.readValue(
+                dishItemsJson,
+                objectMapper.getTypeFactory().constructCollectionType(List.class, String.class)
+            );
+            if (dishes == null || dishes.isEmpty()) {
+                return "今日营养套餐";
+            }
+            return String.join("、", dishes);
+        } catch (Exception ex) {
+            log.warn("解析菜品名 JSON 失败，使用原始文本 dishItemsJson={}", dishItemsJson);
+            return dishItemsJson.replaceAll("[\\[\\]\"]", "").trim();
+        }
     }
 
     private DeliverySubscriptionSendContext findCustomerSubscribeMessageTestContext(long customerId) {
@@ -264,9 +303,12 @@ class DeliverySubscriptionModule {
             """,
             ps -> ps.setLong(1, customerId),
             rs -> rs.next()
-                ? new DeliverySubscriptionSendContext(
+                ?                 new DeliverySubscriptionSendContext(
                     0L,
-                    rs.getString("current_openid")
+                    rs.getString("current_openid"),
+                    "",
+                    "",
+                    ""
                 )
                 : null
         );
@@ -286,7 +328,10 @@ class DeliverySubscriptionModule {
 
     private record DeliverySubscriptionSendContext(
         long id,
-        String openid
+        String openid,
+        String dishNames,
+        String riderPhone,
+        String pickupLocation
     ) {
     }
 }

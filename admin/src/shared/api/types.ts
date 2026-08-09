@@ -590,6 +590,10 @@ export type OperationSettingsResponse = {
   deliverySubscribeEnabled: boolean;
   deliverySubscribeLunchTime: string;
   deliverySubscribeDinnerTime: string;
+  nightlyReminderEnabled: boolean;
+  nightlyReminderTime: string;
+  nightlyReminderDescription: string;
+  nightlyReminderTip: string;
   popupAnnouncementEnabled: boolean;
   popupAnnouncementContent: string;
   restNoticeTemplate: string;

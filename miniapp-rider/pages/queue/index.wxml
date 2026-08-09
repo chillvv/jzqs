@@ -227,5 +227,4 @@
 
   <!-- Bottom Spacing for TabBar (handled by padding-bottom in CSS) -->
 </view>
-<view wx:if="{{demoActive}}" class="demo-exit-fab" catchtap="exitDemo">退出演示</view>
 <guide-mask id="guideMask" />
