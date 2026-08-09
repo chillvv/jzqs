@@ -1,10 +1,6 @@
 <subpage-navbar title="餐次流水单" />
 
 <view class="subpage">
-  <view class="subpage-card">
-    <view class="hero-inline-main">餐次流水单</view>
-  </view>
-
   <view class="wallet-summary-card">
     <view class="wallet-summary-block">
       <view class="wallet-summary-label">总餐次</view>

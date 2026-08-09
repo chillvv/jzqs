@@ -63,7 +63,7 @@ class DeliverySubscriptionModule {
             context.openid(),
             "pages/profile/index",
             "今日套餐",
-            "",
+            "13800138000",
             "简知轻食取餐点",
             "请查看取餐测试提醒"
         );

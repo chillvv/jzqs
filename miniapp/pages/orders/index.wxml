@@ -1,9 +1,8 @@
 <subpage-navbar title="{{showingTargetOrderOnly ? '关联订单' : '我的预订记录'}}" />
 
 <view class="subpage">
-  <view class="subpage-card">
-    <view class="hero-inline-main">{{showingTargetOrderOnly ? '关联订单' : '我的预订记录'}}</view>
-    <view wx:if="{{showingTargetOrderOnly}}" class="target-order-hint">
+  <view wx:if="{{showingTargetOrderOnly}}" class="subpage-card">
+    <view class="target-order-hint">
       <text>已为你直达餐次流水对应订单</text>
       <button class="sub-btn ghost target-order-btn" bindtap="viewAllOrders">查看全部订单</button>
     </view>
