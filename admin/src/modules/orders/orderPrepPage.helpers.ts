@@ -1,4 +1,4 @@
-import type { OrderPrepItemResponse } from "../../shared/api/types";
+import type { OrderPrepItemResponse, SubscriptionConfirmationItem } from "../../shared/api/types";
 
 export type OrderPrepMealPeriodFilter = "LUNCH" | "DINNER";
 export type OrderPrepSourceFilter = "ALL" | "MINIAPP" | "BACKEND" | "SUBSCRIPTION";
@@ -264,7 +264,7 @@ export function buildOrderPrepView(
 
 export function buildOrderPrepSummary(
   items: OrderPrepItemResponse[],
-  confirmationItems: Array<{ mealPeriod?: string; priority?: boolean }>
+  confirmationItems: SubscriptionConfirmationItem[]
 ) {
   // 已取消/已退款（含秒退款）不计入份数与订单统计
   const countedItems = items.filter((item) => !isOrderExcludedFromToday(item));

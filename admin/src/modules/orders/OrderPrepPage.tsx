@@ -187,7 +187,7 @@ export function OrderPrepPage() {
     labelRequiredCount: 0
   };
   const items = listResponse?.data?.items || [];
-  const confirmationItems = confirmationsResponse?.data || [];
+  const confirmationItems: SubscriptionConfirmationItem[] = confirmationsResponse?.data || [];
   const ordersError = ordersErrorObj ? getErrorMessage(ordersErrorObj, "加载订单失败") : "";
 
   // Forms state

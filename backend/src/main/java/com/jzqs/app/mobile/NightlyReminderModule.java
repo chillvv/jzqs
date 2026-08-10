@@ -71,7 +71,7 @@ public class NightlyReminderModule {
                            - COALESCE(SUM(consumed_meals), 0) AS remaining_meals
                 FROM meal_wallets
                 WHERE active = TRUE
-                  AND (expires_at IS NULL OR expires_at >= CURDATE())
+                  AND (expired_at IS NULL OR expired_at >= CURDATE())
                 GROUP BY customer_id
                 HAVING remaining_meals > 0
             ) wallet_summary ON wallet_summary.customer_id = c.id
@@ -132,7 +132,7 @@ public class NightlyReminderModule {
                            - COALESCE(SUM(consumed_meals), 0) AS remaining_meals
                 FROM meal_wallets
                 WHERE active = TRUE
-                  AND (expires_at IS NULL OR expires_at >= CURDATE())
+                  AND (expired_at IS NULL OR expired_at >= CURDATE())
                 GROUP BY customer_id
                 HAVING remaining_meals > 0
             ) wallet_summary ON wallet_summary.customer_id = c.id

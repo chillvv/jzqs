@@ -3,7 +3,7 @@ services:
     image: mysql:8.0
     container_name: jzqs-mysql
     restart: unless-stopped
-    cpus: 1.50
+    cpus: 1.0
     mem_limit: 1024m
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE}
@@ -29,10 +29,12 @@ services:
   backend:
     build:
       context: ./backend
+      dockerfile: Dockerfile
+    image: jzqs-backend:local
     container_name: jzqs-backend
     restart: unless-stopped
-    cpus: 1.50
-    mem_limit: 1024m
+    cpus: 2.0
+    mem_limit: 1664m
     depends_on:
       mysql:
         condition: service_healthy
@@ -62,10 +64,11 @@ services:
       SERVER_TOMCAT_THREADS_MIN_SPARE: ${SERVER_TOMCAT_THREADS_MIN_SPARE:-10}
       SERVER_TOMCAT_ACCEPT_COUNT: ${SERVER_TOMCAT_ACCEPT_COUNT:-100}
       SERVER_TOMCAT_MAX_CONNECTIONS: ${SERVER_TOMCAT_MAX_CONNECTIONS:-1024}
-      JAVA_OPTS: "-Dfile.encoding=UTF-8 -Duser.timezone=Asia/Shanghai -XX:+UseG1GC -XX:MaxRAMPercentage=50 -XX:InitialRAMPercentage=25 -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/./urandom"
+      JAVA_OPTS: "-Dfile.encoding=UTF-8 -Duser.timezone=Asia/Shanghai -XX:+UseG1GC -XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=50 -XX:+ExitOnOutOfMemoryError -Djava.security.egd=file:/dev/./urandom -Dspring.main.lazy-initialization=true"
     ports:
       - "${BACKEND_PORT:-8080}:8080"
     volumes:
+      - ./backend/target/backend-0.0.1-SNAPSHOT.jar:/app/app.jar:ro
       - backend_uploads:/app/uploads
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
@@ -95,7 +98,7 @@ services:
     image: caddy:2
     container_name: jzqs-caddy
     restart: unless-stopped
-    cpus: 0.50
+    cpus: 0.30
     mem_limit: 256m
     depends_on:
       backend:

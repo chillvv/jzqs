@@ -208,6 +208,8 @@ export function SystemSettingsSectionPage() {
   const [restNoticeForm, setRestNoticeForm] = useState("");
   const [restNoticeSubmitting, setRestNoticeSubmitting] = useState(false);
   const [nightlyTemplateForm, setNightlyTemplateForm] = useState({
+    nightlyReminderEnabled: true,
+    nightlyReminderTime: "20:00",
     nightlyReminderDescription: "",
     nightlyReminderTip: ""
   });
@@ -353,6 +355,8 @@ export function SystemSettingsSectionPage() {
 
   function openNightlyTemplate() {
     setNightlyTemplateForm({
+      nightlyReminderEnabled: settings.nightlyReminderEnabled !== false,
+      nightlyReminderTime: settings.nightlyReminderTime || "20:00",
       nightlyReminderDescription: settings.nightlyReminderDescription || "再忙也要好好吃饭哟🍽",
       nightlyReminderTip: settings.nightlyReminderTip || "需要明日餐食的宝子现在可以下单喽～"
     });
@@ -360,6 +364,12 @@ export function SystemSettingsSectionPage() {
   }
 
   async function submitNightlyTemplate() {
+    const time = (nightlyTemplateForm.nightlyReminderTime || "20:00").trim();
+    const timePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+    if (!timePattern.test(time)) {
+      toast("发送时间格式应为 HH:mm（如 20:00）", "error");
+      return;
+    }
     const description = (nightlyTemplateForm.nightlyReminderDescription || "").trim();
     const tip = (nightlyTemplateForm.nightlyReminderTip || "").trim();
     if (graphemeLength(description) > 20 || graphemeLength(tip) > 20) {
@@ -375,13 +385,13 @@ export function SystemSettingsSectionPage() {
         deliverySubscribeEnabled: settings.deliverySubscribeEnabled !== false,
         deliverySubscribeLunchTime: settings.deliverySubscribeLunchTime,
         deliverySubscribeDinnerTime: settings.deliverySubscribeDinnerTime,
-        nightlyReminderEnabled: settings.nightlyReminderEnabled !== false,
-        nightlyReminderTime: settings.nightlyReminderTime,
+        nightlyReminderEnabled: nightlyTemplateForm.nightlyReminderEnabled !== false,
+        nightlyReminderTime: time,
         nightlyReminderDescription: description,
         nightlyReminderTip: tip
       }));
       closeModal();
-      toast("正常营业提示模板已更新");
+      toast("订阅模板已更新");
     } catch (err: any) {
       showError(err);
     } finally {
@@ -1652,7 +1662,7 @@ export function SystemSettingsSectionPage() {
               checked={packageReminderForm.mealReminderPopupEnabled}
               onCheckedChange={(checked) => setPackageReminderForm({ ...packageReminderForm, mealReminderPopupEnabled: !!checked })}
             />
-            <span>{packageReminderForm.mealReminderPopupEnabled ? "开启后顾客打开小程序会收到一次温和提醒" : "关闭后顾客上线时不再主动弹出提醒"}</span>
+            <span>{packageReminderForm.mealReminderPopupEnabled ? "开启后，当顾客餐包余额低于阈值或即将到期时，打开小程序会弹出一次温和提醒（建议续卡/补餐）" : "关闭后，即使餐包余额不足或临期，顾客打开小程序也不再弹窗提醒"}</span>
           </div>
         </div>
         <div className="form-group">
@@ -1664,32 +1674,6 @@ export function SystemSettingsSectionPage() {
             />
             <span>{packageReminderForm.deliverySubscribeEnabled ? "开启后按午餐、晚餐各自时间扫描并发送顾客订阅通知" : "关闭后不发送顾客订阅通知"}</span>
           </div>
-        </div>
-        <div className="form-group">
-          <label className="form-label">每晚用餐提醒</label>
-          <div className="toggle-row">
-            <Checkbox
-              checked={packageReminderForm.nightlyReminderEnabled}
-              onCheckedChange={(checked) => setPackageReminderForm({ ...packageReminderForm, nightlyReminderEnabled: !!checked })}
-            />
-            <span>{packageReminderForm.nightlyReminderEnabled ? "开启后每晚定时向已授权顾客发送「明日用餐还剩多少餐」提醒" : "关闭后每晚不发送用餐提醒"}</span>
-          </div>
-          {packageReminderForm.nightlyReminderEnabled && (
-            <div className="nightly-reminder-config">
-              <div className="form-group" style={{ marginTop: 12 }}>
-                <label className="form-label">发送时间</label>
-                <SafeInput
-                  className="form-control"
-                  type="time"
-                  value={packageReminderForm.nightlyReminderTime}
-                  onValueChange={(value) => setPackageReminderForm({ ...packageReminderForm, nightlyReminderTime: value })}
-                />
-                <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 8 }}>
-                  系统在该时间点群发。仅当明天配置了菜单（即营业日）才发送，休息日自动跳过。模板文案请在「正常营业提示模板」中编辑。
-                </div>
-              </div>
-            </div>
-          )}
         </div>
         <div className="form-group">
           <label className="form-label">午餐订阅时间</label>
@@ -1846,6 +1830,28 @@ export function SystemSettingsSectionPage() {
       >
         <div className="settings-form-callout">
           微信订阅消息（优惠券过期提醒模板），仅明天为营业日时发送，休息日自动跳过。描述与温馨提示各限 20 字。
+        </div>
+        <div className="form-group">
+          <label className="form-label">每晚用餐提醒</label>
+          <div className="toggle-row">
+            <Checkbox
+              checked={nightlyTemplateForm.nightlyReminderEnabled}
+              onCheckedChange={(checked) => setNightlyTemplateForm({ ...nightlyTemplateForm, nightlyReminderEnabled: !!checked })}
+            />
+            <span>{nightlyTemplateForm.nightlyReminderEnabled ? "开启后，每晚在下方时间向已订阅且仍有餐次的顾客推送用餐提醒" : "关闭后，每晚不再发送用餐提醒"}</span>
+          </div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">发送时间（每天 HH:mm，默认 20:00）</label>
+          <input
+            type="time"
+            className="form-control"
+            value={nightlyTemplateForm.nightlyReminderTime}
+            onChange={(e) => setNightlyTemplateForm({ ...nightlyTemplateForm, nightlyReminderTime: e.target.value })}
+          />
+          <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 6 }}>
+            到点后自动向已订阅且仍有餐次的客户推送提醒，可改为任意时间。
+          </div>
         </div>
         <div className="form-group">
           <label className="form-label">描述内容（thing3，限 20 字）</label>

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.common.wechat.WeChatService;
+import com.jzqs.app.settings.service.SettingsService;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -25,11 +26,13 @@ class DeliverySubscriptionModule {
     private final JdbcTemplate jdbcTemplate;
     private final WeChatService weChatService;
     private final ObjectMapper objectMapper;
+    private final SettingsService settingsService;
 
-    DeliverySubscriptionModule(JdbcTemplate jdbcTemplate, WeChatService weChatService, ObjectMapper objectMapper) {
+    DeliverySubscriptionModule(JdbcTemplate jdbcTemplate, WeChatService weChatService, ObjectMapper objectMapper, SettingsService settingsService) {
         this.jdbcTemplate = jdbcTemplate;
         this.weChatService = weChatService;
         this.objectMapper = objectMapper;
+        this.settingsService = settingsService;
     }
 
     void authorizeSubscription(long customerId, long orderId, String templateId) {
@@ -195,6 +198,11 @@ class DeliverySubscriptionModule {
     }
 
     private boolean trySendDeliverySubscription(long mealSlotOrderId, LocalDateTime triggerTime) {
+        // 「订阅通知发送」开关关闭时，所有取餐订阅消息（含定时调度、后台立即释放、测试发送）统一不再发送
+        if (!settingsService.operationSettings().deliverySubscribeEnabled()) {
+            log.debug("订阅通知发送已关闭，跳过订单 {} 的取餐订阅消息", mealSlotOrderId);
+            return false;
+        }
         DeliverySubscriptionSendContext context = findDeliverySubscriptionSendContext(mealSlotOrderId);
         if (context == null || isBlank(context.openid())) {
             return false;

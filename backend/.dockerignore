@@ -1,5 +1,4 @@
 .backup
-target
 uploads
 *.log
 *.txt

@@ -29,6 +29,7 @@ spring:
     enabled: true
     repair-on-migrate: true
     encoding: UTF-8
+    out-of-order: true
   servlet:
     multipart:
       max-file-size: 8MB
