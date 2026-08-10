@@ -8,6 +8,7 @@ const {
   resolveServiceHeaders
 } = require('./utils/api-base');
 const realtime = require('./utils/realtime');
+const onboarding = require('./utils/onboarding');
 
 const UNOPENED_RIDER_ACCOUNT_MESSAGE = '后台未开通该手机号对应的骑手账号';
 
@@ -79,6 +80,8 @@ App({
     // 根据认证状态自动跳转
     this.authPromise.then(() => {
       this.syncRiderGlobals();
+      // 首次登录自动开始新手指引
+      onboarding.maybeAutoStart();
       const entryPage = auth.getRiderEntryPage();
       if (entryPage) {
         setTimeout(() => {

@@ -4,6 +4,7 @@
   "backgroundColor": "#f7f9ee",
   "navigationBarTitleText": "首页",
   "usingComponents": {
+    "guide-swiper": "/components/guide-swiper/index",
     "guide-mask": "/components/guide-mask/index"
   }
 }

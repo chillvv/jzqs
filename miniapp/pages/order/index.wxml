@@ -15,7 +15,16 @@
       <view class="menu-top-title">预订明日餐食</view>
       <view class="menu-top-row">
         <view class="date-tag">{{serveDateText}}</view>
-        <view class="menu-top-desc">{{canOrder ? '提前一天预订，保证食材新鲜' : ''}}</view>
+        <view class="menu-top-desc">{{canOrder && !nightClosed ? '提前一天预订，保证食材新鲜' : ''}}</view>
+      </view>
+    </view>
+
+    <!-- 夜间停单提示 -->
+    <view class="night-close-banner" wx:if="{{canOrder && nightClosed && !showCheckout}}">
+      <view class="night-close-icon">💤</view>
+      <view class="night-close-body">
+        <view class="night-close-title">系统夜间结算中</view>
+        <view class="night-close-desc">{{nightCloseDesc}}</view>
       </view>
     </view>
 
@@ -95,7 +104,7 @@
       <view class="cart-info">
         <view class="cart-desc">共 <text class="cart-total">{{totalQty}}<text>餐</text></text> 明天的餐食</view>
       </view>
-      <button class="btn-checkout" bindtap="goToCheckout" disabled="{{!home || !home.orderingEnabled || !selfOrderEnabled}}">{{selfOrderEnabled ? (isGuest ? '先验证再预订' : '去结算') : '联系专属客服'}}</button>
+      <button class="btn-checkout" bindtap="goToCheckout" disabled="{{!home || !home.orderingEnabled || !selfOrderEnabled || nightClosed}}">{{nightClosed ? nightCloseBtnText : (selfOrderEnabled ? (isGuest ? '先验证再预订' : '去结算') : '联系专属客服')}}</button>
     </view>
   </view>
 
@@ -254,4 +263,4 @@
   <view class="tabbar-spacer"></view>
 </view>
 
-<guide-mask id="guideMask" />
+<guide-mask id="guideMask" g-trigger="{{gTrigger}}" g-steps="{{gSteps}}" g-accent="{{gAccent}}" />

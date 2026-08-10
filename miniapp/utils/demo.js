@@ -91,7 +91,10 @@ function getMockOrderPageData() {
     lunchItem: lunch,
     dinnerItem: dinner,
     menuItems: [lunch, dinner],
-    addresses
+    addresses,
+    // 演示预填：午餐 1 份，购物车栏立即可见，不需要用户自己点 + 号
+    qty1: 1,
+    qty2: 0
   };
 }
 

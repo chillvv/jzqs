@@ -33,9 +33,8 @@ public class DeliveryReleaseSupport {
     }
 
     /** 列出"已送达但被时间拦截、等待餐期释放"的订单 */
-    public List<DeliveryReleasePendingItem> pendingReleaseOrders() {
-        return jdbcTemplate.query(
-            """
+    public List<DeliveryReleasePendingItem> pendingReleaseOrders(String serveDate, String mealPeriod) {
+        StringBuilder sql = new StringBuilder("""
                 SELECT
                     mso.id AS order_id,
                     doo.serve_date AS serve_date,
@@ -55,8 +54,19 @@ public class DeliveryReleaseSupport {
                 WHERE mso.status = 'DELIVERED'
                   AND mso.visible_to_customer = TRUE
                   AND dr.visible_at > CURRENT_TIMESTAMP
-                ORDER BY doo.serve_date DESC, mso.id DESC
-                """,
+                """);
+        List<Object> params = new java.util.ArrayList<>();
+        if (serveDate != null && !serveDate.isBlank()) {
+            sql.append(" AND doo.serve_date = ?");
+            params.add(java.sql.Date.valueOf(serveDate));
+        }
+        if (mealPeriod != null && !mealPeriod.isBlank()) {
+            sql.append(" AND mso.meal_period = ?");
+            params.add(mealPeriod);
+        }
+        sql.append(" ORDER BY doo.serve_date DESC, mso.id DESC");
+        return jdbcTemplate.query(
+            sql.toString(),
             (rs, rowNum) -> new DeliveryReleasePendingItem(
                 rs.getLong("order_id"),
                 rs.getDate("serve_date").toLocalDate().toString(),
@@ -67,7 +77,8 @@ public class DeliveryReleaseSupport {
                 rs.getString("delivery_address"),
                 rs.getTimestamp("delivered_at") == null ? "" : rs.getTimestamp("delivered_at").toLocalDateTime().toString(),
                 rs.getString("subscription_status")
-            )
+            ),
+            params.toArray()
         );
     }
 

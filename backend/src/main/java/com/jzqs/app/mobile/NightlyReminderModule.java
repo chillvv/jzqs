@@ -118,49 +118,60 @@ public class NightlyReminderModule {
      * @return 跳转页路径
      */
     public String sendTestMessage(long customerId) {
-        List<NightlySendTarget> targets = jdbcTemplate.query(
-            """
-            SELECT
-                c.id AS customer_id,
-                COALESCE(c.current_openid, c.openid, '') AS current_openid,
-                COALESCE(wallet_summary.remaining_meals, 0) AS remaining_meals
-            FROM customers c
-            LEFT JOIN (
-                SELECT customer_id,
-                       COALESCE(SUM(total_meals), 0)
-                           - COALESCE(SUM(reserved_meals), 0)
-                           - COALESCE(SUM(consumed_meals), 0) AS remaining_meals
-                FROM meal_wallets
-                WHERE active = TRUE
-                  AND (expires_at IS NULL OR expires_at >= CURDATE())
-                GROUP BY customer_id
-                HAVING remaining_meals > 0
-            ) wallet_summary ON wallet_summary.customer_id = c.id
-            WHERE c.id = ? AND c.active = TRUE
-            """,
-            (rs, rowNum) -> new NightlySendTarget(
-                rs.getLong("customer_id"),
-                rs.getString("current_openid"),
-                rs.getInt("remaining_meals")
-            ),
-            customerId
-        );
-        String openid = targets.isEmpty() ? "" : targets.get(0).openid();
-        if (openid == null || openid.isBlank()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前账号缺少可用的微信接收标识或有效餐数");
+        try {
+            List<NightlySendTarget> targets = jdbcTemplate.query(
+                """
+                SELECT
+                    c.id AS customer_id,
+                    COALESCE(c.current_openid, c.openid, '') AS current_openid,
+                    COALESCE(wallet_summary.remaining_meals, 0) AS remaining_meals
+                FROM customers c
+                LEFT JOIN (
+                    SELECT customer_id,
+                           COALESCE(SUM(total_meals), 0)
+                               - COALESCE(SUM(reserved_meals), 0)
+                               - COALESCE(SUM(consumed_meals), 0) AS remaining_meals
+                    FROM meal_wallets
+                    WHERE active = TRUE
+                      AND (expires_at IS NULL OR expires_at >= CURDATE())
+                    GROUP BY customer_id
+                    HAVING remaining_meals > 0
+                ) wallet_summary ON wallet_summary.customer_id = c.id
+                WHERE c.id = ? AND c.active = TRUE
+                """,
+                (rs, rowNum) -> new NightlySendTarget(
+                    rs.getLong("customer_id"),
+                    rs.getString("current_openid"),
+                    rs.getInt("remaining_meals")
+                ),
+                customerId
+            );
+            String openid = targets.isEmpty() ? "" : targets.get(0).openid();
+            if (openid == null || openid.isBlank()) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前账号缺少可用的微信接收标识，或暂无剩余餐数");
+            }
+            NightlySendTarget target = targets.get(0);
+            int remainingMeals = target.remainingMeals();
+            if (remainingMeals <= 0) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前账号暂无剩余餐数，无法发送每晚提醒测试（至少需要1餐）");
+            }
+            String description = settingsService.operationSettings().nightlyReminderDescription();
+            String tip = settingsService.operationSettings().nightlyReminderTip();
+            String page = weChatService.buildNightlyPage();
+            weChatService.sendNightlySubscribeMessage(
+                target.openid(),
+                page,
+                remainingMeals,
+                description,
+                tip
+            );
+            return page;
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("每晚提醒测试发送异常 customerId={}", customerId, e);
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "每晚提醒测试发送失败：" + e.getMessage());
         }
-        NightlySendTarget target = targets.get(0);
-        String description = settingsService.operationSettings().nightlyReminderDescription();
-        String tip = settingsService.operationSettings().nightlyReminderTip();
-        String page = weChatService.buildNightlyPage();
-        weChatService.sendNightlySubscribeMessage(
-            target.openid(),
-            page,
-            target.remainingMeals(),
-            description,
-            tip
-        );
-        return page;
     }
 
     private void markSent(long customerId, String errorMessage) {

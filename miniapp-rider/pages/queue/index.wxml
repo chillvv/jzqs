@@ -227,4 +227,4 @@
 
   <!-- Bottom Spacing for TabBar (handled by padding-bottom in CSS) -->
 </view>
-<guide-mask id="guideMask" />
+<guide-mask id="guideMask" g-trigger="{{gTrigger}}" g-steps="{{gSteps}}" g-accent="{{gAccent}}" />

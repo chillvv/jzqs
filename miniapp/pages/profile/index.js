@@ -15,7 +15,8 @@ const {
   sendSubscribeMessageTest
 } = require('../../utils/delivery-subscription');
 const auth = require('../../utils/auth');
-const onboarding = require('../../utils/onboarding');
+const demo = require('../../utils/demo');
+const onb = require('../../utils/onboarding');
 
 const AGREEMENT_ACCEPTED_KEY = 'miniapp_customer_auth_agreement_accepted_v1';
 
@@ -85,7 +86,9 @@ Page({
     sendingDelivery: false,
     sendingNightly: false,
     statusBarHeight: 0,
-    navBarHeight: 44
+    navBarHeight: 44,
+    // 是否展示「测试订阅」内部入口（仅测试环境，正式版隐藏）
+    showTestSubscription: false
   },
 
   onLoad() {
@@ -145,6 +148,7 @@ Page({
   stopPropagation() {},
 
   onShow() {
+    onb.ensureCleanDemo();
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().setData({
         selected: 2
@@ -161,7 +165,8 @@ Page({
     this.setData({
       onboarding,
       authMode: app.globalData.authMode,
-      needPhoneAuth: !!app.globalData.needPhoneAuth
+      needPhoneAuth: !!app.globalData.needPhoneAuth,
+      showTestSubscription: !!(app.globalData && app.globalData.isTestEnv)
     });
     if (onboarding) {
       this.setData({
@@ -195,6 +200,13 @@ Page({
     } finally {
       this.setData({ loading: false });
       wx.stopPullDownRefresh();
+      this.showGuide();
+    }
+  },
+
+  showGuide() {
+    if (onb.shouldRunStageHere('flow_profile')) {
+      onb.runCurrentStage(this);
     }
   },
 
@@ -620,11 +632,14 @@ Page({
       confirmText: '确认开始',
       success: (res) => {
         if (res.confirm) {
-          onboarding.startFromProfile();
+          onb.startFromProfile();
         }
       }
     });
   },
+
+  onGuideDone() {},
+  onGuideSkip() {},
 
   async sendSubscriptionTest(e) {
     if (this.data.onboarding) {
@@ -638,7 +653,7 @@ Page({
       return;
     }
     const templateId = isDelivery ? DELIVERY_TEMPLATE_ID : NIGHTLY_TEMPLATE_ID;
-    const label = isDelivery ? '送达' : '每晚提醒';
+    const label = isDelivery ? '送达' : '提醒';
     this.setData({ [sendingKey]: true });
     try {
       // 各自只弹自己这一个模板的授权框
