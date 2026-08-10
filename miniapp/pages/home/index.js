@@ -2,9 +2,8 @@ const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const { request } = require('../../utils/request');
 const { resolveMediaUrl } = require('../../utils/media-url');
 const realtime = require('../../utils/realtime');
-const guide = require('../../utils/guide');
-const demo = require('../../utils/demo');
 const auth = require('../../utils/auth');
+const demo = require('../../utils/demo');
 const onboarding = require('../../utils/onboarding');
 
 const MEAL_REMINDER_DISMISSED_PREFIX = 'miniapp_meal_reminder_dismissed_';
@@ -103,23 +102,34 @@ Page({
   },
 
   onShow() {
-    if (typeof this.getTabBar === 'function' && this.getTabBar()) {
-      this.getTabBar().setData({
-        selected: 0
-      })
-    }
     onboarding.ensureCleanDemo();
+    if (typeof this.getTabBar === 'function' && this.getTabBar()) {
+      this.getTabBar().setData({ selected: 0 });
+    }
     this.startRealtimeSync();
-    onboarding.maybeAutoStart();
     this.loadPageData();
   },
 
   async loadPageData() {
+    // 演示模式：用沙盒假数据，不请求真实接口
     if (demo.isActive() && onboarding.isRunningFlow()) {
-      this.applyDemoHomeData();
+      const mock = demo.getMockHomeData();
+      this.setData({
+        home: mock.home,
+        rangeText: mock.rangeText,
+        weekCards: mock.weekCards,
+        weekViews: [{ rangeText: mock.rangeText, published: true, cards: mock.weekCards }],
+        weekUnpublished: false,
+        loading: false,
+        fullscreenAnnouncementLines: [],
+        showMealReminderPopup: false,
+        demoActive: true
+      });
+      wx.stopPullDownRefresh();
       this.showGuide();
       return;
     }
+
     const app = getApp();
     await app.waitForAuth();
     this.setData({ loading: true });
@@ -195,39 +205,14 @@ Page({
     this.applyWeekTab(tab);
   },
 
+  onGuideDone() {},
+
+  onGuideSkip() {},
+
   showGuide() {
     if (onboarding.shouldRunStageHere('flow_home')) {
       onboarding.runCurrentStage(this);
     }
-  },
-
-  applyDemoHomeData() {
-    const { home, rangeText, weekCards } = demo.getMockHomeData();
-    const normalizedHome = Object.assign({}, home, {
-      bannerImages: [],
-      popupAnnouncementEnabled: false,
-      popupAnnouncementContent: '',
-      mealReminderPopupEnabled: false,
-      mealReminderKey: '',
-      mealReminderMessage: ''
-    });
-    const normalizedWeek = weekCards.map(decorateDay);
-    this.setData({
-      weekTab: 0,
-      weekTitle: WEEK_TABS[0].title,
-      weekUnpublished: false,
-      weekViews: [
-        { rangeText, published: true, cards: normalizedWeek },
-        { rangeText, published: true, cards: normalizedWeek }
-      ]
-    });
-    this.setData({
-      home: normalizedHome,
-      rangeText,
-      weekCards: normalizedWeek,
-      demoActive: true,
-      loading: false
-    });
   },
 
   onPullDownRefresh() {
@@ -250,8 +235,15 @@ Page({
   startAnnouncementPolling() {
     this.stopAnnouncementPolling();
     this._pollAnnouncementTimer = setInterval(() => {
+      // 兜底：页面已从栈中销毁（subPageFrame 为 null）时立即停掉轮询，
+      // 避免回调里访问框架导致 Cannot read property '__subPageFrameEndTime__' of null
+      if (getCurrentPages().indexOf(this) === -1) {
+        this.stopAnnouncementPolling();
+        return;
+      }
       request({ url: '/api/mobile/customer/home', requireAuth: false })
         .then((home) => {
+          if (getCurrentPages().indexOf(this) === -1) return;
           if (!home.popupAnnouncementEnabled) {
             this.stopAnnouncementPolling();
             this.loadPageData();

@@ -10,6 +10,9 @@
 .gm-dim {
   position: absolute;
   background: rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  transition: all 0.25s ease;
 }
 
 .gm-ring {
@@ -17,6 +20,7 @@
   box-sizing: border-box;
   border: 2px solid #ffffff;
   border-radius: 12px;
+  transition: all 0.25s ease;
 }
 
 .gm-tip {
@@ -25,6 +29,8 @@
   border-radius: 14px;
   padding: 16px;
   box-sizing: border-box;
+  transition: all 0.25s ease;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.15);
 }
 
 .gm-arrow {

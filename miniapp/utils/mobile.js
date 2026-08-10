@@ -71,11 +71,11 @@ function transactionLabel(type) {
     case 'EXTEND_VALIDITY':
       return '统一延期';
     case 'RESERVE':
-      return '下单占用';
+      return '预定核销';
     case 'RELEASE':
       return '取消释放';
     case 'CONSUME':
-      return '送达核销';
+      return '预定核销';
     case 'REFUND_RETURN':
       return '退款退回';
     case 'COMPENSATION_RETURN':

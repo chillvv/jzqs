@@ -54,3 +54,7 @@
   color: var(--brand-dark);
   font-weight: 700;
 }
+
+.detail-strong {
+  font-weight: 700;
+}

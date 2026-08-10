@@ -12,8 +12,8 @@
     </view>
   </view>
   <view class="subpage-card" wx:if="{{home}}">
-    <view class="detail-line">到期日：{{home.packageExpiredAt || '--'}}</view>
-    <view class="detail-line" wx:if="{{home.packageExpiredAt && home.remainingValidityDays >= 0}}">剩余天数：{{home.remainingValidityDays}} 天</view>
+    <view class="detail-line">到期日：<text class="detail-strong">{{home.packageExpiredAt || '--'}}</text></view>
+    <view class="detail-line" wx:if="{{home.packageExpiredAt && home.remainingValidityDays >= 0}}">剩余天数：<text class="detail-strong">{{home.remainingValidityDays}}</text> 天</view>
     <view class="detail-line" wx:if="{{home.packageAlertMessage}}">提醒：{{home.packageAlertMessage}}</view>
   </view>
 

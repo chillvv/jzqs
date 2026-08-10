@@ -12,8 +12,8 @@ const navIcons: Record<string, React.ComponentType<{ size?: number | string }>> 
   "待释放送达": Hourglass
 };
 
-// 骑手管理、待释放送达页不需要日期/餐期筛选
-const DATE_FILTER_HIDDEN_PATHS = ["/dispatch/riders", "/dispatch/release"];
+// 骑手管理页不需要日期/餐期筛选
+const DATE_FILTER_HIDDEN_PATHS = ["/dispatch/riders"];
 
 function DispatchCenterInner() {
   const navItems = buildDispatchWorkspaceNav();

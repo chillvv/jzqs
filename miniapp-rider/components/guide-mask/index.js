@@ -1,7 +1,31 @@
 // 引导蒙层（交互版）：
 // - interactive=true 时蒙层不拦截点击（pointer-events:none），用户可真实点击页面按钮（配合演示沙盒）。
 // - 每步「懒定位」：切到该步时才查询元素当前位置，适配视图切换（如 菜单→结算→成功弹窗）。
+// - 数据驱动：页面通过 setData 设 gTrigger/gSteps/gAccent 就能触发起动，不依赖 selectComponent 时序。
 Component({
+  properties: {
+    gTrigger: { type: Number, value: 0 },
+    gSteps: { type: Array, value: [] },
+    gAccent: { type: String, value: '#639922' }
+  },
+
+  observers: {
+    'gTrigger' (val) {
+      if (!val || !this.properties.gSteps.length) return;
+      if (val === this._lastTrigger) return;
+      this._lastTrigger = val;
+      const pages = getCurrentPages();
+      const page = pages[pages.length - 1];
+      const cb = (page && page.__guideCBs) || {};
+      this.start(this.properties.gSteps, this.properties.gAccent, {
+        pageCtx: page || null,
+        interactive: cb.interactive || false,
+        onSkip: cb.onSkip || null,
+        onDone: cb.onDone || null
+      });
+    }
+  },
+
   data: {
     visible: false,
     current: 0,
@@ -29,6 +53,7 @@ Component({
       this._interactive = !!opts.interactive;
       this._onSkip = (typeof opts.onSkip === 'function') ? opts.onSkip : null;
       this._onDone = (typeof opts.onDone === 'function') ? opts.onDone : null;
+      this._scrollAttempted = {};
       this.setData({
         visible: true,
         steps,
@@ -77,11 +102,55 @@ Component({
       if (step.selector) {
         const rect = await this._queryRect(step);
         if (rect) {
+          // 元素在可视区外 → 先滚到可见位置再重新查询
+          const sys = (wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync());
+          const H = sys.windowHeight || sys.screenHeight;
+          const stepIdx = this.data.current;
+          const outOfView = rect.top > H * 0.75 || rect.bottom < 0;
+          if (outOfView && !this._scrollAttempted[stepIdx]) {
+            this._scrollAttempted[stepIdx] = true;
+            await this._scrollToView(step, rect);
+            // 重新查询滚动后的位置
+            const rect2 = await this._queryRect(step);
+            if (rect2) {
+              this._layoutHole(step, rect2);
+              return;
+            }
+          }
           this._layoutHole(step, rect);
           return;
         }
       }
       this._layoutCentered(step);
+    },
+
+    // 将目标元素滚到可视区域内
+    _scrollToView(step, rect) {
+      return new Promise((resolve) => {
+        if (step.scrollViewSelector) {
+          // 在 scroll-view 内：使用 scrollIntoView
+          try {
+            wx.createSelectorQuery()
+              .select(step.scrollViewSelector)
+              .node()
+              .exec((res) => {
+                if (res[0] && res[0].node && typeof res[0].node.scrollIntoView === 'function') {
+                  res[0].node.scrollIntoView(step.selector);
+                }
+                setTimeout(resolve, 200);
+              });
+          } catch (e) {
+            setTimeout(resolve, 100);
+          }
+        } else {
+          // 普通页面滚动
+          wx.pageScrollTo({
+            scrollTop: Math.max(0, rect.top - 60),
+            duration: 0
+          });
+          setTimeout(resolve, 200);
+        }
+      });
     },
 
     _layoutCentered(step) {

@@ -108,4 +108,4 @@
     </view>
   </view>
 </view>
-<guide-mask id="guideMask" />
+<guide-mask id="guideMask" g-trigger="{{gTrigger}}" g-steps="{{gSteps}}" g-accent="{{gAccent}}" />

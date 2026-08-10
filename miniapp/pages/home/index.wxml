@@ -112,4 +112,5 @@
   </view>
 </view>
 </block>
-<guide-mask id="guideMask" />
+<guide-swiper id="guideSwiper" steps="{{[]}}" bind:done="onGuideDone" bind:skip="onGuideSkip" />
+<guide-mask id="guideMask" g-trigger="{{gTrigger}}" g-steps="{{gSteps}}" g-accent="{{gAccent}}" />

@@ -53,6 +53,7 @@ Page({
           const displayItem = formatWalletTransaction(item);
           return {
             ...displayItem,
+            operatorName: this.resolveOperatorName(displayItem, home),
             flowHint: buildWalletHint({ walletDelta: displayItem.mealDelta })
           };
         })
@@ -89,6 +90,17 @@ Page({
     wx.navigateTo({
       url: `/pages/orders/index?orderId=${id}`
     });
+  },
+
+  resolveOperatorName(item, home) {
+    const raw = item.operatorName || '';
+    const remark = item.remarkText || item.remark || '';
+    const customerName = home && home.name ? home.name : '';
+    const isSelfOrder = raw === '小程序' || (raw === '系统' && remark.indexOf('用户自主下单') !== -1);
+    if (isSelfOrder && customerName) {
+      return customerName;
+    }
+    return raw;
   },
 
 });

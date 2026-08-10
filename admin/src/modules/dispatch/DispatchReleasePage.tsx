@@ -3,6 +3,8 @@ import { Send, RefreshCw, Inbox, Sun, Moon } from "lucide-react";
 import { fetchDeliveryReleasePending, releaseDeliveredOrder, fetchOperationSettings } from "../../shared/api/http";
 import type { DeliveryReleasePendingItem } from "../../shared/api/types";
 import { toast } from "../../shared/components/Toast";
+import { useDispatchContext } from "./DispatchContext";
+import { mealPeriodLabel } from "./dispatchCenterLayout.helpers";
 
 function getErrorMessage(error: unknown, fallback = "操作失败") {
   if (typeof error === "object" && error !== null) {
@@ -28,6 +30,7 @@ function subscriptionLabel(status: string) {
  * 释放后该订单对用户立即变为"已送达"、回执可见，并发送取餐提醒订阅消息。
  */
 export function DispatchReleasePage() {
+  const { serveDate, mealPeriod } = useDispatchContext();
   const [items, setItems] = useState<DeliveryReleasePendingItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [releasingId, setReleasingId] = useState<number | null>(null);
@@ -37,14 +40,14 @@ export function DispatchReleasePage() {
   const loadPending = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await fetchDeliveryReleasePending();
+      const result = await fetchDeliveryReleasePending({ serveDate, mealPeriod });
       setItems(result || []);
     } catch (error: any) {
       toast(getErrorMessage(error, "加载待释放订单失败"), "error");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [serveDate, mealPeriod]);
 
   const loadReleaseTimes = useCallback(async () => {
     try {
@@ -85,8 +88,11 @@ export function DispatchReleasePage() {
     }
   }
 
-  const lunchItems = useMemo(() => items.filter((item) => item.mealPeriod === "LUNCH"), [items]);
-  const dinnerItems = useMemo(() => items.filter((item) => item.mealPeriod === "DINNER"), [items]);
+  const currentReleaseTime = mealPeriod === "DINNER" ? dinnerReleaseTime : lunchReleaseTime;
+  const currentPeriodColor = mealPeriod === "DINNER" ? "#6366f1" : "#f59e0b";
+  const currentPeriodIcon = mealPeriod === "DINNER" ? <Moon size={16} color={currentPeriodColor} /> : <Sun size={16} color={currentPeriodColor} />;
+
+  const filteredItems = useMemo(() => items.filter((item) => item.mealPeriod === mealPeriod), [items, mealPeriod]);
 
   function renderOrderCard(item: DeliveryReleasePendingItem) {
     return (
@@ -124,26 +130,6 @@ export function DispatchReleasePage() {
     );
   }
 
-  function renderPeriodSection(title: string, icon: React.ReactNode, list: DeliveryReleasePendingItem[]) {
-    return (
-      <section
-        className="admin-stack"
-        style={{ gap: "12px", border: "1px solid var(--border-color)", borderRadius: "16px", padding: "16px", background: "var(--bg-page)" }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700 }}>
-          {icon}
-          <span>{title}</span>
-          <span className="tag tag-gray" style={{ marginLeft: "auto" }}>{list.length} 单待释放</span>
-        </div>
-        {list.length === 0 ? (
-          <div className="admin-empty-note" style={{ padding: "20px 0" }}>该餐期当前没有待释放的订单</div>
-        ) : (
-          list.map((item) => renderOrderCard(item))
-        )}
-      </section>
-    );
-  }
-
   return (
     <div className="admin-stack">
       <div className="toolbar">
@@ -163,35 +149,37 @@ export function DispatchReleasePage() {
         </div>
       </div>
 
-      <div className="dispatch-summary-grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
-        <div className="dispatch-stat-card" style={{ borderLeft: "4px solid #f59e0b" }}>
+      <div className="dispatch-summary-grid" style={{ gridTemplateColumns: "1fr" }}>
+        <div className="dispatch-stat-card" style={{ borderLeft: `4px solid ${currentPeriodColor}` }}>
           <div className="admin-panel-note" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <Sun size={14} /> 午餐释放时间
+            {currentPeriodIcon} {mealPeriodLabel(mealPeriod)}释放时间
           </div>
-          <div className="dispatch-stat-card__value" style={{ fontSize: "24px", fontWeight: 800 }}>{lunchReleaseTime}</div>
-          <div className="dispatch-stat-card__footer">午餐已送达订单在该时间点统一释放</div>
-        </div>
-        <div className="dispatch-stat-card" style={{ borderLeft: "4px solid #6366f1" }}>
-          <div className="admin-panel-note" style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <Moon size={14} /> 晚餐释放时间
-          </div>
-          <div className="dispatch-stat-card__value" style={{ fontSize: "24px", fontWeight: 800 }}>{dinnerReleaseTime}</div>
-          <div className="dispatch-stat-card__footer">晚餐已送达订单在该时间点统一释放</div>
+          <div className="dispatch-stat-card__value" style={{ fontSize: "24px", fontWeight: 800 }}>{currentReleaseTime}</div>
+          <div className="dispatch-stat-card__footer">{mealPeriodLabel(mealPeriod)}已送达订单在该时间点统一释放</div>
         </div>
       </div>
 
       {loading && items.length === 0 ? (
         <div className="admin-empty-note">加载中...</div>
-      ) : items.length === 0 ? (
+      ) : filteredItems.length === 0 ? (
         <div className="admin-empty-note" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", padding: "48px 0" }}>
           <Inbox size={32} />
-          <div>当前没有待释放的已送达订单</div>
+          <div>当前没有待释放的{mealPeriodLabel(mealPeriod)}订单</div>
           <div className="dispatch-inline-note">到释放时间后，订单会自动对用户可见并发送提醒，无需手动处理。</div>
         </div>
       ) : (
         <div className="admin-stack" style={{ gap: "16px" }}>
-          {renderPeriodSection("午餐时段", <Sun size={16} color="#f59e0b" />, lunchItems)}
-          {renderPeriodSection("晚餐时段", <Moon size={16} color="#6366f1" />, dinnerItems)}
+          <section
+            className="admin-stack"
+            style={{ gap: "12px", border: "1px solid var(--border-color)", borderRadius: "16px", padding: "16px", background: "var(--bg-page)" }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: 700 }}>
+              {currentPeriodIcon}
+              <span>{mealPeriodLabel(mealPeriod)}时段</span>
+              <span className="tag tag-gray" style={{ marginLeft: "auto" }}>{filteredItems.length} 单待释放</span>
+            </div>
+            {filteredItems.map((item) => renderOrderCard(item))}
+          </section>
         </div>
       )}
     </div>

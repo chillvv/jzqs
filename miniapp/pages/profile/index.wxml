@@ -92,7 +92,7 @@
     </view>
   </view>
 
-  <view class="menu-group" wx:if="{{!onboarding}}">
+  <view class="menu-group" wx:if="{{!onboarding && showTestSubscription}}">
     <button class="list-item list-item-btn {{sendingDelivery ? 'disabled' : ''}}" data-template="delivery" bindtap="sendSubscriptionTest" loading="{{sendingDelivery}}">
       <view class="list-icon-wrap">
         <text class="list-icon">🔔</text>
@@ -106,8 +106,7 @@
       <view class="list-icon-wrap">
         <text class="list-icon">🌙</text>
         <view class="list-copy">
-          <view class="list-title">测试每晚提醒订阅</view>
-          <view class="list-sub">借用优惠券过期提醒模板（gNYZT0…）</view>
+          <view class="list-title">测试提醒订阅</view>
         </view>
       </view>
       <text class="list-arrow">›</text>
@@ -121,3 +120,7 @@
   <view class="tabbar-spacer"></view>
 
 </view>
+
+<guide-swiper id="guideSwiper" bind:done="onGuideDone" bind:skip="onGuideSkip" />
+<guide-mask id="guideMask" g-trigger="{{gTrigger}}" g-steps="{{gSteps}}" g-accent="{{gAccent}}" />
+

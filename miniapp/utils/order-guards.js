@@ -8,6 +8,38 @@ function getCheckoutMealLimitMessage({ totalQty, remainingMeals }) {
   return '';
 }
 
+// ============================================================
+// 夜间停止下单（后厨/系统结算休整）
+// 每天 23:30 起至次日 08:00 止，系统进入结算休整，不接受新订单。
+// 即便次日菜单已发布、可下单，该时段内也只展示提示、不开放下单入口。
+// 时间按用户本地时间判定（前端友好拦截，后端下单接口仍需二次校验）。
+// ============================================================
+const NIGHT_ORDER_START_HOUR = 23;
+const NIGHT_ORDER_START_MINUTE = 30; // 23:30 起
+const NIGHT_ORDER_END_HOUR = 8; // 次日 08:00 恢复
+
+function isNightOrderClosed(now) {
+  const date = now instanceof Date ? now : new Date();
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  const start = NIGHT_ORDER_START_HOUR * 60 + NIGHT_ORDER_START_MINUTE; // 1410
+  const end = NIGHT_ORDER_END_HOUR * 60; // 480
+  // 窗口跨越午夜：[start, 1440) ∪ [0, end)
+  return minutes >= start || minutes < end;
+}
+
+function getNightCloseNotice() {
+  return {
+    title: '系统夜间结算中',
+    content:
+      '为了给您更准时的配送，系统每晚 23:30 起进入结算休整，暂无法下单。' +
+      '别急，明早 08:00 一切就绪，更多好菜等您～',
+    desc:
+      '为了给您更准时的配送，系统每晚 23:30 起进入结算休整，暂无法下单。' +
+      '别急，明早 08:00 一切就绪，更多好菜等您～',
+    buttonText: '23:30 后暂停下单'
+  };
+}
+
 // 送餐当天联系客服的最后时限：过了这个点，餐已经出餐上路，客服也拦不下来。
 const SUPPORT_REFUND_CUTOFF_HOUR = 9;
 
@@ -104,5 +136,7 @@ module.exports = {
   canCancelMiniappOrder,
   isUndeliveredOrderStatus,
   resolveSupportRefundStage,
-  buildSupportRefundNotice
+  buildSupportRefundNotice,
+  isNightOrderClosed,
+  getNightCloseNotice
 };

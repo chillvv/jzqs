@@ -13,6 +13,8 @@ const {
   resolveServiceHeaders
 } = require('./utils/api-base');
 const realtime = require('./utils/realtime');
+const { isTestEnv } = require('./utils/env');
+const onboarding = require('./utils/onboarding');
 
 App({
   globalData: {
@@ -21,7 +23,9 @@ App({
     cloudEnvId: DEFAULT_CLOUD_ENV_ID,
     serviceHeaders: { ...DEFAULT_SERVICE_HEADERS },
     statusBarHeight: 0,
-    navBarHeight: 44
+    navBarHeight: 44,
+    // 是否测试环境（开发版/体验版=true，正式版=false），用于决定是否展示内部测试入口
+    isTestEnv: false
   },
   
   async onLaunch() {
@@ -34,6 +38,7 @@ App({
     this.globalData.apiBaseUrl = resolveApiBaseUrl(wx.getStorageSync('apiBaseUrl'));
     this.globalData.cloudEnvId = resolveCloudEnvId(wx.getStorageSync('cloudEnvId'));
     this.globalData.serviceHeaders = resolveServiceHeaders(wx.getStorageSync('serviceHeaders'));
+    this.globalData.isTestEnv = isTestEnv();
     realtime.init({
       clientLabel: 'customer',
       getToken: () => wx.getStorageSync('auth_token') || auth.globalData.token || ''
@@ -70,6 +75,8 @@ App({
         // 已登录：合并申请「送达订阅」与「每晚用餐提醒」两个授权，
         // 用户勾选「总是保持」后可无限下发，减少反复弹窗。
         this.requestSubscriptionsOnLogin();
+        // 首次登录自动开始新手指引（已跳过过的不会再弹）
+        onboarding.maybeAutoStart();
       }
     } catch (error) {
       console.error('[App] 认证初始化失败:', error);

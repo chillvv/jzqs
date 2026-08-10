@@ -1078,9 +1078,10 @@ export async function deleteDeliveryReceipt(orderId: number) {
   return response.data.data;
 }
 
-export async function fetchDeliveryReleasePending() {
+export async function fetchDeliveryReleasePending(params?: { serveDate?: string; mealPeriod?: string }) {
   const response = await http.get<ApiResponse<DeliveryReleasePendingItem[]>>(
-    "/api/admin/orders/delivery-release-pending"
+    "/api/admin/orders/delivery-release-pending",
+    { params }
   );
   return response.data.data;
 }

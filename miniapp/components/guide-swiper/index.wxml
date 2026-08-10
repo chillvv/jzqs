@@ -1,0 +1,141 @@
+<!-- guide-swiper：独立全屏幻灯片引导，不依赖任何真实页面 -->
+<view wx:if="{{visible}}" class="gs-root {{_entering ? 'gs-entering' : ''}}" style="--gs-pri:{{theme.primary}};--gs-pri-d:{{theme.primaryDark}};--gs-pri-l:{{theme.primaryLight}};--gs-bg:{{theme.bg}};--gs-card:{{theme.cardBg}};--gs-tx:{{theme.textMain}};--gs-tx-s:{{theme.textSub}};--gs-tx-m:{{theme.textMuted}};--gs-bd:{{theme.border}};--gs-ac:{{theme.accent}};">
+
+  <swiper class="gs-swiper" current="{{current}}" bindchange="onSwiperChange" duration="350" easing-function="easeInOutCubic">
+    <swiper-item wx:for="{{_steps}}" wx:key="mockType" wx:for-index="si">
+
+      <!-- === 整张「假页面截图」=== -->
+      <view class="gs-page {{current === si ? 'gs-page-active' : ''}}">
+
+        <!-- 1. 首页 -->
+        <view wx:if="{{item.mockType === 'home'}}" class="gs-p-home">
+          <view class="gs-nav"><view class="gs-n-dot"></view><text class="gs-n-t">简知轻食</text></view>
+          <view class="gs-banner"><view class="gs-bn-inner"><text class="gs-bn-txt">每日鲜食 · 健康轻生活</text></view></view>
+          <view class="gs-card gs-c-menu">
+            <view class="gs-mh"><text class="gs-mh-t">本周主厨菜单</text><text class="gs-mh-r">08.10 - 08.16</text></view>
+            <view class="gs-wtabs"><view class="gs-wt a">周一</view><view class="gs-wt">周二</view><view class="gs-wt">周三</view></view>
+            <view class="gs-day" wx:for="{{[0,1]}}" wx:key="*this" style="animation-delay:{{0.1 + index * 0.08}}s">
+              <text class="gs-dl">{{index === 0 ? '周一 08.10' : '周二 08.11'}}</text>
+              <view class="gs-mr"><text class="gs-mt g">午</text><text class="gs-md">香煎鸡胸藜麦碗 · 清炒时蔬 · 糙米饭</text></view>
+              <view class="gs-mr"><text class="gs-mt a">晚</text><text class="gs-md">番茄牛腩糙米饭 · 凉拌黄瓜 · 紫薯</text></view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 2. 点餐页 -->
+        <view wx:if="{{item.mockType === 'order'}}" class="gs-p-order">
+          <view class="gs-nav"><view class="gs-n-dot"></view><text class="gs-n-t">简知轻食</text></view>
+          <view class="gs-ot"><text class="gs-ot-t">预订明日餐食</text><view class="gs-ot-d">08.11</view></view>
+          <view class="gs-card gs-lunch-card" style="animation-delay:0.06s">
+            <view class="gs-lc-inner">
+              <view class="gs-lc-img"></view>
+              <view class="gs-lc-body">
+                <text class="gs-lc-title">明日午餐</text>
+                <view class="gs-lc-dish"><text>· 香煎鸡胸藜麦碗</text><text>· 清炒时蔬</text><text>· 糙米饭</text></view>
+                <view class="gs-lc-tags"><text class="gs-tg">520 kcal</text></view>
+                <view class="gs-lc-stepper"><view class="gs-st-b">-</view><text class="gs-st-n">1</text><view class="gs-st-b gs-st-p">+</view></view>
+              </view>
+            </view>
+          </view>
+          <view class="gs-card gs-lunch-card gs-dinner-card" style="animation-delay:0.14s">
+            <view class="gs-lc-inner">
+              <view class="gs-lc-img d"></view>
+              <view class="gs-lc-body">
+                <text class="gs-lc-title">明日晚餐</text>
+                <view class="gs-lc-dish"><text>· 番茄牛腩糙米饭</text><text>· 凉拌黄瓜</text><text>· 紫薯</text></view>
+                <view class="gs-lc-tags"><text class="gs-tg">610 kcal</text></view>
+                <view class="gs-lc-stepper"><view class="gs-st-b">-</view><text class="gs-st-n">1</text><view class="gs-st-b gs-st-p">+</view></view>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <!-- 3. 结算页 -->
+        <view wx:if="{{item.mockType === 'checkout'}}" class="gs-p-checkout">
+          <view class="gs-nav"><view class="gs-n-back"></view><text class="gs-n-t">确认订单</text></view>
+          <view class="gs-card gs-c-addr">
+            <text class="gs-a-n">演示收餐人 138****0000</text>
+            <text class="gs-a-t">演示路 1 号 演示小区 3 栋 502</text>
+          </view>
+          <view class="gs-card gs-c-sum">
+            <view class="gs-sr"><text class="gs-sl">明日午餐</text><text class="gs-sd">香煎鸡胸藜麦碗</text><text class="gs-sq">×1</text></view>
+            <view class="gs-sr"><text class="gs-sl">明日晚餐</text><text class="gs-sd">番茄牛腩糙米饭</text><text class="gs-sq">×1</text></view>
+            <view class="gs-sdiv"></view>
+            <view class="gs-sr"><text class="gs-sl">套餐剩余</text><text class="gs-sright">30 份</text></view>
+          </view>
+          <view class="gs-card gs-c-note">
+            <text class="gs-nl">备注</text>
+            <text class="gs-np">如有忌口请在此填写</text>
+          </view>
+          <view class="gs-submit-btn">确认预订</view>
+        </view>
+
+        <!-- 4. 成功 -->
+        <view wx:if="{{item.mockType === 'success'}}" class="gs-p-success">
+          <view class="gs-s-ic-wrap"><view class="gs-s-ic">OK</view></view>
+          <text class="gs-s-t">预订成功！</text>
+          <text class="gs-s-d">明日的餐食已为您安排</text>
+          <view class="gs-card gs-s-detail">
+            <view class="gs-s-r"><text class="gs-s-rl">午餐</text><text class="gs-s-rv">香煎鸡胸藜麦碗 ×1</text></view>
+            <view class="gs-s-r"><text class="gs-s-rl">晚餐</text><text class="gs-s-rv">番茄牛腩糙米饭 ×1</text></view>
+            <view class="gs-s-r"><text class="gs-s-rl">送达地址</text><text class="gs-s-rv">演示路 1 号 演示小区</text></view>
+          </view>
+        </view>
+
+        <!-- 5. 我的预订 -->
+        <view wx:if="{{item.mockType === 'orders'}}" class="gs-p-orders">
+          <view class="gs-nav"><view class="gs-n-back"></view><text class="gs-n-t">我的预订记录</text></view>
+          <view class="gs-card gs-c-filt">
+            <view class="gs-fs"><view class="gs-f a">全部</view><view class="gs-f">待配送</view><view class="gs-f">已送达</view></view>
+          </view>
+          <view class="gs-card gs-c-ord" style="animation-delay:0.06s">
+            <view class="gs-oh"><text class="gs-od">08.10 午餐</text><view class="gs-os p">待配送</view></view>
+            <text class="gs-om">香煎鸡胸藜麦碗 ×1</text>
+            <text class="gs-oa">送至：演示路 1 号 演示小区</text>
+          </view>
+          <view class="gs-card gs-c-ord" style="animation-delay:0.14s">
+            <view class="gs-oh"><text class="gs-od">08.09 晚餐</text><view class="gs-os d">已送达</view></view>
+            <text class="gs-om">番茄牛腩糙米饭 ×1</text>
+            <text class="gs-oa">送至：演示路 1 号 演示小区</text>
+          </view>
+        </view>
+
+      </view>
+
+      <!-- 半透明遮罩 -->
+      <view class="gs-shade"></view>
+
+      <!-- 高亮框 -->
+      <view wx:for="{{item.highlights}}" wx:key="label" wx:for-item="hl"
+        class="gs-hl" style="top:{{hl.top}};left:{{hl.left}};width:{{hl.width}};height:{{hl.height}};border-color:{{hl.borderColor || theme.accent}};"></view>
+
+      <!-- 提示卡片 -->
+      <view wx:if="{{item.tipTitle}}" class="gs-tip gs-tip-{{item.tipPlacement || 'center'}}"
+        style="{{item.tipTop ? 'top:' + item.tipTop + ';' : ''}}{{item.tipBottom ? 'bottom:' + item.tipBottom + ';' : ''}}">
+        <view class="gs-tip-badge">{{si + 1}}/{{total}}</view>
+        <text class="gs-tip-title">{{item.tipTitle}}</text>
+        <text class="gs-tip-desc" wx:if="{{item.tipDesc}}">{{item.tipDesc}}</text>
+      </view>
+
+    </swiper-item>
+  </swiper>
+
+  <!-- 底部栏 -->
+  <view class="gs-bar">
+    <view class="gs-bar-row">
+      <view class="gs-dots">
+        <view wx:for="{{_steps}}" wx:key="mockType" wx:for-index="i"
+          class="gs-dot {{i === current ? 'a' : ''}} {{i < current ? 'd' : ''}}"></view>
+      </view>
+      <view class="gs-bar-skip" bindtap="skip">跳过</view>
+    </view>
+    <view class="gs-bar-btns">
+      <view class="gs-b-prev {{current === 0 ? 'off' : ''}}" bindtap="prev">上一步</view>
+      <view class="gs-b-next" bindtap="next">
+        <text>{{current >= total - 1 ? '开始使用' : '下一步'}}</text>
+        <view class="gs-b-arr"></view>
+      </view>
+    </view>
+  </view>
+
+</view>

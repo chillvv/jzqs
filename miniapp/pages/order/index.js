@@ -1,7 +1,9 @@
 const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const { request } = require('../../utils/request');
 const { formatMonthDay, periodLabel } = require('../../utils/mobile');
-const { getCheckoutMealLimitMessage } = require('../../utils/order-guards');
+const { getCheckoutMealLimitMessage, isNightOrderClosed, getNightCloseNotice } = require('../../utils/order-guards');
+const demo = require('../../utils/demo');
+const onboarding = require('../../utils/onboarding');
 const {
   requestDeliverySubscribeAuthorization,
   saveOrderDeliverySubscription
@@ -12,10 +14,7 @@ const {
   composeRemark,
   resolveInitialRemark
 } = require('../../utils/order-remark');
-const guide = require('../../utils/guide');
-const demo = require('../../utils/demo');
 const auth = require('../../utils/auth');
-const onboarding = require('../../utils/onboarding');
 
 function tomorrowDate() {
   const date = new Date();
@@ -87,7 +86,10 @@ Page({
     showOrderSuccess: false,
     orderSuccessMsg: '',
     orderSuccessIds: [],
-    demoActive: false
+    demoActive: false,
+    nightClosed: false,
+    nightCloseDesc: '',
+    nightCloseBtnText: ''
   },
 
   onLoad() {
@@ -99,14 +101,24 @@ Page({
   },
 
   onShow() {
+    onboarding.ensureCleanDemo();
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().setData({
         selected: 1
       })
     }
     this.restoreRemarkDraft();
-    onboarding.ensureCleanDemo();
+    this.applyNightOrderState();
     this.loadOrderData();
+  },
+
+  applyNightOrderState() {
+    const notice = getNightCloseNotice();
+    this.setData({
+      nightClosed: isNightOrderClosed(new Date()),
+      nightCloseDesc: notice.desc,
+      nightCloseBtnText: notice.buttonText
+    });
   },
 
   onPullDownRefresh() {
@@ -114,13 +126,42 @@ Page({
   },
 
   async loadOrderData() {
+    // 演示模式：用沙盒假数据，不请求真实接口
     if (demo.isActive() && onboarding.isRunningFlow()) {
-      this.applyDemoOrderData();
-      this.setData({ loading: false });
+      const mock = demo.getMockOrderPageData();
+      const qty1 = mock.qty1 || 0;
+      const qty2 = mock.qty2 || 0;
+      this.setData({
+        home: mock.home,
+        isGuest: false,
+        serveDate: mock.serveDate,
+        serveDateText: mock.serveDateText,
+        selfOrderEnabled: true,
+        selfOrderNotice: '',
+        canOrder: true,
+        statusText: '',
+        nightClosed: false,
+        nightCloseDesc: '',
+        nightCloseBtnText: '',
+        menuItems: mock.menuItems,
+        lunchItem: mock.lunchItem,
+        dinnerItem: mock.dinnerItem,
+        addresses: mock.addresses,
+        qty1, qty2,
+        defaultRemark: '',
+        historyRemarkSuggestions: [],
+        selectedAddressId: 'demo-addr',
+        selectedAddressText: mock.addresses[0].addressLine,
+        selectedContactText: `${mock.addresses[0].contactName} ${mock.addresses[0].contactPhone}`,
+        loading: false,
+        demoActive: true
+      });
+      this.syncCheckoutState();
       wx.stopPullDownRefresh();
       this.showGuide();
       return;
     }
+
     const app = getApp();
     await app.waitForAuth();
     this.setData({ loading: true });
@@ -153,6 +194,9 @@ Page({
         selfOrderNotice: tomorrowMenu.selfOrderNotice,
         canOrder: resolvedCanOrder,
         statusText: resolvedStatusText,
+        nightClosed: isNightOrderClosed(new Date()),
+        nightCloseDesc: getNightCloseNotice().desc,
+        nightCloseBtnText: getNightCloseNotice().buttonText,
         menuItems,
         lunchItem,
         dinnerItem,
@@ -180,30 +224,6 @@ Page({
     if (onboarding.shouldRunStageHere('flow_order')) {
       onboarding.runCurrentStage(this);
     }
-  },
-
-  applyDemoOrderData() {
-    const { serveDate, serveDateText, home, lunchItem, dinnerItem, menuItems, addresses } = demo.getMockOrderPageData();
-    const defaultAddress = addresses[0];
-    this.setData({
-      home,
-      isGuest: false,
-      serveDate,
-      serveDateText,
-      selfOrderEnabled: true,
-      selfOrderNotice: '',
-      canOrder: true,
-      statusText: '',
-      menuItems,
-      lunchItem,
-      dinnerItem,
-      addresses,
-      defaultRemark: home && home.defaultUserRemark ? String(home.defaultUserRemark).trim() : '',
-      selectedAddressId: defaultAddress ? defaultAddress.id : null,
-      selectedAddressText: defaultAddress ? defaultAddress.addressLine : '请先选择地址',
-      selectedContactText: defaultAddress ? `${defaultAddress.contactName} ${defaultAddress.contactPhone}` : '暂无地址'
-    });
-    this.syncCheckoutState();
   },
 
   updateCart1Minus() {
@@ -266,10 +286,6 @@ Page({
   },
 
   async toggleDefaultRemark() {
-    if (demo.isActive()) {
-      wx.showToast({ title: '演示模式不支持保存备注', icon: 'none' });
-      return;
-    }
     if (!getApp().globalData.token) {
       openInlineAuth(this, 'order');
       return;
@@ -342,6 +358,17 @@ Page({
   },
 
   goToCheckout() {
+    if (this.data.nightClosed) {
+      const notice = getNightCloseNotice();
+      wx.showModal({
+        title: notice.title,
+        content: notice.content,
+        showCancel: false,
+        confirmText: '我知道了',
+        confirmColor: '#B8D060'
+      });
+      return;
+    }
     if (!getApp().globalData.token) {
       openInlineAuth(this, 'order');
       return;
@@ -390,6 +417,17 @@ Page({
         showOrderSuccess: true,
         orderSuccessMsg: '演示下单成功，未真实提交任何数据',
         orderSuccessIds: ['demo-order']
+      });
+      return;
+    }
+    if (this.data.nightClosed) {
+      const notice = getNightCloseNotice();
+      wx.showModal({
+        title: notice.title,
+        content: notice.content,
+        showCancel: false,
+        confirmText: '我知道了',
+        confirmColor: '#B8D060'
       });
       return;
     }

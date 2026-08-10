@@ -302,8 +302,11 @@ public class OrderPrepController {
     }
 
     @GetMapping("/delivery-release-pending")
-    public ApiResponse<List<DeliveryReleasePendingItem>> deliveryReleasePending() {
-        return ApiResponse.success(deliveryReleaseSupport.pendingReleaseOrders());
+    public ApiResponse<List<DeliveryReleasePendingItem>> deliveryReleasePending(
+        @RequestParam(required = false) String serveDate,
+        @RequestParam(required = false) String mealPeriod
+    ) {
+        return ApiResponse.success(deliveryReleaseSupport.pendingReleaseOrders(serveDate, mealPeriod));
     }
 
     @PostMapping("/{orderId}/delivery-release")
