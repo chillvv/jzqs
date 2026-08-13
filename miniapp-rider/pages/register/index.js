@@ -25,7 +25,6 @@ Page({
     navBarHeight: 44,
     phone: '',
     name: '',
-    agreed: false,
     loading: false
   },
 
@@ -62,12 +61,7 @@ Page({
     this.setData({ phone: normalizePhone(e.detail.value) });
   },
 
-  onAgreeChange(e) {
-    this.setData({ agreed: e.detail.value.length > 0 });
-  },
-
   async onRegister() {
-    const { agreed } = this.data;
     const phone = normalizePhone(this.data.phone);
     const name = normalizeName(this.data.name);
 
@@ -83,11 +77,6 @@ Page({
 
     if (!phone || !/^1\d{10}$/.test(phone)) {
       wx.showToast({ title: '请输入正确的手机号', icon: 'none' });
-      return;
-    }
-
-    if (!agreed) {
-      wx.showToast({ title: '请阅读并同意协议', icon: 'none' });
       return;
     }
 
@@ -133,13 +122,5 @@ Page({
     const phone = String(this.data.phone || '').trim();
     const query = phone ? `?phoneNumber=${phone}` : '';
     wx.redirectTo({ url: `/pages/login/index${query}` });
-  },
-
-  onViewAgreement() {
-    wx.showModal({
-      title: '用户协议',
-      content: '这里是用户协议内容...',
-      showCancel: false
-    });
   }
 });

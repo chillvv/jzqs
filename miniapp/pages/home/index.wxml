@@ -77,15 +77,15 @@
             <block wx:for="{{item.items}}" wx:key="id" wx:for-item="subitem">
               <view class="meal-row">
                 <view class="meal-badge">{{subitem.mealPeriod === 'LUNCH' ? '午' : '晚'}}</view>
-                <view class="meal-info">
-                  <view class="meal-main">
-                    <view wx:for="{{subitem.dishItems}}" wx:key="*this" wx:for-item="dish" class="meal-main-item">{{dish}}</view>
+                  <view class="meal-info">
+                    <view class="meal-main">
+                      <view wx:for="{{subitem.dishItems}}" wx:key="*this" wx:for-item="dish" class="meal-main-item">{{dish}}</view>
+                    </view>
+                    <view class="meal-meta">
+                      <text class="meal-note" wx:if="{{subitem.merchantNote && subitem.merchantNote !== '-'}}">备注：{{subitem.merchantNote}}</text>
+                      <text class="meal-kcal">🔥 {{subitem.totalCalories}} kcal</text>
+                    </view>
                   </view>
-                  <view class="meal-meta">
-                    <text class="meal-note" wx:if="{{subitem.merchantNote && subitem.merchantNote !== '-'}}">备注：{{subitem.merchantNote}}</text>
-                    <text class="meal-kcal">🔥 {{subitem.totalCalories}} kcal</text>
-                  </view>
-                </view>
               </view>
             </block>
           </view>

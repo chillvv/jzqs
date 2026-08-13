@@ -291,7 +291,7 @@
 /* =========================================
    Tab 1：首页（从 app.wxss 拆入）
    ========================================= */
-#tab-home { background: var(--bg-card-alt); min-height: 100vh; padding-bottom: calc(136rpx + env(safe-area-inset-bottom)); }
+#tab-home { background: var(--bg-card-alt); min-height: 100vh; padding-bottom: 160rpx; }
 
 .hero-banner {
   width: 100%; height: 500rpx;
@@ -353,7 +353,7 @@
 .meal-main { font-size: 30rpx; font-weight: 700; color: var(--text-main); margin-bottom: 12rpx; line-height: 1.6; display: flex; flex-direction: column; gap: 8rpx; }
 .meal-main-item { position: relative; padding-left: 24rpx; }
 .meal-main-item::before { content: ''; position: absolute; left: 0; top: 18rpx; width: 8rpx; height: 8rpx; border-radius: 50%; background: var(--brand-primary); }
-.meal-meta { display: flex; justify-content: space-between; align-items: center; margin-top: 8rpx; }
-.meal-note { font-size: 22rpx; color: var(--text-muted); background: #f8f8f8; padding: 4rpx 16rpx; border-radius: 8rpx; }
-.meal-kcal { font-size: 24rpx; color: var(--brand-dark); font-weight: 700; display: flex; align-items: center; gap: 4rpx; }
+.meal-meta { display: flex; justify-content: flex-end; align-items: center; margin-top: 12rpx; gap: 16rpx; }
+.meal-note { font-size: 22rpx; color: var(--text-muted); background: #f6f7f4; padding: 6rpx 16rpx; border-radius: 10rpx; border-left: 4rpx solid var(--brand-light); line-height: 1.4; margin-right: auto; max-width: 72%; }
+.meal-kcal { font-size: 24rpx; color: var(--brand-dark); font-weight: 700; display: flex; align-items: center; gap: 4rpx; flex-shrink: 0; }
 .rest-card { background: var(--bg-card); border: 2rpx dashed rgba(184, 208, 96, 0.3); border-radius: 32rpx; padding: 48rpx; text-align: center; color: var(--text-sub); font-size: 28rpx; font-weight: 500; margin-bottom: 32rpx; box-shadow: var(--shadow-sm); }

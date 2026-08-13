@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "协议",
+  "navigationBarBackgroundColor": "#FFFFFF",
+  "navigationBarTextStyle": "black",
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "subpage-navbar": "/components/subpage-navbar/index"
+  }
+}

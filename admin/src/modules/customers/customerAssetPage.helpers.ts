@@ -115,27 +115,6 @@ export function resolveCustomerOrderModeLabel(item: CustomerAssetResponse) {
   return item.fixedSubscriptionEnabled ? "固定订餐" : "普通下单";
 }
 
-export function extractCustomerNoteGroups(detail: CustomerDetailResponse | null | undefined) {
-  const merchantNotes = Array.isArray(detail?.merchantNotes) ? detail.merchantNotes as CustomerNoteItem[] : [];
-
-  return {
-    merchantNotes,
-    longTermMerchantNotes: merchantNotes,
-    userNotes: [],
-    timeBoxedMerchantNotes: []
-  };
-}
-
-export function formatCustomerNoteSchedule(note: CustomerNoteItem) {
-  if (note.scopeType !== "TIME_BOXED") {
-    return "长期生效";
-  }
-  if (!note.startAt && !note.endAt) {
-    return "限时生效";
-  }
-  return `${note.startAt || "-"} ~ ${note.endAt || "-"}`;
-}
-
 export function resolvePrimaryCustomerAddress(addresses: CustomerAddressItem[] | null | undefined) {
   if (!Array.isArray(addresses) || addresses.length === 0) {
     return null;

@@ -1,0 +1,62 @@
+page {
+  background: var(--bg-app, #f5f6f7);
+}
+
+.agreement-page {
+  min-height: 100vh;
+  padding: 32rpx 40rpx calc(env(safe-area-inset-bottom) + 80rpx);
+  box-sizing: border-box;
+}
+
+.agreement-doc {
+  background: var(--bg-card, #ffffff);
+  border-radius: 24rpx;
+  padding: 56rpx 44rpx;
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(0, 0, 0, 0.04));
+}
+
+.agreement-doc-title {
+  font-size: 44rpx;
+  font-weight: 800;
+  color: var(--text-main, #1a1a1a);
+  text-align: center;
+  letter-spacing: 2rpx;
+  margin-bottom: 20rpx;
+}
+
+.agreement-doc-updated {
+  font-size: 24rpx;
+  color: var(--text-muted, #999999);
+  text-align: center;
+  padding-bottom: 40rpx;
+  margin-bottom: 40rpx;
+  border-bottom: 2rpx solid var(--border, #eeeeee);
+}
+
+.agreement-doc-intro {
+  font-size: 28rpx;
+  color: var(--text-sub, #666666);
+  line-height: 1.9;
+  text-align: justify;
+  margin-bottom: 48rpx;
+}
+
+.agreement-section {
+  margin-bottom: 40rpx;
+}
+
+.agreement-section-heading {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--text-main, #1a1a1a);
+  line-height: 1.6;
+  margin-bottom: 20rpx;
+}
+
+.agreement-paragraph {
+  font-size: 27rpx;
+  color: var(--text-sub, #666666);
+  line-height: 1.9;
+  text-align: justify;
+  margin-bottom: 16rpx;
+}

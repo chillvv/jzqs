@@ -1041,7 +1041,7 @@
 /* =========================================
    Tab 3：我的页（从 app.wxss 拆入）
    ========================================= */
-#tab-profile { min-height: 100vh; padding-bottom: calc(136rpx + env(safe-area-inset-bottom)); background: var(--bg-card-alt); }
+#tab-profile { min-height: 100vh; padding-bottom: 160rpx; background: var(--bg-card-alt); }
 
 @keyframes sweep {
   0% { transform: translateX(-100%) skewX(-20deg); }

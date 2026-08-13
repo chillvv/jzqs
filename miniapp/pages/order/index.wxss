@@ -40,7 +40,7 @@
   position: fixed;
   left: 0;
   right: 0;
-  bottom: calc(136rpx + env(safe-area-inset-bottom));
+  bottom: 160rpx;
   padding: 40rpx 32rpx;
   border-radius: 40rpx 40rpx 0 0;
   background: var(--bg-card);
@@ -171,7 +171,9 @@ page { overflow: hidden; }
   top: 0;
   left: 0;
   right: 0;
-  bottom: 0;
+  /* 结算视图底边 = 自定义 tabBar 顶边（tabBar height 固定 160rpx，border-box 已含底部安全区），
+     这样底部按钮栏贴死 tabBar 上边、任何机型都无缝，不靠硬编码 safe-area 去猜 */
+  bottom: 160rpx;
   background: var(--bg-card);
   display: flex;
   flex-direction: column;
@@ -183,9 +185,13 @@ page { overflow: hidden; }
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: calc(200rpx + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 48rpx;
+  /* 底部避让：tabBar 160rpx + 购物车栏悬浮间距 24rpx + 购物车栏高 112rpx（tabBar 160 已含安全区，不再额外加 safe） */
+  padding: 0 24rpx calc(160rpx + 24rpx + 112rpx);
 }
-#view-checkout { background: var(--bg-app); min-height: 100vh; padding-bottom: calc(420rpx + env(safe-area-inset-bottom)); }
+#view-checkout { background: var(--bg-app); }
 
 .menu-top { background: var(--bg-card); padding: 32rpx; margin-bottom: 24rpx; }
 .menu-top-title { font-size: 40rpx; font-weight: 800; margin-bottom: 8rpx; color: var(--text-main); }
@@ -193,7 +199,6 @@ page { overflow: hidden; }
 .menu-top-row { display: flex; align-items: center; gap: 16rpx; margin-top: 8rpx; }
 .date-tag { background: #f0f4e8; color: var(--brand-color); font-size: 24rpx; font-weight: 700; padding: 4rpx 16rpx; border-radius: 8rpx; }
 
-.menu-list-wrap { padding: 0 24rpx; display: flex; flex-direction: column; gap: 48rpx; }
 .rest-card { background: var(--bg-card); border: 2rpx dashed rgba(184, 208, 96, 0.3); border-radius: 32rpx; padding: 48rpx; text-align: center; color: var(--text-sub); font-size: 28rpx; font-weight: 500; margin-bottom: 32rpx; box-shadow: var(--shadow-sm); }
 
 /* 夜间停单提示横幅 */
@@ -230,7 +235,7 @@ page { overflow: hidden; }
 .step-num { min-width: 60rpx; text-align: center; font-size: 30rpx; font-weight: 600; color: var(--text-main); }
 
 /* 购物车底栏 */
-.cart-bar { position: fixed; bottom: calc(136rpx + env(safe-area-inset-bottom) + 24rpx); left: 32rpx; right: 32rpx; height: 112rpx; background: linear-gradient(135deg, rgba(40, 40, 40, 0.7) 0%, rgba(10, 10, 10, 0.85) 100%); backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px); border: 2rpx solid rgba(255, 255, 255, 0.15); border-radius: 56rpx; display: flex; align-items: center; justify-content: space-between; padding: 0 12rpx 0 40rpx; z-index: 100; transform: translateY(200rpx); visibility: hidden; opacity: 0; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 16rpx 40rpx rgba(0,0,0,0.25); }
+.cart-bar { position: fixed; bottom: 184rpx; left: 32rpx; right: 32rpx; height: 112rpx; background: linear-gradient(135deg, rgba(40, 40, 40, 0.7) 0%, rgba(10, 10, 10, 0.85) 100%); backdrop-filter: blur(40px); -webkit-backdrop-filter: blur(40px); border: 2rpx solid rgba(255, 255, 255, 0.15); border-radius: 56rpx; display: flex; align-items: center; justify-content: space-between; padding: 0 12rpx 0 40rpx; z-index: 100; transform: translateY(200rpx); visibility: hidden; opacity: 0; transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); box-shadow: 0 16rpx 40rpx rgba(0,0,0,0.25); }
 .cart-bar.show { transform: translateY(0); visibility: visible; opacity: 1; }
 .cart-info { display: flex; align-items: baseline; gap: 12rpx; }
 .cart-total { font-size: 44rpx; font-weight: 900; color: var(--brand-primary); }
@@ -260,7 +265,7 @@ page { overflow: hidden; }
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding: 24rpx;
-  padding-bottom: calc(420rpx + env(safe-area-inset-bottom));
+  padding-bottom: 32rpx;
 }
 
 .address-card { background: linear-gradient(180deg, var(--bg-card) 0%, #fdfdfd 100%); border-radius: 32rpx; padding: 40rpx; display: flex; align-items: center; justify-content: space-between; gap: 24rpx; box-shadow: 0 12rpx 32rpx rgba(0,0,0,0.06); margin: 24rpx; border: 2rpx solid rgba(184, 208, 96, 0.15); position: relative; overflow: hidden; }
@@ -369,29 +374,32 @@ page { overflow: hidden; }
 }
 
 .submit-bar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: calc(136rpx + env(safe-area-inset-bottom));
-  background: rgba(255, 255, 255, 0.98);
-  padding: 24rpx 32rpx;
+  /* 与点餐页购物车栏 cart-bar 完全一致的悬浮圆角卡片外观（黑底 + 绿按钮），
+     作为结算视图 flex 末尾元素，贴住 tabBar 上方 */
+  flex-shrink: 0;
+  margin: 24rpx 32rpx;
+  height: 112rpx;
+  background: linear-gradient(135deg, rgba(40, 40, 40, 0.7) 0%, rgba(10, 10, 10, 0.85) 100%);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 2rpx solid rgba(255, 255, 255, 0.15);
+  border-radius: 56rpx;
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  z-index: 140;
-  box-shadow: 0 -4rpx 20rpx rgba(0,0,0,0.05);
-  border-top: 1rpx solid rgba(0, 0, 0, 0.04);
+  justify-content: space-between;
+  padding: 0 12rpx 0 40rpx;
+  box-shadow: 0 16rpx 40rpx rgba(0,0,0,0.25);
 }
-.submit-total { display: flex; align-items: baseline; gap: 8rpx; }
-.submit-total-label { font-size: 26rpx; color: var(--text-main); }
-.submit-total-num { font-size: 48rpx; font-weight: 800; color: var(--brand-dark); }
-.submit-total-unit { font-size: 24rpx; color: var(--text-main); font-weight: 600; }
-.btn-submit { background: var(--brand-primary); color: #111; border: none; padding: 0 60rpx; height: 96rpx; line-height: 96rpx; border-radius: 48rpx; font-size: 32rpx; font-weight: 800; margin: 0; box-shadow: 0 12rpx 24rpx rgba(184, 208, 96, 0.3); }
+.submit-total { display: flex; align-items: baseline; gap: 12rpx; }
+.submit-total-label { font-size: 24rpx; color: rgba(255, 255, 255, 0.95); font-weight: 900; }
+.submit-total-num { font-size: 44rpx; font-weight: 900; color: var(--brand-primary); }
+.submit-total-unit { font-size: 24rpx; color: rgba(255, 255, 255, 0.95); font-weight: 900; }
+.btn-submit { background: var(--brand-primary); color: #111; border: none; height: 88rpx; line-height: 88rpx; padding: 0 48rpx; border-radius: 44rpx; font-size: 30rpx; font-weight: 900; margin: 0; }
 .btn-submit[disabled] {
   opacity: 0.56;
 }
 
-/* 订阅授权引导勾选 */
+/* 订阅授权引导勾选（嵌在餐具数量卡片内，作为卡片末项，紧贴餐具数量，不额外留缝） */
 .subscribe-consent {
   display: flex;
   align-items: center;
@@ -400,7 +408,7 @@ page { overflow: hidden; }
   border: 2rpx solid #fde2bd;
   border-radius: 24rpx;
   padding: 26rpx 28rpx;
-  margin: 0 24rpx 24rpx;
+  margin: 0 32rpx 32rpx;
   transition: background 0.2s ease, border-color 0.2s ease;
 }
 /* 已勾选（本单授权） */

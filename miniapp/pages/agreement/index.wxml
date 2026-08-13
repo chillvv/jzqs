@@ -1,0 +1,19 @@
+<subpage-navbar title="{{title}}" />
+
+<view class="agreement-page">
+  <view class="agreement-doc">
+    <view class="agreement-doc-title">{{title}}</view>
+    <view class="agreement-doc-updated" wx:if="{{updatedAt}}">更新日期：{{updatedAt}}</view>
+    <view class="agreement-doc-intro" wx:if="{{intro}}">{{intro}}</view>
+
+    <view class="agreement-section" wx:for="{{sections}}" wx:key="heading">
+      <view class="agreement-section-heading">{{item.heading}}</view>
+      <view
+        class="agreement-paragraph"
+        wx:for="{{item.paragraphs}}"
+        wx:for-item="para"
+        wx:key="*this"
+      >{{para}}</view>
+    </view>
+  </view>
+</view>

@@ -1,12 +1,6 @@
 const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const { request } = require('../../utils/request');
 const { maskPhone } = require('../../utils/mobile');
-const { getSubmitProfileError } = require('../../utils/profile-auth');
-const {
-  ensurePhonePrivacyPermission,
-  getPhonePrivacyErrorMessage,
-  openPrivacyContract
-} = require('../../utils/privacy-auth');
 const {
   DELIVERY_TEMPLATE_ID,
   NIGHTLY_TEMPLATE_ID,
@@ -15,49 +9,13 @@ const {
   sendSubscribeMessageTest
 } = require('../../utils/delivery-subscription');
 const auth = require('../../utils/auth');
-const demo = require('../../utils/demo');
 const onb = require('../../utils/onboarding');
-
-const AGREEMENT_ACCEPTED_KEY = 'miniapp_customer_auth_agreement_accepted_v1';
 
 function displayName(name) {
   if (!name || name.startsWith('微信用户-') || name.startsWith('待完善-')) {
     return '用户';
   }
   return name;
-}
-
-function isPlaceholderCustomerName(name) {
-  const value = String(name || '').trim();
-  return value.startsWith('微信用户-') || value.startsWith('待完善-');
-}
-
-function shouldStartRegister(error) {
-  const message = String(error && error.message || '').trim();
-  return message.includes('未注册') || message.includes('请先注册');
-}
-
-function applyCustomerAuthResult(result) {
-  if (!result) {
-    return;
-  }
-  auth.applyAuthState(result);
-  auth.globalData.ready = true;
-  auth.syncAppGlobalData();
-}
-
-function readAgreementAccepted() {
-  try {
-    return !!wx.getStorageSync(AGREEMENT_ACCEPTED_KEY);
-  } catch (_) {
-    return false;
-  }
-}
-
-function persistAgreementAccepted() {
-  try {
-    wx.setStorageSync(AGREEMENT_ACCEPTED_KEY, true);
-  } catch (_) {}
 }
 
 Page({
@@ -69,20 +27,6 @@ Page({
     displayName: '游客',
     loading: false,
     onboarding: true,
-    savingProfile: false,
-    authMode: 'UNKNOWN',
-    needPhoneAuth: true,
-    authFlowMode: 'login',
-    profileForm: {
-      nickname: '',
-      phoneNumber: ''
-    },
-    phoneAuthHint: '',
-    showAuthPopup: false,
-    agreementAccepted: false,
-    agreementSheetChecked: false,
-    showAgreementSheet: false,
-    pendingAgreementAction: '',
     sendingDelivery: false,
     sendingNightly: false,
     statusBarHeight: 0,
@@ -103,50 +47,6 @@ Page({
     wx.navigateTo({ url: '/pages/login/index' });
   },
 
-  openAuthPopup() {
-    this.goLoginPage();
-  },
-
-  startRegisterFlow({ phoneNumber = '' } = {}) {
-    this.setData({
-      showAuthPopup: true,
-      authFlowMode: 'register',
-      phoneAuthHint: phoneNumber ? maskPhone(phoneNumber) : '',
-      agreementAccepted: false,
-      agreementSheetChecked: false,
-      showAgreementSheet: false,
-      pendingAgreementAction: '',
-      profileForm: {
-        nickname: '',
-        phoneNumber
-      }
-    });
-  },
-
-  startCompleteProfileFlow({ phoneNumber = '' } = {}) {
-    this.setData({
-      showAuthPopup: true,
-      authFlowMode: 'complete-profile',
-      phoneAuthHint: phoneNumber ? maskPhone(phoneNumber) : this.data.phoneAuthHint,
-      agreementAccepted: false,
-      agreementSheetChecked: false,
-      showAgreementSheet: false,
-      pendingAgreementAction: '',
-      'profileForm.nickname': '',
-      'profileForm.phoneNumber': String(phoneNumber || '').replace(/\D/g, '')
-    });
-  },
-
-  closeAuthPopup() {
-    this.setData({
-      showAuthPopup: false,
-      showAgreementSheet: false,
-      pendingAgreementAction: ''
-    });
-  },
-
-  stopPropagation() {},
-
   onShow() {
     onb.ensureCleanDemo();
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
@@ -164,8 +64,6 @@ Page({
     const onboarding = !app.globalData.token;
     this.setData({
       onboarding,
-      authMode: app.globalData.authMode,
-      needPhoneAuth: !!app.globalData.needPhoneAuth,
       showTestSubscription: !!(app.globalData && app.globalData.isTestEnv)
     });
     if (onboarding) {
@@ -212,325 +110,6 @@ Page({
 
   onPullDownRefresh() {
     this.refreshPage();
-  },
-
-  openAgreement() {
-    wx.showModal({
-      title: '用户服务协议',
-      content: '为完成登录、下单与配送通知服务，我们会在你使用过程中处理账号标识、手机号、订单与收货信息。继续使用前，请先阅读并同意用户服务协议。',
-      showCancel: false
-    });
-  },
-
-  openPrivacy() {
-    openPrivacyContract().catch((error) => {
-      wx.showToast({
-        title: getPhonePrivacyErrorMessage(error),
-        icon: 'none'
-      });
-    });
-  },
-
-  onPhoneInput(e) {
-    const phone = e.detail.value.replace(/\D/g, '');
-    const hint = phone ? maskPhone(phone) : '';
-    this.setData({
-      'profileForm.phoneNumber': phone,
-      phoneAuthHint: hint
-    });
-  },
-
-  onNicknameInput(e) {
-    this.setData({
-      'profileForm.nickname': e.detail.value
-    });
-  },
-
-  handleAgreementBarTap() {
-    this.openAgreementSheet('');
-  },
-
-  openAgreementSheet(action = '') {
-    this.setData({
-      showAgreementSheet: true,
-      pendingAgreementAction: action,
-      agreementSheetChecked: this.data.agreementAccepted || this.data.agreementSheetChecked
-    });
-  },
-
-  closeAgreementSheet() {
-    this.setData({
-      showAgreementSheet: false,
-      pendingAgreementAction: '',
-      agreementSheetChecked: this.data.agreementSheetChecked
-    });
-  },
-
-  toggleAgreementSheetChecked() {
-    this.setData({
-      agreementSheetChecked: !this.data.agreementSheetChecked
-    });
-  },
-
-  ensureAgreementAccepted() {
-    if (!this.data.agreementAccepted && !this.data.agreementSheetChecked) {
-      wx.showToast({ title: '请先勾选已阅读并同意', icon: 'none' });
-      return false;
-    }
-    if (!this.data.agreementAccepted) {
-      persistAgreementAccepted();
-    }
-    this.setData({
-      agreementAccepted: true,
-      agreementSheetChecked: true,
-      showAgreementSheet: false,
-      pendingAgreementAction: ''
-    });
-    return true;
-  },
-
-  handleAgreementPrimaryAction() {
-    if (!this.ensureAgreementAccepted()) {
-      return;
-    }
-    if (this.data.pendingAgreementAction === 'submitProfile') {
-      this.submitProfile();
-    }
-  },
-
-  openAgreementSheetForWechat() {
-    this.openAgreementSheet('wechat-login');
-  },
-
-  async prepareWechatLogin() {
-    try {
-      await ensurePhonePrivacyPermission();
-      return true;
-    } catch (error) {
-      wx.showToast({
-        title: getPhonePrivacyErrorMessage(error),
-        icon: 'none'
-      });
-      return false;
-    }
-  },
-
-  async handleWechatPermissionFailure(detail) {
-    try {
-      await ensurePhonePrivacyPermission();
-      wx.showToast({
-        title: '已完成手机号授权，请再次点击手机号快捷登录',
-        icon: 'none'
-      });
-      return;
-    } catch (_) {
-      wx.showToast({
-        title: getPhonePrivacyErrorMessage(detail),
-        icon: 'none'
-      });
-    }
-  },
-
-  async completeAgreementAndContinueWechat(e) {
-    if (!this.ensureAgreementAccepted()) {
-      return;
-    }
-    if (e.detail.errMsg !== 'getPhoneNumber:ok') {
-      await this.handleWechatPermissionFailure(e && e.detail);
-      return;
-    }
-    this.doLoginWithCode(e.detail.code);
-  },
-
-  handleSubmitEntry() {
-    if (this.data.agreementAccepted) {
-      this.submitProfile();
-      return;
-    }
-    this.openAgreementSheet('submitProfile');
-  },
-
-  async getPhoneNumber(e) {
-    if (e.detail.errMsg !== 'getPhoneNumber:ok') {
-      await this.handleWechatPermissionFailure(e && e.detail);
-      return;
-    }
-    this.doLoginWithCode(e.detail.code);
-  },
-
-  async doLoginWithCode(code) {
-    if (this.data.savingProfile) return;
-    this.setData({ savingProfile: true });
-
-    try {
-      code = String(code || '').trim();
-      if (!code) {
-        wx.showToast({ title: '手机号授权失败，请重试', icon: 'none' });
-        return;
-      }
-
-      const result = await auth.bindPhone({ code });
-
-      applyCustomerAuthResult(result);
-
-      const home = await request({ url: '/api/mobile/customer/home' });
-      if (isPlaceholderCustomerName(home && home.name)) {
-        this.setData({
-          onboarding: false,
-          home
-        });
-        this.startCompleteProfileFlow({
-          phoneNumber: home && home.phone ? String(home.phone).replace(/\D/g, '') : ''
-        });
-        wx.showToast({ title: '请填写姓名完成注册', icon: 'none' });
-        return;
-      }
-
-      wx.showToast({ title: '登录成功', icon: 'success' });
-      this.setData({ showAuthPopup: false, phoneAuthHint: '' });
-      setTimeout(() => this.refreshPage(), 1200);
-    } catch (error) {
-      if (shouldStartRegister(error)) {
-        this.startRegisterFlow();
-        wx.showToast({ title: '请填写姓名完成注册', icon: 'none' });
-      } else {
-        wx.showToast({ title: error.message || '手机号授权失败', icon: 'none' });
-      }
-    } finally {
-      this.setData({ savingProfile: false });
-    }
-  },
-
-  async submitProfile() {
-    if (!this.data.agreementAccepted) {
-      wx.showToast({ title: '请先阅读并同意协议', icon: 'none' });
-      return;
-    }
-    if (this.data.authFlowMode === 'register') {
-      return this.submitRegister();
-    }
-    if (this.data.authFlowMode === 'complete-profile') {
-      return this.submitProfileCompletion();
-    }
-    return this.submitPhoneLogin();
-  },
-
-  async submitPhoneLogin() {
-    const errorMessage = getSubmitProfileError({
-      mode: 'login',
-      nickname: '',
-      phoneNumber: this.data.profileForm.phoneNumber
-    });
-
-    if (errorMessage) {
-      wx.showToast({ title: errorMessage, icon: 'none' });
-      return;
-    }
-
-    if (this.data.savingProfile) return;
-
-    this.setData({ savingProfile: true });
-    try {
-      const result = await auth.phoneLogin(this.data.profileForm.phoneNumber);
-      applyCustomerAuthResult(result);
-
-      wx.showToast({ title: '登录成功', icon: 'success' });
-      this.setData({
-        onboarding: false,
-        showAuthPopup: false,
-        phoneAuthHint: ''
-      });
-      this.refreshPage();
-    } catch (error) {
-      if (shouldStartRegister(error)) {
-        this.startRegisterFlow({
-          phoneNumber: this.data.profileForm.phoneNumber
-        });
-        wx.showToast({ title: '请填写姓名完成注册', icon: 'none' });
-      } else {
-        wx.showToast({ title: error.message || '登录失败', icon: 'none' });
-      }
-    } finally {
-      this.setData({ savingProfile: false });
-    }
-  },
-
-  async submitRegister() {
-    const errorMessage = getSubmitProfileError({
-      mode: 'register',
-      nickname: this.data.profileForm.nickname,
-      phoneNumber: this.data.profileForm.phoneNumber
-    });
-
-    if (errorMessage) {
-      wx.showToast({ title: errorMessage, icon: 'none' });
-      return;
-    }
-
-    if (this.data.savingProfile) return;
-
-    this.setData({ savingProfile: true });
-    try {
-      const result = await auth.register(
-        this.data.profileForm.phoneNumber,
-        this.data.profileForm.nickname.trim()
-      );
-      applyCustomerAuthResult(result);
-      wx.showToast({ title: '注册成功', icon: 'success' });
-      this.setData({
-        onboarding: false,
-        showAuthPopup: false,
-        authFlowMode: 'login',
-        phoneAuthHint: '',
-        profileForm: {
-          nickname: '',
-          phoneNumber: ''
-        }
-      });
-      wx.switchTab({ url: '/pages/home/index' });
-    } catch (error) {
-      wx.showToast({ title: error.message || '注册失败', icon: 'none' });
-    } finally {
-      this.setData({ savingProfile: false });
-    }
-  },
-
-  async submitProfileCompletion() {
-    const nickname = String(this.data.profileForm.nickname || '').trim();
-    const phoneNumber = this.data.profileForm.phoneNumber || (this.data.home && this.data.home.phone) || '';
-    const errorMessage = getSubmitProfileError({
-      mode: 'register',
-      nickname,
-      phoneNumber
-    });
-
-    if (errorMessage) {
-      wx.showToast({ title: errorMessage, icon: 'none' });
-      return;
-    }
-
-    if (this.data.savingProfile) return;
-
-    this.setData({ savingProfile: true });
-    try {
-      const result = await auth.completeProfile(nickname);
-      applyCustomerAuthResult(result);
-
-      wx.showToast({ title: '注册成功', icon: 'success' });
-      this.setData({
-        showAuthPopup: false,
-        authFlowMode: 'login',
-        profileForm: {
-          nickname: '',
-          phoneNumber: ''
-        }
-      });
-      wx.switchTab({ url: '/pages/home/index' });
-    } catch (error) {
-      wx.showToast({ title: error.message || '保存失败', icon: 'none' });
-    } finally {
-      this.setData({ savingProfile: false });
-    }
   },
 
   handleLogout() {
@@ -585,11 +164,7 @@ Page({
       return;
     }
     if (this.data.onboarding) {
-      this.setData({
-        onboarding: false,
-        authMode: app.globalData.authMode,
-        needPhoneAuth: !!app.globalData.needPhoneAuth
-      });
+      this.setData({ onboarding: false });
     }
     wx.navigateTo({ url: targetUrl });
   },

@@ -16,11 +16,6 @@ export type NewRiderDraft = {
   areaCode: string;
 };
 
-export type NewRiderFieldErrors = {
-  riderName: string;
-  phone: string;
-};
-
 export const DEFAULT_OPERATOR = "管理员";
 
 export type DispatchMealPeriod = "LUNCH" | "DINNER";
@@ -52,10 +47,6 @@ export function normalizeDispatchOverview(data: DispatchOverviewLike): DispatchO
     dispatchingCount: data.dispatchingCount ?? 0,
     missingRiderAreaCount: data.missingRiderAreaCount ?? 0
   };
-}
-
-export function normalizeMealPeriodTab(value: string): DispatchMealPeriod {
-  return value === "DINNER" || value === "晚餐" ? "DINNER" : "LUNCH";
 }
 
 export function mealPeriodLabel(value: DispatchMealPeriod) {

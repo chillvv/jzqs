@@ -49,20 +49,8 @@
   font-size: 28rpx;
 }
 
-.agreement {
-  margin: 32rpx 0;
-}
-
-.agreement-label {
-  display: flex;
-  align-items: center;
-  font-size: 24rpx;
-  color: #666;
-}
-
 .link {
   color: var(--brand-color);
-  margin-left: 8rpx;
 }
 
 .register-btn {

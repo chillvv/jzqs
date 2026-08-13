@@ -8,8 +8,7 @@ page {
 }
 
 .auth-page-shell {
-  min-height: 100vh;
-  max-height: 86vh;
+  min-height: calc(100vh - 88px);
   overflow-y: auto;
   box-sizing: border-box;
   display: flex;
@@ -163,26 +162,29 @@ page {
 /* Bottom Section */
 .auth-page-footer {
   width: 100%;
-  padding-top: 40rpx;
+  padding-top: 24rpx;
 }
 
 .auth-agreement-bar {
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 16rpx 0;
 }
 
 .auth-agreement-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32rpx;
-  height: 32rpx;
-  border-radius: 50%;
-  border: 2rpx solid #cccccc;
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 8rpx;
+  border: 2rpx solid #c8c8c8;
+  background: #ffffff;
   box-sizing: border-box;
-  margin-right: 12rpx;
-  transition: all 0.2s;
+  margin-right: 14rpx;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
 }
 
 .auth-agreement-icon.checked {
@@ -191,7 +193,8 @@ page {
 }
 
 .auth-agreement-icon-mark {
-  font-size: 22rpx;
+  font-size: 24rpx;
+  font-weight: 700;
   color: #ffffff;
   line-height: 1;
 }
@@ -202,129 +205,36 @@ page {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
+  line-height: 1.6;
 }
 
 .auth-agreement-text {
   font-size: 24rpx;
+  color: var(--text-sub);
 }
 
 .auth-agreement-link {
+  font-size: 24rpx;
   color: var(--text-link);
+  padding: 0 2rpx;
 }
 
-/* Modal */
-.auth-agreement-modal-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: flex;
-  align-items: flex-end;
-  background: rgba(15, 23, 42, 0.48);
-  animation: fadeIn 0.3s ease;
+/* 未勾选时点击登录的提醒动画 */
+.auth-agreement-bar.attention {
+  animation: agreementShake 0.5s ease;
 }
 
-.auth-agreement-modal-panel {
-  width: 100%;
-  background: var(--bg-card);
-  border-radius: 32rpx 32rpx 0 0;
-  padding: 48rpx 40rpx calc(env(safe-area-inset-bottom) + 40rpx);
-  box-sizing: border-box;
-  animation: slideUp 0.3s ease;
+.auth-agreement-bar.attention .auth-agreement-icon {
+  border-color: #fa5151;
+  background: #fff5f5;
 }
 
-.auth-agreement-modal-title {
-  font-size: 36rpx;
-  font-weight: 600;
-  color: var(--text-main);
-  text-align: center;
-  margin-bottom: 16rpx;
-}
-
-.auth-agreement-modal-copy {
-  font-size: 28rpx;
-  color: var(--text-sub);
-  text-align: center;
-  margin-bottom: 40rpx;
-  line-height: 1.5;
-}
-
-.auth-agreement-sheet-links {
-  background: #f8f8f8;
-  border-radius: 16rpx;
-  padding: 0 32rpx;
-  margin-bottom: 40rpx;
-}
-
-.auth-agreement-sheet-link-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 32rpx 0;
-  border-bottom: 1rpx solid var(--border);
-}
-
-.auth-agreement-sheet-link-card:last-child {
-  border-bottom: none;
-}
-
-.auth-agreement-sheet-link-title {
-  font-size: 30rpx;
-  color: var(--text-main);
-}
-
-.auth-agreement-sheet-link-arrow {
-  font-size: 36rpx;
-  color: #cccccc;
-}
-
-.auth-agreement-sheet-check {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 40rpx;
-}
-
-.auth-agreement-sheet-check-text {
-  font-size: 28rpx;
-  color: var(--text-main);
-}
-
-.auth-agreement-sheet-actions {
-  display: flex;
-  gap: 24rpx;
-}
-
-.auth-agreement-sheet-btn {
-  flex: 1;
-  height: 96rpx;
-  line-height: 96rpx;
-  border-radius: 48rpx;
-  font-size: 32rpx;
-  font-weight: 500;
-  margin: 0;
-  padding: 0;
-}
-
-.auth-agreement-sheet-btn::after {
-  border: none;
-}
-
-.auth-agreement-sheet-btn-secondary {
-  background: var(--brand-secondary);
-  color: var(--text-main);
-}
-
-.auth-agreement-sheet-btn-primary {
-  background: var(--brand-primary);
-  color: #ffffff;
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-@keyframes slideUp {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+@keyframes agreementShake {
+  0%, 100% { transform: translateX(0); }
+  15% { transform: translateX(-10rpx); }
+  30% { transform: translateX(10rpx); }
+  45% { transform: translateX(-8rpx); }
+  60% { transform: translateX(8rpx); }
+  75% { transform: translateX(-4rpx); }
+  90% { transform: translateX(4rpx); }
 }

@@ -244,13 +244,6 @@ export async function logoutAdmin() {
   return response.data.data;
 }
 
-export async function updateOrderMerchantRemark(orderId: number, merchantRemark: string) {
-  const response = await http.post<ApiResponse<{ orderId: number; status: string }>>(`/api/admin/orders/${orderId}/merchant-remark`, {
-    merchantRemark
-  });
-  return response.data.data;
-}
-
 export async function updateOrderProfile(orderId: number, payload: {
   mealPeriod: "LUNCH" | "DINNER";
   quantity: number;
@@ -380,11 +373,6 @@ export async function deleteCustomerAddress(customerId: number, addressId: numbe
   return response.data.data;
 }
 
-export async function fetchMenuSchedules() {
-  const response = await http.get<ApiResponse<PageResponse<MenuScheduleResponse>>>("/api/admin/menu-schedules");
-  return response.data.data;
-}
-
 export async function fetchCurrentMenuWeek(targetDate?: string) {
   const url = targetDate ? `/api/admin/menu-weeks/current?targetDate=${encodeURIComponent(targetDate)}` : "/api/admin/menu-weeks/current";
   const response = await http.get<ApiResponse<AdminMenuWeekResponse>>(url);
@@ -424,16 +412,6 @@ export async function saveMenuWeekDay(weekId: number, serveDate: string, payload
   return response.data.data;
 }
 
-export async function publishMenuWeek(weekId: number) {
-  const response = await http.post<ApiResponse<{ weekId: number; status: string }>>(`/api/admin/menu-weeks/${weekId}/publish`);
-  return response.data.data;
-}
-
-export async function fetchDispatchBoard() {
-  const response = await http.get<ApiResponse<PageResponse<DispatchBoardItemResponse>>>("/api/admin/dispatch/board");
-  return response.data.data;
-}
-
 export async function fetchDispatchOverview(mealPeriod: "LUNCH" | "DINNER", serveDate?: string) {
   const params = new URLSearchParams({ mealPeriod });
   if (serveDate) params.set('serveDate', serveDate);
@@ -454,20 +432,6 @@ export async function fetchDispatchRiderProgress(mealPeriod?: "LUNCH" | "DINNER"
   return response.data.data;
 }
 
-export async function fetchDispatchBatches(serveDate?: string, mealPeriod?: string) {
-  const query = new URLSearchParams();
-  if (serveDate) query.set("serveDate", serveDate);
-  if (mealPeriod) query.set("mealPeriod", mealPeriod);
-  const suffix = query.toString() ? `?${query.toString()}` : "";
-  const response = await http.get<ApiResponse<DispatchBatchResponse[]>>(`/api/admin/dispatch/batches${suffix}`);
-  return response.data.data;
-}
-
-export async function fetchDispatchExceptions() {
-  const response = await http.get<ApiResponse<DispatchExceptionItemResponse[]>>("/api/admin/dispatch/exceptions");
-  return response.data.data;
-}
-
 export async function fetchDispatchPendingItems(mealPeriod: "LUNCH" | "DINNER", serveDate?: string) {
   const params = new URLSearchParams({ mealPeriod });
   if (serveDate) params.set('serveDate', serveDate);
@@ -482,11 +446,6 @@ export async function batchAssignDispatchPendingOrders(payload: {
   areaCode: string;
 }) {
   const response = await http.post<ApiResponse<BatchOperationResponse>>("/api/admin/dispatch/pending-items/batch-assign", payload);
-  return response.data.data;
-}
-
-export async function fetchPendingRiders() {
-  const response = await http.get<ApiResponse<PendingRiderResponse[]>>("/api/admin/dispatch/pending-riders");
   return response.data.data;
 }
 
@@ -522,28 +481,6 @@ export async function updateDispatchRiderProfile(riderId: number, payload: {
   return response.data.data;
 }
 
-export async function fetchDispatchRiderAuthBinding(riderId: number) {
-  const response = await http.get<ApiResponse<DispatchRiderAuthBindingResponse>>(`/api/admin/dispatch/riders/${riderId}/auth-binding`);
-  return response.data.data;
-}
-
-export async function takeoverDispatchRiderAuth(riderId: number, payload: {
-  sourceRiderId: number;
-}) {
-  const response = await http.post<ApiResponse<{ riderId: number; sourceRiderId: number; currentOpenid: string; riderStatus: string }>>(
-    `/api/admin/dispatch/riders/${riderId}/takeover-auth`,
-    payload
-  );
-  return response.data.data;
-}
-
-export async function unbindDispatchRiderAuth(riderId: number) {
-  const response = await http.post<ApiResponse<{ riderId: number; currentOpenid: string; riderStatus: string }>>(
-    `/api/admin/dispatch/riders/${riderId}/unbind-auth`
-  );
-  return response.data.data;
-}
-
 export async function fetchDispatchAreaBindings(mealPeriod?: "LUNCH" | "DINNER", serveDate?: string) {
   const params = new URLSearchParams();
   if (mealPeriod) params.set('mealPeriod', mealPeriod);
@@ -563,14 +500,6 @@ export async function updateDispatchAreaBinding(areaCode: string, payload: {
   const response = await http.post<ApiResponse<{ areaCode: string; defaultRiderId: number; backupRiderId: number | null }>>(
     `/api/admin/dispatch/area-bindings/${encodeURIComponent(areaCode)}`,
     payload
-  );
-  return response.data.data;
-}
-
-export async function removeDispatchAreaBinding(areaCode: string, riderId: number) {
-  const response = await http.post<ApiResponse<{ areaCode: string; riderId: number; status: string }>>(
-    "/api/admin/dispatch/area-bindings/remove-rider",
-    { areaCode, riderId }
   );
   return response.data.data;
 }
@@ -706,17 +635,6 @@ export interface DispatchRouteSuggestionFeedbackResponse {
   feedbackId: number;
 }
 
-export async function getDispatchAreaRouteSuggestion(
-  areaCode: string,
-  request: DispatchRouteSuggestionRequest
-) {
-  const response = await http.post<ApiResponse<DispatchRouteSuggestionResponse>>(
-    `/api/admin/dispatch/areas/${encodeURIComponent(areaCode)}/route-suggestion`,
-    request
-  );
-  return response.data.data;
-}
-
 export async function simulateRouteLab(
   request: {
     addresses: string[];
@@ -742,45 +660,6 @@ export async function deleteDispatchAiJobLogs(request: { ids: number[] }) {
   const response = await http.delete<ApiResponse<void>>("/api/admin/dispatch/job-logs", {
     data: request
   });
-  return response.data.data;
-}
-
-export async function saveDispatchAreaRouteSuggestionFeedback(
-  areaCode: string,
-  request: DispatchRouteSuggestionFeedbackRequest
-) {
-  const response = await http.post<ApiResponse<DispatchRouteSuggestionFeedbackResponse>>(
-    `/api/admin/dispatch/areas/${encodeURIComponent(areaCode)}/route-suggestion-feedback`,
-    request
-  );
-  return response.data.data;
-}
-
-export async function fetchDispatchReassignments(serveDate?: string) {
-  const suffix = serveDate ? `?serveDate=${encodeURIComponent(serveDate)}` : "";
-  const response = await http.get<ApiResponse<DispatchReassignmentResponse[]>>(`/api/admin/dispatch/reassignments${suffix}`);
-  return response.data.data;
-}
-
-export async function reassignDispatchWork(payload: {
-  reassignLevel: string;
-  targetId: number;
-  fromRiderName?: string;
-  toRiderName: string;
-  toAreaCode?: string;
-  serveDate: string;
-  mealPeriod?: string;
-  syncDefaultBinding: boolean;
-  reason?: string;
-}) {
-  const response = await http.post<ApiResponse<{
-    reassignLevel: string;
-    targetId: number;
-    toRiderName: string;
-    toAreaCode: string | null;
-    syncDefaultBinding: boolean;
-    affectedOrderCount: number;
-  }>>("/api/admin/dispatch/reassign", payload);
   return response.data.data;
 }
 
@@ -907,54 +786,6 @@ export async function assignDispatch(mealSlotOrderId: number, riderName: string,
   return response.data.data;
 }
 
-export async function autoAssignDispatch() {
-  const response = await http.post<ApiResponse<{ assignedCount: number; exceptionCount: number }>>("/api/admin/dispatch/auto-assign");
-  return response.data.data;
-}
-
-export async function resolveDispatchException(mealSlotOrderId: number, riderName: string, areaCode: string) {
-  const response = await http.post<ApiResponse<{ status: string }>>(`/api/admin/dispatch/exceptions/${mealSlotOrderId}/resolve`, {
-    riderName,
-    areaCode
-  });
-  return response.data.data;
-}
-
-export async function confirmDispatchExceptionArea(mealSlotOrderId: number, payload: {
-  areaCode: string;
-  riderName: string;
-  rememberAddress: boolean;
-}) {
-  const response = await http.post<ApiResponse<{
-    mealSlotOrderId: number;
-    areaCode: string;
-    riderName: string;
-    rememberAddress: boolean;
-    status: string;
-  }>>(`/api/admin/dispatch/exceptions/${mealSlotOrderId}/confirm-area`, payload);
-  return response.data.data;
-}
-
-export async function notifyDispatch(dispatchId: number) {
-  const response = await http.post<ApiResponse<{ notificationStatus: string }>>(`/api/admin/dispatch/${dispatchId}/notify`);
-  return response.data.data;
-}
-
-export async function updateOrderingToggle(enabled: boolean) {
-  const response = await http.post<ApiResponse<OperationSettingsResponse>>("/api/admin/settings/ordering-toggle", {
-    enabled
-  });
-  return response.data.data;
-}
-
-export async function updateHolidayNotice(title: string, description: string) {
-  const response = await http.post<ApiResponse<OperationSettingsResponse>>("/api/admin/settings/holiday-notice", {
-    title,
-    description
-  });
-  return response.data.data;
-}
-
 export async function updateRestNoticeTemplate(template: string) {
   const response = await http.post<ApiResponse<OperationSettingsResponse>>("/api/admin/settings/rest-notice-template", {
     template
@@ -992,19 +823,6 @@ export async function uploadBannerImage(file: File) {
         "Content-Type": "multipart/form-data"
       }
     }
-  );
-  return response.data.data;
-}
-
-export async function pauseOrderingWithNotice(payload: {
-  title: string;
-  description: string;
-  popupEnabled: boolean;
-  popupContent: string;
-}) {
-  const response = await http.post<ApiResponse<OperationSettingsResponse>>(
-    "/api/admin/settings/ordering/pause-with-notice",
-    payload
   );
   return response.data.data;
 }
@@ -1053,11 +871,6 @@ export async function changeOrderAddress(orderId: number, payload: { addressId: 
     `/api/admin/orders/${orderId}/change-address`,
     payload
   );
-  return response.data.data;
-}
-
-export async function consumeOrders(orderIds: number[]) {
-  const response = await http.post<ApiResponse<BatchOperationResponse>>("/api/admin/orders/consume", { orderIds });
   return response.data.data;
 }
 
@@ -1187,35 +1000,6 @@ export async function fetchCostEntries(month?: string) {
 
 export async function createCostEntry(payload: Record<string, unknown>) {
   const response = await http.post<ApiResponse<{ id: number; status: string }>>("/api/admin/analysis/cost-entries", payload);
-  return response.data.data;
-}
-
-export async function createMenuSchedule(payload: {
-  serveDate: string;
-  mealPeriod: string;
-  mealName: string;
-  mealDetail: string;
-  calories: number;
-  merchantNote: string;
-}) {
-  const response = await http.post<ApiResponse<MenuScheduleResponse>>("/api/admin/menu-schedules", payload);
-  return response.data.data;
-}
-
-export async function updateMenuSchedule(id: number, payload: {
-  serveDate: string;
-  mealPeriod: string;
-  mealName: string;
-  mealDetail: string;
-  calories: number;
-  merchantNote: string;
-}) {
-  const response = await http.put<ApiResponse<MenuScheduleResponse>>(`/api/admin/menu-schedules/${id}`, payload);
-  return response.data.data;
-}
-
-export async function disableMenuSchedule(id: number) {
-  const response = await http.post<ApiResponse<MenuScheduleResponse>>(`/api/admin/menu-schedules/${id}/disable`);
   return response.data.data;
 }
 

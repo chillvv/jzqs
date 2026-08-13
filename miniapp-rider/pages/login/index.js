@@ -1,21 +1,6 @@
 const { shareAppMessage, shareTimeline } = require('../../utils/share');
-const AGREEMENT_ACCEPTED_KEY = 'miniapp_rider_auth_agreement_accepted_v2';
 const auth = require('../../utils/auth');
 const authService = require('../../services/auth.service');
-
-function readAgreementAccepted() {
-  try {
-    return !!wx.getStorageSync(AGREEMENT_ACCEPTED_KEY);
-  } catch (_) {
-    return false;
-  }
-}
-
-function persistAgreementAccepted() {
-  try {
-    wx.setStorageSync(AGREEMENT_ACCEPTED_KEY, true);
-  } catch (_) {}
-}
 
 Page({
   onShareAppMessage: shareAppMessage,
@@ -26,22 +11,15 @@ Page({
     navBarHeight: 44,
     profileForm: {
       phoneNumber: ''
-    },
-    agreementAccepted: false,
-    agreementSheetChecked: false,
-    showAgreementSheet: false,
-    pendingAgreementAction: ''
+    }
   },
 
   onLoad(options = {}) {
     const app = getApp();
-    const agreementAccepted = readAgreementAccepted();
     const phoneNumber = String(options.phoneNumber || '').replace(/\D/g, '');
     this.setData({
       statusBarHeight: app.globalData.statusBarHeight,
       navBarHeight: app.globalData.navBarHeight,
-      agreementAccepted,
-      agreementSheetChecked: agreementAccepted,
       'profileForm.phoneNumber': phoneNumber
     });
   },
@@ -67,90 +45,11 @@ Page({
     });
   },
 
-  openAgreement() {
-    wx.showModal({
-      title: '骑手服务协议',
-      content: '为完成骑手登录、接单、回执上传与配送通知，我们会在你使用过程中处理账号标识、手机号、订单与配送信息。继续使用前，请先阅读并同意骑手服务协议。',
-      showCancel: false
-    });
-  },
-
-  openPrivacy() {
-    wx.showModal({
-      title: '隐私政策',
-      content: '为完成骑手登录、接单、回执上传与配送服务，我们会处理手机号、账号标识、订单与配送相关信息。继续使用前，请阅读并同意隐私政策。',
-      showCancel: false
-    });
-  },
-
-  handleAgreementBarTap() {
-    this.openAgreementSheet('');
-  },
-
-  openAgreementSheet(action = '') {
-    this.setData({
-      showAgreementSheet: true,
-      pendingAgreementAction: action,
-      agreementSheetChecked: this.data.agreementAccepted || this.data.agreementSheetChecked
-    });
-  },
-
-  closeAgreementSheet() {
-    this.setData({
-      showAgreementSheet: false,
-      pendingAgreementAction: '',
-      agreementSheetChecked: this.data.agreementSheetChecked
-    });
-  },
-
-  stopPropagation() {},
-
-  toggleAgreementSheetChecked() {
-    const nextChecked = !this.data.agreementSheetChecked;
-    this.setData({
-      agreementSheetChecked: nextChecked
-    });
-  },
-
-  ensureAgreementAccepted() {
-    if (!this.data.agreementAccepted && !this.data.agreementSheetChecked) {
-      wx.showToast({ title: '请先勾选已阅读并同意', icon: 'none' });
-      return false;
-    }
-    if (!this.data.agreementAccepted) {
-      persistAgreementAccepted();
-    }
-    this.setData({
-      agreementAccepted: true,
-      agreementSheetChecked: true,
-      showAgreementSheet: false,
-      pendingAgreementAction: ''
-    });
-    return true;
-  },
-
-  handleAgreementPrimaryAction() {
-    if (!this.ensureAgreementAccepted()) {
-      return;
-    }
-    if (this.data.pendingAgreementAction === 'submitProfile') {
-      this.submitProfile();
-    }
-  },
-
   handleSubmitEntry() {
-    if (this.data.agreementAccepted) {
-      this.submitProfile();
-      return;
-    }
-    this.openAgreementSheet('submitProfile');
+    this.submitProfile();
   },
 
   async submitProfile() {
-    if (!this.data.agreementAccepted) {
-      wx.showToast({ title: '请先阅读并同意协议', icon: 'none' });
-      return;
-    }
     const phone = String(this.data.profileForm.phoneNumber || '').trim();
     if (!phone) {
       wx.showToast({ title: '请输入手机号', icon: 'none' });

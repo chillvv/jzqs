@@ -12,7 +12,8 @@
     "pages/aftersale-apply/index",
     "pages/receipts/index",
     "pages/addresses/index",
-    "pages/wallet/index"
+    "pages/wallet/index",
+    "pages/agreement/index"
   ],
   "window": {
     "navigationBarTitleText": "简知轻食",

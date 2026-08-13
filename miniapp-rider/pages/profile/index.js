@@ -1,5 +1,4 @@
 const { shareAppMessage, shareTimeline } = require('../../utils/share');
-const AGREEMENT_ACCEPTED_KEY = 'miniapp_rider_auth_agreement_accepted_v2';
 const onboarding = require('../../utils/onboarding');
 
 function maskPhone(phone) {
@@ -151,9 +150,6 @@ Page({
         if (!res.confirm) {
           return;
         }
-        try {
-          wx.removeStorageSync(AGREEMENT_ACCEPTED_KEY);
-        } catch (_) {}
         await getApp().logoutRider();
         wx.showToast({ title: '已退出', icon: 'success' });
         this.refreshPage();

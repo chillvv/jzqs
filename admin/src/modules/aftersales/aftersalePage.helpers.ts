@@ -118,10 +118,6 @@ export function resolveAftersaleSourceLabel(source: string) {
   return source || "-";
 }
 
-export function resolveAftersaleStatusLabel(status: string) {
-  return AFTERSALE_STATUS_LABELS[status as AftersaleStatusKey] ?? status ?? "-";
-}
-
 export function resolveAftersaleCompactStatusLabel(status: string) {
   return AFTERSALE_COMPACT_STATUS_LABELS[status as AftersaleStatusKey] ?? status ?? "-";
 }
