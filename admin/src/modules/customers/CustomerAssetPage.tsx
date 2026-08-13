@@ -404,7 +404,6 @@ export function CustomerAssetPage() {
         await updateCustomerAddress(activeItem.id, editingAddressId, payload);
       }
       await refreshCustomerWorkspace(activeItem);
-      setIsAddressExpanded(true);
       resetAddressEditor();
     } finally {
       setSubmittingAddress(false);
@@ -427,7 +426,6 @@ export function CustomerAssetPage() {
         isDefault: true
       });
       await refreshCustomerWorkspace(activeItem);
-      setIsAddressExpanded(true);
     } finally {
       setSubmittingAddress(false);
       setSubmittingAddressActionId(null);
@@ -449,7 +447,6 @@ export function CustomerAssetPage() {
     try {
       await deleteCustomerAddress(activeItem.id, deleteAddressTarget.id);
       await refreshCustomerWorkspace(activeItem);
-      setIsAddressExpanded(true);
       resetAddressEditor();
       setDeleteAddressTarget(null);
     } finally {
@@ -1182,7 +1179,20 @@ export function CustomerAssetPage() {
                         </div>
                         <div className="customer-detail-info-item">
                           <span className="customer-detail-info-item__label">收货地址</span>
-                          <span className="customer-detail-info-item__value">{primaryAddress?.addressLine || "未设置"}</span>
+                          <span className="customer-detail-info-item__value">
+                            {detailAddresses.length === 0 ? (
+                              "未设置"
+                            ) : (
+                              <span style={{ display: "grid", gap: 4 }}>
+                                {detailAddresses.map((address) => (
+                                  <span key={address.id}>
+                                    {address.addressLine}
+                                    {address.isDefault ? "（默认）" : ""}
+                                  </span>
+                                ))}
+                              </span>
+                            )}
+                          </span>
                         </div>
                         <div className="customer-detail-info-item">
                           <span className="customer-detail-info-item__label">客户状态</span>
