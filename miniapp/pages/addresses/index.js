@@ -5,6 +5,8 @@ function normalizePhone(value) {
   return String(value || '').replace(/\D/g, '');
 }
 
+const MAX_ADDRESSES_PER_CUSTOMER = 5;
+
 function buildEmptyForm(customerProfile, isDefault) {
   return {
     id: null,
@@ -46,6 +48,7 @@ Page({
     noOtherAddress: false,
     isManageMode: false,
     selectedDefaultId: null,
+    addressLimitReached: false,
     statusBarHeight: 0,
     navBarHeight: 44,
     customerProfile: {
@@ -178,7 +181,7 @@ Page({
       });
       const noOtherAddress = this.data.selectOrderId != null
         && items.filter((item) => !item.isCurrentOrderAddress).length === 0;
-      this.setData({ items, noOtherAddress });
+      this.setData({ items, noOtherAddress, addressLimitReached: items.length >= MAX_ADDRESSES_PER_CUSTOMER });
     } catch (error) {
       wx.showToast({ title: error.message || '加载失败', icon: 'none' });
     } finally {
@@ -189,6 +192,15 @@ Page({
 
   showAddPopup() {
     const { customerProfile, items } = this.data;
+    if (items.length >= MAX_ADDRESSES_PER_CUSTOMER) {
+      wx.showModal({
+        title: '收货地址已达上限',
+        content: '每个用户最多保存 ' + MAX_ADDRESSES_PER_CUSTOMER + ' 个地址。请先删除一个不常用的地址，再新增哦~',
+        showCancel: false,
+        confirmText: '我知道了'
+      });
+      return;
+    }
     this.setData({
       showPopup: true,
       form: buildEmptyForm(customerProfile, items.length === 0)

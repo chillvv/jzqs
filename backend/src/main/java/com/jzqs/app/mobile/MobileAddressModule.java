@@ -12,6 +12,8 @@ import org.springframework.stereotype.Component;
 
 @Component
 class MobileAddressModule {
+    private static final int MAX_ADDRESSES_PER_CUSTOMER = 5;
+
     private final JdbcTemplate jdbcTemplate;
 
     MobileAddressModule(JdbcTemplate jdbcTemplate) {
@@ -51,6 +53,17 @@ class MobileAddressModule {
         String finalAreaCode = areaCode == null ? "" : areaCode.trim();
         if (isDefault) {
             jdbcTemplate.update("UPDATE customer_addresses SET is_default = FALSE WHERE customer_id = ?", customerId);
+        }
+        Integer addressCount = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM customer_addresses WHERE customer_id = ?",
+            Integer.class,
+            customerId
+        );
+        if (addressCount != null && addressCount >= MAX_ADDRESSES_PER_CUSTOMER) {
+            throw new BusinessException(
+                ErrorCode.ADDRESS_LIMIT_EXCEEDED,
+                "每个用户最多保存 " + MAX_ADDRESSES_PER_CUSTOMER + " 个收货地址，请先删除一个再新增"
+            );
         }
         long addressId = insertAndReturnId(
             """
@@ -201,11 +214,15 @@ class MobileAddressModule {
     }
 
     /**
-     * 换地址后的区域重分配：让 dispatch_assignments 的区域与新地址一致。
-     * - 新地址之前派过单 → 直接取其区域；
-     * - 新地址从未派过单 → 沿用该订单原区域，并补一条「地址变更待确认」的绑定记录，由商家后台复核；
+     * 区域记忆以「地址」为单位，而非「用户」。换地址后的区域重分配规则：
+     * - 新地址之前派过单（记忆表有记录）→ 直接取其自身的区域，订单快照同步为新地址区域；
+     * - 新地址从未派过单（记忆表无记录）→ 不继承旧地址的区域，写入一条 area_code 为空的
+     *   「地址变更待确认」绑定，由商家后台手动分配；对应已派单订单的快照区域置为待分配标记，
+     *   不再沿用旧区域。
      * - 若订单尚未派单（无 dispatch_assignments 行），自动派单环节会基于新 address_id 实时 JOIN，无需处理。
      */
+    private static final String AREA_PENDING = "PENDING";
+
     private void reconcileDispatchArea(long orderId, long newAddressId) {
         String newArea = jdbcTemplate.query(
             "SELECT area_code FROM rider_address_bindings WHERE address_id = ? ORDER BY id DESC LIMIT 1",
@@ -213,23 +230,16 @@ class MobileAddressModule {
             newAddressId
         ).stream().findFirst().orElse(null);
         if (newArea == null) {
-            String oldArea = jdbcTemplate.query(
-                "SELECT area_code FROM dispatch_assignments WHERE meal_slot_order_id = ? LIMIT 1",
-                (rs, rn) -> rs.getString("area_code"),
+            // 新地址无记忆：不沿用旧地址区域，留空待商家手动分配。
+            jdbcTemplate.update(
+                "INSERT INTO rider_address_bindings (customer_id, address_id, address_fingerprint, area_code, manually_confirmed, updated_reason, updated_at) "
+                    + "SELECT customer_id, ?, '', '', FALSE, 'ADDRESS_CHANGED_PENDING_CONFIRM', CURRENT_TIMESTAMP "
+                    + "FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE mso.id = ? "
+                    + "ON DUPLICATE KEY UPDATE area_code = '', updated_reason = VALUES(updated_reason), updated_at = CURRENT_TIMESTAMP",
+                newAddressId,
                 orderId
-            ).stream().findFirst().orElse(null);
-            if (oldArea != null) {
-                jdbcTemplate.update(
-                    "INSERT INTO rider_address_bindings (customer_id, address_id, address_fingerprint, area_code, manually_confirmed, updated_reason, updated_at) "
-                        + "SELECT customer_id, ?, '', ?, FALSE, 'ADDRESS_CHANGED_PENDING_CONFIRM', CURRENT_TIMESTAMP "
-                        + "FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE mso.id = ? "
-                        + "ON DUPLICATE KEY UPDATE area_code = VALUES(area_code), updated_reason = VALUES(updated_reason), updated_at = CURRENT_TIMESTAMP",
-                    newAddressId,
-                    oldArea,
-                    orderId
-                );
-                newArea = oldArea;
-            }
+            );
+            newArea = AREA_PENDING;
         }
         if (newArea != null) {
             jdbcTemplate.update(

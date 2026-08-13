@@ -198,6 +198,30 @@
       </view>
     </view>
 
+    <!-- 订阅授权引导：默认未勾选。只有点击勾选框并成功授权（微信弹窗，可勾「总是保持」）后，
+         才能收到送达提醒与每晚菜单推送；未授权则下单会被拦截并提示。
+         已授权过「总是」的用户显示为「已开启」，不可再取消。 -->
+    <view
+      class="subscribe-consent {{nightlySubscribed ? 'opened' : (subscribeConsent ? 'checked' : '')}} {{consentingSubscribe ? 'loading' : ''}}"
+      bindtap="toggleSubscribeConsent"
+    >
+      <view class="subscribe-consent-check">
+        <text wx:if="{{consentingSubscribe}}" class="subscribe-consent-spinner"></text>
+        <text wx:elif="{{nightlySubscribed || subscribeConsent}}">✓</text>
+      </view>
+      <view class="subscribe-consent-copy">
+        <view class="subscribe-consent-title">
+          {{nightlySubscribed ? '已开启用餐提醒' : '开启用餐提醒，不错过送达与每日菜单'}}
+        </view>
+        <view class="subscribe-consent-desc">
+          <block wx:if="{{nightlySubscribed}}">已授权，每天将收到餐食送达通知与晚间次日菜单推送</block>
+          <block wx:elif="{{subscribeConsent}}">已开启，将为您推送送达通知与每晚菜单</block>
+          <block wx:else>勾选后将弹出微信授权，建议点「总是保持」，以便准时收到取餐通知与每日菜单（未开启将无法下单）</block>
+        </view>
+      </view>
+      <view class="subscribe-consent-tag" wx:if="{{nightlySubscribed}}">长期有效</view>
+    </view>
+
     <view class="submit-bar">
       <view class="submit-total">
         <text class="submit-total-label">合计扣减</text>

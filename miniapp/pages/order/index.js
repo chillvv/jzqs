@@ -5,8 +5,10 @@ const { getCheckoutMealLimitMessage, isNightOrderClosed, getNightCloseNotice } =
 const demo = require('../../utils/demo');
 const onboarding = require('../../utils/onboarding');
 const {
-  requestDeliverySubscribeAuthorization,
-  saveOrderDeliverySubscription
+  requestCombinedSubscribeAuthorization,
+  saveOrderDeliverySubscription,
+  saveNightlySubscription,
+  cacheDeliveryAcceptResult
 } = require('../../utils/delivery-subscription');
 const {
   normalizeHistoryRemarkSuggestions,
@@ -70,6 +72,13 @@ Page({
     defaultRemark: '',
     historyRemarkSuggestions: [],
     showRemarkDropdown: false,
+    // 订阅授权引导：默认未勾选（需点击勾选框并成功授权后才变为勾选）。
+    // 未勾选时下单会被拦截并提示。
+    subscribeConsent: false,
+    // 点击勾选框后正在请求微信订阅授权（避免重复点击）
+    consentingSubscribe: false,
+    // 用户是否已勾选「总是」授权每晚提醒（已授权则视为已开启，无需再弹）
+    nightlySubscribed: false,
     submitting: false,
     savingDefaultRemark: false,
     loading: false,
@@ -171,9 +180,16 @@ Page({
         request({ url: '/api/mobile/customer/menu/tomorrow', requireAuth: false }),
         app.globalData.token
           ? request({ url: '/api/mobile/customer/addresses' })
-          : Promise.resolve([])
+          : Promise.resolve([]),
+        app.globalData.token
+          ? request({ url: '/api/mobile/customer/nightly-subscription/status' }).catch(() => null)
+          : Promise.resolve(null)
       ];
-      const [home, tomorrowMenu, addresses] = await Promise.all(tasks);
+      const [home, tomorrowMenu, addresses, nightlyStatus] = await Promise.all(tasks);
+      const nightlySubscribed = !!(nightlyStatus && nightlyStatus.subscribed);
+      // 已勾选「总是」授权过每晚提醒的用户，默认视为已勾选「同意接收订单通知」；
+      // 未授权的用户保持未勾选，需点击勾选框并成功授权后才能下单。
+      this.setData({ nightlySubscribed, subscribeConsent: nightlySubscribed });
       const defaultAddress = addresses.find((item) => item.isDefault) || addresses[0] || null;
       const menuItems = [tomorrowMenu.lunchItem, tomorrowMenu.dinnerItem].filter(Boolean);
       const lunchItem = tomorrowMenu.lunchItem || null;
@@ -409,6 +425,46 @@ Page({
     this.setData({ showCheckout: false });
   },
 
+  /**
+   * 点击「同意接收订单通知」勾选框：立即请求微信订阅授权。
+   * 只有授权成功，勾选框才真正变为勾选；授权失败/取消则保持未勾选。
+   * 之后下单时校验：未勾选（即未真正授权）则下单失败。
+   */
+  async toggleSubscribeConsent() {
+    // 已勾选「总是」授权过每晚提醒的用户，视为已开启，不可再取消
+    if (this.data.nightlySubscribed) {
+      return;
+    }
+    if (this.data.consentingSubscribe) {
+      return;
+    }
+    this.setData({ consentingSubscribe: true });
+    try {
+      // 一次弹窗申请「送达 + 每晚提醒」两个授权
+      const results = await requestCombinedSubscribeAuthorization();
+      const { delivery, nightly } = results || {};
+      if (delivery) {
+        cacheDeliveryAcceptResult(delivery);
+      }
+      if (nightly) {
+        await saveNightlySubscription(nightly);
+      }
+      // 只要任一订阅授权成功即视为已勾选（可正常接收通知与每晚提醒）
+      const authorized = Boolean(delivery || nightly);
+      this.setData({ subscribeConsent: authorized });
+      if (authorized) {
+        wx.showToast({ title: '已开启用餐提醒', icon: 'success' });
+      } else {
+        wx.showToast({ title: '未开启提醒，无法下单', icon: 'none' });
+      }
+    } catch (error) {
+      this.setData({ subscribeConsent: false });
+      wx.showToast({ title: error.message || '订阅授权失败', icon: 'none' });
+    } finally {
+      this.setData({ consentingSubscribe: false });
+    }
+  },
+
   async submitOrder() {
     if (demo.isActive()) {
       wx.showToast({ title: '演示下单成功（未真实提交）', icon: 'none' });
@@ -418,6 +474,12 @@ Page({
         orderSuccessMsg: '演示下单成功，未真实提交任何数据',
         orderSuccessIds: ['demo-order']
       });
+      return;
+    }
+    // 订阅授权引导：已勾选「总是」授权过每晚提醒的用户不受限制；
+    // 否则必须勾选「同意接收订单通知」才允许下单，避免用户收不到送达通知与每晚提醒。
+    if (!this.data.nightlySubscribed && !this.data.subscribeConsent) {
+      wx.showToast({ title: '请先开启用餐提醒再下单', icon: 'none' });
       return;
     }
     if (this.data.nightClosed) {
@@ -478,18 +540,15 @@ Page({
     }
     this.setData({ submitting: true });
     try {
-      let subscriptionResult = '';
-      try {
-        subscriptionResult = await requestDeliverySubscribeAuthorization();
-      } catch (error) {
-        console.warn('下单订阅授权失败，跳过订阅保存', error);
-      }
+      // 订阅授权已在勾选「同意接收订单通知」时完成（见 toggleSubscribeConsent），
+      // 送达授权结果已写入缓存，此处直接随订单保存送达订阅。
+      // 每晚提醒也已在勾选时保存（AUTHORIZED），无需重复请求。
       const orderResults = await Promise.all(requests);
       const mergedCount = orderResults.filter((item) => item && item.status === 'MERGED').length;
       const orderIds = [...new Set(orderResults
         .map((item) => item && item.orderId)
         .filter(Boolean))];
-      await saveOrderDeliverySubscription(orderIds, subscriptionResult);
+      await saveOrderDeliverySubscription(orderIds);
 
       // Save remark to history
       if (this.data.remark) {

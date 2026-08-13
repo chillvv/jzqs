@@ -202,6 +202,17 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     }
 
     @Override
+    public boolean isNightlySubscribed(long customerId) {
+        return nightlyReminderModule.isSubscribed(customerId);
+    }
+
+    @Override
+    @Transactional
+    public void cancelNightlySubscription(long customerId) {
+        nightlyReminderModule.cancelNightlySubscription(customerId);
+    }
+
+    @Override
     @Transactional
     public MobileSubscribeMessageTestResponse sendSubscribeMessageTest(long customerId, String templateId, String acceptResult, String type) {
         if (!isAcceptedSubscribeResult(acceptResult)) {

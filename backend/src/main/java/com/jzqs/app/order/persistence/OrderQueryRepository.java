@@ -166,6 +166,7 @@ public class OrderQueryRepository {
                 COALESCE(mso.merchant_remark, '') AS merchant_remark,
                 ca.address_line AS delivery_address,
                 do.source,
+                CASE WHEN COALESCE(da.area_code, '') = 'PENDING' THEN '' ELSE COALESCE(da.area_code, rab.area_code, ca.area_code, '') END AS area_code,
                 do.customer_id AS customer_id,
                 do.serve_date AS serve_date,
                 CASE WHEN c.is_priority_customer = TRUE OR mso.is_priority = TRUE THEN TRUE ELSE FALSE END AS priority_customer,
@@ -198,10 +199,18 @@ public class OrderQueryRepository {
                 CASE WHEN mso.status = 'PENDING_DISPATCH' THEN TRUE ELSE FALSE END AS can_assign,
                 CASE WHEN mso.status NOT IN ('CANCELLED', 'DELIVERED') THEN TRUE ELSE FALSE END AS can_cancel,
                 CASE WHEN mso.status = 'DISPATCHING' THEN TRUE ELSE FALSE END AS can_receipt,
+                do.created_at AS created_at,
                 COALESCE(ari.reference_image_url, '') AS reference_image_url,
                 COALESCE(dr.receipt_url, '') AS receipt_url,
                 COALESCE(dr.receipt_note, '') AS receipt_note,
-                dr.delivered_at
+                dr.delivered_at,
+                (
+                    SELECT COALESCE(rp2.rider_name, '')
+                    FROM dispatch_assignments da2
+                    JOIN rider_profiles rp2 ON rp2.id = da2.rider_profile_id
+                    WHERE da2.meal_slot_order_id = mso.id
+                    LIMIT 1
+                ) AS rider_name
             FROM meal_slot_orders mso
             JOIN daily_orders do ON do.id = mso.daily_order_id
             JOIN customers c ON c.id = do.customer_id
@@ -218,6 +227,8 @@ public class OrderQueryRepository {
                     SELECT MAX(id) FROM delivery_receipts WHERE meal_slot_order_id = dr_inner.meal_slot_order_id
                 )
             ) dr ON dr.meal_slot_order_id = mso.id
+            LEFT JOIN dispatch_assignments da ON da.meal_slot_order_id = mso.id
+            LEFT JOIN rider_address_bindings rab ON rab.customer_id = do.customer_id AND rab.address_id = mso.address_id
             WHERE do.serve_date = ?
               AND mso.status <> 'REFUNDED'
               AND NOT EXISTS (
@@ -241,6 +252,8 @@ public class OrderQueryRepository {
             rs.getString("merchant_remark"),
             rs.getString("delivery_address"),
             rs.getString("source"),
+            rs.getString("area_code"),
+            rs.getString("rider_name"),
             rs.getBoolean("priority_customer"),
             rs.getBoolean("fixed_subscription"),
             rs.getString("status"),
@@ -249,6 +262,7 @@ public class OrderQueryRepository {
             rs.getBoolean("can_assign"),
             rs.getBoolean("can_cancel"),
             rs.getBoolean("can_receipt"),
+            formatTimestamp(rs.getTimestamp("created_at")),
             rs.getString("reference_image_url"),
             rs.getString("receipt_url"),
             rs.getString("receipt_note"),
@@ -484,11 +498,14 @@ public class OrderQueryRepository {
             resolveProjectedMerchantRemark(projection, row.merchantRemark()),
             row.deliveryAddress(),
             row.source(),
+            row.areaCode(),
+            row.riderName(),
             row.priorityCustomer(),
             row.fixedSubscription(),
             row.status(),
             row.displayStatus(),
             row.displayStatusLabel(),
+            row.createdAt(),
             row.canAssign(),
             row.canCancel(),
             row.canReceipt(),
@@ -544,6 +561,8 @@ public class OrderQueryRepository {
         String merchantRemark,
         String deliveryAddress,
         String source,
+        String areaCode,
+        String riderName,
         boolean priorityCustomer,
         boolean fixedSubscription,
         String status,
@@ -552,6 +571,7 @@ public class OrderQueryRepository {
         boolean canAssign,
         boolean canCancel,
         boolean canReceipt,
+        String createdAt,
         String referenceImageUrl,
         String receiptUrl,
         String receiptNote,

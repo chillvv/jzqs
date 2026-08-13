@@ -161,18 +161,23 @@ export function resolveOrderStatusTone(status: string): "orange" | "blue" | "gre
 
 export function buildMealPrepExportRows(items: OrderPrepItemResponse[]) {
   return items.map((item) => {
-    const displayStatus = resolveOrderDisplayStatus(item);
+    const merchantRemark = buildCrossMealDeliveryRemark(
+      item.merchantRemark,
+      item.mealPeriod,
+      item.deliveryMealPeriod
+    );
     return {
-      "订单ID": item.id,
-      "客户姓名": item.customerName,
+      "客户名称": item.customerName,
       "联系电话": item.customerPhone,
-      "餐次": item.mealSummary,
-      "数量": item.quantity,
+      "用户备注": item.userNote?.trim() || "",
+      "商家备注": merchantRemark,
+      "下单时间": item.createdAt?.trim() || "",
       "配送地址": item.deliveryAddress,
+      "餐数": item.quantity,
+      "餐次": mealPeriodLabel(resolveMealPeriod(item)),
       "订单来源": resolveOrderSourceLabel(item),
-      "用户备注": formatOrderNote(item.userNote),
-      "商家备注": formatOrderNote(item.merchantRemark),
-      "订单状态": item.displayStatusLabel || resolveOrderDisplayStatusLabel(displayStatus)
+      "区域": item.areaCode?.trim() || "",
+      "骑手": item.riderName?.trim() || ""
     };
   });
 }

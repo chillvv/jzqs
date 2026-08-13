@@ -112,6 +112,15 @@ async function saveNightlySubscription(acceptResult) {
   }).catch(() => null);
 }
 
+/** 取消「每晚用餐提醒」订阅，后台将不再向该用户自动推送。 */
+async function cancelNightlySubscription() {
+  return request({
+    url: '/api/mobile/customer/nightly-subscription',
+    method: 'DELETE',
+    header: { 'content-type': 'application/json' }
+  });
+}
+
 /**
  * 调试/自测入口：把已同意的模板授权结果提交给后端，由后端真正下发一条订阅测试消息。
  * 后端按 templateId 路由：送达走送达模板、每晚提醒走每晚提醒模板（内容取后台运营设置）。
@@ -140,6 +149,7 @@ module.exports = {
   requestCombinedSubscribeAuthorization,
   saveOrderDeliverySubscription,
   saveNightlySubscription,
+  cancelNightlySubscription,
   sendSubscribeMessageTest,
   cacheDeliveryAcceptResult,
   getCachedDeliveryAcceptResult

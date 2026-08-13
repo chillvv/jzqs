@@ -72,9 +72,10 @@ App({
     try {
       await auth.init();
       if (!auth.shouldRedirectToAuth()) {
-        // 已登录：合并申请「送达订阅」与「每晚用餐提醒」两个授权，
-        // 用户勾选「总是保持」后可无限下发，减少反复弹窗。
-        this.requestSubscriptionsOnLogin();
+        // 注意：微信要求 wx.requestSubscribeMessage 必须由「用户点击」行为触发，
+        // 不能在登录/启动等自动流程中静默调用（会被微信拦截，返回 fail "can only be
+        // invoked by user TAP gesture"）。每晚用餐提醒的授权改由「个人中心」页面的
+        // 按钮显式触发（见 pages/profile/index.js -> enableNightlyReminder）。
         // 首次登录自动开始新手指引（已跳过过的不会再弹）
         onboarding.maybeAutoStart();
       }
@@ -92,25 +93,12 @@ App({
   },
 
   /**
-   * 登录后合并申请两个订阅授权（送达 + 每晚提醒）。
-   * 一次弹窗即可让用户同时开启，勾选「总是保持」后后台即可每晚自动发送。
+   * 注意：不再提供自动拉起订阅授权的方法。
+   * 微信规定 wx.requestSubscribeMessage 必须由用户点击触发，故每晚用餐提醒的
+   * 授权仅能在「个人中心」页面用户点击「开启每晚用餐提醒」按钮时执行
+   * （见 pages/profile/index.js -> enableNightlyReminder）。
    */
-  requestSubscriptionsOnLogin() {
-    Promise.resolve()
-      .then(() => requestCombinedSubscribeAuthorization())
-      .then((results) => {
-        const { delivery, nightly } = results || {};
-        if (delivery) {
-          // 送达订阅结果缓存，下单时随订单一起提交（避免下单时再弹窗）。
-          cacheDeliveryAcceptResult(delivery);
-        }
-        if (nightly) {
-          saveNightlySubscription(nightly);
-        }
-      })
-      .catch(() => {});
-  },
-  
+
   /**
    * 获取认证状态
    */

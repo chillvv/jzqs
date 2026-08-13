@@ -92,6 +92,19 @@
     </view>
   </view>
 
+  <view class="menu-group" wx:if="{{!onboarding}}">
+    <button class="list-item list-item-btn {{sendingNightly ? 'disabled' : ''}}" bindtap="toggleNightlyReminder" loading="{{sendingNightly}}">
+      <view class="list-icon-wrap">
+        <text class="list-icon">🌙</text>
+        <view class="list-copy">
+          <view class="list-title">每晚用餐提醒</view>
+          <view class="list-sub">{{nightlySubscribed ? '已开启：每晚将自动推送次日菜单，点击可关闭' : '未开启：每晚将不会推送，点击可开启'}}</view>
+        </view>
+      </view>
+      <text class="list-arrow">{{nightlySubscribed ? '关闭' : '开启'}}</text>
+    </button>
+  </view>
+
   <view class="menu-group" wx:if="{{!onboarding && showTestSubscription}}">
     <button class="list-item list-item-btn {{sendingDelivery ? 'disabled' : ''}}" data-template="delivery" bindtap="sendSubscriptionTest" loading="{{sendingDelivery}}">
       <view class="list-icon-wrap">

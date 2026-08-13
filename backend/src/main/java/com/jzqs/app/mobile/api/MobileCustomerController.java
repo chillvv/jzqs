@@ -130,6 +130,24 @@ public class MobileCustomerController {
         );
     }
 
+    @GetMapping("/nightly-subscription/status")
+    public ApiResponse<NightlySubscriptionStatusResponse> nightlySubscriptionStatus(
+        @RequestHeader("Authorization") String authorization
+    ) {
+        long customerId = extractCustomerId(authorization);
+        return ApiResponse.success(
+            new NightlySubscriptionStatusResponse(mobilePortalService.isNightlySubscribed(customerId))
+        );
+    }
+
+    @DeleteMapping("/nightly-subscription")
+    public ApiResponse<Void> cancelNightlySubscription(
+        @RequestHeader("Authorization") String authorization
+    ) {
+        mobilePortalService.cancelNightlySubscription(extractCustomerId(authorization));
+        return ApiResponse.success(null);
+    }
+
     @PostMapping("/subscribe-message/test-send")
     public ApiResponse<MobileSubscribeMessageTestResponse> sendSubscribeMessageTest(
         @RequestHeader("Authorization") String authorization,

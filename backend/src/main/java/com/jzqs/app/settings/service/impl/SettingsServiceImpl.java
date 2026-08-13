@@ -341,7 +341,7 @@ public class SettingsServiceImpl implements SettingsService {
                     UNION
                     SELECT area_code
                     FROM dispatch_assignments
-                    WHERE area_code IS NOT NULL AND TRIM(area_code) <> ''
+                    WHERE area_code IS NOT NULL AND TRIM(area_code) <> '' AND area_code <> 'PENDING'
                     UNION
                     SELECT default_area_code AS area_code
                     FROM rider_profiles
@@ -947,6 +947,7 @@ public class SettingsServiceImpl implements SettingsService {
                   AND COALESCE(mso.delivery_meal_period, mso.meal_period) = ?
                   AND COALESCE(da.area_code, rab.area_code) IS NOT NULL
                   AND COALESCE(da.area_code, rab.area_code) <> ''
+                  AND COALESCE(da.area_code, rab.area_code) <> 'PENDING'
                 ORDER BY area_code
                 """,
             (rs, rowNum) -> rs.getString("area_code"),

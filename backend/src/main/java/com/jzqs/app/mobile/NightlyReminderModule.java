@@ -71,7 +71,7 @@ public class NightlyReminderModule {
                            - COALESCE(SUM(consumed_meals), 0) AS remaining_meals
                 FROM meal_wallets
                 WHERE active = TRUE
-                  AND (expires_at IS NULL OR expires_at >= CURDATE())
+                  AND (expired_at IS NULL OR expired_at >= CURDATE())
                 GROUP BY customer_id
                 HAVING remaining_meals > 0
             ) wallet_summary ON wallet_summary.customer_id = c.id
@@ -133,19 +133,19 @@ public class NightlyReminderModule {
                                - COALESCE(SUM(consumed_meals), 0) AS remaining_meals
                     FROM meal_wallets
                     WHERE active = TRUE
-                      AND (expires_at IS NULL OR expires_at >= CURDATE())
+                      AND (expired_at IS NULL OR expired_at >= CURDATE())
                     GROUP BY customer_id
                     HAVING remaining_meals > 0
-                ) wallet_summary ON wallet_summary.customer_id = c.id
-                WHERE c.id = ? AND c.active = TRUE
-                """,
-                (rs, rowNum) -> new NightlySendTarget(
-                    rs.getLong("customer_id"),
-                    rs.getString("current_openid"),
-                    rs.getInt("remaining_meals")
-                ),
-                customerId
-            );
+                    ) wallet_summary ON wallet_summary.customer_id = c.id
+                    WHERE c.id = ? AND c.active = TRUE
+                    """,
+                    (rs, rowNum) -> new NightlySendTarget(
+                        rs.getLong("customer_id"),
+                        rs.getString("current_openid"),
+                        rs.getInt("remaining_meals")
+                    ),
+                    customerId
+                    );
             String openid = targets.isEmpty() ? "" : targets.get(0).openid();
             if (openid == null || openid.isBlank()) {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "当前账号缺少可用的微信接收标识，或暂无剩余餐数");
@@ -228,6 +228,30 @@ public class NightlyReminderModule {
                 now
             );
         }
+    }
+
+    /** 查询用户是否已授权「每晚用餐提醒」(status = AUTHORIZED)。 */
+    public boolean isSubscribed(long customerId) {
+        Integer count = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM customer_nightly_subscriptions WHERE customer_id = ? AND status = 'AUTHORIZED'",
+            Integer.class,
+            customerId
+        );
+        return count != null && count > 0;
+    }
+
+    /** 取消「每晚用餐提醒」订阅（置为非授权状态），后台将不再向该用户推送。 */
+    public void cancelNightlySubscription(long customerId) {
+        jdbcTemplate.update(
+            """
+            UPDATE customer_nightly_subscriptions
+            SET status = 'CANCELLED',
+                updated_at = ?
+            WHERE customer_id = ?
+            """,
+            Timestamp.valueOf(LocalDateTime.now()),
+            customerId
+        );
     }
 
     private record NightlySendTarget(

@@ -41,7 +41,7 @@
     <view class="empty-text">还没有保存任何地址</view>
   </view>
 
-  <button class="sub-btn primary full-btn" style="margin-top: 40rpx;" bindtap="showAddPopup">{{selectOrderId ? '+ 新增后使用' : '+ 新增地址'}}</button>
+  <button class="sub-btn primary full-btn" style="margin-top: 40rpx;" bindtap="showAddPopup" disabled="{{addressLimitReached}}">{{addressLimitReached ? '已达 5 个上限，请先删除' : (selectOrderId ? '+ 新增后使用' : '+ 新增地址')}}</button>
 
   <!-- 新增/编辑地址半屏弹窗 -->
   <view class="address-popup-mask {{showPopup ? 'show' : ''}}" bindtap="hideAddPopup"></view>

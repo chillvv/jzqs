@@ -867,8 +867,8 @@ export function OrderPrepPage() {
     const rows = buildMealPrepExportRows(view.filteredItems);
     const worksheet = XLSX.utils.json_to_sheet(rows);
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "备餐单");
-    XLSX.writeFile(workbook, `备餐单-${filterDate}.xlsx`);
+    XLSX.utils.book_append_sheet(workbook, worksheet, "客户今日订单明细");
+    XLSX.writeFile(workbook, `客户今日订单明细-${filterDate}.xlsx`);
   }
 
   async function copyPlainText(text: string, successMessage: string) {
@@ -1324,13 +1324,15 @@ export function OrderPrepPage() {
                     <th>配送地址</th>
                     <th>订单来源</th>
                     <th>状态</th>
+                    <th>区域</th>
+                    <th>骑手</th>
                     <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
                   {orderListStatus !== "success" ? (
                     <tr>
-                      <td colSpan={8} style={{ padding: "0" }}>
+                      <td colSpan={10} style={{ padding: "0" }}>
                         <AsyncContentView
                           status={orderListStatus}
                           loadingText="订单加载中..."
@@ -1383,6 +1385,8 @@ export function OrderPrepPage() {
                           <td>
                             {renderStatus(item)}
                           </td>
+                          <td>{item.areaCode?.trim() || "-"}</td>
+                          <td>{item.riderName?.trim() || "-"}</td>
                           <td>{renderActions(item)}</td>
                         </tr>
                       );
@@ -1427,6 +1431,14 @@ export function OrderPrepPage() {
                     <div className="mobile-card-row">
                       <div className="mobile-card-label">地址</div>
                       <div className="mobile-card-value">{item.deliveryAddress}</div>
+                    </div>
+                    <div className="mobile-card-row">
+                      <div className="mobile-card-label">区域</div>
+                      <div className="mobile-card-value">{item.areaCode?.trim() || "-"}</div>
+                    </div>
+                    <div className="mobile-card-row">
+                      <div className="mobile-card-label">骑手</div>
+                      <div className="mobile-card-value">{item.riderName?.trim() || "-"}</div>
                     </div>
                     <div className="mobile-card-actions">
                     {renderActions(item)}

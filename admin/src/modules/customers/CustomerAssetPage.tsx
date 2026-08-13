@@ -285,7 +285,6 @@ export function CustomerAssetPage() {
   const [remainingValidityStateFilter, setRemainingValidityStateFilter] = useState<CustomerRemainingValidityState>("ALL");
   const [transactions, setTransactions] = useState<WalletTransactionResponse[]>([]);
   const [detail, setDetail] = useState<CustomerDetailResponse | null>(null);
-  const [isAddressExpanded, setIsAddressExpanded] = useState(false);
   const [isAddressEditorOpen, setIsAddressEditorOpen] = useState(false);
   const [editingAddressId, setEditingAddressId] = useState<number | null>(null);
   const [deleteAddressTarget, setDeleteAddressTarget] = useState<CustomerAddressItem | null>(null);
@@ -317,11 +316,7 @@ export function CustomerAssetPage() {
     [detailAddresses]
   );
   const visibleAddresses = useMemo(
-    () => buildVisibleCustomerAddresses(detailAddresses, isAddressExpanded),
-    [detailAddresses, isAddressExpanded]
-  );
-  const showAddressExpandToggle = useMemo(
-    () => shouldShowAddressExpandToggle(detailAddresses),
+    () => buildVisibleCustomerAddresses(detailAddresses),
     [detailAddresses]
   );
 
@@ -345,7 +340,6 @@ export function CustomerAssetPage() {
     setDetail(detailResponse);
     setTransactions(txPage.items);
     setEditForm(buildEditForm(detailResponse, item));
-    setIsAddressExpanded(false);
     resetAddressEditor();
   }
 
@@ -1231,16 +1225,6 @@ export function CustomerAssetPage() {
                     <div className="customer-detail-card__header">
                       <div className="customer-detail-card__title">收货地址</div>
                       <div className="customer-detail-card__actions" style={{ gap: 8, flexWrap: "wrap" }}>
-                        {detailMode === "edit" && showAddressExpandToggle && (
-                          <button
-                            type="button"
-                            className="btn btn-outline"
-                            disabled={submittingAddress}
-                            onClick={() => setIsAddressExpanded((current) => !current)}
-                          >
-                            {isAddressExpanded ? "收起地址" : "展开全部"}
-                          </button>
-                        )}
                         {detailMode === "edit" && (
                           <button type="button" className="btn btn-outline" disabled={submittingAddress} onClick={handleStartCreateAddress}>
                             {submittingAddress && editingAddressId == null ? "处理中..." : "新增地址"}

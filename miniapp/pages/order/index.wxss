@@ -391,6 +391,78 @@ page { overflow: hidden; }
   opacity: 0.56;
 }
 
+/* 订阅授权引导勾选 */
+.subscribe-consent {
+  display: flex;
+  align-items: center;
+  gap: 20rpx;
+  background: #fff7ed;
+  border: 2rpx solid #fde2bd;
+  border-radius: 24rpx;
+  padding: 26rpx 28rpx;
+  margin: 0 24rpx 24rpx;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+/* 已勾选（本单授权） */
+.subscribe-consent.checked {
+  background: #f4faf0;
+  border-color: #d8ebc4;
+}
+/* 已长期开启（勾选「总是保持」） */
+.subscribe-consent.opened {
+  background: #f3faf0;
+  border-color: var(--brand-color);
+}
+.subscribe-consent-check {
+  width: 42rpx;
+  height: 42rpx;
+  border-radius: 10rpx;
+  border: 3rpx solid #f0a23a;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30rpx;
+  font-weight: 800;
+  color: #111;
+  flex-shrink: 0;
+}
+.subscribe-consent.checked .subscribe-consent-check,
+.subscribe-consent.opened .subscribe-consent-check {
+  background: var(--brand-primary);
+  border-color: var(--brand-primary);
+  color: #111;
+}
+.subscribe-consent-copy { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6rpx; }
+.subscribe-consent-title { font-size: 28rpx; font-weight: 800; color: #b45309; line-height: 1.4; }
+.subscribe-consent.checked .subscribe-consent-title,
+.subscribe-consent.opened .subscribe-consent-title { color: var(--brand-dark); }
+.subscribe-consent-desc { font-size: 23rpx; color: #9a6b3a; line-height: 1.5; }
+.subscribe-consent.checked .subscribe-consent-desc,
+.subscribe-consent.opened .subscribe-consent-desc { color: var(--text-sub); }
+.subscribe-consent-tag {
+  flex-shrink: 0;
+  font-size: 20rpx;
+  font-weight: 700;
+  color: #fff;
+  background: var(--brand-color);
+  border-radius: 999rpx;
+  padding: 6rpx 16rpx;
+  align-self: flex-start;
+}
+/* 授权中加载态 */
+.subscribe-consent.loading { opacity: 0.85; }
+.subscribe-consent-spinner {
+  width: 22rpx;
+  height: 22rpx;
+  border: 4rpx solid rgba(184, 208, 96, 0.35);
+  border-top-color: var(--brand-primary);
+  border-radius: 50%;
+  display: block;
+  animation: consent-spin 0.7s linear infinite;
+}
+@keyframes consent-spin { to { transform: rotate(360deg); } }
+
 /* 地址半屏弹窗 */
 .address-popup-mask { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 999; opacity: 0; visibility: hidden; transition: all 0.2s ease; }
 .address-popup-mask.show { opacity: 1; visibility: visible; }

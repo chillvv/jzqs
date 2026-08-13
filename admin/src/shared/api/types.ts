@@ -251,11 +251,14 @@ export type OrderPrepItemResponse = {
   merchantRemark: string;
   deliveryAddress: string;
   source: string;
+  areaCode?: string;
+  riderName?: string;
   priorityCustomer: boolean;
   fixedSubscription: boolean;
   status: string;
   displayStatus?: string;
   displayStatusLabel?: string;
+  createdAt?: string;
   canAssign: boolean;
   canCancel: boolean;
   canReceipt: boolean;

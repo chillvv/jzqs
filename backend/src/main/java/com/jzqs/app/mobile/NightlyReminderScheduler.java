@@ -30,26 +30,22 @@ public class NightlyReminderScheduler {
     /**
      * 每分钟轮询一次：仅当当前上海时间落在后台配置的发送时间（精确到分钟），
      * 且当天尚未发送过时，才触发每晚提醒。
+     * 发送时间由后台「每晚提醒时间」(nightlyReminderTime) 配置控制，不写死。
      * 是否真正发送由 NightlyReminderModule 判断：需开启总开关、且明天有菜单排期（营业）。
-     */
-    /**
-     * 每分钟轮询一次，发送每晚提醒（优惠券过期提醒）。
-     * 是否真正发送由 NightlyReminderModule 判断：需开启总开关、且明天有菜单排期（营业）。
-     *
-     * ！！临时测试态：为验证订阅消息可用性，已放开「时:分时间窗口」与「当天去重」，
-     * cron 每分钟触发即尝试发送一次。生产须还原为「时:分匹配 + 当天去重」逻辑
-     * （见下方注释中的判断）。
      */
     @Scheduled(cron = "0 * * * * ?")
     public void pollNightlyReminders() {
         LocalDate today = LocalDate.now(APP_ZONE);
         LocalTime now = LocalTime.now(APP_ZONE);
-        // ===== 临时测试态：每分钟都发，去掉时间窗口与当天去重 =====
-        // LocalTime target = LocalTime.parse(settingsService.operationSettings().nightlyReminderTime());
-        // if (now.getHour() != target.getHour() || now.getMinute() != target.getMinute()) { return; }
-        // if (today.equals(lastSentDate.get())) { return; }
-        // lastSentDate.set(today);
+        LocalTime target = LocalTime.parse(settingsService.operationSettings().nightlyReminderTime());
+        if (now.getHour() != target.getHour() || now.getMinute() != target.getMinute()) {
+            return;
+        }
+        if (today.equals(lastSentDate.get())) {
+            return;
+        }
+        lastSentDate.set(today);
         int count = nightlyReminderModule.sendNightlyReminders();
-        log.info("[测试态] 每晚提醒每分钟触发, now={}, count={}", now, count);
+        log.info("[每晚提醒] 已触发, target={}, now={}, count={}", target, now, count);
     }
 }

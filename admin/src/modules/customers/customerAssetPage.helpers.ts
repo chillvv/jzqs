@@ -144,19 +144,15 @@ export function resolvePrimaryCustomerAddress(addresses: CustomerAddressItem[] |
 }
 
 export function shouldShowAddressExpandToggle(addresses: CustomerAddressItem[] | null | undefined) {
-  return Array.isArray(addresses) && addresses.length > 1;
+  return false;
 }
 
 export function buildVisibleCustomerAddresses(
   addresses: CustomerAddressItem[] | null | undefined,
-  expanded: boolean
+  _expanded?: boolean
 ) {
   if (!Array.isArray(addresses) || addresses.length === 0) {
     return [];
   }
-  if (expanded) {
-    return addresses;
-  }
-  const primaryAddress = resolvePrimaryCustomerAddress(addresses);
-  return primaryAddress ? [primaryAddress] : [];
+  return addresses;
 }

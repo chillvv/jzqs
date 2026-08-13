@@ -66,6 +66,12 @@ public interface MobilePortalService {
 
     MobileDeliverySubscriptionAuthorizeResponse authorizeNightlySubscription(long customerId, String templateId, String acceptResult);
 
+    /** 查询用户是否已授权「每晚用餐提醒」订阅（status = AUTHORIZED）。 */
+    boolean isNightlySubscribed(long customerId);
+
+    /** 取消「每晚用餐提醒」订阅。 */
+    void cancelNightlySubscription(long customerId);
+
     MobileSubscribeMessageTestResponse sendSubscribeMessageTest(long customerId, String templateId, String acceptResult, String type);
 
     int sendScheduledDeliverySubscribeMessages(String mealPeriod);
