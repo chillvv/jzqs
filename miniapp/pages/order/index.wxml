@@ -7,10 +7,8 @@
     <text class="custom-nav-title">简知轻食</text>
   </view>
 </view>
-<view class="custom-nav-spacer" style="height: {{navBarHeight}}px; display: {{showCheckout ? 'none' : 'block'}};"></view>
-
 <view id="tab-order" class="content">
-  <view id="view-menu" style="display: {{showCheckout ? 'none' : 'block'}};">
+  <view id="view-menu" style="display: {{showCheckout ? 'none' : 'flex'}}; padding-top: {{navBarHeight}}px;">
     <view class="menu-top">
       <view class="menu-top-title">预订明日餐食</view>
       <view class="menu-top-row">
@@ -109,7 +107,7 @@
   </view>
 
   <!-- 结算视图 -->
-  <view id="view-checkout" style="display: {{showCheckout ? 'block' : 'none'}};">
+  <view id="view-checkout" style="display: {{showCheckout ? 'flex' : 'none'}};">
     <view class="checkout-nav" style="padding-top: {{statusBarHeight}}px; height: {{navBarHeight}}px;">
       <view class="subpage-nav-content" style="height: {{navBarHeight - statusBarHeight}}px;">
         <view class="subpage-nav-left">
@@ -260,7 +258,7 @@
       </view>
     </view>
   </view>
-  <view class="tabbar-spacer"></view>
+  <view class="tabbar-spacer" style="display:none;"></view>
 </view>
 
 <guide-mask id="guideMask" g-trigger="{{gTrigger}}" g-steps="{{gSteps}}" g-accent="{{gAccent}}" />

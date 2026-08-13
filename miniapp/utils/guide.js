@@ -110,6 +110,16 @@ async function runGuide(pageCtx, key, candidates, accent, opts) {
     gSteps: candidates,
     gAccent: accent || '#639922'
   });
+  // 安全网：设 2 秒后如果引导仍未显示，推进到下一步（阻止用户困死在假页面里）
+  const onDone = (typeof opts.onDone === 'function') ? opts.onDone : null;
+  if (onDone) {
+    setTimeout(() => {
+      const comp = pageCtx.selectComponent('#guideMask');
+      if (comp && !comp.data.visible && onDone) {
+        try { onDone(); } catch (e) {}
+      }
+    }, 2000);
+  }
 }
 
 module.exports = { shouldShow, markShown, markAllDismissed, queryRects, resolveSteps, runGuide };

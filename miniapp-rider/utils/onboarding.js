@@ -41,6 +41,7 @@ const STAGES = [
 let isRunning = false;
 let currentIndex = -1;
 let returnTab = '/pages/profile/index';
+let flowSession = 0;
 
 // 是否有真实登录会话（token 已持久化）。
 // 防「openid 已注册但未登录（无 token）」的假注册态误启动引导。
@@ -80,8 +81,9 @@ function ensureCleanDemo() {
 function runCurrentStage(pageCtx) {
   const stage = STAGES[currentIndex];
   if (!stage) return;
-  if (pageCtx && pageCtx.__onbRun === stage.key) return; // 防重复触发
-  if (pageCtx) pageCtx.__onbRun = stage.key;
+  const sessionKey = stage.key + '_' + flowSession;
+  if (pageCtx && pageCtx.__onbSession === sessionKey) return; // 防重复：同 session 内不重复跑
+  if (pageCtx) pageCtx.__onbSession = sessionKey;
   guide.runGuide(pageCtx, stage.key, stage.getSteps(), stage.accent, {
     force: true,
     interactive: true, // 蒙层不拦截点击，用户真实点按钮走流程
@@ -110,6 +112,10 @@ function advance() {
 
 function finishFlow() {
   isRunning = false;
+  try {
+    const pages = getCurrentPages();
+    pages.forEach((p) => { if (p) p.__onbRun = null; });
+  } catch (e) {}
   try { wx.setStorageSync(AUTO_DONE_KEY, 1); } catch (e) {}
   demo.end();
   wx.switchTab({ url: returnTab });
@@ -117,6 +123,10 @@ function finishFlow() {
 
 function cancelFlow() {
   isRunning = false;
+  try {
+    const pages = getCurrentPages();
+    pages.forEach((p) => { if (p) p.__onbRun = null; });
+  } catch (e) {}
   try {
     wx.setStorageSync(AUTO_DONE_KEY, 1);
     wx.setStorageSync(DISMISS_ALL_KEY, 1);
@@ -129,6 +139,7 @@ function startFlow(targetReturnTab) {
   returnTab = targetReturnTab || '/pages/profile/index';
   isRunning = true;
   currentIndex = 0;
+  flowSession++;
   demo.start();
   goToStage(0);
 }

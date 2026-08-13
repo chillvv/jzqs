@@ -50,6 +50,13 @@ public class WeChatService {
     @Value("${wechat.subscribe.nightly-page:pages/orders/index}")
     private String nightlyPage;
 
+    @jakarta.annotation.PostConstruct
+    public void logResolvedConfig() {
+        // 启动时打印一次实际解析到的配置，便于确认环境变量是否真正注入容器
+        log.info("[WeChatService] 启动解析配置 devMode={}, appid={}, secretSet={}",
+                devMode, appid, (secret != null && !secret.isEmpty()));
+    }
+
     private final RestTemplate restTemplate;
     private final ObjectMapper objectMapper;
 
@@ -165,7 +172,7 @@ public class WeChatService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "未配置送达提醒模板");
         }
         if (devMode) {
-            log.info("开发模式：跳过订阅消息发送 openid={}, page={}", openid, page);
+            log.info("开发模式：跳过订阅消息发送 devMode={}, openid={}, page={}", devMode, openid, page);
             return;
         }
         try {
@@ -232,7 +239,7 @@ public class WeChatService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "未配置每晚提醒模板");
         }
         if (devMode) {
-            log.info("开发模式：跳过每晚提醒发送 openid={}, page={}", openid, page);
+            log.info("开发模式：跳过每晚提醒发送 devMode={}, openid={}, page={}", devMode, openid, page);
             return;
         }
         try {

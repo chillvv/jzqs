@@ -10,21 +10,12 @@ Component({
   },
 
   observers: {
-    'gTrigger' (val) {
-      if (!val || !this.properties.gSteps.length) return;
-      // 防同一 trigger 值重复触发
-      if (val === this._lastTrigger) return;
-      this._lastTrigger = val;
-      // 从页面实例取回调（不能通过 setData 传函数）
-      const pages = getCurrentPages();
-      const page = pages[pages.length - 1];
-      const cb = (page && page.__guideCBs) || {};
-      this.start(this.properties.gSteps, this.properties.gAccent, {
-        pageCtx: page || null,
-        interactive: cb.interactive || false,
-        onSkip: cb.onSkip || null,
-        onDone: cb.onDone || null
-      });
+    // 同时监听 trigger 和 steps —— 确保两样都到了才启动
+    'gTrigger, gSteps' (trigger, steps) {
+      if (!trigger || !steps || !steps.length) return;
+      if (trigger === this._lastTrigger) return;
+      this._lastTrigger = trigger;
+      this._safeStart(trigger, steps);
     }
   },
 
@@ -45,7 +36,45 @@ Component({
     interactive: false
   },
 
+  lifetimes: {
+    ready() {
+      // 安全网：如果 10 秒内引导还没启动但 demo 开着 → 自动推进 flow，防止用户困死
+      this._safetyTimer = setTimeout(() => {
+        if (!this.data.visible) {
+          const pages = getCurrentPages();
+          const page = pages[pages.length - 1];
+          const cb = (page && page.__guideCBs) || {};
+          if (typeof cb.onDone === 'function') {
+            try { cb.onDone(); } catch (e) {}
+          }
+        }
+      }, 10000);
+    },
+    detached() {
+      if (this._safetyTimer) { clearTimeout(this._safetyTimer); this._safetyTimer = null; }
+    }
+  },
+
   methods: {
+    _safeStart(trigger, steps) {
+      try {
+        const pages = getCurrentPages();
+        const page = pages[pages.length - 1];
+        const cb = (page && page.__guideCBs) || {};
+        this.start(steps, this.properties.gAccent, {
+          pageCtx: page || null,
+          interactive: cb.interactive || false,
+          onSkip: cb.onSkip || null,
+          onDone: cb.onDone || null
+        });
+      } catch (e) {
+        // 极端兜底：start 失败也不能困住用户，直接推进到下一步
+        const cb = (page && page.__guideCBs) || {};
+        if (typeof cb.onDone === 'function') {
+          try { cb.onDone(); } catch (e2) {}
+        }
+      }
+    },
     start(steps, accent, opts) {
       if (!steps || !steps.length) {
         return;

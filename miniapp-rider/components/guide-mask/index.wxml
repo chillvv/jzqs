@@ -20,7 +20,7 @@
     <view class="gm-tip-title">{{step.title}}</view>
     <view class="gm-tip-desc">{{step.desc}}</view>
     <view class="gm-tip-actions">
-      <text class="gm-skip" catchtap="onSkip">跳过</text>
+      <text class="gm-skip" catchtap="onSkip">全部跳过</text>
       <view class="gm-next" catchtap="next" style="background:{{accent}};">{{isLast ? '完成' : '下一步'}}</view>
     </view>
   </view>

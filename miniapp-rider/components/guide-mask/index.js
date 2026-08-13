@@ -10,19 +10,11 @@ Component({
   },
 
   observers: {
-    'gTrigger' (val) {
-      if (!val || !this.properties.gSteps.length) return;
-      if (val === this._lastTrigger) return;
-      this._lastTrigger = val;
-      const pages = getCurrentPages();
-      const page = pages[pages.length - 1];
-      const cb = (page && page.__guideCBs) || {};
-      this.start(this.properties.gSteps, this.properties.gAccent, {
-        pageCtx: page || null,
-        interactive: cb.interactive || false,
-        onSkip: cb.onSkip || null,
-        onDone: cb.onDone || null
-      });
+    'gTrigger, gSteps' (trigger, steps) {
+      if (!trigger || !steps || !steps.length) return;
+      if (trigger === this._lastTrigger) return;
+      this._lastTrigger = trigger;
+      this._safeStart(trigger, steps);
     }
   },
 
@@ -43,7 +35,44 @@ Component({
     interactive: false
   },
 
+  lifetimes: {
+    ready() {
+      this._safetyTimer = setTimeout(() => {
+        if (!this.data.visible) {
+          const pages = getCurrentPages();
+          const page = pages[pages.length - 1];
+          const cb = (page && page.__guideCBs) || {};
+          if (typeof cb.onDone === 'function') {
+            try { cb.onDone(); } catch (e) {}
+          }
+        }
+      }, 10000);
+    },
+    detached() {
+      if (this._safetyTimer) { clearTimeout(this._safetyTimer); this._safetyTimer = null; }
+    }
+  },
+
   methods: {
+    _safeStart(trigger, steps) {
+      try {
+        const pages = getCurrentPages();
+        const page = pages[pages.length - 1];
+        const cb = (page && page.__guideCBs) || {};
+        this.start(steps, this.properties.gAccent, {
+          pageCtx: page || null,
+          interactive: cb.interactive || false,
+          onSkip: cb.onSkip || null,
+          onDone: cb.onDone || null
+        });
+      } catch (e) {
+        const cb = (page && page.__guideCBs) || {};
+        if (typeof cb.onDone === 'function') {
+          try { cb.onDone(); } catch (e2) {}
+        }
+      }
+    },
+
     start(steps, accent, opts) {
       if (!steps || !steps.length) {
         return;
