@@ -1,6 +1,6 @@
 function getCheckoutMealLimitMessage({ totalQty, remainingMeals }) {
   if (remainingMeals <= 0) {
-    return '当前剩余餐数为 0。请联系专属客服办理套餐后再下单。';
+    return '当前剩余餐数为 0，请联系专属客服办理套餐后再下单';
   }
   if (totalQty > remainingMeals) {
     return '剩余餐次不足，请调整餐食数量后再结算';
@@ -31,10 +31,10 @@ function getNightCloseNotice() {
   return {
     title: '系统夜间结算中',
     content:
-      '为了给您更准时的配送，系统每晚 23:30 起进入结算休整，暂无法下单。' +
+      '为了给您更准时的配送，系统每晚 23:30 起进入结算休整，暂无法下单' +
       '别急，明早 08:00 一切就绪，更多好菜等您～',
     desc:
-      '为了给您更准时的配送，系统每晚 23:30 起进入结算休整，暂无法下单。' +
+      '为了给您更准时的配送，系统每晚 23:30 起进入结算休整，暂无法下单' +
       '别急，明早 08:00 一切就绪，更多好菜等您～',
     buttonText: '23:30 后暂停下单'
   };
@@ -121,12 +121,12 @@ function buildSupportRefundNotice(stage) {
   if (stage === 'SAME_DAY') {
     return {
       title: '送餐当天需联系商家',
-      content: '这单今天就要配送啦，系统暂时没法直接取消。您可以先和商家协商下，看能不能调整，能不能处理以商家反馈为准。'
+      content: '这单今天就要配送啦，系统暂时没法直接取消。您可以先和商家协商下，看能不能调整，能不能处理以商家反馈为准'
     };
   }
   return {
     title: '建议送达后申请售后',
-    content: '这单可能已出餐或配送中，建议先签收。如有问题，可在送达后申请售后处理。'
+    content: '这单可能已出餐或配送中，建议先签收。如有问题，可在送达后申请售后处理'
   };
 }
 

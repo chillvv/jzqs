@@ -43,7 +43,7 @@
           <view class="detail-info-list" style="background: transparent; padding: 0; margin-bottom: 24rpx;">
             <view class="detail-info-row rider-note-block" style="padding-top: 0; border-top: none;">
               <text class="detail-info-label">骑手备注</text>
-              <text class="detail-info-value rider-note-text">{{item.receiptNote || '回执文本已清理，仅保留送达状态。'}}</text>
+              <text class="detail-info-value rider-note-text">{{item.receiptNote || '回执文本已清理，仅保留送达状态'}}</text>
             </view>
           </view>
 

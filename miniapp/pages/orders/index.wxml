@@ -78,7 +78,7 @@
             <text class="detail-value highlight-note">{{item.note}}</text>
           </view>
           <view class="detail-row" wx:if="{{item.merchantNote && item.merchantNote !== '-'}}">
-            <text class="detail-label">商家回复</text>
+            <text class="detail-label">菜品备注</text>
             <text class="detail-value">{{item.merchantNote}}</text>
           </view>
         </view>

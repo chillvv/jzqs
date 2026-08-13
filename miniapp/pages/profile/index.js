@@ -195,7 +195,7 @@ Page({
     }
     wx.showModal({
       title: '联系专属客服',
-      content: '可在“联系客服”入口直接发起会话，或联系运营同事处理。',
+      content: '可在"联系客服"入口直接发起会话，或联系运营同事处理',
       showCancel: false
     });
   },

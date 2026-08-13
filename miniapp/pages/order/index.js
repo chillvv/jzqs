@@ -558,8 +558,8 @@ Page({
       }
 
       const successMsg = mergedCount > 0
-        ? `同地址餐次已自动合并到原订单，共扣减 ${this.data.totalQty} 餐。`
-        : `已成功预订明天的餐食，共扣减 ${this.data.totalQty} 餐。`;
+        ? `同地址餐次已自动合并到原订单，共扣减 ${this.data.totalQty} 餐`
+        : `已成功预订明天的餐食，共扣减 ${this.data.totalQty} 餐`;
       this.setData({
         showOrderSuccess: true,
         orderSuccessMsg: successMsg,
@@ -569,7 +569,7 @@ Page({
       if (error.message && (error.message.includes('不足') || error.message.includes('INSUFFICIENT_MEALS'))) {
         wx.showModal({
           title: '餐次不足',
-          content: '您的套餐剩余餐次不足，请联系专属客服充值。',
+          content: '您的套餐剩余餐次不足，请联系专属客服充值',
           confirmText: '联系客服',
           confirmColor: '#B8D060',
           cancelText: '取消',

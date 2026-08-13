@@ -209,12 +209,12 @@
         </view>
         <view class="subscribe-consent-copy">
           <view class="subscribe-consent-title">
-            {{nightlySubscribed ? '已开启用餐提醒' : '开启用餐提醒，不错过送达与每日菜单'}}
+            {{nightlySubscribed ? '已开启用餐提醒' : '开启用餐提醒'}}
           </view>
           <view class="subscribe-consent-desc">
-            <block wx:if="{{nightlySubscribed}}">已授权，每天将收到餐食送达通知与晚间次日菜单推送</block>
+            <block wx:if="{{nightlySubscribed}}">已授权，将收到送达通知与每日菜单推送</block>
             <block wx:elif="{{subscribeConsent}}">已开启，将为您推送送达通知与每晚菜单</block>
-            <block wx:else>勾选后将弹出微信授权，需要勾选「总是保持」，以便准时收到取餐通知与每日菜单（未开启将无法下单）</block>
+            <block wx:else>勾选后在微信弹窗选「总是保持」，可接收送达通知与每日菜单（未开启无法下单）</block>
           </view>
         </view>
         <view class="subscribe-consent-tag" wx:if="{{nightlySubscribed}}">长期有效</view>
@@ -274,7 +274,7 @@
       <view class="success-desc">{{orderSuccessMsg}}</view>
       <view class="success-tip">
         <view class="success-tip-head">🛵 联系骑手小贴士</view>
-        <view class="success-tip-body">配送途中遇到延误、送错或位置不清等情况，直接拨打骑手电话最快解决。</view>
+        <view class="success-tip-body">配送途中遇到延误、送错或位置不清等情况，直接拨打骑手电话最快解决</view>
       </view>
       <view class="success-actions">
         <button class="success-btn ghost" bindtap="closeOrderSuccess">继续逛逛</button>

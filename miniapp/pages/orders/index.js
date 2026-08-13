@@ -151,7 +151,7 @@ Page({
     const { id } = e.currentTarget.dataset;
     wx.showModal({
       title: '取消订单',
-      content: '确认取消这笔预订吗？餐次会退回到钱包余额。',
+      content: '确认取消这笔预订吗？餐次会退回到钱包余额',
       success: async ({ confirm }) => {
         if (!confirm) {
           return;
@@ -193,7 +193,7 @@ Page({
   viewAftersale(e) {
     wx.showModal({
       title: '售后处理中',
-      content: '您的售后申请商家正在处理中，请留意最新状态或直接联系客服。',
+      content: '您的售后申请商家正在处理中，请留意最新状态或直接联系客服',
       showCancel: false,
       confirmText: '我知道了',
       confirmColor: '#92AA40'
@@ -225,7 +225,7 @@ Page({
     if (mode === 'CONTACT_SUPPORT') {
       wx.showModal({
         title: '送餐当天需联系商家',
-        content: '这单今天就要配送啦，地址没法在系统里直接改。您可以先和商家协商下，由商家后台帮您调整，能不能改以商家反馈为准。',
+        content: '这单今天就要配送啦，地址没法在系统里直接改。您可以先和商家协商下，由商家后台帮您调整，能不能改以商家反馈为准',
         showCancel: false,
         confirmText: '我知道了',
         confirmColor: '#92AA40'

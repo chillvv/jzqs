@@ -17,9 +17,9 @@ const STAGES = [
     url: '/pages/home/index',
     accent: '#639922',
     getSteps: () => ([
-      { centered: true, title: '欢迎使用简知轻食', desc: '花 1 分钟带你走一遍完整点餐流程。演示环境全是假数据，不会真实下单，随时可点「跳过」。' },
-      { selector: '.poster-title', fallbacks: ['.menu-section', '.day-card-full', '.home-content'], title: '每周主厨菜单', desc: '每天午/晚吃什么都在这里，每周更新。看完就可以去点餐了。' },
-      { centered: true, title: '下一步：点餐页', desc: '首页讲完了。点「完成」，系统自动带你到点餐页面——就像你平时点底部「点餐」tab 一样。' }
+      { centered: true, title: '欢迎使用简知轻食', desc: '花 1 分钟带你走一遍完整点餐流程。演示环境全是假数据，不会真实下单，随时可点「跳过」' },
+      { selector: '.poster-title', fallbacks: ['.menu-section', '.day-card-full', '.home-content'], title: '每周主厨菜单', desc: '每天午/晚吃什么都在这里，每周更新。看完就可以去点餐了' },
+      { centered: true, title: '下一步：点餐页', desc: '首页讲完了。点「完成」，系统自动带你到点餐页面——就像你平时点底部「点餐」tab 一样' }
     ])
   },
   {
@@ -28,10 +28,10 @@ const STAGES = [
     url: '/pages/order/index',
     accent: '#639922',
     getSteps: () => ([
-      { centered: true, title: '点餐页面', desc: '欢迎来到点餐页——这是你每次下单的主战场。演示数据已预填 1 份午餐，方便你看清每个位置。' },
-      { selector: '.meal-item', fallbacks: ['.stepper', '.lunch-selector'], title: '选餐区', desc: '明天午餐和晚餐各一张卡片，每份标了菜名和热量。你可以点 + / − 增减份数。' },
-      { selector: '.btn-checkout', fallbacks: ['.cart-bar', '.cart-info'], title: '购物车 & 去结算', desc: '选好后底部会出现购物车栏和「去结算」按钮，汇总你选的餐食。' },
-      { centered: true, title: '下一步：查看预订', desc: '下单后去哪看订单？点「完成」带你去「我的」页面找预订入口。' }
+      { centered: true, title: '点餐页面', desc: '欢迎来到点餐页——这是你每次下单的主战场。演示数据已预填 1 份午餐，方便你看清每个位置' },
+      { selector: '.meal-item', fallbacks: ['.stepper', '.lunch-selector'], title: '选餐区', desc: '明天午餐和晚餐各一张卡片，每份标了菜名和热量。你可以点 + / − 增减份数' },
+      { selector: '.btn-checkout', fallbacks: ['.cart-bar', '.cart-info'], title: '购物车 & 去结算', desc: '选好后底部会出现购物车栏和「去结算」按钮，汇总你选的餐食' },
+      { centered: true, title: '下一步：查看预订', desc: '下单后去哪看订单？点「完成」带你去「我的」页面找预订入口' }
     ])
   },
   {
@@ -40,9 +40,9 @@ const STAGES = [
     url: '/pages/profile/index',
     accent: '#639922',
     getSteps: () => ([
-      { centered: true, title: '我的页面', desc: '这就是你个人的页面。余额、餐数、设置都在这。下单后在这找你的订单记录。' },
-      { selector: '.menu-group .list-item', fallbacks: ['.list-title', '.menu-group'], title: '我的预订记录', desc: '点这里就能看到你所有订单的状态——待配送 / 已送达，一目了然。' },
-      { centered: true, title: '下一步：订单详情', desc: '点「完成」带你进去看一笔演示订单长什么样。' }
+      { centered: true, title: '我的页面', desc: '这就是你个人的页面。余额、餐数、设置都在这。下单后在这找你的订单记录' },
+      { selector: '.menu-group .list-item', fallbacks: ['.list-title', '.menu-group'], title: '我的预订记录', desc: '点这里就能看到你所有订单的状态——待配送 / 已送达，一目了然' },
+      { centered: true, title: '下一步：订单详情', desc: '点「完成」带你进去看一笔演示订单长什么样' }
     ])
   },
   {
@@ -51,10 +51,10 @@ const STAGES = [
     url: '/pages/orders/index',
     accent: '#639922',
     getSteps: () => ([
-      { centered: true, title: '这里就是你的预订', desc: '刚刚下的单会显示在这儿，餐食、地址、配送状态都在这张卡片上。' },
-      { selector: '.order-card', fallbacks: ['.subpage-card', '.subpage-body'], title: '订单卡片', desc: '每一张卡片就是一笔预订，套餐内容、地址、状态一目了然。' },
-      { selector: '.order-status', fallbacks: ['.order-card-header', '.order-card'], title: '配送状态', desc: '右上角是配送状态（待配送/已配送），有变化会实时更新。' },
-      { centered: true, title: '新手指引完成 🎉', desc: '你已经完整走了一遍点餐流程！想再看随时到「我的」→「新手指引」重看。' }
+      { centered: true, title: '这里就是你的预订', desc: '刚刚下的单会显示在这儿，餐食、地址、配送状态都在这张卡片上' },
+      { selector: '.order-card', fallbacks: ['.subpage-card', '.subpage-body'], title: '订单卡片', desc: '每一张卡片就是一笔预订，套餐内容、地址、状态一目了然' },
+      { selector: '.order-status', fallbacks: ['.order-card-header', '.order-card'], title: '配送状态', desc: '右上角是配送状态（待配送/已配送），有变化会实时更新' },
+      { centered: true, title: '新手指引完成 🎉', desc: '你已经完整走了一遍点餐流程！想再看随时到「我的」→「新手指引」重看' }
     ])
   }
 ];

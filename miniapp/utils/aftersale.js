@@ -44,8 +44,8 @@ function resolveOrderStatusText({ status, userVisibleStatus, afterSaleStatus }) 
 function buildRejectedAftersaleDetail(adminRemark) {
   const detail = adminRemark && adminRemark.trim()
     ? adminRemark.trim()
-    : "后台暂未填写说明，请联系客服处理。";
-  return `售后申请未通过。\n处理结果：${detail}`;
+    : "后台暂未填写说明，请联系客服处理";
+  return `售后申请未通过\n处理结果：${detail}`;
 }
 
 function submitAftersaleApplication(orderId, payload) {
