@@ -12,10 +12,6 @@ const {
   NIGHTLY_TEMPLATE_ID,
   requestDeliverySubscribeAuthorization,
   requestNightlySubscribeAuthorization,
-  requestCombinedSubscribeAuthorization,
-  saveNightlySubscription,
-  cancelNightlySubscription,
-  cacheDeliveryAcceptResult,
   sendSubscribeMessageTest
 } = require('../../utils/delivery-subscription');
 const auth = require('../../utils/auth');
@@ -89,8 +85,6 @@ Page({
     pendingAgreementAction: '',
     sendingDelivery: false,
     sendingNightly: false,
-    // 是否已开启「每晚用餐提醒」订阅（AUTHORIZED），用于展示当前状态
-    nightlySubscribed: false,
     statusBarHeight: 0,
     navBarHeight: 44,
     // 是否展示「测试订阅」内部入口（仅测试环境，正式版隐藏）
@@ -201,8 +195,6 @@ Page({
         displayName: finalName,
         maskedPhone: maskPhone(home.phone)
       });
-      // 查询是否已开启每晚用餐提醒订阅，用于页面状态展示
-      await this.loadNightlySubscriptionStatus();
     } catch (error) {
       wx.showToast({ title: error.message || '加载失败', icon: 'none' });
     } finally {
@@ -648,73 +640,6 @@ Page({
 
   onGuideDone() {},
   onGuideSkip() {},
-
-  /** 查询当前用户是否已授权「每晚用餐提醒」订阅 */
-  async loadNightlySubscriptionStatus() {
-    if (this.data.onboarding) {
-      return;
-    }
-    try {
-      const res = await request({ url: '/api/mobile/customer/nightly-subscription/status' });
-      this.setData({ nightlySubscribed: !!(res && res.subscribed) });
-    } catch (_) {
-      // 查询失败不影响页面其它功能，保持默认未开启
-    }
-  },
-
-  /**
-   * 「我的」页每晚用餐提醒开关：点击切换开启/关闭。
-   * 开启：弹授权框（需用户点击触发 requestSubscribeMessage），勾选「总是保持」后
-   *       后台每晚（默认 20:00，由运营后台配置）自动推送，无需再次登录/点击。
-   * 关闭：直接调用后端取消订阅，后台不再向该用户推送。
-   */
-  async toggleNightlyReminder() {
-    if (this.data.onboarding) {
-      wx.showToast({ title: '请先登录后再操作提醒', icon: 'none' });
-      return;
-    }
-    if (this.data.sendingNightly) {
-      return;
-    }
-    // 当前已开启 -> 关闭
-    if (this.data.nightlySubscribed) {
-      this.setData({ sendingNightly: true });
-      try {
-        await cancelNightlySubscription();
-        this.setData({ nightlySubscribed: false });
-        wx.showToast({ title: '已关闭每晚用餐提醒', icon: 'none' });
-      } catch (error) {
-        wx.showToast({ title: error.message || '关闭失败，请重试', icon: 'none' });
-      } finally {
-        this.setData({ sendingNightly: false });
-      }
-      return;
-    }
-    // 当前未开启 -> 开启
-    this.setData({ sendingNightly: true });
-    try {
-      // 一次弹窗同时申请「送达」与「每晚提醒」两个授权，减少反复弹窗
-      const results = await requestCombinedSubscribeAuthorization();
-      const { delivery, nightly } = results || {};
-      if (delivery) {
-        // 送达订阅结果缓存，下单时随订单一起提交（避免下单时再弹窗）
-        cacheDeliveryAcceptResult(delivery);
-      }
-      if (!nightly) {
-        // 用户未勾选允许，或勾选了「取消」/「拒绝」
-        wx.showToast({ title: '未开启每晚提醒', icon: 'none' });
-        this.setData({ nightlySubscribed: false });
-        return;
-      }
-      await saveNightlySubscription(nightly);
-      this.setData({ nightlySubscribed: true });
-      wx.showToast({ title: '已开启每晚用餐提醒', icon: 'success' });
-    } catch (error) {
-      wx.showToast({ title: error.message || '开启失败，请重试', icon: 'none' });
-    } finally {
-      this.setData({ sendingNightly: false });
-    }
-  },
 
   async sendSubscriptionTest(e) {
     if (this.data.onboarding) {
