@@ -10,6 +10,8 @@ import {
   UtensilsCrossed,
   LineChart,
   LifeBuoy,
+  Users,
+  ScrollText,
 } from "lucide-react";
 import "../../index.css";
 import { changeAdminPassword, fetchAdminProfile, logoutAdmin } from "../../shared/api/http";
@@ -33,6 +35,8 @@ const items = [
   { key: "/customers", activePrefix: "/customers", label: "客户资产", shortLabel: "客户", description: "余额、流水、重点客户", icon: <CreditCard size={18} /> },
   { key: "/menu", activePrefix: "/menu", label: "菜单配置", shortLabel: "菜单", description: "周菜单、排菜与发布", icon: <CalendarDays size={18} /> },
   { key: "/analysis", activePrefix: "/analysis", label: "经营分析", shortLabel: "分析", description: "营收、成本、毛利洞察", icon: <LineChart size={18} /> },
+  { key: "/accounts", activePrefix: "/accounts", label: "后台账号", shortLabel: "账号", description: "管理人员账号与密码", icon: <Users size={18} /> },
+  { key: "/operation-logs", activePrefix: "/operation-logs", label: "操作日志", shortLabel: "日志", description: "谁在什么时间做了什么", icon: <ScrollText size={18} /> },
   { key: buildSettingsSectionPath(DEFAULT_SETTINGS_SECTION), activePrefix: "/settings", label: "系统设置", shortLabel: "设置", description: "配置、AI 与系统维护", icon: <Settings size={18} /> },
 ];
 

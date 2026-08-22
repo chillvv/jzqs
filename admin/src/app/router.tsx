@@ -25,6 +25,8 @@ const DispatchReleasePage = lazyWithRetry(() => import("../modules/dispatch/Disp
 const SystemSettingsSectionPage = lazyWithRetry(() => import("../modules/settings/SystemSettingsSectionPage").then((m) => ({ default: m.SystemSettingsSectionPage })));
 const OperationsAnalysisPage = lazyWithRetry(() => import("../modules/analysis/OperationsAnalysisPage").then((m) => ({ default: m.OperationsAnalysisPage })));
 const AftersalePage = lazyWithRetry(() => import("../modules/aftersales/AftersalePage").then((m) => ({ default: m.AftersalePage })));
+const AdminAccountsPage = lazyWithRetry(() => import("../modules/accounts/AdminAccountsPage").then((m) => ({ default: m.AdminAccountsPage })));
+const OperationLogsPage = lazyWithRetry(() => import("../modules/audit/OperationLogsPage").then((m) => ({ default: m.OperationLogsPage })));
 
 function RequireAdminAuth({ children }: { children: JSX.Element }) {
   if (typeof window === "undefined") {
@@ -92,6 +94,8 @@ export const appRoutes: RouteObject[] = [
         ]
       },
       { path: "analysis", element: <Suspense fallback={<PageFallback />}><OperationsAnalysisPage /></Suspense> },
+      { path: "accounts", element: <Suspense fallback={<PageFallback />}><AdminAccountsPage /></Suspense> },
+      { path: "operation-logs", element: <Suspense fallback={<PageFallback />}><OperationLogsPage /></Suspense> },
       { path: "settings", element: <Navigate to={buildSettingsSectionPath(DEFAULT_SETTINGS_SECTION)} replace /> },
       { path: "settings/:section", element: <SettingsSectionRoute /> },
       { path: "maintenance", element: <Navigate to={buildSettingsSectionPath(SETTINGS_SECTION.MAINTENANCE)} replace /> }

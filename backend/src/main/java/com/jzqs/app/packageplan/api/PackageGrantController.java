@@ -24,11 +24,13 @@ public class PackageGrantController {
     @Idempotent(key = "admin:package-grants:create", ttlSeconds = 8, includeBody = true)
     @AuditAction(module = "PACKAGE_PLAN", action = "GRANT")
     public ApiResponse<GrantPackageResponse> grant(@Valid @RequestBody GrantPackageRequest request) {
+        var operator = AdminRequestContextSupport.requireAdmin();
         return ApiResponse.success(packageGrantService.grantPackage(
             request.customerId(),
             request.packageCode(),
             request.totalMeals(),
-            AdminRequestContextSupport.requireOperatorName()
+            operator.operatorName(),
+            operator.userId()
         ));
     }
 }

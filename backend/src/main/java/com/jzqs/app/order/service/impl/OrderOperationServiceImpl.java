@@ -152,7 +152,7 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
                 Long walletId = findActiveWalletIdByCustomerId(customerId);
                 if (walletId != null) {
                     orderOperationRepository.releaseReservedMeals(walletId, quantity);
-                    insertWalletTransaction(walletId, "RELEASE", quantity, "系统", "取消订单释放餐次", orderId);
+                    insertWalletTransactionByAdmin(walletId, "RELEASE", quantity, "取消订单释放餐次", orderId);
                 }
             }
         }
@@ -181,7 +181,7 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
             Long walletId = findActiveWalletIdByCustomerId(customerId);
             if (walletId != null) {
                 orderOperationRepository.releaseReservedMeals(walletId, quantity);
-                insertWalletTransaction(walletId, "RELEASE", quantity, "系统", "删除订单释放餐次", orderId);
+                insertWalletTransactionByAdmin(walletId, "RELEASE", quantity, "删除订单释放餐次", orderId);
             }
         }
 
@@ -267,11 +267,10 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
             );
             orderOperationRepository.mergeOrderQuantityAndRemark(mergeTargetOrderId, quantity, mergedMerchantRemark);
             orderOperationRepository.increaseReservedMeals(walletId, quantity);
-            insertWalletTransaction(
+            insertWalletTransactionByAdmin(
                 walletId,
                 "RESERVE",
                 -quantity,
-                "系统",
                 "SUBSCRIPTION".equals(source) ? "固定订餐自动扣餐" : "代客录单加餐占用餐次",
                 mergeTargetOrderId
             );
@@ -291,11 +290,10 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
         );
         LocalDateTime snapshotTime = LocalDateTime.now();
         orderOperationRepository.increaseReservedMeals(walletId, quantity);
-        insertWalletTransaction(
+        insertWalletTransactionByAdmin(
             walletId,
             "RESERVE",
             -quantity,
-            "系统",
             "SUBSCRIPTION".equals(source) ? "固定订餐自动扣餐" : "代客录单占用餐次",
             mealSlotOrderId
         );

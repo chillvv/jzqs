@@ -50,3 +50,46 @@ jzqs.top {
         -Server
     }
 }
+
+# ---- JanGo（jango.com.cn）：TLS 在此终止，反代到本机 8081 的 jango caddy ----
+jango.com.cn {
+    encode zstd gzip
+
+    handle /uploads/* {
+        reverse_proxy 172.18.0.1:8081 {
+            transport http {
+                dial_timeout 5s
+                response_header_timeout 30s
+                read_timeout 30s
+                write_timeout 30s
+            }
+        }
+    }
+
+    handle /api/* {
+        reverse_proxy 172.18.0.1:8081 {
+            transport http {
+                dial_timeout 5s
+                response_header_timeout 30s
+                read_timeout 180s
+                write_timeout 30s
+            }
+        }
+    }
+
+    handle {
+        reverse_proxy 172.18.0.1:8081 {
+            transport http {
+                dial_timeout 5s
+                response_header_timeout 15s
+                read_timeout 30s
+                write_timeout 30s
+            }
+        }
+    }
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        -Server
+    }
+}

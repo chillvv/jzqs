@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
+import com.jzqs.app.common.security.AdminRequestContext;
+import com.jzqs.app.common.security.AdminRequestContextSupport;
 import com.jzqs.app.customer.api.CustomerAddressActionResponse;
 import com.jzqs.app.customer.api.CustomerAddressDetailResponse;
 import com.jzqs.app.customer.api.CustomerAddressUpsertRequest;
@@ -282,7 +284,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             wallet.setExpiredAt(grantExpiredAt);
             wallet.setLastAdjustedAt(now());
             mealWalletMapper.updateById(wallet);
-            insertWalletTransaction(wallet.getId(), "GRANT", initialMealDelta, "ADMIN", initialMealRemark, grantExpiredAt);
+            insertWalletTransaction(wallet.getId(), "GRANT", initialMealDelta, currentOperator(), initialMealRemark, grantExpiredAt);
         }
 
         return new CustomerProfileCreateResponse(customer.getId(), "CREATED");
@@ -462,29 +464,29 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         // 统一过期时间：优先使用日历指定的 expiredAt，否则按当前北京时间 + validityDays 计算
         LocalDateTime grantExpiredAt = resolveGrantExpiry(request);
         MealWalletEntity wallet = findOrCreateWallet(customerId);
-        jdbcTemplate.update(
-            "UPDATE meal_wallets SET total_meals = total_meals + ?, expired_at = ?, last_adjusted_at = ? WHERE id = ?",
-            request.mealDelta(), grantExpiredAt, now(), wallet.getId()
-        );
-        insertWalletTransaction(wallet.getId(), "GRANT", request.mealDelta(), request.operatorName(), request.remark(), grantExpiredAt);
-        MealWalletEntity refreshed = mealWalletMapper.selectById(wallet.getId());
-        return buildAdjustResult(customerId, remainingMeals(refreshed));
+        wallet.setTotalMeals(nvl(wallet.getTotalMeals()) + request.mealDelta());
+        wallet.setExpiredAt(grantExpiredAt);
+        wallet.setLastAdjustedAt(now());
+        mealWalletMapper.updateById(wallet);
+        insertWalletTransaction(wallet.getId(), "GRANT", request.mealDelta(), request.operatorName(), request.operatorId(), request.remark(), grantExpiredAt);
+        int remainingMeals = remainingMeals(wallet);
+        return buildAdjustResult(customerId, remainingMeals);
     }
 
     @Override
     @Transactional
     public CustomerWalletAdjustResponse deductMeals(long customerId, WalletAdjustRequest request) {
         MealWalletEntity wallet = findOrCreateWallet(customerId);
-        int updated = jdbcTemplate.update(
-            "UPDATE meal_wallets SET total_meals = total_meals - ? WHERE id = ? AND (total_meals - reserved_meals - consumed_meals) >= ?",
-            request.mealDelta(), wallet.getId(), request.mealDelta()
-        );
-        if (updated == 0) {
+        int remainingMeals = remainingMeals(wallet);
+        if (remainingMeals < request.mealDelta()) {
             throw new BusinessException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH, "客户余额不足，无法继续扣餐");
         }
-        insertWalletTransaction(wallet.getId(), "MANUAL_DEDUCT", -request.mealDelta(), request.operatorName(), request.remark(), null);
-        MealWalletEntity refreshed = mealWalletMapper.selectById(wallet.getId());
-        return buildAdjustResult(customerId, remainingMeals(refreshed));
+        int nextTotal = nvl(wallet.getTotalMeals()) - request.mealDelta();
+        wallet.setTotalMeals(nextTotal);
+        mealWalletMapper.updateById(wallet);
+        insertWalletTransaction(wallet.getId(), "MANUAL_DEDUCT", -request.mealDelta(), request.operatorName(), request.operatorId(), request.remark(), null);
+        remainingMeals = remainingMeals(wallet);
+        return buildAdjustResult(customerId, remainingMeals);
     }
 
     @Override
@@ -513,7 +515,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             wallet.setExpiredAt(nextExpiry);
             wallet.setLastAdjustedAt(now());
             mealWalletMapper.updateById(wallet);
-            insertWalletTransaction(wallet.getId(), "EXTEND_VALIDITY", 0, "系统", remark, nextExpiry);
+            insertWalletTransaction(wallet.getId(), "EXTEND_VALIDITY", 0, currentOperator(), remark, nextExpiry);
             affected++;
         }
         return new CustomerBatchExtendResponse(affected, skipped, wallets.size());
@@ -534,6 +536,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             tx.getTransactionType(),
             nvl(tx.getMealDelta()),
             tx.getOperatorName(),
+            tx.getOperatorId(),
             tx.getRemark() == null ? "" : tx.getRemark(),
             tx.getRelatedOrderId(),
             tx.getRelatedAftersaleId(),
@@ -566,9 +569,8 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             ));
             case "SUBSCRIPTION_NOTE" -> recentDistinct(querySuggestionValues(
                 customerId != null ?
-                "SELECT merchant_remark FROM subscription_rules WHERE customer_id = ? AND merchant_remark IS NOT NULL ORDER BY id DESC" :
-                "SELECT merchant_remark FROM subscription_rules WHERE merchant_remark IS NOT NULL ORDER BY id DESC",
-                customerId != null ? new Object[]{customerId} : new Object[0]
+                "SELECT merchant_remark FROM subscription_rules WHERE customer_id = " + customerId + " AND merchant_remark IS NOT NULL ORDER BY id DESC" :
+                "SELECT merchant_remark FROM subscription_rules WHERE merchant_remark IS NOT NULL ORDER BY id DESC"
             ));
             case "MENU_NOTE" -> recentDistinct(querySuggestionValues(
                 "SELECT merchant_note FROM menu_week_items WHERE merchant_note IS NOT NULL ORDER BY serve_date DESC, id DESC"
@@ -579,21 +581,18 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             case "ORDER_REMARK" -> recentDistinct(
                 querySuggestionValues(
                     customerId != null ? 
-                    "SELECT m.note FROM meal_slot_orders m JOIN daily_orders d ON m.daily_order_id = d.id WHERE d.customer_id = ? AND m.note IS NOT NULL ORDER BY m.id DESC" :
-                    "SELECT note FROM meal_slot_orders WHERE note IS NOT NULL ORDER BY id DESC",
-                    customerId != null ? new Object[]{customerId} : new Object[0]
+                    "SELECT m.note FROM meal_slot_orders m JOIN daily_orders d ON m.daily_order_id = d.id WHERE d.customer_id = " + customerId + " AND m.note IS NOT NULL ORDER BY m.id DESC" :
+                    "SELECT note FROM meal_slot_orders WHERE note IS NOT NULL ORDER BY id DESC"
                 ),
                 querySuggestionValues(
                     customerId != null ?
-                    "SELECT m.user_note FROM meal_slot_orders m JOIN daily_orders d ON m.daily_order_id = d.id WHERE d.customer_id = ? AND m.user_note IS NOT NULL ORDER BY m.id DESC" :
-                    "SELECT user_note FROM meal_slot_orders WHERE user_note IS NOT NULL ORDER BY id DESC",
-                    customerId != null ? new Object[]{customerId} : new Object[0]
+                    "SELECT m.user_note FROM meal_slot_orders m JOIN daily_orders d ON m.daily_order_id = d.id WHERE d.customer_id = " + customerId + " AND m.user_note IS NOT NULL ORDER BY m.id DESC" :
+                    "SELECT user_note FROM meal_slot_orders WHERE user_note IS NOT NULL ORDER BY id DESC"
                 ),
                 querySuggestionValues(
                     customerId != null ?
-                    "SELECT merchant_remark FROM subscription_rules WHERE customer_id = ? AND merchant_remark IS NOT NULL ORDER BY id DESC" :
-                    "SELECT merchant_remark FROM subscription_rules WHERE merchant_remark IS NOT NULL ORDER BY id DESC",
-                    customerId != null ? new Object[]{customerId} : new Object[0]
+                    "SELECT merchant_remark FROM subscription_rules WHERE customer_id = " + customerId + " AND merchant_remark IS NOT NULL ORDER BY id DESC" :
+                    "SELECT merchant_remark FROM subscription_rules WHERE merchant_remark IS NOT NULL ORDER BY id DESC"
                 )
             );
             default -> List.of();
@@ -738,18 +737,33 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         return PackageAlert.none();
     }
 
-    private void insertWalletTransaction(long walletId, String transactionType, int mealDelta, String operatorName, String remark, LocalDateTime expiredAtSnapshot) {
+    private void insertWalletTransaction(long walletId, String transactionType, int mealDelta, AdminRequestContext operator, String remark, LocalDateTime expiredAtSnapshot) {
+        insertWalletTransaction(walletId, transactionType, mealDelta,
+            operator == null ? "系统" : operator.operatorName(),
+            operator == null ? null : operator.userId(),
+            remark, expiredAtSnapshot);
+    }
+
+    private void insertWalletTransaction(long walletId, String transactionType, int mealDelta, String operatorName, Long operatorId, String remark, LocalDateTime expiredAtSnapshot) {
         WalletTransactionEntity tx = new WalletTransactionEntity();
         tx.setWalletId(walletId);
         tx.setTransactionType(transactionType);
         tx.setBizType(transactionType);
         tx.setMealDelta(mealDelta);
         tx.setOperatorName(operatorName);
+        tx.setOperatorId(operatorId);
         tx.setRemark(remark);
         tx.setExpiredAtSnapshot(expiredAtSnapshot);
         tx.setCreatedAt(now());
         tx.setSnapshotBalance(querySnapshotBalance(walletId));
         walletTransactionMapper.insert(tx);
+    }
+
+    /**
+     * 当前后台操作人（用于流水留痕）：非后台链路（定时任务/小程序）时为 null，流水记为"系统"
+     */
+    private AdminRequestContext currentOperator() {
+        return AdminRequestContextSupport.currentAdminOrNull();
     }
 
     private List<String> splitTags(String raw) {
@@ -776,10 +790,6 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
 
     private List<String> querySuggestionValues(String sql) {
         return jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString(1));
-    }
-
-    private List<String> querySuggestionValues(String sql, Object... args) {
-        return jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString(1), args);
     }
 
     @SafeVarargs

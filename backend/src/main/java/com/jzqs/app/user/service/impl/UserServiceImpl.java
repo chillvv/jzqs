@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
+import com.jzqs.app.common.util.PasswordUtils;
 import com.jzqs.app.user.mapper.UserMapper;
 import com.jzqs.app.user.model.dto.UserCreateRequest;
 import com.jzqs.app.user.model.dto.UserQueryRequest;
@@ -67,14 +68,20 @@ public class UserServiceImpl implements UserService {
     @Transactional
     public UserDetailResponse create(UserCreateRequest request) {
         assertUsernameUnique(request.username(), null);
+        assertPhoneUnique(request.phone(), null);
+        String role = normalizeRole(request.role());
         LocalDateTime now = LocalDateTime.now();
         UserEntity entity = new UserEntity();
-        entity.setUsername(request.username().trim());
+        // 用户名未单独提供时以手机号作为用户名（登录统一使用手机号+密码）
+        entity.setUsername(request.username() == null || request.username().isBlank()
+            ? request.phone().trim()
+            : request.username().trim());
         entity.setDisplayName(request.displayName().trim());
         entity.setPhone(request.phone().trim());
-        entity.setRole(request.role().trim());
+        entity.setRole(role);
         entity.setStatus("ENABLED");
-        entity.setPasswordHash("{noop}init123456");
+        // 密码以手机号为盐做 SHA-256 存储，创建后即可用手机号+密码登录
+        entity.setPasswordHash(PasswordUtils.hash(request.password(), request.phone().trim()));
         entity.setCreatedAt(now);
         entity.setUpdatedAt(now);
         userMapper.insert(entity);
@@ -89,15 +96,58 @@ public class UserServiceImpl implements UserService {
             throw new BusinessException(ErrorCode.USER_NOT_FOUND, "用户不存在");
         }
         existing.setDisplayName(request.displayName().trim());
-        existing.setPhone(request.phone().trim());
-        existing.setRole(request.role().trim());
-        existing.setStatus(request.status().trim());
+        existing.setRole(normalizeRole(request.role()));
+        existing.setStatus(normalizeStatus(request.status()));
         existing.setUpdatedAt(LocalDateTime.now());
         userMapper.updateById(existing);
         return detail(userId);
     }
 
+    @Override
+    @Transactional
+    public UserDetailResponse resetPassword(Long userId, String newPassword) {
+        UserEntity existing = userMapper.selectById(userId);
+        if (existing == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND, "用户不存在");
+        }
+        existing.setPasswordHash(PasswordUtils.hash(newPassword, existing.getPhone()));
+        existing.setUpdatedAt(LocalDateTime.now());
+        userMapper.updateById(existing);
+        return detail(userId);
+    }
+
+    private String normalizeRole(String role) {
+        String normalized = role == null ? "" : role.trim().toUpperCase();
+        if (!normalized.equals("OWNER") && !normalized.equals("ADMIN") && !normalized.equals("OPERATOR")) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "角色必须是 OWNER/ADMIN/OPERATOR");
+        }
+        return normalized;
+    }
+
+    private String normalizeStatus(String status) {
+        String normalized = status == null ? "" : status.trim().toUpperCase();
+        if (!normalized.equals("ENABLED") && !normalized.equals("DISABLED")) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "状态必须是 ENABLED/DISABLED");
+        }
+        return normalized;
+    }
+
+    private void assertPhoneUnique(String phone, Long excludeId) {
+        LambdaQueryWrapper<UserEntity> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(UserEntity::getPhone, phone.trim());
+        if (excludeId != null) {
+            wrapper.ne(UserEntity::getId, excludeId);
+        }
+        Long count = userMapper.selectCount(wrapper);
+        if (count != null && count > 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "该手机号已被使用");
+        }
+    }
+
     private void assertUsernameUnique(String username, Long excludeId) {
+        if (username == null || username.isBlank()) {
+            return;
+        }
         LambdaQueryWrapper<UserEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(UserEntity::getUsername, username.trim());
         if (excludeId != null) {

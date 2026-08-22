@@ -337,6 +337,7 @@ export type WalletTransactionResponse = {
   transactionType: string;
   mealDelta: number;
   operatorName: string;
+  operatorId?: number | null;
   remark: string;
   relatedOrderId: number | null;
   relatedAftersaleId: number | null;
@@ -346,6 +347,42 @@ export type WalletTransactionResponse = {
   refundReasonText: string;
   createdAt: string;
   expiredAtSnapshot: string | null;
+};
+
+export type AdminUserItem = {
+  id: number;
+  username: string;
+  displayName: string;
+  phone: string;
+  role: string;
+  status: string;
+};
+
+export type AdminUserDetail = AdminUserItem & {
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AdminOperationLogItem = {
+  id: number;
+  operatorId: number | null;
+  operatorName: string | null;
+  operatorPhone: string | null;
+  operatorRole: string | null;
+  module: string;
+  action: string;
+  httpMethod: string;
+  requestPath: string;
+  requestSummary: string | null;
+  status: string;
+  errorMessage: string | null;
+  durationMs: number;
+  clientIp: string | null;
+  createdAt: string;
+  moduleLabel: string;
+  actionLabel: string;
+  targetLabel: string;
+  detailLabel: string;
 };
 
 export type CustomerBatchExtendResponse = {

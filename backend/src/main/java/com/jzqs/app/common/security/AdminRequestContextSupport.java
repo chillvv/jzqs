@@ -36,6 +36,39 @@ public final class AdminRequestContextSupport {
         return requireAdmin().operatorName();
     }
 
+    /**
+     * 安全获取当前后台操作人：非 Web 上下文（如定时任务）或非管理员请求时返回 null，不抛异常。
+     * 余额流水等业务记录操作人时使用，取不到则回退为"系统"。
+     */
+    public static AdminRequestContext currentAdminOrNull() {
+        try {
+            RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
+            if (!(attributes instanceof ServletRequestAttributes servletRequestAttributes)) {
+                return null;
+            }
+            HttpServletRequest request = servletRequestAttributes.getRequest();
+            Object userType = request.getAttribute(USER_TYPE_ATTR);
+            if (!"admin".equalsIgnoreCase(stringValue(userType))) {
+                return null;
+            }
+            return new AdminRequestContext(
+                longValue(request.getAttribute(USER_ID_ATTR)),
+                stringValue(request.getAttribute(ADMIN_ROLE_ATTR)),
+                stringValue(request.getAttribute(ADMIN_DISPLAY_NAME_ATTR))
+            );
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    /**
+     * 当前操作人姓名：后台管理员返回其姓名；否则（系统任务/用户小程序侧）返回"系统"。
+     */
+    public static String currentOperatorNameOrSystem() {
+        AdminRequestContext admin = currentAdminOrNull();
+        return admin == null ? "系统" : admin.operatorName();
+    }
+
     public static String currentRequestPath() {
         RequestAttributes attributes = RequestContextHolder.getRequestAttributes();
         if (!(attributes instanceof ServletRequestAttributes servletRequestAttributes)) {

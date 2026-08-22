@@ -6,6 +6,7 @@ public record WalletTransactionResponse(
     String transactionType,
     int mealDelta,
     String operatorName,
+    Long operatorId,
     String remark,
     Long relatedOrderId,
     Long relatedAftersaleId,

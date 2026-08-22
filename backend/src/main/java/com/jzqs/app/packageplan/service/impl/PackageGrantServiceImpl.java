@@ -22,7 +22,7 @@ public class PackageGrantServiceImpl implements PackageGrantService {
 
     @Override
     @Transactional
-    public GrantPackageResponse grantPackage(long customerId, String packageCode, int totalMeals, String operatorName) {
+    public GrantPackageResponse grantPackage(long customerId, String packageCode, int totalMeals, String operatorName, Long operatorId) {
         jdbcTemplate.queryForObject(
             "SELECT id FROM customers WHERE id = ? FOR UPDATE",
             Long.class,
@@ -49,17 +49,18 @@ public class PackageGrantServiceImpl implements PackageGrantService {
                 existingWalletId
             );
         }
-        insertWalletTransaction(existingWalletId, "OPEN", totalMeals, operatorName, "后台开卡");
+        insertWalletTransaction(existingWalletId, "OPEN", totalMeals, operatorName, operatorId, "后台开卡");
         return new GrantPackageResponse(customerId, packageCode, totalMeals);
     }
 
-    private void insertWalletTransaction(long walletId, String transactionType, int mealDelta, String operatorName, String remark) {
+    private void insertWalletTransaction(long walletId, String transactionType, int mealDelta, String operatorName, Long operatorId, String remark) {
         jdbcTemplate.update(
-            "INSERT INTO wallet_transactions (wallet_id, transaction_type, meal_delta, operator_name, remark, created_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
+            "INSERT INTO wallet_transactions (wallet_id, transaction_type, meal_delta, operator_name, operator_id, remark, created_at) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
             walletId,
             transactionType,
             mealDelta,
             operatorName,
+            operatorId,
             remark
         );
     }

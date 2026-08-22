@@ -9,6 +9,7 @@ import com.jzqs.app.aftersale.api.AdminAftersaleResolveResponse;
 import com.jzqs.app.aftersale.service.AftersaleService;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
+import com.jzqs.app.common.security.AdminRequestContextSupport;
 import com.jzqs.app.mobile.api.MobileAfterSaleItemResponse;
 import com.jzqs.app.mobile.api.MobileCreateAfterSaleRequest;
 import com.jzqs.app.mobile.api.MobileCreateAfterSaleResponse;
@@ -760,18 +761,21 @@ public class AftersaleServiceImpl implements AftersaleService {
         String refundReasonText,
         LocalDateTime createdAt
     ) {
+        // 售后处理链路由后台管理员触发，记录其用户ID用于追溯；非后台链路时为 NULL
+        var admin = AdminRequestContextSupport.currentAdminOrNull();
         return insertAndReturnId(
             """
                 INSERT INTO wallet_transactions (
-                    wallet_id, transaction_type, meal_delta, operator_name, remark,
+                    wallet_id, transaction_type, meal_delta, operator_name, operator_id, remark,
                     related_order_id, related_aftersale_id, related_transaction_id,
                     snapshot_balance, refunded, refund_reason_code, refund_reason_text, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, FALSE, ?, ?, ?)
                 """,
             walletId,
             transactionType,
             mealDelta,
             operatorName,
+            admin == null ? null : admin.userId(),
             remark,
             orderId,
             aftersaleId,

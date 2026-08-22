@@ -77,12 +77,17 @@ public class OrderSupportRepository {
     }
 
     public void insertWalletTransaction(long walletId, String transactionType, int mealDelta, String operatorName, String remark, Long relatedOrderId) {
+        insertWalletTransaction(walletId, transactionType, mealDelta, operatorName, null, remark, relatedOrderId);
+    }
+
+    public void insertWalletTransaction(long walletId, String transactionType, int mealDelta, String operatorName, Long operatorId, String remark, Long relatedOrderId) {
         jdbcTemplate.update(
-            "INSERT INTO wallet_transactions (wallet_id, transaction_type, meal_delta, operator_name, remark, created_at, related_order_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO wallet_transactions (wallet_id, transaction_type, meal_delta, operator_name, operator_id, remark, created_at, related_order_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             walletId,
             transactionType,
             mealDelta,
             operatorName,
+            operatorId,
             remark,
             Timestamp.valueOf(LocalDateTime.now()),
             relatedOrderId

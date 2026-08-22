@@ -4,6 +4,7 @@ import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.common.aop.annotation.AuditAction;
 import com.jzqs.app.common.aop.annotation.Idempotent;
 import com.jzqs.app.common.aop.annotation.RateLimit;
+import com.jzqs.app.common.security.AdminRequestContext;
 import com.jzqs.app.common.security.AdminRequestContextSupport;
 import com.jzqs.app.customer.sync.CustomerMainSheetSyncRequest;
 import com.jzqs.app.customer.service.CustomerMainSheetSyncService;
@@ -101,10 +102,12 @@ public class CustomerAssetController {
     @Idempotent(key = "admin:customers:wallet:grant", ttlSeconds = 5, includeBody = true)
     @AuditAction(module = "CUSTOMER_ASSET", action = "WALLET_GRANT")
     public ApiResponse<CustomerWalletAdjustResponse> grant(@PathVariable long customerId, @Valid @RequestBody WalletAdjustRequest request) {
+        AdminRequestContext operator = AdminRequestContextSupport.requireAdmin();
         WalletAdjustRequest normalizedRequest = new WalletAdjustRequest(
             request.mealDelta(),
             request.validityDays(),
-            AdminRequestContextSupport.requireOperatorName(),
+            operator.operatorName(),
+            operator.userId(),
             request.remark(),
             request.expiredAt()
         );
@@ -116,10 +119,12 @@ public class CustomerAssetController {
     @Idempotent(key = "admin:customers:wallet:deduct", ttlSeconds = 5, includeBody = true)
     @AuditAction(module = "CUSTOMER_ASSET", action = "WALLET_DEDUCT")
     public ApiResponse<CustomerWalletAdjustResponse> deduct(@PathVariable long customerId, @Valid @RequestBody WalletAdjustRequest request) {
+        AdminRequestContext operator = AdminRequestContextSupport.requireAdmin();
         WalletAdjustRequest normalizedRequest = new WalletAdjustRequest(
             request.mealDelta(),
             request.validityDays(),
-            AdminRequestContextSupport.requireOperatorName(),
+            operator.operatorName(),
+            operator.userId(),
             request.remark(),
             request.expiredAt()
         );

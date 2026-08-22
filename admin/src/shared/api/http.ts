@@ -56,7 +56,10 @@ import type {
   SubscriptionPreviewCheckResponse,
   ManualCreateCustomerSearchResponse,
   DeliveryReleasePendingItem,
-  DeliveryReleaseResult
+  DeliveryReleaseResult,
+  AdminUserItem,
+  AdminUserDetail,
+  AdminOperationLogItem
 } from "./types";
 import { ADMIN_AUTH_STORAGE_KEY, parseAdminAuthSession } from "../../modules/auth/adminAuth.helpers";
 
@@ -1087,3 +1090,63 @@ export async function checkSubscriptionPreview(serveDate: string) {
 // --- SWR Fetcher ---
 // 使用现有的 http 实例，这样 SWR 请求就能自动继承已有的 token 和 401/403 拦截逻辑
 export const swrFetcher = (url: string) => http.get(url).then(res => res.data);
+
+// --- Admin User Accounts (后台账号管理) ---
+export async function fetchAdminUsers(params?: { keyword?: string; status?: string }) {
+  const query = new URLSearchParams();
+  if (params?.keyword) query.set("keyword", params.keyword);
+  if (params?.status) query.set("status", params.status);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  const response = await http.get<ApiResponse<PageResponse<AdminUserItem>>>(`/api/admin/users${suffix}`);
+  return response.data.data;
+}
+
+export async function createAdminUser(payload: {
+  displayName: string;
+  phone: string;
+  role: string;
+  password: string;
+  username?: string;
+}) {
+  const response = await http.post<ApiResponse<AdminUserDetail>>("/api/admin/users", payload);
+  return response.data.data;
+}
+
+export async function updateAdminUser(userId: number, payload: {
+  displayName: string;
+  role: string;
+  status: string;
+}) {
+  const response = await http.put<ApiResponse<AdminUserDetail>>(`/api/admin/users/${userId}`, payload);
+  return response.data.data;
+}
+
+export async function resetAdminUserPassword(userId: number, newPassword: string) {
+  const response = await http.post<ApiResponse<AdminUserDetail>>(`/api/admin/users/${userId}/reset-password`, {
+    newPassword
+  });
+  return response.data.data;
+}
+
+// --- Admin Operation Logs (后台操作审计日志) ---
+export async function fetchAdminOperationLogs(params?: {
+  page?: number;
+  pageSize?: number;
+  operatorName?: string;
+  module?: string;
+  status?: string;
+  startDate?: string;
+  endDate?: string;
+}) {
+  const query = new URLSearchParams();
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.pageSize) query.set("pageSize", String(params.pageSize));
+  if (params?.operatorName) query.set("operatorName", params.operatorName);
+  if (params?.module) query.set("module", params.module);
+  if (params?.status) query.set("status", params.status);
+  if (params?.startDate) query.set("startDate", params.startDate);
+  if (params?.endDate) query.set("endDate", params.endDate);
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  const response = await http.get<ApiResponse<PageResponse<AdminOperationLogItem>>>(`/api/admin/operation-logs${suffix}`);
+  return response.data.data;
+}

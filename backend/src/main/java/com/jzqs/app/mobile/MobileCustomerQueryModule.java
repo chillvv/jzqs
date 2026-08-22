@@ -405,6 +405,7 @@ class MobileCustomerQueryModule {
                     wt.transaction_type,
                     wt.meal_delta,
                     wt.operator_name,
+                    wt.operator_id,
                     COALESCE(wt.remark, '') AS remark,
                     wt.related_order_id,
                     wt.related_aftersale_id,
@@ -420,22 +421,29 @@ class MobileCustomerQueryModule {
                 ORDER BY wt.id DESC
                 LIMIT 50
                 """,
-            (rs, rowNum) -> new WalletTransactionResponse(
-                rs.getLong("id"),
-                rs.getLong("customer_id"),
-                rs.getString("transaction_type"),
-                rs.getInt("meal_delta"),
-                rs.getString("operator_name"),
-                rs.getString("remark"),
-                (Long) rs.getObject("related_order_id"),
-                (Long) rs.getObject("related_aftersale_id"),
-                (Long) rs.getObject("related_transaction_id"),
-                rs.getBoolean("refunded"),
-                rs.getString("refund_reason_code"),
-                rs.getString("refund_reason_text"),
-                formatTimestamp(rs.getTimestamp("created_at")),
-                formatTimestamp(rs.getTimestamp("expired_at_snapshot"))
-            ),
+            (rs, rowNum) -> {
+                Long operatorId = (Long) rs.getObject("operator_id");
+                // 小程序端脱敏：商家后台人员操作(operator_id 非空)统一显示"系统"，不暴露操作人姓名；
+                // 用户自主操作(operator_id 为空，如"小程序")保持原文展示
+                String operatorName = operatorId != null ? "系统" : rs.getString("operator_name");
+                return new WalletTransactionResponse(
+                    rs.getLong("id"),
+                    rs.getLong("customer_id"),
+                    rs.getString("transaction_type"),
+                    rs.getInt("meal_delta"),
+                    operatorName,
+                    null,
+                    rs.getString("remark"),
+                    (Long) rs.getObject("related_order_id"),
+                    (Long) rs.getObject("related_aftersale_id"),
+                    (Long) rs.getObject("related_transaction_id"),
+                    rs.getBoolean("refunded"),
+                    rs.getString("refund_reason_code"),
+                    rs.getString("refund_reason_text"),
+                    formatTimestamp(rs.getTimestamp("created_at")),
+                    formatTimestamp(rs.getTimestamp("expired_at_snapshot"))
+                );
+            },
             customerId
         );
         return PageResponse.of(items, 1, 20, items.size());

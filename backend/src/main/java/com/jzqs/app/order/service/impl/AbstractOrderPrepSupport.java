@@ -2,6 +2,7 @@ package com.jzqs.app.order.service.impl;
 
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
+import com.jzqs.app.common.security.AdminRequestContextSupport;
 import com.jzqs.app.order.persistence.OrderSupportRepository;
 import java.util.List;
 
@@ -52,6 +53,22 @@ abstract class AbstractOrderPrepSupport {
 
     protected void insertWalletTransaction(long walletId, String transactionType, int mealDelta, String operatorName, String remark, Long relatedOrderId) {
         orderSupportRepository.insertWalletTransaction(walletId, transactionType, mealDelta, operatorName, remark, relatedOrderId);
+    }
+
+    /**
+     * 记录后台管理员操作人的余额流水：admin 链路记真实姓名+ID，非 admin 链路（定时任务等）记"系统"。
+     */
+    protected void insertWalletTransactionByAdmin(long walletId, String transactionType, int mealDelta, String remark, Long relatedOrderId) {
+        var admin = AdminRequestContextSupport.currentAdminOrNull();
+        orderSupportRepository.insertWalletTransaction(
+            walletId,
+            transactionType,
+            mealDelta,
+            admin == null ? "系统" : admin.operatorName(),
+            admin == null ? null : admin.userId(),
+            remark,
+            relatedOrderId
+        );
     }
 
     protected String resolveMealPeriod(Object mealPeriodValue, Object legacyMealSummaryValue, String fallbackMealPeriod) {
