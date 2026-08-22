@@ -73,6 +73,18 @@ async function getTempFileURL(fileID) {
 }
 
 /**
+ * 清洗路径片段：去掉路径分隔符、控制字符与 ".."，防止路径穿越/越权目录
+ */
+function sanitizeSegment(value, fallback) {
+  const cleaned = String(value == null ? '' : value)
+    .replace(/[\/\\\x00-\x1f]/g, '')
+    .replace(/\.\./g, '')
+    .replace(/^\W+|\W+$/g, '')
+    .slice(0, 40);
+  return cleaned || fallback;
+}
+
+/**
  * 生成云存储路径
  * @param {string} riderName - 骑手姓名
  * @param {string} extension - 文件扩展名（如: jpg）
@@ -81,7 +93,9 @@ async function getTempFileURL(fileID) {
 function generateCloudPath(riderName, extension = 'jpg') {
   const timestamp = Date.now();
   const random = Math.floor(Math.random() * 10000);
-  return `rider-receipts/${riderName}-${timestamp}-${random}.${extension}`;
+  const safeName = sanitizeSegment(riderName, 'rider');
+  const safeExt = String(extension || 'jpg').replace(/[^a-zA-Z0-9]/g, '').slice(0, 10) || 'jpg';
+  return `rider-receipts/${safeName}-${timestamp}-${random}.${safeExt}`;
 }
 
 module.exports = {

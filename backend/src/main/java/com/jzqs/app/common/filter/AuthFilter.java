@@ -54,9 +54,7 @@ public class AuthFilter implements Filter {
         "/api/admin/auth/login",
         "/uploads/",
         "/ws/realtime",
-        "/actuator/",
-        "/swagger-ui/",
-        "/v3/api-docs/",
+        "/actuator/health",
         "/error"
     );
 
@@ -121,6 +119,14 @@ public class AuthFilter implements Filter {
             JwtClaims claims = JwtUtils.parseToken(token);
 
             if (path.startsWith("/api/admin/") && !isAdmin(claims)) {
+                writeUnauthorized(httpResponse, GENERIC_UNAUTHORIZED_MESSAGE);
+                return;
+            }
+            if (path.startsWith("/api/mobile/rider/") && claims.riderId() == null) {
+                writeUnauthorized(httpResponse, GENERIC_UNAUTHORIZED_MESSAGE);
+                return;
+            }
+            if (path.startsWith("/api/mobile/customer/") && claims.customerId() == null) {
                 writeUnauthorized(httpResponse, GENERIC_UNAUTHORIZED_MESSAGE);
                 return;
             }

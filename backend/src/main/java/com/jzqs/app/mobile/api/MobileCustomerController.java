@@ -2,6 +2,7 @@ package com.jzqs.app.mobile.api;
 
 import com.jzqs.app.common.api.ApiResponse;
 import com.jzqs.app.common.api.PageResponse;
+import com.jzqs.app.common.aop.annotation.Idempotent;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.common.util.JwtUtils;
@@ -83,6 +84,7 @@ public class MobileCustomerController {
         return ApiResponse.success(mobilePortalService.customerOrders(extractCustomerId(authorization), status));
     }
 
+    @Idempotent(key = "order:create", ttlSeconds = 10)
     @PostMapping("/orders")
     public ApiResponse<MobileCreateOrderResponse> createOrder(
         @RequestHeader("Authorization") String authorization,
@@ -163,6 +165,7 @@ public class MobileCustomerController {
         );
     }
 
+    @Idempotent(key = "order:cancel", ttlSeconds = 10)
     @PostMapping("/orders/{orderId}/cancel")
     public ApiResponse<OrderActionResponse> cancelOrder(
         @PathVariable long orderId,
@@ -198,6 +201,7 @@ public class MobileCustomerController {
         return ApiResponse.success(response);
     }
 
+    @Idempotent(key = "aftersale:create", ttlSeconds = 10)
     @PostMapping("/orders/{orderId}/after-sales")
     public ApiResponse<MobileCreateAfterSaleResponse> createAfterSale(
         @PathVariable long orderId,
@@ -230,6 +234,7 @@ public class MobileCustomerController {
         return ApiResponse.success(mobilePortalService.customerAddresses(extractCustomerId(authorization)));
     }
 
+    @Idempotent(key = "address:save", ttlSeconds = 10)
     @PostMapping("/addresses")
     public ApiResponse<MobileAddressResponse> saveAddress(
         @RequestHeader("Authorization") String authorization,
@@ -245,6 +250,7 @@ public class MobileCustomerController {
         ));
     }
 
+    @Idempotent(key = "address:update", ttlSeconds = 10)
     @PutMapping("/addresses/{addressId}")
     public ApiResponse<MobileAddressResponse> updateAddress(
         @PathVariable long addressId,
@@ -284,6 +290,7 @@ public class MobileCustomerController {
         return ApiResponse.success(subscriptionRuleService.getRuleByCustomerId(customerId));
     }
 
+    @Idempotent(key = "subscription:update", ttlSeconds = 10)
     @PostMapping("/subscription-rule")
     public ApiResponse<MobileSubscriptionRuleResponse> updateSubscriptionRule(
         @RequestAttribute("customerId") Long customerId,
@@ -299,6 +306,7 @@ public class MobileCustomerController {
         return ApiResponse.success(mobilePortalService.walletTransactions(extractCustomerId(authorization)));
     }
 
+    @Idempotent(key = "profile:update", ttlSeconds = 10)
     @PostMapping("/profile")
     public ApiResponse<CustomerProfileUpdateResponse> updateProfile(
         @RequestHeader("Authorization") String authorization,

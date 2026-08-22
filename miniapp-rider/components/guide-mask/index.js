@@ -66,6 +66,8 @@ Component({
           onDone: cb.onDone || null
         });
       } catch (e) {
+        const pages = getCurrentPages();
+        const page = pages[pages.length - 1];
         const cb = (page && page.__guideCBs) || {};
         if (typeof cb.onDone === 'function') {
           try { cb.onDone(); } catch (e2) {}

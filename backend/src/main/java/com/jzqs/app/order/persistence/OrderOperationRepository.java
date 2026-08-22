@@ -103,7 +103,7 @@ public class OrderOperationRepository {
 
     public int cancelOrder(long orderId) {
         return jdbcTemplate.update(
-            "UPDATE meal_slot_orders SET status = 'CANCELLED' WHERE id = ? AND status <> 'CANCELLED'",
+            "UPDATE meal_slot_orders SET status = 'CANCELLED' WHERE id = ? AND status NOT IN ('CANCELLED', 'DELIVERED', 'REFUNDED')",
             orderId
         );
     }

@@ -112,7 +112,7 @@ export function AdminLoginPage() {
               checked={form.remember}
               onChange={(event) => setForm((current) => ({ ...current, remember: event.target.checked }))}
             />
-            <span>记住账号和密码</span>
+            <span>记住账号</span>
           </label>
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "12px", fontSize: "13px", color: "var(--text-sub)" }}>

@@ -16,8 +16,6 @@ public final class JwtUtils {
     private static final int MIN_SECRET_LENGTH = 8;
     private static final String DEV_FALLBACK_SECRET = "dev-local-jwt-secret-change-me-2026";
     private static final String ALLOW_DEFAULT_SECRET_PROPERTY = "app.jwt.allow-default-secret";
-    private static final String ACTIVE_PROFILE_PROPERTY = "spring.profiles.active";
-    private static final String ACTIVE_PROFILE_ENV = "SPRING_PROFILES_ACTIVE";
 
     private JwtUtils() {
     }
@@ -192,12 +190,10 @@ public final class JwtUtils {
     }
 
     private static boolean shouldAllowDefaultSecret() {
+        // 仅当显式声明 APP_JWT_ALLOW_DEFAULT_SECRET=true 时才允许回退默认密钥，
+        // 避免任何环境（含未正确设置 profile 的生产）静默使用可预测的默认密钥。
         String allowDefault = readPropertyOrEnv(ALLOW_DEFAULT_SECRET_PROPERTY, "APP_JWT_ALLOW_DEFAULT_SECRET");
-        if ("true".equalsIgnoreCase(allowDefault)) {
-            return true;
-        }
-        String activeProfiles = readPropertyOrEnv(ACTIVE_PROFILE_PROPERTY, ACTIVE_PROFILE_ENV);
-        return activeProfiles == null || !containsProdProfile(activeProfiles);
+        return "true".equalsIgnoreCase(allowDefault);
     }
 
     private static String readPropertyOrEnv(String propertyName, String envName) {
@@ -208,16 +204,4 @@ public final class JwtUtils {
         return configured;
     }
 
-    private static boolean containsProdProfile(String activeProfiles) {
-        if (activeProfiles == null || activeProfiles.isBlank()) {
-            return false;
-        }
-        String[] profiles = activeProfiles.split(",");
-        for (String profile : profiles) {
-            if ("prod".equalsIgnoreCase(profile == null ? "" : profile.trim())) {
-                return true;
-            }
-        }
-        return false;
-    }
 }

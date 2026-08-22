@@ -77,9 +77,16 @@ public class DeliveryServiceImpl implements DeliveryService {
         String visibleAt,
         String expiresAt
     ) {
-        Integer exists = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM meal_slot_orders WHERE id = ?", Integer.class, orderId);
-        if (exists == null || exists == 0) {
+        String status = jdbcTemplate.query(
+            "SELECT status FROM meal_slot_orders WHERE id = ?",
+            ps -> ps.setLong(1, orderId),
+            rs -> rs.next() ? rs.getString("status") : null
+        );
+        if (status == null) {
             return new DeliveryReceiptRecordResponse(orderId, "NOT_FOUND", "SKIPPED", "SKIPPED", receiptUrl, visibleAt, expiresAt);
+        }
+        if ("CANCELLED".equals(status) || "REFUNDED".equals(status)) {
+            return new DeliveryReceiptRecordResponse(orderId, status, "SKIPPED", "SKIPPED", receiptUrl, visibleAt, expiresAt);
         }
         Timestamp deliveredTimestamp = parseTimestamp(deliveredAt, "送达时间格式不正确");
         Timestamp visibleTimestamp = parseTimestamp(visibleAt, "可见时间格式不正确");

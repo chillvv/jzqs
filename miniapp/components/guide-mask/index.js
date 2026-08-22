@@ -69,6 +69,8 @@ Component({
         });
       } catch (e) {
         // 极端兜底：start 失败也不能困住用户，直接推进到下一步
+        const pages = getCurrentPages();
+        const page = pages[pages.length - 1];
         const cb = (page && page.__guideCBs) || {};
         if (typeof cb.onDone === 'function') {
           try { cb.onDone(); } catch (e2) {}

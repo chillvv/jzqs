@@ -1,6 +1,6 @@
+// 出于安全考虑，不持久化明文密码："记住账号" 仅保存手机号用于回填。
 export type SavedAdminCredentials = {
   phone: string;
-  password: string;
   remember: true;
 };
 
@@ -31,7 +31,7 @@ export function buildInitialAdminLoginForm(saved: SavedAdminCredentials | null):
   }
   return {
     phone: saved.phone,
-    password: saved.password,
+    password: "",
     remember: true
   };
 }
@@ -46,7 +46,6 @@ export function buildSavedAdminCredentials(input: {
   }
   return {
     phone: input.phone.trim(),
-    password: input.password,
     remember: true
   };
 }
@@ -58,17 +57,12 @@ export function parseSavedAdminCredentials(rawValue: string | null | undefined):
   }
   const record = parsed as Record<string, unknown>;
   const phone = normalizeText(record.phone);
-  const rawPassword = record.password;
-  const password = typeof rawPassword === "string"
-    ? rawPassword
-    : "";
   const remember = record.remember === true;
-  if (!phone || !password || !remember) {
+  if (!phone || !remember) {
     return null;
   }
   return {
     phone,
-    password,
     remember: true
   };
 }

@@ -95,10 +95,8 @@ function request({ url, method = 'GET', data, header, requireWorkbench = true, t
           reject(new Error(errorMsg));
         },
         fail(err) {
-          console.error('[请求失败]', {
-            url: `${app.globalData.apiBaseUrl}${url}`,
-            error: err
-          });
+          // 只打印错误信息，避免 err 对象可能携带请求头/token 等敏感信息
+          console.error('[请求失败]', url, err && err.errMsg ? err.errMsg : err);
           
           let errorMsg = '网络请求失败';
           if (err.errMsg && err.errMsg.includes('timeout')) {
@@ -199,10 +197,8 @@ function uploadFile({ url, filePath, name = 'file', formData, requireWorkbench =
           }
         },
         fail(err) {
-          console.error('[上传失败]', {
-            url: `${app.globalData.apiBaseUrl}${url}`,
-            error: err
-          });
+          // 只打印错误信息，避免 err 对象可能携带请求头/token 等敏感信息
+          console.error('[上传失败]', url, err && err.errMsg ? err.errMsg : err);
           
           let errorMsg = '网络请求失败';
           if (err.errMsg && err.errMsg.includes('timeout')) {

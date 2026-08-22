@@ -1,6 +1,6 @@
 /**
- * 缁熶竴璁よ瘉妯″潡 - 椤惧绔?
- * 鍩轰簬寰俊灏忕▼搴忕粺涓€鐧诲綍鏂规
+ * 统一认证模块 - 顾客端
+ * 基于微信小程序统一登录方案
  *
  * @author Kiro AI
  * @since 2026-05-23
@@ -28,15 +28,15 @@ class Auth {
   }
 
   /**
-   * 鍒濆鍖栬璇佺姸鎬?
-   * 灏忕▼搴忓惎鍔ㄦ椂璋冪敤涓€娆?
+   * 初始化认证状态
+   * 小程序启动时调用一次
    */
   async init() {
-    // 1. 妫€鏌ユ湰鍦?token
+    // 1. 检查本地 token
     const token = wx.getStorageSync(AUTH_TOKEN_KEY);
 
     if (token) {
-      // 2. 楠岃瘉 token 鏄惁鏈夋晥
+      // 2. 验证 token 是否有效
       try {
         const result = await this.request('/api/mobile/auth/verify', 'GET', null, token);
         if (result.valid && result.userType === 'customer') {
@@ -50,17 +50,17 @@ class Auth {
           return;
         }
       } catch (e) {
-        // token 鏃犳晥锛岀户缁蛋鐧诲綍娴?
-        console.log('[Auth] Token 楠岃瘉澶辫触:', e.message);
+        // token 无效，继续走登录流
+        console.log('[Auth] Token 验证失败:', e.message);
       }
       wx.removeStorageSync(AUTH_TOKEN_KEY);
     }
 
-    // 3. 鏃犳湁鏁?token锛岃蛋寰俊闈欓粯鐧诲綍
+    // 3. 无有效 token，走微信静默登录
     try {
       await this.silentLogin();
     } catch (error) {
-      console.error('[Auth] 闈欓粯鐧诲綍澶辫触锛岃繘鍏ユ湭鐧诲綍鐘舵€?', error);
+      console.error('[Auth] 静默登录失败，进入未登录状态', error);
       this.syncAppGlobalData();
     }
     this.globalData.ready = true;
@@ -68,7 +68,7 @@ class Auth {
   }
 
   /**
-   * 寰俊闈欓粯鐧诲綍锛坵x.login 鈫?code 鈫?鍚庣鎹?openid锛?
+   * 微信静默登录（wx.login → code → 后端换 openid）
    */
   async silentLogin() {
     try {
@@ -80,7 +80,7 @@ class Auth {
       this.applyAuthState(result);
       return result;
     } catch (error) {
-      console.error('[Auth] 闈欓粯鐧诲綍澶辫触:', error);
+      console.error('[Auth] 静默登录失败:', error);
       throw error;
     }
   }
@@ -97,7 +97,7 @@ class Auth {
   }
 
   /**
-   * 鎵嬫満鍙风櫥褰?
+   * 手机号登录
    */
   async phoneLogin(phone) {
     try {
@@ -109,13 +109,13 @@ class Auth {
       this.applyAuthState(result);
       return result;
     } catch (error) {
-      console.error('[Auth] 鎵嬫満鍙风櫥褰曞け璐?', error);
+      console.error('[Auth] 手机号登录失败:', error);
       throw error;
     }
   }
 
   /**
-   * 鎵嬪姩娉ㄥ唽骞剁粦瀹氭墜鏈哄彿
+   * 手动注册并绑定手机号
    */
   async register(phone, nickname) {
     try {
@@ -128,13 +128,13 @@ class Auth {
       this.applyAuthState(result);
       return result;
     } catch (error) {
-      console.error('[Auth] 椤惧娉ㄥ唽澶辫触:', error);
+      console.error('[Auth] 顾客注册失败:', error);
       throw error;
     }
   }
 
   /**
-   * 瀹屾垚椤惧棣栨璧勬枡琛ュ叏
+   * 完成顾客首次资料补全
    */
   async completeProfile(nickname) {
     try {
@@ -146,7 +146,7 @@ class Auth {
       this.applyAuthState(result);
       return result;
     } catch (error) {
-      console.error('[Auth] 瀹屽杽璧勬枡澶辫触:', error);
+      console.error('[Auth] 完善资料失败:', error);
       throw error;
     }
   }
@@ -171,13 +171,13 @@ class Auth {
       this.applyAuthState(result);
       return result;
     } catch (error) {
-      console.error('[Auth] 缁戝畾鎵嬫満鍙峰け璐?', error);
+      console.error('[Auth] 绑定手机号失败:', error);
       throw error;
     }
   }
 
   /**
-   * 搴旂敤璁よ瘉鐘舵€侊紙闈欓粯鐧诲綍缁撴灉锛?
+   * 应用认证状态（静默登录结果）
    */
   applyAuthState(result) {
     this.globalData.authMode = result.authMode || 'MINIAPP_WX';
@@ -194,7 +194,7 @@ class Auth {
   }
 
   /**
-   * 搴旂敤璁よ瘉缁撴灉锛堢櫥褰曟垚鍔燂級
+   * 应用认证结果（登录成功）
    */
   applyAuth(result) {
     if (result.token) {
@@ -212,7 +212,7 @@ class Auth {
   }
 
   /**
-   * 閫€鍑虹櫥褰?
+   * 退出登录
    */
   async logout() {
     const token = this.globalData.token || wx.getStorageSync(AUTH_TOKEN_KEY);
@@ -222,7 +222,7 @@ class Auth {
         await this.request('/api/mobile/auth/logout', 'POST', {}, token);
       }
     } catch (error) {
-      console.warn('[Auth] 閫€鍑虹櫥褰曡姹傚け璐?', error);
+      console.warn('[Auth] 退出登录请求失败:', error);
     } finally {
       wx.removeStorageSync(AUTH_TOKEN_KEY);
       wx.removeStorageSync(AUTH_STATE_KEY);
@@ -255,14 +255,15 @@ class Auth {
       app.globalData.userType = this.globalData.userType;
       app.globalData.authMode = this.globalData.authMode;
     } catch (error) {
-      // getApp 鍦ㄦ瀬鏃╂湡鏃跺彲鑳藉皻鏈畬鍏ㄥ彲鐢紝杩欓噷闈欓粯璺宠繃鍗冲彲
+      // getApp 在极早期时可能尚未完全可用，这里静默跳过即可
     }
   }
 
   /**
-   * 灏佽鐨勮姹傦紝鑷姩甯?token
+   * 封装的请求，自动带 token
    */
   async request(url, method, data, customToken) {
+    const self = this;
     const token = customToken || this.globalData.token;
     return new Promise((resolve, reject) => {
       const app = typeof getApp === 'function' ? getApp() : null;
@@ -277,8 +278,11 @@ class Auth {
         success(res) {
           const body = res.data || {};
           if (body.code === 'UNAUTHORIZED') {
-            // 401:清除状态，但不要在这里直接跳转，让调用方处理
+            // 401:清除 token 与登录态并同步到 app，让调用方处理跳转
             wx.removeStorageSync(AUTH_TOKEN_KEY);
+            self.globalData.token = null;
+            self.globalData.loggedIn = false;
+            self.syncAppGlobalData();
             reject(new Error(body.message || '登录状态已失效'));
             return;
           }
@@ -286,17 +290,17 @@ class Auth {
             resolve(body.data);
             return;
           }
-          reject(new Error(body.message || '璇锋眰澶辫触'));
+          reject(new Error(body.message || '请求失败'));
         },
         fail() {
-          reject(new Error('鏆傛椂鏃犳硶杩炴帴鏈嶅姟'));
+          reject(new Error('暂时无法连接服务'));
         }
       });
     });
   }
 
   /**
-   * 绛夊緟璁よ瘉灏辩华
+   * 等待认证就绪
    */
   waitForAuth() {
     return new Promise((resolve) => {
@@ -312,7 +316,7 @@ class Auth {
   }
 
   /**
-   * 鑾峰彇璁よ瘉鐘舵€?
+   * 获取认证状态
    */
   getAuthState() {
     return {
@@ -329,21 +333,21 @@ class Auth {
   }
 
   /**
-   * 鍒ゆ柇鏄惁闇€瑕佽烦杞埌鐧诲綍/娉ㄥ唽椤甸潰
+   * 判断是否需要跳转到登录/注册页面
    */
   shouldRedirectToAuth() {
     return this.globalData.ready && !this.globalData.loggedIn;
   }
 
   /**
-   * 鍒ゆ柇鏄惁闇€瑕佺粦瀹氭墜鏈哄彿
+   * 判断是否需要绑定手机号
    */
   shouldBindPhone() {
     return this.globalData.ready && !this.globalData.registered && this.globalData.needPhoneAuth;
   }
 }
 
-// 鍒涘缓鍗曚緥
+// 创建单例
 const auth = new Auth();
 
 module.exports = auth;

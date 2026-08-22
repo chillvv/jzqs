@@ -71,6 +71,7 @@ function request({ url, method = 'GET', data, header, requireAuth = true, hideLo
         method,
         data,
         header: finalHeader,
+        timeout: 15000,
         success(res) {
           const body = res.data || {};
           if (res.statusCode >= 200 && res.statusCode < 300 && body.code === 'OK') {
@@ -81,8 +82,8 @@ function request({ url, method = 'GET', data, header, requireAuth = true, hideLo
             app.handleUnauthorized();
           }
           const errorMsg = toErrorMessage(body.message);
-          // 把后端返回的完整错误打到控制台，便于定位（toast 一闪而过）
-          console.error(`[request] ${method} ${url} -> ${res.statusCode}`, JSON.stringify(body));
+          // 只打印状态码与脱敏后的错误信息，避免响应体（可能含 token/手机号等敏感信息）写入日志
+          console.error(`[request] ${method} ${url} -> ${res.statusCode}`, errorMsg);
           if (!hideErrorToast && typeof wx.showToast === 'function') {
             wx.showToast({ title: errorMsg, icon: 'none', duration: 2500 });
           }

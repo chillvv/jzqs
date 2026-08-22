@@ -29,7 +29,6 @@ import {
   filterCustomerAssets,
   normalizeInitialMealsValue,
   resolvePrimaryCustomerAddress,
-  shouldShowAddressExpandToggle,
   resolveCustomerStatusLabel,
   type CustomerBalanceState,
   type CustomerOrderModeFilter,

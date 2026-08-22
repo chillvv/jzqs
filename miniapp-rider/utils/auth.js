@@ -56,6 +56,8 @@ class Auth {
         console.log('[Auth] Token 验证失败:', e.message);
       }
       wx.removeStorageSync(AUTH_TOKEN_KEY);
+      // token 失效时同步清除持久化状态，避免 restorePersistedAuthState 恢复旧登录态造成"伪登录"
+      wx.removeStorageSync(AUTH_STATE_KEY);
     }
 
     this.restorePersistedAuthState();
@@ -386,7 +388,8 @@ class Auth {
     return this.globalData.ready && 
            this.globalData.loggedIn && 
            this.globalData.registered && 
-           this.globalData.workbenchEnabled;
+           this.globalData.workbenchEnabled &&
+           !!(this.globalData.token || wx.getStorageSync(AUTH_TOKEN_KEY));
   }
 
   /**

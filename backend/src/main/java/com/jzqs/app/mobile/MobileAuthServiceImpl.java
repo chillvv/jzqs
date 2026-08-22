@@ -86,6 +86,15 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         if (customerId == null) {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "该手机号未注册，请先注册");
         }
+        // 防 openid 劫持：该账号若已绑定其他微信 openid，拒绝用新 openid 直接覆盖登录
+        String boundOpenid = jdbcTemplate.query(
+            "SELECT current_openid FROM customers WHERE id = ?",
+            ps -> ps.setLong(1, customerId),
+            rs -> rs.next() ? rs.getString(1) : null
+        );
+        if (boundOpenid != null && !boundOpenid.isBlank() && !boundOpenid.equals(finalOpenid)) {
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, "该账号已绑定其他微信，请使用原微信登录");
+        }
         jdbcTemplate.update(
             """
                 UPDATE customers
@@ -940,7 +949,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
 
         // 生成 JWT Token
         String token = JwtUtils.generateToken(
-            JwtClaims.rider(newRiderId, finalName, finalPhone, finalOpenid.isBlank() ? null : finalOpenid)
+            JwtClaims.rider(newRiderId, finalName, finalPhone, finalOpenid)
         );
 
         return new RiderLoginResponse(
@@ -1038,7 +1047,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
 
         // 生成 JWT Token
         String token = JwtUtils.generateToken(
-            JwtClaims.rider(riderId, riderName, finalPhone, finalOpenid.isBlank() ? null : finalOpenid)
+            JwtClaims.rider(riderId, riderName, finalPhone, finalOpenid)
         );
 
         return new RiderLoginResponse(
@@ -1134,7 +1143,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
 
             // 生成 JWT Token
             String token = JwtUtils.generateToken(
-                JwtClaims.rider(riderId, existingName, finalPhone, finalOpenid.isBlank() ? null : finalOpenid)
+                JwtClaims.rider(riderId, existingName, finalPhone, finalOpenid)
             );
 
             return new RiderLoginResponse(
@@ -1188,7 +1197,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
 
             // 生成 JWT Token
             String token = JwtUtils.generateToken(
-                JwtClaims.rider(newRiderId, finalName, finalPhone, finalOpenid.isBlank() ? null : finalOpenid)
+                JwtClaims.rider(newRiderId, finalName, finalPhone, finalOpenid)
             );
 
             return new RiderLoginResponse(

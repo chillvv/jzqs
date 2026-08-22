@@ -1,4 +1,9 @@
-# 上传的文件
+# ============================================================
+# jzqs 项目 .gitignore
+# 多模块工程：Java 后端 / React 管理端 / 微信小程序 x2 / 云函数
+# ============================================================
+
+# ---------- 上传的文件 / 运行时产出 ----------
 /uploads/
 /backend/uploads/
 /backend/.backup/
@@ -6,7 +11,7 @@
 # 恢复与备份
 /_recovery/
 
-# AI & 工具产物 (Trae/Superpowers)
+# ---------- AI & 工具产物 (Trae/Superpowers/CodeBuddy 等) ----------
 /.trae/
 /.superpowers/
 /.kiro/
@@ -15,11 +20,10 @@
 /.worktree-backups/
 /docs/superpowers/
 .trae-sandbox/
+# 本地工作记忆（不提交，含跨会话 agent 记忆，属个人本地状态）
+.codebuddy/
 
-# 本地工作记忆（不提交）
-/.workbuddy/
-
-# 测试类与测试资源 (生产环境不需要)
+# ---------- 测试类与测试资源 (生产环境不需要) ----------
 /tests/
 /backend/src/test/
 /admin/src/**/*.test.ts
@@ -29,15 +33,15 @@
 /miniapp/tests/
 /miniapp-rider/tests/
 
-# 开发文档与本地规格说明
+# ---------- 开发文档与本地规格说明 ----------
 /docs/
 
-# IDE
+# ---------- IDE ----------
 .idea/
 .vscode/
 *.iml
 
-# 编译输出与构建产物
+# ---------- 编译输出与构建产物 ----------
 /backend/target/
 /backend/build/
 /admin/dist/
@@ -45,8 +49,21 @@
 /admin/admin-build.log
 /admin/admin-helper-test.log
 /admin/admin-test.log
+# 通用构建/缓存目录
+dist/
+build/
+out/
+.output/
+coverage/
+.turbo/
+.cache/
+# 编译中间文件
+*.class
+*.jar
+*.map
+*.tsbuildinfo
 
-# 日志
+# ---------- 日志 ----------
 *.log
 *.out
 *.err
@@ -56,7 +73,7 @@ backend/*.err
 admin/*.log
 backend/*.txt
 
-# 临时文件
+# ---------- 临时文件 ----------
 *.tmp
 *.temp
 /split_*.js
@@ -64,22 +81,30 @@ backend/*.txt
 /ui_optimization_plan.md
 backend/tmp_*
 
-# 操作系统
+# ---------- 操作系统 ----------
 .DS_Store
 Thumbs.db
 
-# Node modules
+# ---------- Node modules ----------
 node_modules/
 /admin/node_modules/
 
-# Docker env
+# ---------- Docker env ----------
 .env
 .env.local
 .env.*.local
 
-# Backend 本地配置
+# ---------- Backend 本地配置 ----------
 /backend/src/main/resources/application-local.yml
 
-# 小程序开发工具
+# ---------- 小程序开发工具 ----------
 .miniprogram/
 project.private.config.json
+
+# ---------- 质量/分析工具产物 (本地生成，不应提交) ----------
+.quality-admin.json
+DEAD_CODE_REPORT.md
+err.txt
+# Vitest 临时生成的配置文件
+vitest.config.ts.timestamp-*
+*.timestamp-*.mjs

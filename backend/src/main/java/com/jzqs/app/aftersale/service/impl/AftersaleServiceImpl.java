@@ -566,17 +566,17 @@ public class AftersaleServiceImpl implements AftersaleService {
         return walletId;
     }
 
-    private void rollbackMeal(long walletId, String orderStatus) {
+    private void rollbackMeal(long walletId, String orderStatus, int quantity) {
         if ("DELIVERED".equals(orderStatus)) {
             jdbcTemplate.update(
-                "UPDATE meal_wallets SET consumed_meals = CASE WHEN consumed_meals > 0 THEN consumed_meals - 1 ELSE 0 END WHERE id = ?",
-                walletId
+                "UPDATE meal_wallets SET consumed_meals = CASE WHEN consumed_meals >= ? THEN consumed_meals - ? ELSE 0 END WHERE id = ?",
+                quantity, quantity, walletId
             );
             return;
         }
         jdbcTemplate.update(
-            "UPDATE meal_wallets SET reserved_meals = CASE WHEN reserved_meals > 0 THEN reserved_meals - 1 ELSE 0 END WHERE id = ?",
-            walletId
+            "UPDATE meal_wallets SET reserved_meals = CASE WHEN reserved_meals >= ? THEN reserved_meals - ? ELSE 0 END WHERE id = ?",
+            quantity, quantity, walletId
         );
     }
 
@@ -614,7 +614,6 @@ public class AftersaleServiceImpl implements AftersaleService {
         clearDispatchLinks(orderId);
         if (!walletTransactionExists(caseId, "REFUND_RETURN")) {
             long walletId = findActiveWalletId(customerId);
-            rollbackMeal(walletId, orderStatus);
             Long originalTransactionId = findOriginalTransactionId(walletId, orderId, orderStatus);
             
             // 自动计算退回数量：如果找到原扣餐记录，则按原扣餐额度退回（取绝对值），忽略前端传入的数量
@@ -629,6 +628,7 @@ public class AftersaleServiceImpl implements AftersaleService {
                     effectiveDelta = Math.abs(originalDelta);
                 }
             }
+            rollbackMeal(walletId, orderStatus, effectiveDelta);
 
             long refundTransactionId = insertWalletTransaction(
                 walletId,

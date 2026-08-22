@@ -122,13 +122,8 @@ export function resolvePrimaryCustomerAddress(addresses: CustomerAddressItem[] |
   return addresses.find((address) => address.isDefault) ?? addresses[0] ?? null;
 }
 
-export function shouldShowAddressExpandToggle(addresses: CustomerAddressItem[] | null | undefined) {
-  return false;
-}
-
 export function buildVisibleCustomerAddresses(
-  addresses: CustomerAddressItem[] | null | undefined,
-  _expanded?: boolean
+  addresses: CustomerAddressItem[] | null | undefined
 ) {
   if (!Array.isArray(addresses) || addresses.length === 0) {
     return [];

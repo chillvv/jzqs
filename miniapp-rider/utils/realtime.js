@@ -224,6 +224,13 @@ function init(options = {}) {
 
 function subscribe(listener) {
   listeners.add(listener);
+  if (authFailed) {
+    // 认证已判定失败：不重连，提示重新登录，避免"看似已连接但收不到任何消息"
+    console.warn('[实时连接] 认证已失败，请重新登录');
+    return () => {
+      listeners.delete(listener);
+    };
+  }
   connect();
   return () => {
     listeners.delete(listener);

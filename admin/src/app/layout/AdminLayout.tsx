@@ -19,11 +19,8 @@ import { useScale } from "../../shared/hooks/useScale";
 import { ToastContainer } from "../../shared/components/Toast";
 import {
   ADMIN_AUTH_STORAGE_KEY,
-  ADMIN_CREDENTIALS_STORAGE_KEY,
   buildAdminAuthSession,
-  buildSavedAdminCredentials,
   parseAdminAuthSession,
-  parseSavedAdminCredentials,
   type AdminAuthSession
 } from "../../modules/auth/adminAuth.helpers";
 import { buildSettingsSectionPath, DEFAULT_SETTINGS_SECTION } from "../../modules/settings/settingsSections";
@@ -127,17 +124,6 @@ export function AdminLayout() {
     setSavingPassword(true);
     try {
       await changeAdminPassword(oldPassword, newPassword);
-      const remembered = parseSavedAdminCredentials(window.localStorage.getItem(ADMIN_CREDENTIALS_STORAGE_KEY));
-      if (remembered && session && remembered.phone === session.phone) {
-        const nextCredentials = buildSavedAdminCredentials({
-          phone: remembered.phone,
-          password: newPassword,
-          remember: true
-        });
-        if (nextCredentials) {
-          window.localStorage.setItem(ADMIN_CREDENTIALS_STORAGE_KEY, JSON.stringify(nextCredentials));
-        }
-      }
       setPasswordForm({
         oldPassword: "",
         newPassword: "",
