@@ -209,6 +209,11 @@ export type SubscriptionImportItem = {
   merchantRemark: string;
 };
 
+export type SubscriptionImportSkipItem = {
+  customerId: number;
+  mealPeriod: string;
+};
+
 export type ManualCreateCustomerAddressResponse = {
   addressId: number;
   addressLine: string;

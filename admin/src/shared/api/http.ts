@@ -48,6 +48,7 @@ import type {
   CustomerBatchExtendResponse,
   SubscriptionPreviewItem,
   SubscriptionImportItem,
+  SubscriptionImportSkipItem,
   AnalysisOverviewResponse,
   CostEntryItem,
   SubscriptionRuleResponse,
@@ -301,6 +302,26 @@ export async function bulkImportSubscription(serveDate: string, items: Subscript
   const response = await http.post<ApiResponse<{ successCount: number }>>("/api/admin/orders/bulk-import-subscription", {
     serveDate,
     items
+  });
+  return response.data.data;
+}
+
+export async function fetchSubscriptionImportSkips(serveDate: string) {
+  const response = await http.get<ApiResponse<SubscriptionPreviewItem[]>>(`/api/admin/orders/subscription-import-skips?serveDate=${serveDate}`);
+  return response.data.data;
+}
+
+export async function recordSubscriptionImportSkips(serveDate: string, items: SubscriptionImportSkipItem[]) {
+  const response = await http.post<ApiResponse<{ count: number }>>("/api/admin/orders/subscription-import-skips", {
+    serveDate,
+    items
+  });
+  return response.data.data;
+}
+
+export async function removeSubscriptionImportSkip(serveDate: string, customerId: number, mealPeriod: string) {
+  const response = await http.delete<ApiResponse<{ count: number }>>("/api/admin/orders/subscription-import-skips", {
+    params: { serveDate, customerId, mealPeriod }
   });
   return response.data.data;
 }

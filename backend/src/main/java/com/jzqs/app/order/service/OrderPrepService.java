@@ -21,6 +21,7 @@ import com.jzqs.app.order.api.SubscriptionConfirmationItem;
 import com.jzqs.app.order.api.SubscriptionActionResponse;
 import com.jzqs.app.order.api.SubscriptionBulkImportResponse;
 import com.jzqs.app.order.api.SubscriptionImportItem;
+import com.jzqs.app.order.api.SubscriptionImportSkipItem;
 import com.jzqs.app.subscription.api.SubscriptionPreviewCheckResponse;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +32,12 @@ public interface OrderPrepService {
     SubscriptionPreviewCheckResponse subscriptionPreviewCheck(String serveDate);
     
     SubscriptionBulkImportResponse bulkImportSubscription(String serveDate, List<SubscriptionImportItem> items);
+
+    List<SubscriptionPreviewItem> subscriptionImportSkips(String serveDate);
+
+    int recordSubscriptionImportSkips(String serveDate, List<SubscriptionImportSkipItem> items);
+
+    int removeSubscriptionImportSkip(String serveDate, long customerId, String mealPeriod);
 
     OrderPrepStatsResponse prepStats(String serveDate);
 

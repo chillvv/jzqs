@@ -20,6 +20,7 @@ import com.jzqs.app.order.api.SubscriptionActionResponse;
 import com.jzqs.app.order.api.SubscriptionBulkImportResponse;
 import com.jzqs.app.order.api.SubscriptionConfirmationItem;
 import com.jzqs.app.order.api.SubscriptionImportItem;
+import com.jzqs.app.order.api.SubscriptionImportSkipItem;
 import com.jzqs.app.order.api.SubscriptionPreviewItem;
 import com.jzqs.app.order.service.OrderDispatchService;
 import com.jzqs.app.order.service.OrderOperationService;
@@ -58,6 +59,23 @@ public class OrderPrepServiceImpl implements OrderPrepService {
     @Override
     public SubscriptionPreviewCheckResponse subscriptionPreviewCheck(String serveDate) {
         return orderQueryService.subscriptionPreviewCheck(serveDate);
+    }
+
+    @Override
+    public List<SubscriptionPreviewItem> subscriptionImportSkips(String serveDate) {
+        return orderQueryService.subscriptionImportSkips(serveDate);
+    }
+
+    @Override
+    @Transactional
+    public int recordSubscriptionImportSkips(String serveDate, List<SubscriptionImportSkipItem> items) {
+        return orderSubscriptionService.recordSubscriptionImportSkips(serveDate, items);
+    }
+
+    @Override
+    @Transactional
+    public int removeSubscriptionImportSkip(String serveDate, long customerId, String mealPeriod) {
+        return orderSubscriptionService.removeSubscriptionImportSkip(serveDate, customerId, mealPeriod);
     }
 
     @Override

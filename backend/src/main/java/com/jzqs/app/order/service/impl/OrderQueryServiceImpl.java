@@ -31,6 +31,11 @@ public class OrderQueryServiceImpl implements OrderQueryService {
     }
 
     @Override
+    public List<SubscriptionPreviewItem> subscriptionImportSkips(String serveDate) {
+        return orderQueryRepository.findSubscriptionImportSkips(LocalDate.parse(serveDate));
+    }
+
+    @Override
     public SubscriptionPreviewCheckResponse subscriptionPreviewCheck(String serveDate) {
         List<SubscriptionPreviewItem> previewItems = subscriptionPreview(serveDate);
 

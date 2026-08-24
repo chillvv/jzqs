@@ -21,6 +21,7 @@ import com.jzqs.app.subscription.api.SubscriptionPreviewCheckResponse;
 import jakarta.validation.Valid;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -102,6 +103,29 @@ public class OrderPrepController {
     @AuditAction(module = "ORDER", action = "BULK_IMPORT_SUBSCRIPTION")
     public ApiResponse<SubscriptionBulkImportResponse> bulkImportSubscription(@Valid @RequestBody BulkImportSubscriptionRequest request) {
         return ApiResponse.success(orderPrepService.bulkImportSubscription(request.serveDate(), request.items()));
+    }
+
+    @GetMapping("/subscription-import-skips")
+    public ApiResponse<List<SubscriptionPreviewItem>> subscriptionImportSkips(@RequestParam String serveDate) {
+        return ApiResponse.success(orderPrepService.subscriptionImportSkips(serveDate));
+    }
+
+    @PostMapping("/subscription-import-skips")
+    @RateLimit(key = "admin:orders:subscription-import-skips", maxRequests = 20, windowSeconds = 10)
+    @AuditAction(module = "ORDER", action = "SUBSCRIPTION_IMPORT_SKIP")
+    public ApiResponse<Integer> recordSubscriptionImportSkips(@Valid @RequestBody SubscriptionImportSkipRequest request) {
+        return ApiResponse.success(orderPrepService.recordSubscriptionImportSkips(request.serveDate(), request.items()));
+    }
+
+    @DeleteMapping("/subscription-import-skips")
+    @RateLimit(key = "admin:orders:subscription-import-skip-remove", maxRequests = 20, windowSeconds = 10)
+    @AuditAction(module = "ORDER", action = "SUBSCRIPTION_IMPORT_SKIP_REMOVE")
+    public ApiResponse<Integer> removeSubscriptionImportSkip(
+        @RequestParam String serveDate,
+        @RequestParam long customerId,
+        @RequestParam String mealPeriod
+    ) {
+        return ApiResponse.success(orderPrepService.removeSubscriptionImportSkip(serveDate, customerId, mealPeriod));
     }
 
     @GetMapping("/prep-stats")

@@ -59,6 +59,23 @@ public class OrderQueryRepository {
                   AND mi.meal_period = 'LUNCH'
                   AND mi.slot_status = 'REST'
               )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM meal_slot_orders mso
+                JOIN daily_orders do ON do.id = mso.daily_order_id
+                WHERE do.customer_id = sr.customer_id
+                  AND do.serve_date = ?
+                  AND mso.meal_period = 'LUNCH'
+                  AND mso.confirmed_from_subscription = TRUE
+                  AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM subscription_import_skips sk
+                WHERE sk.serve_date = ?
+                  AND sk.customer_id = sr.customer_id
+                  AND sk.meal_period = 'LUNCH'
+              )
 
             UNION ALL
 
@@ -89,6 +106,23 @@ public class OrderQueryRepository {
                   AND mi.meal_period = 'DINNER'
                   AND mi.slot_status = 'REST'
               )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM meal_slot_orders mso
+                JOIN daily_orders do ON do.id = mso.daily_order_id
+                WHERE do.customer_id = sr.customer_id
+                  AND do.serve_date = ?
+                  AND mso.meal_period = 'DINNER'
+                  AND mso.confirmed_from_subscription = TRUE
+                  AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
+              )
+              AND NOT EXISTS (
+                SELECT 1
+                FROM subscription_import_skips sk
+                WHERE sk.serve_date = ?
+                  AND sk.customer_id = sr.customer_id
+                  AND sk.meal_period = 'DINNER'
+              )
 
             ORDER BY customer_id, meal_period
             """;
@@ -105,7 +139,49 @@ public class OrderQueryRepository {
             rs.getString("merchant_remark"),
             rs.getInt("remaining_meals"),
             rs.getBoolean("has_balance")
-        ), targetDate, targetDate, targetDayOfWeek, targetDate, targetDate, targetDate, targetDayOfWeek, targetDate);
+        ),
+            targetDate, targetDate, targetDayOfWeek, targetDate, targetDate, targetDate,
+            targetDate, targetDate, targetDayOfWeek, targetDate, targetDate, targetDate);
+    }
+
+    public List<SubscriptionPreviewItem> findSubscriptionImportSkips(LocalDate targetDate) {
+        String sql = """
+            SELECT
+                sk.customer_id,
+                c.name AS customer_name,
+                c.phone AS customer_phone,
+                sk.meal_period,
+                CASE WHEN sk.meal_period = 'LUNCH' THEN COALESCE(sr.lunch_delivery_meal_period, 'LUNCH') ELSE COALESCE(sr.dinner_delivery_meal_period, 'DINNER') END AS delivery_meal_period,
+                COALESCE(sr.default_address_id, 0) AS address_id,
+                COALESCE(ca.address_line, '') AS delivery_address,
+                COALESCE(sr.merchant_remark, '-') AS merchant_remark,
+                COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) AS remaining_meals,
+                CASE WHEN COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) > 0 THEN TRUE ELSE FALSE END AS has_balance
+            FROM subscription_import_skips sk
+            JOIN customers c ON c.id = sk.customer_id
+            LEFT JOIN subscription_rules sr ON sr.id = (
+                SELECT id FROM subscription_rules sr2
+                WHERE sr2.customer_id = sk.customer_id AND sr2.active = TRUE
+                ORDER BY sr2.id DESC
+                LIMIT 1
+            )
+            LEFT JOIN customer_addresses ca ON ca.id = sr.default_address_id
+            LEFT JOIN meal_wallets mw ON mw.customer_id = sk.customer_id AND mw.active = TRUE
+            WHERE sk.serve_date = ?
+            ORDER BY sk.meal_period, sk.id
+            """;
+        return jdbcTemplate.query(sql, (rs, rowNum) -> new SubscriptionPreviewItem(
+            rs.getLong("customer_id"),
+            rs.getString("customer_name"),
+            rs.getString("customer_phone"),
+            rs.getString("meal_period"),
+            rs.getString("delivery_meal_period"),
+            rs.getLong("address_id"),
+            rs.getString("delivery_address"),
+            rs.getString("merchant_remark"),
+            rs.getInt("remaining_meals"),
+            rs.getBoolean("has_balance")
+        ), java.sql.Date.valueOf(targetDate));
     }
 
     public OrderPrepStatsResponse loadPrepStats(LocalDate serveDate) {

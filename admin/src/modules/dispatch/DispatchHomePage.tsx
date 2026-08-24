@@ -163,27 +163,6 @@ export function DispatchHomePage() {
 
   return (
     <div className="admin-stack">
-      <div className="toolbar">
-        <div className="dispatch-toolbar">
-          <div className="dispatch-toolbar__search">
-              <SafeInput
-                wrapperClassName="dispatch-toolbar__search-wrapper"
-                prefix={<Search size={14} />}
-                value={search}
-                onValueChange={setSearch}
-                placeholder="按客户名或地址搜索"
-              />
-            </div>
-        </div>
-      </div>
-
-      <div className="admin-grid-1" style={{ marginBottom: '16px' }}>
-        <div className="admin-panel" style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px', borderLeft: '4px solid var(--warning-color)', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
-          <div style={{ color: 'var(--text-light)', fontSize: '13px' }}>待分配份数</div>
-          <div style={{ fontSize: '24px', fontWeight: 'bold', color: 'var(--warning-color)' }}>{overview.pendingCount} 份</div>
-        </div>
-      </div>
-
       <div className="dispatch-section">
         {loadingAll ? (
           <div className="admin-panel" style={{ marginBottom: "12px", color: "var(--text-muted)" }}>

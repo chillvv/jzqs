@@ -2,9 +2,11 @@ package com.jzqs.app.order.service.impl;
 
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
+import com.jzqs.app.common.security.AdminRequestContextSupport;
 import com.jzqs.app.order.api.SubscriptionActionResponse;
 import com.jzqs.app.order.api.SubscriptionBulkImportResponse;
 import com.jzqs.app.order.api.SubscriptionImportItem;
+import com.jzqs.app.order.api.SubscriptionImportSkipItem;
 import com.jzqs.app.order.persistence.OrderSubscriptionRepository;
 import com.jzqs.app.order.service.OrderSubscriptionImportService;
 import com.jzqs.app.order.service.OrderSubscriptionService;
@@ -106,6 +108,27 @@ public class OrderSubscriptionServiceImpl implements OrderSubscriptionService {
         }
 
         return new SubscriptionBulkImportResponse(successCount, failures.size(), failures);
+    }
+
+    @Override
+    @Transactional
+    public int recordSubscriptionImportSkips(String serveDate, List<SubscriptionImportSkipItem> items) {
+        if (items == null || items.isEmpty()) {
+            return 0;
+        }
+        String operatorName = AdminRequestContextSupport.requireOperatorName();
+        java.sql.Date date = java.sql.Date.valueOf(serveDate);
+        int count = 0;
+        for (SubscriptionImportSkipItem item : items) {
+            count += orderSubscriptionRepository.insertSubscriptionImportSkip(date, item.customerId(), item.mealPeriod(), operatorName);
+        }
+        return count;
+    }
+
+    @Override
+    @Transactional
+    public int removeSubscriptionImportSkip(String serveDate, long customerId, String mealPeriod) {
+        return orderSubscriptionRepository.deleteSubscriptionImportSkip(java.sql.Date.valueOf(serveDate), customerId, mealPeriod);
     }
 
     private String fallbackCustomerName(long customerId) {

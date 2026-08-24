@@ -63,6 +63,33 @@ public class OrderSubscriptionRepository {
         return rows.isEmpty() ? null : rows.get(0);
     }
 
+    /** 记录指定日期指定客户餐次被跳过（取消勾选），已存在则保持原记录 */
+    public int insertSubscriptionImportSkip(java.sql.Date serveDate, long customerId, String mealPeriod, String skippedBy) {
+        return jdbcTemplate.update(
+            """
+                INSERT IGNORE INTO subscription_import_skips (serve_date, customer_id, meal_period, skipped_by)
+                VALUES (?, ?, ?, ?)
+                """,
+            serveDate,
+            customerId,
+            mealPeriod,
+            skippedBy
+        );
+    }
+
+    /** 删除指定日期指定客户餐次的跳过记录（恢复导入） */
+    public int deleteSubscriptionImportSkip(java.sql.Date serveDate, long customerId, String mealPeriod) {
+        return jdbcTemplate.update(
+            """
+                DELETE FROM subscription_import_skips
+                WHERE serve_date = ? AND customer_id = ? AND meal_period = ?
+                """,
+            serveDate,
+            customerId,
+            mealPeriod
+        );
+    }
+
     /** 判断指定日期、指定餐期是否为店铺休息日（菜单排期 slot_status = REST） */
     public boolean isMealSlotRest(String serveDate, String mealPeriod) {
         Integer count = jdbcTemplate.queryForObject(
