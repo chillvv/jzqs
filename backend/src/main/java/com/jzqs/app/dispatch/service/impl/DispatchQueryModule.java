@@ -134,7 +134,7 @@ class DispatchQueryModule {
                 FROM meal_slot_orders mso
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
                 LEFT JOIN dispatch_assignments da ON da.meal_slot_order_id = mso.id
-                LEFT JOIN rider_address_bindings rab ON rab.customer_id = doo.customer_id AND rab.address_id = mso.address_id
+                LEFT JOIN rider_address_bindings rab ON rab.customer_id = doo.customer_id AND rab.address_id = mso.address_id AND rab.rider_profile_id IS NOT NULL
                 WHERE mso.status = 'PENDING_DISPATCH'
                   AND doo.serve_date = ?
                   AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
@@ -255,17 +255,17 @@ class DispatchQueryModule {
                     ELSE 'CONFLICT_REQUIRES_CONFIRM'
                 END AS exception_type,
                 CASE
-                    WHEN rab.id IS NULL THEN '鏂板湴鍧€锛屽皻鏈‘璁ゅ尯鍩?'
-                    WHEN dab.id IS NULL THEN '璇ュ尯鍩熸湭璁剧疆榛樿楠戞墜'
-                    WHEN rp_default.id IS NULL THEN '榛樿楠戞墜褰撳墠涓嶅彲娲惧崟'
-                    ELSE '璇ュ湴鍧€闇€瑕侀噸鏂扮‘璁ゅ尯鍩熷綊灞?'
+                    WHEN rab.id IS NULL THEN '新地址，尚未确认区域'
+                    WHEN dab.id IS NULL THEN '该区域未设置默认骑手'
+                    WHEN rp_default.id IS NULL THEN '默认骑手当前不可派单'
+                    ELSE '该地址需要重新确认区域归属'
                 END AS reason,
                 CASE WHEN rab.id IS NULL THEN FALSE ELSE TRUE END AS remembered_address
             FROM meal_slot_orders mso
             JOIN daily_orders doo ON doo.id = mso.daily_order_id
             JOIN customers c ON c.id = doo.customer_id
             JOIN customer_addresses ca ON ca.id = mso.address_id
-            LEFT JOIN rider_address_bindings rab ON rab.customer_id = doo.customer_id AND rab.address_id = mso.address_id
+            LEFT JOIN rider_address_bindings rab ON rab.customer_id = doo.customer_id AND rab.address_id = mso.address_id AND rab.rider_profile_id IS NOT NULL
             LEFT JOIN dispatch_area_bindings dab ON dab.area_code = rab.area_code
             LEFT JOIN rider_profiles rp_default
                 ON rp_default.id = dab.default_rider_profile_id
@@ -304,7 +304,7 @@ class DispatchQueryModule {
             JOIN daily_orders doo ON doo.id = mso.daily_order_id
             JOIN customers c ON c.id = doo.customer_id
             JOIN customer_addresses ca ON ca.id = mso.address_id
-            LEFT JOIN rider_address_bindings rab ON rab.customer_id = doo.customer_id AND rab.address_id = mso.address_id
+            LEFT JOIN rider_address_bindings rab ON rab.customer_id = doo.customer_id AND rab.address_id = mso.address_id AND rab.rider_profile_id IS NOT NULL
             LEFT JOIN dispatch_assignments da ON da.meal_slot_order_id = mso.id
             WHERE mso.status = 'PENDING_DISPATCH'
               AND doo.serve_date = ?

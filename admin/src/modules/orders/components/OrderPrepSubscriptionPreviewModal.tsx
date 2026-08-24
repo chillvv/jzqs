@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from "react";
-import { X, AlertTriangle } from "lucide-react";
-import { fetchSubscriptionPreview, bulkImportSubscription, checkSubscriptionPreview } from "../../../shared/api/http";
+import { X, AlertTriangle, ChevronDown, ChevronUp, RotateCcw } from "lucide-react";
+import {
+  fetchSubscriptionPreview,
+  bulkImportSubscription,
+  checkSubscriptionPreview,
+  fetchSubscriptionImportSkips,
+  recordSubscriptionImportSkips,
+  removeSubscriptionImportSkip
+} from "../../../shared/api/http";
 import { SafeInput } from "../../../shared/components/SafeInput";
 import { toast } from "../../../shared/components/Toast";
 import type { SubscriptionPreviewItem, SubscriptionPreviewCheckResponse } from "../../../shared/api/types";
@@ -14,12 +21,19 @@ interface Props {
   subscriptionNoteSuggestions: string[];
 }
 
+function skipKey(item: Pick<SubscriptionPreviewItem, "customerId" | "mealPeriod">) {
+  return `${item.customerId}-${item.mealPeriod}`;
+}
+
 export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, filterDate, subscriptionNoteSuggestions }: Props) {
   const [isSubmittingImport, setIsSubmittingImport] = useState(false);
   const [previewItems, setPreviewItems] = useState<SubscriptionPreviewItem[]>([]);
+  const [skippedItems, setSkippedItems] = useState<SubscriptionPreviewItem[]>([]);
   const [previewCheckResult, setPreviewCheckResult] = useState<SubscriptionPreviewCheckResponse | null>(null);
   const [viewState, setViewState] = useState<"LOADING" | "CHECK" | "PREVIEW">("LOADING");
   const [mealPeriodFilter, setMealPeriodFilter] = useState<"LUNCH" | "DINNER">("LUNCH");
+  const [showSkipped, setShowSkipped] = useState(false);
+  const [processingSkipKeys, setProcessingSkipKeys] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (isOpen) {
@@ -42,12 +56,16 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
 
   async function loadPreviewItems(skipInsufficient: boolean) {
     try {
-      const data = await fetchSubscriptionPreview(filterDate);
+      const [data, skips] = await Promise.all([
+        fetchSubscriptionPreview(filterDate),
+        fetchSubscriptionImportSkips(filterDate)
+      ]);
       if (skipInsufficient) {
         setPreviewItems(data.flatMap(item => item.hasBalance ? [{ ...item, selected: true }] : []));
       } else {
         setPreviewItems(data.map(item => ({ ...item, selected: item.hasBalance })));
       }
+      setSkippedItems(skips);
       setViewState("PREVIEW");
     } catch (err: any) {
       toast(err?.response?.data?.message || err?.message || "获取包月预览列表失败", "error");
@@ -81,14 +99,48 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
     }
   }
 
-  const handleTogglePreviewItem = (customerId: number, mealPeriod: string) => {
-    const newItems = [...previewItems];
-    const targetIndex = newItems.findIndex((i) => i.customerId === customerId && i.mealPeriod === mealPeriod);
-    if (targetIndex !== -1 && newItems[targetIndex].hasBalance) {
-      newItems[targetIndex].selected = !newItems[targetIndex].selected;
-      setPreviewItems(newItems);
+  /** 候选行：取消勾选 = 记录跳过（持久化），该客户本次与之后都不再出现在待导入列表 */
+  async function handleSkipPreviewItem(item: SubscriptionPreviewItem) {
+    const key = skipKey(item);
+    if (processingSkipKeys.has(key)) return;
+    setProcessingSkipKeys((current) => new Set(current).add(key));
+    try {
+      await recordSubscriptionImportSkips(filterDate, [{ customerId: item.customerId, mealPeriod: item.mealPeriod }]);
+      setPreviewItems((current) => current.filter((i) => !(i.customerId === item.customerId && i.mealPeriod === item.mealPeriod)));
+      setSkippedItems((current) => [...current, { ...item, selected: false }]);
+      setShowSkipped(true);
+      toast(`已跳过 ${item.customerName}，本次不再导入`);
+    } catch (err: any) {
+      toast(err?.response?.data?.message || err?.message || "记录跳过失败，请重试", "error");
+    } finally {
+      setProcessingSkipKeys((current) => {
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
     }
-  };
+  }
+
+  /** 已跳过行：恢复导入（删除跳过记录） */
+  async function handleRestoreSkipped(item: SubscriptionPreviewItem) {
+    const key = skipKey(item);
+    if (processingSkipKeys.has(key)) return;
+    setProcessingSkipKeys((current) => new Set(current).add(key));
+    try {
+      await removeSubscriptionImportSkip(filterDate, item.customerId, item.mealPeriod);
+      setSkippedItems((current) => current.filter((i) => !(i.customerId === item.customerId && i.mealPeriod === item.mealPeriod)));
+      setPreviewItems((current) => [...current, { ...item, selected: item.hasBalance }]);
+      toast(`已恢复 ${item.customerName} 的导入`);
+    } catch (err: any) {
+      toast(err?.response?.data?.message || err?.message || "恢复失败，请重试", "error");
+    } finally {
+      setProcessingSkipKeys((current) => {
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
+    }
+  }
 
   const handleUpdatePreviewNote = (customerId: number, mealPeriod: string, val: string) => {
     const newItems = [...previewItems];
@@ -102,6 +154,7 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
   if (!isOpen) return null;
 
   const visibleItems = previewItems.filter((i) => i.mealPeriod === mealPeriodFilter);
+  const visibleSkippedItems = skippedItems.filter((i) => i.mealPeriod === mealPeriodFilter);
 
   if (viewState === "LOADING") {
     return (
@@ -197,7 +250,7 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
         </div>
         <div className="modal-body" style={{ padding: "0", background: "#F8FAFC" }}>
           <div style={{ padding: "16px 24px", color: "var(--text-sub)", fontSize: "14px" }}>
-            请核对明日的包月名单。取消勾选即可跳过请假用户，或在右侧直接补充临时口味备注。
+            请核对明日的包月名单。取消勾选即可跳过请假用户（会记住，不再重复提醒），或在右侧直接补充临时口味备注。
           </div>
           <div className="filter-item subscription-meal-toggle" style={{ padding: "0 24px 12px" }}>
             <span className="filter-label">查看餐次:</span>
@@ -218,6 +271,9 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
             <div style={{ color: "var(--text-sub)", fontSize: "13px" }}>可导入 <span style={{ color: "var(--text-main)", fontWeight: 800, fontSize: "18px" }}>{visibleItems.filter(i => i.hasBalance).length}</span></div>
             <div style={{ color: "var(--text-sub)", fontSize: "13px" }}>余额不足 <span style={{ color: "var(--error-color)", fontWeight: 800, fontSize: "18px" }}>{visibleItems.filter(i => !i.hasBalance).length}</span></div>
             <div style={{ color: "var(--text-sub)", fontSize: "13px" }}>已勾选 <span style={{ color: "var(--primary-color)", fontWeight: 800, fontSize: "18px" }}>{visibleItems.filter(i => i.selected && i.hasBalance).length}</span></div>
+            {visibleSkippedItems.length > 0 && (
+              <div style={{ color: "var(--text-sub)", fontSize: "13px" }}>已跳过 <span style={{ color: "var(--text-sub)", fontWeight: 800, fontSize: "18px" }}>{visibleSkippedItems.length}</span></div>
+            )}
           </div>
           <div className="table-responsive">
             <table style={{ background: "#FFFFFF", borderTop: "1px solid var(--border-color)", borderBottom: "1px solid var(--border-color)" }}>
@@ -245,8 +301,13 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
                       <input 
                         type="checkbox" 
                         checked={isSelected} 
-                        disabled={isDisabled} 
-                        onChange={() => handleTogglePreviewItem(item.customerId, item.mealPeriod)} 
+                        disabled={isDisabled}
+                        onChange={() => {
+                          if (isSelected) {
+                            // 取消勾选 -> 记录跳过（持久化）
+                            handleSkipPreviewItem(item).catch(() => undefined);
+                          }
+                        }}
                       />
                     </td>
                     <td style={{ textDecoration: !isSelected ? "line-through" : "none" }}>{item.customerName}</td>
@@ -287,10 +348,68 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
             </tbody>
           </table>
         </div>
+
+          {visibleSkippedItems.length > 0 && (
+            <div style={{ padding: "12px 24px 16px" }}>
+              <div style={{ border: "1px solid var(--border-color)", borderRadius: "12px", background: "#FFFFFF", overflow: "hidden" }}>
+                <button
+                  type="button"
+                  onClick={() => setShowSkipped((v) => !v)}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", padding: "12px 16px", background: "transparent", border: "none", cursor: "pointer", fontSize: "14px", fontWeight: 600, color: "var(--text-main)" }}
+                >
+                  <span>已跳过（本次不导入）({visibleSkippedItems.length})</span>
+                  {showSkipped ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+                {showSkipped && (
+                  <div className="table-responsive">
+                    <table style={{ background: "#FFFFFF", borderTop: "1px solid var(--border-color)" }}>
+                      <thead>
+                        <tr>
+                          <th style={{ paddingLeft: "24px" }}>姓名</th>
+                          <th>餐次</th>
+                          <th>默认地址</th>
+                          <th>备注</th>
+                          <th>操作</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {visibleSkippedItems.map((item) => {
+                          const processing = processingSkipKeys.has(skipKey(item));
+                          return (
+                            <tr key={`skip-${item.customerId}-${item.mealPeriod}`} style={{ opacity: 0.8 }}>
+                              <td style={{ paddingLeft: "24px" }}>{item.customerName}</td>
+                              <td>
+                                <span className={`tag ${item.mealPeriod === "LUNCH" ? "tag-orange" : "tag-green"}`}>
+                                  {item.mealPeriod === "LUNCH" ? "午餐" : "晚餐"}
+                                </span>
+                              </td>
+                              <td style={{ maxWidth: "180px", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{item.deliveryAddress || "-"}</td>
+                              <td style={{ color: "var(--text-sub)" }}>{item.merchantRemark && item.merchantRemark !== "-" ? item.merchantRemark : "-"}</td>
+                              <td>
+                                <button
+                                  className="btn btn-outline btn-sm"
+                                  disabled={processing}
+                                  onClick={() => handleRestoreSkipped(item).catch(() => undefined)}
+                                >
+                                  <RotateCcw size={14} />
+                                  {processing ? "恢复中..." : "恢复导入"}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
         <div className="modal-footer" style={{ justifyContent: "space-between", alignItems: "center" }}>
           <div style={{ color: "var(--text-sub)", fontSize: "14px", fontWeight: 500 }}>
             已选: <span style={{ color: "var(--primary-color)", fontWeight: 600 }}>{visibleItems.filter(i => i.selected && i.hasBalance).length}</span> 人 |
-            跳过: <span style={{ color: "var(--text-main)", fontWeight: 600 }}>{visibleItems.filter(i => !i.selected || !i.hasBalance).length}</span> 人
+            跳过: <span style={{ color: "var(--text-main)", fontWeight: 600 }}>{visibleSkippedItems.length} 人</span>
           </div>
           <div style={{ display: "flex", gap: "12px" }}>
             <button className="btn btn-outline" disabled={isSubmittingImport} onClick={onClose}>取消</button>
@@ -300,7 +419,6 @@ export function OrderPrepSubscriptionPreviewModal({ isOpen, onClose, onSuccess, 
           </div>
         </div>
       </div>
-    </div>
     </div>
   );
 }

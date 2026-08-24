@@ -81,16 +81,21 @@ export function hasOrderAttention(order: { userNote?: string | null; merchantRem
 }
 
 export function buildDispatchAreaStats(bindings: DispatchAreaBindingResponse[]) {
+  let totalOrderCount = 0;
+  let dispatchingCount = 0;
+  for (const area of bindings) {
+    for (const item of area.orders) {
+      const qty = item.quantity || 1;
+      totalOrderCount += qty;
+      if (item.deliveryStatus === "PENDING_DISPATCH") {
+        dispatchingCount += qty;
+      }
+    }
+  }
   return {
     totalCount: bindings.length,
-    dispatchingCount: bindings.reduce(
-      (sum, area) =>
-        sum + area.orders.reduce(
-          (orderSum, item) => orderSum + (item.deliveryStatus === "PENDING_DISPATCH" ? (item.quantity || 1) : 0),
-          0
-        ),
-      0
-    ),
+    totalOrderCount,
+    dispatchingCount,
     missingRiderAreaCount: bindings.filter((area) => area.missingRider).length
   };
 }

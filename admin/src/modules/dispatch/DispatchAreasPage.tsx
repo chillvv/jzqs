@@ -440,6 +440,10 @@ export function DispatchAreasPage() {
           <div className="dispatch-stat-card__value">{areaStats.totalCount}</div>
         </div>
         <div className="dispatch-stat-card">
+          <div className="admin-panel-note">订单总份数</div>
+          <div className="dispatch-stat-card__value is-primary">{areaStats.totalOrderCount}</div>
+        </div>
+        <div className="dispatch-stat-card">
           <div className="admin-panel-note">待配送份数</div>
           <div className="dispatch-stat-card__value is-primary">{areaStats.dispatchingCount}</div>
         </div>

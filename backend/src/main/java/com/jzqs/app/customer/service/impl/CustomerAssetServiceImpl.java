@@ -1177,6 +1177,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         jdbcTemplate.update("DELETE FROM customer_notes WHERE customer_id = ?", customerId);
         jdbcTemplate.update("DELETE FROM subscription_rules WHERE customer_id = ?", customerId);
         jdbcTemplate.update("DELETE FROM subscription_confirmations WHERE customer_id = ?", customerId);
+        jdbcTemplate.update("DELETE FROM subscription_import_skips WHERE customer_id = ?", customerId);
         jdbcTemplate.update("DELETE FROM rider_address_bindings WHERE customer_id = ?", customerId);
         jdbcTemplate.update("DELETE FROM aftersale_cases WHERE customer_id = ?", customerId);
         jdbcTemplate.update("DELETE FROM order_notes WHERE customer_id = ?", customerId);
