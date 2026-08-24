@@ -773,6 +773,8 @@ export type DeliveryReleaseResult = {
   orderId: number;
   released: boolean;
   subscriptionSent: boolean;
+  /** 取餐提醒发送原因：SENT / NO_CONSENT / SEND_FAILED / DISABLED */
+  subscriptionReason: string;
 };
 
 export type SubscriptionRuleResponse = {

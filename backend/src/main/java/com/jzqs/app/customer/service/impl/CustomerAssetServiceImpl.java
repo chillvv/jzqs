@@ -313,10 +313,20 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         if (request.phone() != null) {
             String newPhone = requireCustomerPhone(blankToDefault(request.phone(), customer.getPhone()));
             if (!newPhone.equals(customer.getPhone()) && !newPhone.isBlank()) {
-                boolean phoneExists = customerMapper.selectCount(new LambdaQueryWrapper<CustomerEntity>().eq(CustomerEntity::getPhone, newPhone)) > 0;
-                if (phoneExists) {
-                    throw new BusinessException(ErrorCode.VALIDATION_ERROR, "手机号已存在，请检查是否重复建档");
+                // 仅校验活跃客户，软删（active=false）的客户视为已释放，允许复用其手机号
+                CustomerEntity duplicate = customerMapper.selectOne(new LambdaQueryWrapper<CustomerEntity>()
+                    .eq(CustomerEntity::getPhone, newPhone)
+                    .eq(CustomerEntity::getActive, true));
+                if (duplicate != null) {
+                    throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+                        "手机号 " + newPhone + " 已被客户「" + duplicate.getName() + "」使用，无法重复绑定");
                 }
+                // 严格改绑：更换手机号后，原手机号与绑定的微信 openid 全部失效，
+                // 原微信小程序登录态作废；新手机号需重新走验证登录流程。
+                customer.setOpenid(null);
+                customer.setCurrentOpenid(null);
+                customer.setOpenidUpdatedAt(null);
+                customer.setSessionKey(null);
             }
             customer.setPhone(newPhone);
         }
@@ -1150,5 +1160,40 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             remainingMeals,
             remainingMeals > 0 ? "ACTIVE" : "EXHAUSTED"
         );
+    }
+
+    @Override
+    @Transactional
+    public void deleteCustomer(long customerId) {
+        CustomerEntity existing = customerMapper.selectById(customerId);
+        if (existing == null || !Boolean.TRUE.equals(existing.getActive())) {
+            throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "客户不存在");
+        }
+        // 彻底硬删：按依赖顺序物理删除该客户的所有关联数据，最后删除主档案。
+        // 这些子表均以 customer_id 普通字段关联（无外键约束），因此按依赖顺序删除即可。
+        // 1) 先删依赖 daily_orders / meal_wallets 的子表
+        jdbcTemplate.update("DELETE FROM customer_delivery_subscriptions WHERE customer_id = ?", customerId);
+        jdbcTemplate.update("DELETE FROM customer_nightly_subscriptions WHERE customer_id = ?", customerId);
+        jdbcTemplate.update("DELETE FROM customer_notes WHERE customer_id = ?", customerId);
+        jdbcTemplate.update("DELETE FROM subscription_rules WHERE customer_id = ?", customerId);
+        jdbcTemplate.update("DELETE FROM subscription_confirmations WHERE customer_id = ?", customerId);
+        jdbcTemplate.update("DELETE FROM rider_address_bindings WHERE customer_id = ?", customerId);
+        jdbcTemplate.update("DELETE FROM aftersale_cases WHERE customer_id = ?", customerId);
+        jdbcTemplate.update("DELETE FROM order_notes WHERE customer_id = ?", customerId);
+        // 2) 删除订单：先删 meal_slot_orders（依赖 daily_orders），再删 daily_orders
+        jdbcTemplate.update(
+            "DELETE mso FROM meal_slot_orders mso INNER JOIN daily_orders d ON d.id = mso.daily_order_id WHERE d.customer_id = ?",
+            customerId
+        );
+        jdbcTemplate.update("DELETE FROM daily_orders WHERE customer_id = ?", customerId);
+        // 3) 删除钱包：先删 wallet_transactions（依赖 meal_wallets），再删 meal_wallets
+        jdbcTemplate.update(
+            "DELETE wt FROM wallet_transactions wt INNER JOIN meal_wallets w ON w.id = wt.wallet_id WHERE w.customer_id = ?",
+            customerId
+        );
+        jdbcTemplate.update("DELETE FROM meal_wallets WHERE customer_id = ?", customerId);
+        // 4) 删除配送地址与主档案
+        jdbcTemplate.update("DELETE FROM customer_addresses WHERE customer_id = ?", customerId);
+        customerMapper.deleteById(customerId);
     }
 }

@@ -32,7 +32,7 @@ public interface OrderPrepService {
     
     SubscriptionBulkImportResponse bulkImportSubscription(String serveDate, List<SubscriptionImportItem> items);
 
-    OrderPrepStatsResponse prepStats();
+    OrderPrepStatsResponse prepStats(String serveDate);
 
     PageResponse<OrderPrepItemResponse> prepPage(String serveDate);
 

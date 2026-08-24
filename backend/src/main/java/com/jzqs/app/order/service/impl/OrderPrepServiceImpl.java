@@ -67,8 +67,8 @@ public class OrderPrepServiceImpl implements OrderPrepService {
     }
 
     @Override
-    public OrderPrepStatsResponse prepStats() {
-        return orderQueryService.prepStats();
+    public OrderPrepStatsResponse prepStats(String serveDate) {
+        return orderQueryService.prepStats(serveDate);
     }
 
     @Override

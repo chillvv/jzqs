@@ -1,5 +1,6 @@
 package com.jzqs.app.dashboard.service.impl;
 
+import com.jzqs.app.common.util.BusinessDateResolver;
 import com.jzqs.app.dashboard.api.DashboardOverviewResponse;
 import com.jzqs.app.dashboard.service.DashboardService;
 import com.jzqs.app.subscription.api.LowBalanceSubscriptionItem;
@@ -129,15 +130,7 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private LocalDate resolveBusinessDate() {
-        List<LocalDate> candidates = new ArrayList<>();
-        addIfPresent(candidates, queryDate("SELECT MAX(CAST(delivered_at AS DATE)) FROM delivery_receipts"));
-        addIfPresent(candidates, queryDate("SELECT MAX(CAST(created_at AS DATE)) FROM daily_orders"));
-        addIfPresent(candidates, queryDate("SELECT MAX(CAST(created_at AS DATE)) FROM wallet_transactions"));
-        addIfPresent(candidates, queryDate("SELECT MAX(CAST(created_at AS DATE)) FROM aftersale_cases"));
-        if (candidates.isEmpty()) {
-            return LocalDate.now();
-        }
-        return candidates.stream().max(LocalDate::compareTo).orElse(LocalDate.now());
+        return BusinessDateResolver.resolve(jdbcTemplate);
     }
 
     private LocalDate resolveUpcomingServeDate(LocalDate businessDate) {
@@ -154,7 +147,7 @@ public class DashboardServiceImpl implements DashboardService {
                 FROM meal_slot_orders mso
                 JOIN daily_orders do ON do.id = mso.daily_order_id
                 WHERE do.serve_date = ?
-                  AND mso.status <> 'REFUNDED'
+                  AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
                   AND NOT EXISTS (
                       SELECT 1
                       FROM aftersale_cases ac
@@ -173,7 +166,7 @@ public class DashboardServiceImpl implements DashboardService {
             JOIN daily_orders do ON do.id = mso.daily_order_id
             WHERE do.serve_date = ?
               AND mso.meal_period = ?
-              AND mso.status <> 'REFUNDED'
+              AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
               AND NOT EXISTS (
                   SELECT 1
                   FROM aftersale_cases ac

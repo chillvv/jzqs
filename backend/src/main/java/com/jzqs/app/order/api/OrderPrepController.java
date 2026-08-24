@@ -105,8 +105,8 @@ public class OrderPrepController {
     }
 
     @GetMapping("/prep-stats")
-    public ApiResponse<OrderPrepStatsResponse> prepStats() {
-        return ApiResponse.success(orderPrepService.prepStats());
+    public ApiResponse<OrderPrepStatsResponse> prepStats(@RequestParam(required = false) String serveDate) {
+        return ApiResponse.success(orderPrepService.prepStats(serveDate));
     }
 
     @GetMapping("/subscription-confirmations")

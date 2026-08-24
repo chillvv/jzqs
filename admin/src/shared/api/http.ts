@@ -376,6 +376,11 @@ export async function deleteCustomerAddress(customerId: number, addressId: numbe
   return response.data.data;
 }
 
+export async function deleteCustomer(customerId: number) {
+  const response = await http.delete<ApiResponse<null>>(`/api/admin/customers/${customerId}`);
+  return response.data.data;
+}
+
 export async function fetchCurrentMenuWeek(targetDate?: string) {
   const url = targetDate ? `/api/admin/menu-weeks/current?targetDate=${encodeURIComponent(targetDate)}` : "/api/admin/menu-weeks/current";
   const response = await http.get<ApiResponse<AdminMenuWeekResponse>>(url);
@@ -1125,6 +1130,11 @@ export async function resetAdminUserPassword(userId: number, newPassword: string
   const response = await http.post<ApiResponse<AdminUserDetail>>(`/api/admin/users/${userId}/reset-password`, {
     newPassword
   });
+  return response.data.data;
+}
+
+export async function deleteAdminUser(userId: number) {
+  const response = await http.delete<ApiResponse<null>>(`/api/admin/users/${userId}`);
   return response.data.data;
 }
 

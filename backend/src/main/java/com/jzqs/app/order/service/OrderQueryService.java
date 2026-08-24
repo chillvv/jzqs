@@ -15,7 +15,7 @@ public interface OrderQueryService {
 
     SubscriptionPreviewCheckResponse subscriptionPreviewCheck(String serveDate);
 
-    OrderPrepStatsResponse prepStats();
+    OrderPrepStatsResponse prepStats(String serveDate);
 
     PageResponse<OrderPrepItemResponse> prepPage(String serveDate);
 

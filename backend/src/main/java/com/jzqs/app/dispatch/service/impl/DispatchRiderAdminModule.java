@@ -181,9 +181,15 @@ class DispatchRiderAdminModule {
         String displayName,
         String phone,
         String areaCode,
-        String updatedBy
+        String updatedBy,
+        AreaBindingUpdater areaBindingUpdater
     ) {
         String normalizedAreaCode = areaCode == null || areaCode.isBlank() ? null : areaCode.trim();
+        String oldAreaCode = jdbcTemplate.query(
+            "SELECT default_area_code FROM rider_profiles WHERE id = ?",
+            ps -> ps.setLong(1, riderId),
+            rs -> rs.next() ? rs.getString("default_area_code") : null
+        );
         jdbcTemplate.update(
             """
                 UPDATE rider_profiles
@@ -206,6 +212,20 @@ class DispatchRiderAdminModule {
             "UPDATE dispatch_assignments SET rider_name = ? WHERE rider_profile_id = ?",
             riderName, riderId
         );
+        if (!java.util.Objects.equals(oldAreaCode, normalizedAreaCode)) {
+            jdbcTemplate.update(
+                """
+                    UPDATE dispatch_area_bindings
+                    SET default_rider_profile_id = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE default_rider_profile_id = ?
+                    """,
+                riderId
+            );
+            if (normalizedAreaCode != null) {
+                areaBindingUpdater.update(normalizedAreaCode, null, riderId, null, updatedBy);
+            }
+        }
         String riderStatus = jdbcTemplate.queryForObject(
             "SELECT auth_status FROM rider_profiles WHERE id = ?",
             String.class,

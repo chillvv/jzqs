@@ -17,4 +17,6 @@ public interface UserService {
     UserDetailResponse update(Long userId, UserUpdateRequest request);
 
     UserDetailResponse resetPassword(Long userId, String newPassword);
+
+    void delete(Long userId);
 }

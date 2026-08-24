@@ -2,6 +2,7 @@ package com.jzqs.app.common.filter;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.jzqs.app.common.aop.annotation.AuditAction;
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
@@ -15,6 +16,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
@@ -39,6 +42,10 @@ public class AdminOperationLogFilter implements Filter {
     private static final Set<String> AUDITED_METHODS = Set.of("POST", "PUT", "DELETE", "PATCH");
     private static final int MAX_SUMMARY_LENGTH = 800;
     private static final List<String> SENSITIVE_FIELDS = List.of("password", "oldPassword", "newPassword");
+    /** 操作对象路径解析：客户/骑手/后台账号，用于把对象手机号快照进日志，删除重建后仍能反查 */
+    private static final Pattern CUSTOMER_ID_PATH = Pattern.compile("/customers/(\\d+)");
+    private static final Pattern RIDER_ID_PATH = Pattern.compile("/riders/(\\d+)");
+    private static final Pattern ADMIN_USER_ID_PATH = Pattern.compile("/users/(\\d+)");
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -76,6 +83,9 @@ public class AdminOperationLogFilter implements Filter {
             String path = request.getRequestURI();
             boolean isAuthEndpoint = path.startsWith("/api/admin/auth/");
             String requestBody = extractAndSanitizeBody(request);
+            // 把操作对象（客户/骑手/后台账号）当前手机号快照进日志参数，
+            // 便于对象被删除后按手机号重建时，旧日志仍能通过手机号反查当前姓名
+            requestBody = enrichTargetPhone(path, requestBody);
 
             Long operatorId = longValue(request.getAttribute("userId"));
             String operatorRole = stringValue(request.getAttribute("adminRole"));
@@ -165,6 +175,53 @@ public class AdminOperationLogFilter implements Filter {
             JsonNode node = objectMapper.readTree(json);
             JsonNode phone = node.get("phone");
             return phone != null && !phone.isNull() ? phone.asText() : null;
+        } catch (Exception ex) {
+            return null;
+        }
+    }
+
+    /**
+     * 请求体参数补充操作对象的手机号快照：
+     * 命中 /customers/{id}、/riders/{id}、/users/{id} 时，查询该对象当前手机号并入参。
+     * 这样对象被删除后按手机号重建时，操作日志仍能显示当前姓名而非"已删除"。
+     */
+    private String enrichTargetPhone(String path, String body) {
+        if (path == null || path.isBlank()) {
+            return body;
+        }
+        String pathOnly = path.split("\\?", 2)[0];
+        String phone = null;
+        Matcher matcher;
+        if ((matcher = CUSTOMER_ID_PATH.matcher(pathOnly)).find()) {
+            phone = querySingleString("SELECT phone FROM customers WHERE id = ?", matcher.group(1));
+        } else if ((matcher = RIDER_ID_PATH.matcher(pathOnly)).find()) {
+            phone = querySingleString("SELECT phone FROM rider_profiles WHERE id = ?", matcher.group(1));
+        } else if ((matcher = ADMIN_USER_ID_PATH.matcher(pathOnly)).find()) {
+            phone = querySingleString("SELECT phone FROM users WHERE id = ?", matcher.group(1));
+        }
+        if (phone == null || phone.isBlank()) {
+            return body;
+        }
+        try {
+            if (body != null && body.trim().startsWith("{")) {
+                JsonNode node = objectMapper.readTree(body);
+                if (node instanceof ObjectNode objectNode && !objectNode.has("phone")) {
+                    objectNode.put("phone", phone.trim());
+                    return objectMapper.writeValueAsString(objectNode);
+                }
+                return body;
+            }
+            return "{\"phone\":\"" + phone.trim() + "\"}";
+        } catch (Exception ex) {
+            return body;
+        }
+    }
+
+    private String querySingleString(String sql, String id) {
+        try {
+            long parsedId = Long.parseLong(id);
+            List<String> values = jdbcTemplate.query(sql, (rs, rowNum) -> rs.getString(1), parsedId);
+            return values.isEmpty() ? null : values.get(0);
         } catch (Exception ex) {
             return null;
         }

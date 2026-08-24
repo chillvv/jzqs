@@ -121,6 +121,11 @@ class DeliverySubscriptionModule {
      * 返回是否实际发送了订阅消息（无授权订阅时不发送，仅释放状态）。
      */
     boolean releaseAndSend(long mealSlotOrderId) {
+        return releaseAndSendWithReason(mealSlotOrderId).sent();
+    }
+
+    /** 与 {@link #releaseAndSend(long)} 等价，但额外返回发送原因，便于后台排障展示 */
+    DeliverySendResult releaseAndSendWithReason(long mealSlotOrderId) {
         int updated = jdbcTemplate.update(
             """
                 UPDATE delivery_receipts
@@ -133,7 +138,11 @@ class DeliverySubscriptionModule {
         if (updated == 0) {
             throw new BusinessException(ErrorCode.ORDER_NOT_FOUND, "未找到该订单的回执记录");
         }
-        return trySendDeliverySubscription(mealSlotOrderId, LocalDateTime.now().withNano(0));
+        return trySendDeliverySubscriptionWithReason(mealSlotOrderId, LocalDateTime.now().withNano(0));
+    }
+
+    /** 取餐订阅消息发送结果：是否成功发送 + 原因（SENT/NO_CONSENT/SEND_FAILED/DISABLED） */
+    public record DeliverySendResult(boolean sent, String reason) {
     }
 
     /** 餐期释放时间：优先取系统设置里配置的订阅发送时间，未配置/异常时回退默认值 */
@@ -198,14 +207,24 @@ class DeliverySubscriptionModule {
     }
 
     private boolean trySendDeliverySubscription(long mealSlotOrderId, LocalDateTime triggerTime) {
+        return trySendDeliverySubscriptionWithReason(mealSlotOrderId, triggerTime).sent();
+    }
+
+    private DeliverySendResult trySendDeliverySubscriptionWithReason(long mealSlotOrderId, LocalDateTime triggerTime) {
         // 「订阅通知发送」开关关闭时，所有取餐订阅消息（含定时调度、后台立即释放、测试发送）统一不再发送
         if (!settingsService.operationSettings().deliverySubscribeEnabled()) {
             log.debug("订阅通知发送已关闭，跳过订单 {} 的取餐订阅消息", mealSlotOrderId);
-            return false;
+            return new DeliverySendResult(false, "DISABLED");
         }
         DeliverySubscriptionSendContext context = findDeliverySubscriptionSendContext(mealSlotOrderId);
+        // 该订单本身没有订阅记录（典型场景：商家后台代客下单，未走小程序授权流程）。
+        // 回退到「该客户已授权过取餐模板」维度：只要该客户存在一条有效的取餐订阅授权，
+        // 即视为已取得下发许可（用户在小程序点过「总是允许」），为该订单补写记录后照常发送。
+        if (context == null) {
+            context = ensureDeliverySubscriptionFromCustomerConsent(mealSlotOrderId);
+        }
         if (context == null || isBlank(context.openid())) {
-            return false;
+            return new DeliverySendResult(false, "NO_CONSENT");
         }
         try {
             weChatService.sendDeliverySubscribeMessage(
@@ -222,7 +241,7 @@ class DeliverySubscriptionModule {
                 context.id()
             );
             pruneOldDeliverySubscriptions();
-            return true;
+            return new DeliverySendResult(true, "SENT");
         } catch (Exception ex) {
             jdbcTemplate.update(
                 "UPDATE customer_delivery_subscriptions SET status = 'FAILED', last_error_message = ? WHERE id = ?",
@@ -230,7 +249,7 @@ class DeliverySubscriptionModule {
                 context.id()
             );
             pruneOldDeliverySubscriptions();
-            throw ex;
+            return new DeliverySendResult(false, "SEND_FAILED");
         }
     }
 
@@ -246,6 +265,61 @@ class DeliverySubscriptionModule {
         if (deletedCount > 0) {
             log.info("清理配送订阅状态记录: {}", deletedCount);
         }
+    }
+
+    /**
+     * 回退策略（方案 B）：当指定订单没有 customer_delivery_subscriptions 记录时，
+     * 检查其所属客户是否已有任意一条有效的取餐订阅授权（AUTHORIZED/FAILED）。
+     * 若有，则为该订单补写一条取餐订阅记录（沿用客户已授权的 template_id），
+     * 以便取餐提醒能正常下发。这样「用户在小程序点过总是允许 + 商家后台代客下单」的场景
+     * 也能收到取餐提醒，而不必每单都重复授权。
+     *
+     * @return 补写成功后返回该订单的发送上下文；若客户从未授权过取餐模板则返回 null
+     */
+    private DeliverySubscriptionSendContext ensureDeliverySubscriptionFromCustomerConsent(long mealSlotOrderId) {
+        Long customerId = jdbcTemplate.queryForObject(
+            """
+            SELECT do.customer_id
+            FROM meal_slot_orders mso
+            JOIN daily_orders do ON do.id = mso.daily_order_id
+            WHERE mso.id = ?
+            """,
+            (rs, rowNum) -> rs.getLong(1),
+            mealSlotOrderId
+        );
+        if (customerId == null) {
+            return null;
+        }
+        String templateId = jdbcTemplate.query(
+            """
+            SELECT template_id
+            FROM customer_delivery_subscriptions
+            WHERE customer_id = ? AND status IN ('AUTHORIZED', 'FAILED')
+            ORDER BY authorized_at DESC
+            LIMIT 1
+            """,
+            (rs, rowNum) -> rs.getString(1),
+            customerId
+        ).stream().findFirst().orElse(null);
+        if (templateId == null) {
+            log.debug("客户 {} 没有有效的取餐订阅授权，订单 {} 不发送取餐提醒", customerId, mealSlotOrderId);
+            return null;
+        }
+        // 为该订单补写取餐订阅记录；meal_slot_order_id 唯一键，使用 INSERT IGNORE 防止并发/重复写入冲突
+        int inserted = jdbcTemplate.update(
+            """
+            INSERT IGNORE INTO customer_delivery_subscriptions (
+                customer_id, meal_slot_order_id, template_id, status, source, authorized_at
+            ) VALUES (?, ?, ?, 'AUTHORIZED', 'INHERITED_FROM_CUSTOMER_CONSENT', CURRENT_TIMESTAMP)
+            """,
+            customerId,
+            mealSlotOrderId,
+            templateId
+        );
+        if (inserted > 0) {
+            pruneOldDeliverySubscriptions();
+        }
+        return findDeliverySubscriptionSendContext(mealSlotOrderId);
     }
 
     private DeliverySubscriptionSendContext findDeliverySubscriptionSendContext(long mealSlotOrderId) {

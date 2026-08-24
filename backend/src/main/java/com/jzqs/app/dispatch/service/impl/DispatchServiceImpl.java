@@ -244,7 +244,16 @@ public class DispatchServiceImpl implements DispatchService {
         String areaCode,
         String updatedBy
     ) {
-        return dispatchRiderAdminModule.updateRiderProfile(riderId, riderName, displayName, phone, areaCode, updatedBy);
+        return dispatchRiderAdminModule.updateRiderProfile(
+            riderId,
+            riderName,
+            displayName,
+            phone,
+            areaCode,
+            updatedBy,
+            (bindingAreaCode, keywords, defaultRiderId, backupRiderId, operator) ->
+                updateAreaBinding(bindingAreaCode, keywords, defaultRiderId, backupRiderId, operator)
+        );
     }
 
     @Override

@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
+import com.jzqs.app.common.security.AdminRequestContext;
+import com.jzqs.app.common.security.AdminRequestContextSupport;
 import com.jzqs.app.common.util.PasswordUtils;
 import com.jzqs.app.user.mapper.UserMapper;
 import com.jzqs.app.user.model.dto.UserCreateRequest;
@@ -114,6 +116,30 @@ public class UserServiceImpl implements UserService {
         existing.setUpdatedAt(LocalDateTime.now());
         userMapper.updateById(existing);
         return detail(userId);
+    }
+
+    @Override
+    @Transactional
+    public void delete(Long userId) {
+        UserEntity existing = userMapper.selectById(userId);
+        if (existing == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_FOUND, "用户不存在");
+        }
+        // 禁止删除自己，避免管理员误删当前登录账号导致无法管理
+        AdminRequestContext admin = AdminRequestContextSupport.currentAdminOrNull();
+        if (admin != null && admin.userId() != null && admin.userId().equals(userId)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不能删除当前登录的账号");
+        }
+        // 禁止删除最后一个老板账号，避免系统失去最高权限
+        if ("OWNER".equals(existing.getRole())) {
+            LambdaQueryWrapper<UserEntity> wrapper = new LambdaQueryWrapper<>();
+            wrapper.eq(UserEntity::getRole, "OWNER");
+            Long ownerCount = userMapper.selectCount(wrapper);
+            if (ownerCount != null && ownerCount <= 1) {
+                throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不能删除唯一的老板账号");
+            }
+        }
+        userMapper.deleteById(userId);
     }
 
     private String normalizeRole(String role) {

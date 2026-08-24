@@ -1,6 +1,7 @@
 package com.jzqs.app.order.persistence;
 
 import com.jzqs.app.common.api.PageResponse;
+import com.jzqs.app.common.util.BusinessDateResolver;
 import com.jzqs.app.order.api.ManualCreateCustomerAddressResponse;
 import com.jzqs.app.order.api.ManualCreateCustomerSearchResponse;
 import com.jzqs.app.order.api.OrderNoteItemResponse;
@@ -107,34 +108,38 @@ public class OrderQueryRepository {
         ), targetDate, targetDate, targetDayOfWeek, targetDate, targetDate, targetDate, targetDayOfWeek, targetDate);
     }
 
-    public OrderPrepStatsResponse loadPrepStats() {
+    public OrderPrepStatsResponse loadPrepStats(LocalDate serveDate) {
+        LocalDate businessDate = serveDate != null ? serveDate : BusinessDateResolver.resolve(jdbcTemplate);
+        // 统计口径：仅统计当日出餐、且未取消/未退款的餐次份数
+        // （秒退款、已取消的订单不计入顶部卡片，与下方订单面板口径一致）
+        String counted = "serve_date = ? AND status NOT IN ('CANCELLED', 'REFUNDED')";
         Integer totalMeals = jdbcTemplate.queryForObject(
-            "SELECT COALESCE(SUM(quantity), 0) FROM meal_slot_orders",
-            Integer.class
+            "SELECT COALESCE(SUM(quantity), 0) FROM meal_slot_orders WHERE " + counted,
+            Integer.class, businessDate
         );
         Integer lunchCount = jdbcTemplate.queryForObject(
-            "SELECT COALESCE(SUM(quantity), 0) FROM meal_slot_orders WHERE meal_period = 'LUNCH'",
-            Integer.class
+            "SELECT COALESCE(SUM(quantity), 0) FROM meal_slot_orders WHERE " + counted + " AND meal_period = 'LUNCH'",
+            Integer.class, businessDate
         );
         Integer dinnerCount = jdbcTemplate.queryForObject(
-            "SELECT COALESCE(SUM(quantity), 0) FROM meal_slot_orders WHERE meal_period = 'DINNER'",
-            Integer.class
+            "SELECT COALESCE(SUM(quantity), 0) FROM meal_slot_orders WHERE " + counted + " AND meal_period = 'DINNER'",
+            Integer.class, businessDate
         );
         Integer selfOrderCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM daily_orders WHERE source = 'MINIAPP'",
-            Integer.class
+            "SELECT COUNT(*) FROM daily_orders WHERE source = 'MINIAPP' AND CAST(created_at AS DATE) = ?",
+            Integer.class, businessDate
         );
         Integer staffOrderCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM daily_orders WHERE source = 'BACKEND'",
-            Integer.class
+            "SELECT COUNT(*) FROM daily_orders WHERE source = 'BACKEND' AND CAST(created_at AS DATE) = ?",
+            Integer.class, businessDate
         );
         Integer subscriptionCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM meal_slot_orders WHERE confirmed_from_subscription = TRUE",
-            Integer.class
+            "SELECT COUNT(*) FROM meal_slot_orders WHERE confirmed_from_subscription = TRUE AND serve_date = ?",
+            Integer.class, businessDate
         );
         Integer adminRemarkCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM meal_slot_orders WHERE merchant_remark IS NOT NULL AND merchant_remark <> ''",
-            Integer.class
+            "SELECT COUNT(*) FROM meal_slot_orders WHERE merchant_remark IS NOT NULL AND merchant_remark <> '' AND serve_date = ?",
+            Integer.class, businessDate
         );
         return new OrderPrepStatsResponse(
             nvl(totalMeals),

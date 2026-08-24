@@ -321,26 +321,26 @@ export function buildOrderPrepCompactSummary(
 ) : OrderPrepCompactSummaryItem[] {
   return [
     {
-      label: "当前待出餐",
-      value: `${summary.totalMeals} 份`,
-      tone: "blue"
-    },
-    {
-      label: "午餐待确认",
-      value: `${summary.lunchConfirmationCount} 份`,
+      label: "午餐",
+      value: `${summary.lunchCount} 份`,
       tone: "orange",
       mealPeriod: "LUNCH"
     },
     {
-      label: "晚餐待确认",
-      value: `${summary.dinnerConfirmationCount} 份`,
+      label: "晚餐",
+      value: `${summary.dinnerCount} 份`,
       tone: "green",
       mealPeriod: "DINNER"
     },
     {
-      label: "待确认固定订餐",
-      value: `${summary.confirmationCount} 份`,
+      label: "午餐待确认",
+      value: `${summary.lunchConfirmationCount} 份`,
       tone: "red"
+    },
+    {
+      label: "晚餐待确认",
+      value: `${summary.dinnerConfirmationCount} 份`,
+      tone: "blue"
     }
   ];
 }

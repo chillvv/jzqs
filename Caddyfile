@@ -51,8 +51,8 @@ jzqs.top {
     }
 }
 
-# ---- JanGo（jango.com.cn）：TLS 在此终止，反代到本机 8081 的 jango caddy ----
-jango.com.cn {
+# ---- JanGo（jango.com.cn + www）：TLS 在此终止，反代到本机 8081 的 jango caddy ----
+jango.com.cn, www.jango.com.cn {
     encode zstd gzip
 
     handle /uploads/* {

@@ -243,31 +243,27 @@ public class AdminOperationLogLabelService {
 
         Matcher customer = CUSTOMER_PATH.matcher(pathOnly);
         if (customer.find()) {
-            return customerLabel(Long.parseLong(customer.group(1)), cache);
+            return customerLabel(Long.parseLong(customer.group(1)), requestSummary, cache);
         }
         // 订单类操作：定位到订单所属的客户
         Matcher order = ORDER_PATH.matcher(pathOnly);
         if (order.find()) {
             Long customerId = cache.orderCustomerIds().get(Long.parseLong(order.group(1)));
-            return customerId != null ? customerLabel(customerId, cache) : "已删除的订单";
+            return customerId != null ? customerLabel(customerId, requestSummary, cache) : "已删除的订单";
         }
         // 售后单处理：定位到售后单所属的客户
         Matcher aftersale = AFTERSALE_PATH.matcher(pathOnly);
         if (aftersale.find()) {
             Long customerId = cache.aftersaleCustomerIds().get(Long.parseLong(aftersale.group(1)));
-            return customerId != null ? customerLabel(customerId, cache) : "已删除的售后单";
+            return customerId != null ? customerLabel(customerId, requestSummary, cache) : "已删除的售后单";
         }
         Matcher adminUser = ADMIN_USER_PATH.matcher(pathOnly);
         if (adminUser.find()) {
-            long id = Long.parseLong(adminUser.group(1));
-            String name = cache.adminUserNames().get(id);
-            return name != null ? "账号「" + name + "」" : "已删除的账号";
+            return adminUserLabel(Long.parseLong(adminUser.group(1)), requestSummary, cache);
         }
         Matcher rider = RIDER_PATH.matcher(pathOnly);
         if (rider.find()) {
-            long id = Long.parseLong(rider.group(1));
-            String name = cache.riderNames().get(id);
-            return name != null ? "骑手「" + name + "」" : "已删除的骑手";
+            return riderLabel(Long.parseLong(rider.group(1)), requestSummary, cache);
         }
         Matcher area = AREA_PATH.matcher(pathOnly);
         if (area.find()) {
@@ -317,10 +313,65 @@ public class AdminOperationLogLabelService {
         return "";
     }
 
-    /** 单个客户：客户「张三」；客户已被删除时提示已删除而不是ID */
-    private String customerLabel(long customerId, NameCache cache) {
+    /**
+     * 单个客户：客户「张三」；客户已被删除时提示已删除而不是ID。
+     * 若客户已被删除后按手机号重新建档（新ID），则通过请求体中的手机号反查出当前客户姓名。
+     */
+    private String customerLabel(long customerId, String requestSummary, NameCache cache) {
         String name = cache.customerNames().get(customerId);
-        return name != null ? "客户「" + name + "」" : "已删除的客户";
+        if (name != null && !name.isBlank()) {
+            return "客户「" + name + "」";
+        }
+        String phone = extractPhone(requestSummary);
+        if (phone != null) {
+            String nameByPhone = cache.customerNamesByPhone().get(phone);
+            if (nameByPhone != null && !nameByPhone.isBlank()) {
+                return "客户「" + nameByPhone + "」";
+            }
+        }
+        return "已删除的客户";
+    }
+
+    /** 单个骑手：骑手「张三」；骑手被删除后按手机号重新添加时，通过请求体手机号反查当前骑手姓名 */
+    private String riderLabel(long riderId, String requestSummary, NameCache cache) {
+        String name = cache.riderNames().get(riderId);
+        if (name != null && !name.isBlank()) {
+            return "骑手「" + name + "」";
+        }
+        String phone = extractPhone(requestSummary);
+        if (phone != null) {
+            String nameByPhone = cache.riderNamesByPhone().get(phone);
+            if (nameByPhone != null && !nameByPhone.isBlank()) {
+                return "骑手「" + nameByPhone + "」";
+            }
+        }
+        return "已删除的骑手";
+    }
+
+    /** 单个后台账号：账号「张三」；账号被删除后按手机号重新添加时，通过请求体手机号反查当前账号姓名 */
+    private String adminUserLabel(long userId, String requestSummary, NameCache cache) {
+        String name = cache.adminUserNames().get(userId);
+        if (name != null && !name.isBlank()) {
+            return "账号「" + name + "」";
+        }
+        String phone = extractPhone(requestSummary);
+        if (phone != null) {
+            String nameByPhone = cache.adminUserNamesByPhone().get(phone);
+            if (nameByPhone != null && !nameByPhone.isBlank()) {
+                return "账号「" + nameByPhone + "」";
+            }
+        }
+        return "已删除的账号";
+    }
+
+    /** 从请求体摘要中提取手机号（删除后重建的对象靠手机号反查当前姓名） */
+    private String extractPhone(String requestSummary) {
+        JsonNode node = parseSummary(requestSummary);
+        if (node == null || !node.hasNonNull("phone") || !node.get("phone").isValueNode()) {
+            return null;
+        }
+        String phone = node.get("phone").asText();
+        return phone == null ? null : phone.trim();
     }
 
     /** 多个客户：少数几个直接列出姓名，多则「张三 等N位客户」 */
@@ -432,13 +483,14 @@ public class AdminOperationLogLabelService {
     public record LogRef(String requestPath, String requestSummary) {
     }
 
-    /** 批量加载一批日志涉及的对象名称，避免逐条查库 */
+    /** 批量加载一批日志涉及的对象名称，避免逐条查库；同时按手机号反查，兼容对象删除后重建（新ID）的日志 */
     public NameCache loadNameCache(Iterable<LogRef> logs) {
         Set<Long> customerIds = new HashSet<>();
         Set<Long> riderIds = new HashSet<>();
         Set<Long> adminUserIds = new HashSet<>();
         Set<Long> orderIds = new HashSet<>();
         Set<Long> aftersaleCaseIds = new HashSet<>();
+        Set<String> phones = new HashSet<>();
         for (LogRef log : logs) {
             String path = log == null ? null : log.requestPath();
             if (path == null || path.isBlank()) {
@@ -456,6 +508,12 @@ public class AdminOperationLogLabelService {
                 collectIds(node.get("customerIds"), customerIds);
                 collectId(node.get("orderId"), orderIds);
                 collectIds(node.get("orderIds"), orderIds);
+                if (node.hasNonNull("phone") && node.get("phone").isValueNode()) {
+                    String phone = node.get("phone").asText();
+                    if (phone != null && !phone.isBlank()) {
+                        phones.add(phone.trim());
+                    }
+                }
             }
         }
         return new NameCache(
@@ -463,7 +521,10 @@ public class AdminOperationLogLabelService {
             queryNames("SELECT id, rider_name FROM rider_profiles WHERE id IN ", riderIds),
             queryNames("SELECT id, display_name FROM users WHERE id IN ", adminUserIds),
             queryLongs("SELECT id, customer_id FROM daily_orders WHERE id IN ", orderIds),
-            queryLongs("SELECT id, customer_id FROM aftersale_cases WHERE id IN ", aftersaleCaseIds)
+            queryLongs("SELECT id, customer_id FROM aftersale_cases WHERE id IN ", aftersaleCaseIds),
+            queryPhoneNames("SELECT phone, name FROM customers WHERE phone IN ", phones),
+            queryPhoneNames("SELECT phone, rider_name FROM rider_profiles WHERE phone IN ", phones),
+            queryPhoneNames("SELECT phone, display_name FROM users WHERE phone IN ", phones)
         );
     }
 
@@ -512,13 +573,36 @@ public class AdminOperationLogLabelService {
         return values;
     }
 
+    /** 按手机号反查姓名（客户/骑手/后台账号删除后按手机号重建时，旧日志仍能定位到当前记录） */
+    private Map<String, String> queryPhoneNames(String sqlPrefix, Set<String> phones) {
+        if (phones.isEmpty()) {
+            return Map.of();
+        }
+        String placeholders = String.join(",", java.util.Collections.nCopies(phones.size(), "?"));
+        Object[] params = phones.toArray();
+        Map<String, String> names = new HashMap<>();
+        jdbcTemplate.query(
+            sqlPrefix + "(" + placeholders + ")",
+            rs -> {
+                while (rs.next()) {
+                    names.put(rs.getString(1), rs.getString(2));
+                }
+            },
+            params
+        );
+        return names;
+    }
+
     /** 一批日志共享的名称缓存 */
     public record NameCache(
         Map<Long, String> customerNames,
         Map<Long, String> riderNames,
         Map<Long, String> adminUserNames,
         Map<Long, Long> orderCustomerIds,
-        Map<Long, Long> aftersaleCustomerIds
+        Map<Long, Long> aftersaleCustomerIds,
+        Map<String, String> customerNamesByPhone,
+        Map<String, String> riderNamesByPhone,
+        Map<String, String> adminUserNamesByPhone
     ) {
     }
 }

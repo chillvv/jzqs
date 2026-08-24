@@ -5,6 +5,7 @@ import {
   fetchAdminUsers,
   resetAdminUserPassword,
   updateAdminUser,
+  deleteAdminUser,
   extractAdminApiErrorMessage
 } from "../../shared/api/http";
 import type { AdminUserItem } from "../../shared/api/types";
@@ -73,6 +74,9 @@ export function AdminAccountsPage() {
   const [resetPassword, setResetPassword] = useState("");
   const [resetConfirmPassword, setResetConfirmPassword] = useState("");
   const [submittingReset, setSubmittingReset] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<AdminUserItem | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
+  const [submittingDelete, setSubmittingDelete] = useState(false);
 
   const currentRole = useMemo(() => {
     if (typeof window === "undefined") {
@@ -188,6 +192,29 @@ export function AdminAccountsPage() {
       toast(extractAdminApiErrorMessage(err, "重置密码失败"), "error");
     } finally {
       setSubmittingReset(false);
+    }
+  }
+
+  async function handleDeleteSubmit() {
+    if (!deleteTarget) {
+      return;
+    }
+    if (deleteConfirmText.trim() !== "删除") {
+      toast('请输入"删除"以确认', "error");
+      return;
+    }
+    setSubmittingDelete(true);
+    try {
+      await deleteAdminUser(deleteTarget.id);
+      toast(`已删除账号 ${deleteTarget.displayName}`);
+      setDeleteTarget(null);
+      setDeleteConfirmText("");
+      setEditingUser(null);
+      await loadUsers();
+    } catch (err) {
+      toast(extractAdminApiErrorMessage(err, "删除账号失败"), "error");
+    } finally {
+      setSubmittingDelete(false);
     }
   }
 
@@ -404,6 +431,17 @@ export function AdminAccountsPage() {
               </div>
             </div>
             <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-danger"
+                style={{ marginRight: "auto" }}
+                onClick={() => {
+                  setDeleteTarget(editingUser);
+                  setDeleteConfirmText("");
+                }}
+              >
+                删除账号
+              </button>
               <button className="btn btn-outline" onClick={() => setEditingUser(null)}>取消</button>
               <button
                 className="btn btn-primary"
@@ -454,6 +492,46 @@ export function AdminAccountsPage() {
                 onClick={() => handleResetSubmit().catch(() => undefined)}
               >
                 {submittingReset ? "重置中..." : "确认重置"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteTarget && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <span>确认删除账号</span>
+              <span className="modal-close" onClick={() => setDeleteTarget(null)}>×</span>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: "0 0 12px", color: "var(--text-muted)" }}>
+                此操作将<strong style={{ color: "#dc2626" }}>彻底删除</strong>账号
+                <strong> {deleteTarget.displayName}（{deleteTarget.phone}）</strong>，
+                删除后该账号无法登录，且不可恢复。
+              </p>
+              <p style={{ margin: "0 0 8px" }}>
+                请输入 <strong style={{ color: "#dc2626" }}>删除</strong> 以确认：
+              </p>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <SafeInput
+                  className="form-control"
+                  value={deleteConfirmText}
+                  onValueChange={setDeleteConfirmText}
+                  placeholder="请输入：删除"
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline" onClick={() => setDeleteTarget(null)}>取消</button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                disabled={submittingDelete || deleteConfirmText.trim() !== "删除"}
+                onClick={() => handleDeleteSubmit().catch(() => undefined)}
+              >
+                {submittingDelete ? "删除中..." : "确认删除"}
               </button>
             </div>
           </div>

@@ -77,8 +77,14 @@ export function DispatchReleasePage() {
       const result = await releaseDeliveredOrder(item.orderId);
       if (result.subscriptionSent) {
         toast(`订单 #${item.orderId} 已释放并发送取餐提醒给用户`);
+      } else if (result.subscriptionReason === "NO_CONSENT") {
+        toast(`订单 #${item.orderId} 已释放，但用户从未授权「取餐提醒」模板，未发送消息（仅状态与图片对用户可见）`);
+      } else if (result.subscriptionReason === "DISABLED") {
+        toast(`订单 #${item.orderId} 已释放，但「订阅通知发送」开关已关闭，未发送消息`);
+      } else if (result.subscriptionReason === "SEND_FAILED") {
+        toast(`订单 #${item.orderId} 已释放，但取餐消息下发失败（微信接口异常），请检查日志`);
       } else {
-        toast(`订单 #${item.orderId} 已释放（该用户未订阅提醒，仅状态与图片对用户可见）`);
+        toast(`订单 #${item.orderId} 已释放（未发送取餐提醒，仅状态与图片对用户可见）`);
       }
       await loadPending();
     } catch (error: any) {

@@ -47,4 +47,6 @@ public interface CustomerAssetService {
     PageResponse<WalletTransactionResponse> walletTransactions(long customerId);
 
     RemarkSuggestionResponse remarkSuggestions(String scene, Long customerId);
+
+    void deleteCustomer(long customerId);
 }

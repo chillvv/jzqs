@@ -44,7 +44,13 @@ public class DeliveryReleaseSupport {
                     COALESCE(c.phone, '') AS customer_phone,
                     ca.address_line AS delivery_address,
                     dr.delivered_at AS delivered_at,
-                    COALESCE(cds.status, '') AS subscription_status
+                    COALESCE(cds.status,
+                        CASE WHEN EXISTS (
+                            SELECT 1 FROM customer_delivery_subscriptions cds2
+                            WHERE cds2.customer_id = doo.customer_id
+                              AND cds2.status IN ('AUTHORIZED', 'FAILED')
+                        ) THEN '' ELSE 'NO_CONSENT' END
+                    ) AS subscription_status
                 FROM meal_slot_orders mso
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
                 JOIN customers c ON c.id = doo.customer_id
@@ -93,7 +99,8 @@ public class DeliveryReleaseSupport {
         if (!"DELIVERED".equals(status)) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "仅已送达的订单可立即释放");
         }
-        boolean subscriptionSent = deliverySubscriptionModule.releaseAndSend(orderId);
+        com.jzqs.app.mobile.DeliverySubscriptionModule.DeliverySendResult sendResult =
+            deliverySubscriptionModule.releaseAndSendWithReason(orderId);
         Long customerId = findCustomerIdByOrderId(orderId);
         if (customerId != null) {
             try {
@@ -102,7 +109,7 @@ public class DeliveryReleaseSupport {
                 // 实时推送失败不影响释放结果
             }
         }
-        return new DeliveryReleaseResult(orderId, true, subscriptionSent);
+        return new DeliveryReleaseResult(orderId, true, sendResult.sent(), sendResult.reason());
     }
 
     private Long findCustomerIdByOrderId(long orderId) {

@@ -61,8 +61,16 @@ public class OrderQueryServiceImpl implements OrderQueryService {
     }
 
     @Override
-    public OrderPrepStatsResponse prepStats() {
-        return orderQueryRepository.loadPrepStats();
+    public OrderPrepStatsResponse prepStats(String serveDate) {
+        LocalDate resolved = null;
+        if (serveDate != null && !serveDate.isBlank()) {
+            try {
+                resolved = LocalDate.parse(serveDate.trim());
+            } catch (Exception ignored) {
+                resolved = null;
+            }
+        }
+        return orderQueryRepository.loadPrepStats(resolved);
     }
 
     @Override

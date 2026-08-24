@@ -28,7 +28,22 @@ class DispatchAreaAdminModule {
         String updatedBy
     ) {
         String normalizedAreaCode = areaCode == null ? null : areaCode.trim();
-        ensureRiderAreaUniqueness(normalizedAreaCode, defaultRiderId, backupRiderId);
+        Long oldDefaultRiderId = null;
+        if (normalizedAreaCode != null) {
+            oldDefaultRiderId = jdbcTemplate.query(
+                "SELECT default_rider_profile_id FROM dispatch_area_bindings WHERE area_code = ?",
+                ps -> ps.setString(1, normalizedAreaCode),
+                rs -> rs.next() ? rs.getLong("default_rider_profile_id") : null
+            );
+        }
+        releaseRiderFromOtherAreas(normalizedAreaCode, defaultRiderId, backupRiderId);
+        if (oldDefaultRiderId != null && oldDefaultRiderId > 0 && !oldDefaultRiderId.equals(defaultRiderId)) {
+            jdbcTemplate.update(
+                "UPDATE rider_profiles SET default_area_code = NULL WHERE id = ? AND default_area_code = ?",
+                oldDefaultRiderId,
+                normalizedAreaCode
+            );
+        }
         Integer existing = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM dispatch_area_bindings WHERE area_code = ?",
             Integer.class,
@@ -91,33 +106,42 @@ class DispatchAreaAdminModule {
     }
 
     /**
-     * 同一骑手不允许同时绑定到多个区域（默认/备用均不允许）。
+     * 将骑手从其它区域中释放出来，实现双向同步：
+     * 1. 默认骑手从其它区域的 default_rider_profile_id 中移除，并清理该骑手的 default_area_code；
+     * 2. 备用骑手从其它区域的 backup_rider_profile_id 中移除（不影响其负责区域）。
      */
-    private void ensureRiderAreaUniqueness(String areaCode, Long defaultRiderId, Long backupRiderId) {
-        for (Long riderId : new Long[] { defaultRiderId, backupRiderId }) {
-            if (riderId == null || riderId <= 0) {
-                continue;
-            }
-            List<String> boundAreas = jdbcTemplate.query(
+    private void releaseRiderFromOtherAreas(String areaCode, Long defaultRiderId, Long backupRiderId) {
+        String targetArea = areaCode == null ? "" : areaCode;
+        if (defaultRiderId != null && defaultRiderId > 0) {
+            jdbcTemplate.update(
                 """
-                    SELECT area_code
-                    FROM dispatch_area_bindings
-                    WHERE (default_rider_profile_id = ? OR backup_rider_profile_id = ?)
+                    UPDATE dispatch_area_bindings
+                    SET default_rider_profile_id = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE default_rider_profile_id = ?
                       AND area_code <> ?
-                    ORDER BY area_code
-                    LIMIT 1
                     """,
-                (rs, rowNum) -> rs.getString("area_code"),
-                riderId,
-                riderId,
-                areaCode == null ? "" : areaCode
+                defaultRiderId,
+                targetArea
             );
-            if (!boundAreas.isEmpty()) {
-                throw new BusinessException(
-                    ErrorCode.VALIDATION_ERROR,
-                    "该骑手已绑定区域「" + boundAreas.get(0) + "」，不允许同一骑手负责多个区域，请先解除原区域绑定"
-                );
-            }
+            jdbcTemplate.update(
+                "UPDATE rider_profiles SET default_area_code = NULL WHERE id = ? AND default_area_code <> ?",
+                defaultRiderId,
+                targetArea
+            );
+        }
+        if (backupRiderId != null && backupRiderId > 0) {
+            jdbcTemplate.update(
+                """
+                    UPDATE dispatch_area_bindings
+                    SET backup_rider_profile_id = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE backup_rider_profile_id = ?
+                      AND area_code <> ?
+                    """,
+                backupRiderId,
+                targetArea
+            );
         }
     }
 
@@ -126,6 +150,11 @@ class DispatchAreaAdminModule {
             "DELETE FROM dispatch_area_bindings WHERE area_code = ? AND default_rider_profile_id = ?",
             areaCode,
             riderId
+        );
+        jdbcTemplate.update(
+            "UPDATE rider_profiles SET default_area_code = NULL WHERE id = ? AND default_area_code = ?",
+            riderId,
+            areaCode
         );
         return new DispatchAreaBindingRemoveResponse(areaCode, riderId, "REMOVED");
     }

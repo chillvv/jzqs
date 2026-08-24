@@ -156,4 +156,12 @@ public class CustomerAssetController {
     public ApiResponse<CustomerMainSheetSyncSummaryResponse> syncMainSheet(@RequestBody CustomerMainSheetSyncRequest request) throws Exception {
         return ApiResponse.success(customerMainSheetSyncService.sync(request));
     }
+
+    @DeleteMapping("/{customerId}")
+    @RateLimit(key = "admin:customers:delete", maxRequests = 3, windowSeconds = 10)
+    @AuditAction(module = "CUSTOMER", action = "DELETE")
+    public ApiResponse<Void> delete(@PathVariable long customerId) {
+        customerAssetService.deleteCustomer(customerId);
+        return ApiResponse.success(null);
+    }
 }

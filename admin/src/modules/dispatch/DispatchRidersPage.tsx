@@ -255,7 +255,7 @@ export function DispatchRidersPage() {
             </div>
             <span className="dispatch-table-toolbar__count">共 {filtered.length} 条结果</span>
           </div>
-          <div className="table-responsive" style={{ overflowX: "auto" }}>
+          <div className="table-responsive table-responsive--fixed-height" style={{ overflowX: "auto" }}>
             <table style={{ minWidth: "900px", width: "100%" }}>
               <thead>
                 <tr>
@@ -312,7 +312,7 @@ export function DispatchRidersPage() {
         open={showAddModal}
         title={editRiderId ? "编辑骑手" : "新增骑手"}
         description={editRiderId ? "修改骑手姓名、登录手机号或负责区域。" : "后台新增骑手后，骑手即可使用对应手机号完成登录绑定。"}
-        width={460}
+        width={640}
         onClose={saving ? () => undefined : () => setShowAddModal(false)}
         footer={
           <>

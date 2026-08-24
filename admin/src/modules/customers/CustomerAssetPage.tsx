@@ -4,6 +4,7 @@ import {
   createCustomerAddress,
   createCustomerProfile,
   deleteCustomerAddress,
+  deleteCustomer,
   fetchCustomerDetail,
   fetchWalletTransactions,
   grantWalletMeals,
@@ -297,6 +298,9 @@ export function CustomerAssetPage() {
   const [isBatchExtendOpen, setIsBatchExtendOpen] = useState(false);
   const [batchExtendForm, setBatchExtendForm] = useState<{ extendDays: string; remark: string }>({ extendDays: "7", remark: "" });
   const [submittingBatchExtend, setSubmittingBatchExtend] = useState(false);
+  const [isDeleteCustomerOpen, setIsDeleteCustomerOpen] = useState(false);
+  const [deleteCustomerConfirmText, setDeleteCustomerConfirmText] = useState("");
+  const [submittingDeleteCustomer, setSubmittingDeleteCustomer] = useState(false);
   const deductCount = Number(deductForm.mealDelta || 0);
   const remainingMeals = activeItem?.remainingMeals ?? 0;
   const deductDisabled = remainingMeals <= 0 || deductCount <= 0 || remainingMeals < deductCount;
@@ -542,6 +546,36 @@ export function CustomerAssetPage() {
       toast(err?.response?.data?.message || err?.message || "批量延期失败", "error");
     } finally {
       setSubmittingBatchExtend(false);
+    }
+  }
+
+  function handleRequestDeleteCustomer() {
+    if (!activeItem) return;
+    setDeleteCustomerConfirmText("");
+    setIsDeleteCustomerOpen(true);
+  }
+
+  async function handleDeleteCustomer() {
+    if (!activeItem) return;
+    if (deleteCustomerConfirmText.trim() !== "删除") {
+      toast('请输入"删除"以确认', "error");
+      return;
+    }
+    if (submittingDeleteCustomer) return;
+    setSubmittingDeleteCustomer(true);
+    try {
+      await deleteCustomer(activeItem.id);
+      toast(`已删除客户 ${activeItem.name}`);
+      setIsDeleteCustomerOpen(false);
+      setDeleteCustomerConfirmText("");
+      setIsDetailOpen(false);
+      setActiveItem(null);
+      setDetail(null);
+      await reloadCustomers();
+    } catch (err: any) {
+      toast(err?.response?.data?.message || err?.message || "删除客户失败", "error");
+    } finally {
+      setSubmittingDeleteCustomer(false);
     }
   }
 
@@ -1463,6 +1497,14 @@ export function CustomerAssetPage() {
               </section>
             </div>
             <div className="modal-footer">
+              <button
+                type="button"
+                className="btn btn-danger"
+                style={{ marginRight: "auto" }}
+                onClick={handleRequestDeleteCustomer}
+              >
+                删除客户
+              </button>
               <button className="btn btn-outline" onClick={() => setIsDetailOpen(false)}>关闭</button>
               <button
                 className="btn btn-danger"
@@ -1488,6 +1530,47 @@ export function CustomerAssetPage() {
         onChange={setEditForm}
         normalizeCustomerPhone={normalizeCustomerPhone}
       />
+
+      {isDeleteCustomerOpen && activeItem && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <div className="modal-header">
+              <span>确认删除客户</span>
+              <span className="modal-close" onClick={() => setIsDeleteCustomerOpen(false)}>×</span>
+            </div>
+            <div className="modal-body">
+              <p style={{ margin: "0 0 12px", color: "var(--text-muted)" }}>
+                此操作将<strong style={{ color: "#dc2626" }}>删除</strong>客户
+                <strong> {activeItem.name}（编号 #{activeItem.id}）</strong>，
+                删除后该客户档案将<strong>从列表和详情中消失</strong>。
+                历史订单、订阅与笔记将保留用于业务凭证。
+              </p>
+              <p style={{ margin: "0 0 8px" }}>
+                请输入 <strong style={{ color: "#dc2626" }}>删除</strong> 以确认：
+              </p>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <SafeInput
+                  className="form-control"
+                  value={deleteCustomerConfirmText}
+                  onValueChange={setDeleteCustomerConfirmText}
+                  placeholder="请输入：删除"
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-outline" onClick={() => setIsDeleteCustomerOpen(false)}>取消</button>
+              <button
+                type="button"
+                className="btn btn-danger"
+                disabled={submittingDeleteCustomer || deleteCustomerConfirmText.trim() !== "删除"}
+                onClick={() => handleDeleteCustomer()}
+              >
+                {submittingDeleteCustomer ? "删除中..." : "确认删除"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <CustomerGrantDialog
         open={isGrantOpen}

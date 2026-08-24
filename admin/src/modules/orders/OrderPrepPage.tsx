@@ -166,7 +166,7 @@ export function OrderPrepPage() {
   const [subscriptionQueryVersion, setSubscriptionQueryVersion] = useState(0);
   const [subscriptionVisibleCount, setSubscriptionVisibleCount] = useState(0);
 
-  const { data: statsResponse, mutate: mutateStats } = useSWR('/api/admin/orders/prep-stats', swrFetcher);
+  const { data: statsResponse, mutate: mutateStats } = useSWR(`/api/admin/orders/prep-stats?serveDate=${encodeURIComponent(filterDate)}`, swrFetcher);
   const { data: listResponse, error: ordersErrorObj, isLoading: loadingOrders, mutate: mutateList } = useSWR(
     `/api/admin/orders?serveDate=${encodeURIComponent(filterDate)}`,
     swrFetcher
@@ -1014,17 +1014,17 @@ export function OrderPrepPage() {
               </div>
               <div className={`stat-val stat-val--${item.tone}`}>{item.value}</div>
               <div className="stat-footer">
-                {item.label === "当前待出餐"
-                  ? `有备注 ${summary.remarkedOrderCount} 单`
-                  : item.label === "午餐"
-                    ? `有备注 ${summary.lunchRemarkedCount} 单`
-                    : item.label === "晚餐"
-                      ? `有备注 ${summary.dinnerRemarkedCount} 单`
-                      : item.label === "待确认固定订餐"
-                        ? `待生成 ${summary.confirmationCount} 份`
-                        : isActive
-                          ? `正在查看${item.label}订单`
-                          : `点击切换到${item.label}订单`}
+                              {item.label === "午餐"
+                                ? `有备注 ${summary.lunchRemarkedCount} 单`
+                                : item.label === "晚餐"
+                                  ? `有备注 ${summary.dinnerRemarkedCount} 单`
+                                  : item.label === "午餐待确认"
+                                    ? `待生成 ${summary.lunchConfirmationCount} 份`
+                                    : item.label === "晚餐待确认"
+                                      ? `待生成 ${summary.dinnerConfirmationCount} 份`
+                                      : isActive
+                                        ? `正在查看${item.label}订单`
+                                        : `点击切换到${item.label}订单`}
               </div>
             </div>
           );
@@ -1160,7 +1160,7 @@ export function OrderPrepPage() {
               </div>
             </>
           )}
-          {activeTab === "ORDERS" ? <span className="dispatch-table-toolbar__count">{mealPeriodLabel(mealPeriodFilter)}筛选出 {view.filteredItems.length} 条</span> : null}
+          {activeTab === "ORDERS" ? <span className="dispatch-table-toolbar__count">{mealPeriodLabel(mealPeriodFilter)}筛选出 {view.filteredItems.reduce((sum, it) => sum + (it.quantity || 0), 0)} 份</span> : null}
           <button
             className="btn btn-primary"
             disabled={activeTab === "ORDERS" ? loadingOrders : false}
