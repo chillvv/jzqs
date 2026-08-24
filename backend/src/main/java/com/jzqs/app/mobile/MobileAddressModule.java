@@ -224,30 +224,44 @@ class MobileAddressModule {
     private static final String AREA_PENDING = "PENDING";
 
     private void reconcileDispatchArea(long orderId, long newAddressId) {
+        long customerId = jdbcTemplate.query(
+            "SELECT do.customer_id FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE mso.id = ?",
+            ps -> ps.setLong(1, orderId),
+            rs -> rs.next() ? rs.getLong("customer_id") : 0L
+        );
+        // 新地址是否有「已确认」的区域记忆（rider_profile_id 非空才算真实记忆，
+        // 空壳待确认记录 area_code='' 不代表已分配，必须走重新分配流程）。
         String newArea = jdbcTemplate.query(
-            "SELECT area_code FROM rider_address_bindings WHERE address_id = ? ORDER BY id DESC LIMIT 1",
+            """
+                SELECT area_code
+                FROM rider_address_bindings
+                WHERE customer_id = ? AND address_id = ? AND rider_profile_id IS NOT NULL
+                ORDER BY id DESC LIMIT 1
+                """,
             (rs, rn) -> rs.getString("area_code"),
+            customerId,
             newAddressId
         ).stream().findFirst().orElse(null);
-        if (newArea == null) {
-            // 新地址无记忆：不沿用旧地址区域，留空待商家手动分配。
+        if (newArea == null || newArea.isBlank()) {
+            // 新地址无已确认记忆：不沿用旧地址区域，留空待商家手动分配，
+            // 并同步写入/刷新「地址变更待确认」绑定，供分单工作台与异常单展示。
             jdbcTemplate.update(
-                "INSERT INTO rider_address_bindings (customer_id, address_id, address_fingerprint, area_code, manually_confirmed, updated_reason, updated_at) "
-                    + "SELECT customer_id, ?, '', '', FALSE, 'ADDRESS_CHANGED_PENDING_CONFIRM', CURRENT_TIMESTAMP "
+                "INSERT INTO rider_address_bindings (customer_id, address_id, address_fingerprint, area_code, rider_profile_id, manually_confirmed, updated_reason, updated_at) "
+                    + "SELECT do.customer_id, ?, '', NULL, FALSE, 'ADDRESS_CHANGED_PENDING_CONFIRM', CURRENT_TIMESTAMP "
                     + "FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE mso.id = ? "
-                    + "ON DUPLICATE KEY UPDATE area_code = '', updated_reason = VALUES(updated_reason), updated_at = CURRENT_TIMESTAMP",
+                    + "ON DUPLICATE KEY UPDATE area_code = '', rider_profile_id = NULL, updated_reason = VALUES(updated_reason), updated_at = CURRENT_TIMESTAMP",
                 newAddressId,
                 orderId
             );
             newArea = AREA_PENDING;
         }
-        if (newArea != null) {
-            jdbcTemplate.update(
-                "UPDATE dispatch_assignments SET area_code = ? WHERE meal_slot_order_id = ?",
-                newArea,
-                orderId
-            );
-        }
+        // 仅当订单已派单（存在 dispatch_assignments 行）时才刷新区域快照；
+        // 未派单订单由自动派单环节基于新 address_id 实时 JOIN，无需处理。
+        jdbcTemplate.update(
+            "UPDATE dispatch_assignments SET area_code = ? WHERE meal_slot_order_id = ?",
+            newArea,
+            orderId
+        );
     }
 
     private ContactSnapshot resolveCustomerAddressContact(long customerId) {
