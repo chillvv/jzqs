@@ -11,6 +11,7 @@ import type {
 type DispatchOverviewLike = Partial<DispatchOverviewResponse>;
 
 export type NewRiderDraft = {
+  mealPeriod: DispatchMealPeriod;
   riderName: string;
   phone: string;
   areaCode: string;
@@ -19,12 +20,18 @@ export type NewRiderDraft = {
 export const DEFAULT_OPERATOR = "管理员";
 
 export type DispatchMealPeriod = "LUNCH" | "DINNER";
+
+export const MEAL_PERIOD_OPTIONS: Array<{ label: string; value: DispatchMealPeriod }> = [
+  { label: "午餐", value: "LUNCH" },
+  { label: "晚餐", value: "DINNER" }
+];
 type DispatchAreaBindingLike = Omit<DispatchAreaBindingResponse, "orders"> & {
   orders?: DispatchAreaBindingResponse["orders"] | null;
 };
 
 export function createEmptyNewRiderDraft(): NewRiderDraft {
   return {
+    mealPeriod: "LUNCH",
     riderName: "",
     phone: "",
     areaCode: ""
@@ -225,6 +232,7 @@ export function validateAreaName(value: string) {
 
 export function buildCreateRiderPayload(draft: NewRiderDraft) {
   return {
+    mealPeriod: draft.mealPeriod,
     riderName: draft.riderName.trim(),
     displayName: draft.riderName.trim(),
     phone: draft.phone.trim(),

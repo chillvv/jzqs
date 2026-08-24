@@ -4,6 +4,7 @@ import com.jzqs.app.common.api.BatchOperationResponse;
 import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.dispatch.api.DispatchAreaBindingRemoveResponse;
 import com.jzqs.app.dispatch.api.DispatchBatchResponse;
+import com.jzqs.app.order.MealPeriod;
 import com.jzqs.app.dispatch.api.DispatchBoardItemResponse;
 import com.jzqs.app.dispatch.api.DispatchAreaAiCorrectionConfirmRequest;
 import com.jzqs.app.dispatch.api.DispatchAreaAiCorrectionPreviewRequest;
@@ -97,13 +98,13 @@ public interface DispatchService {
 
     List<PendingRiderResponse> pendingRiders();
 
-    List<DispatchManagedRiderResponse> managedRiders(String authStatus, String keyword, String areaCode);
+    List<DispatchManagedRiderResponse> managedRiders(String authStatus, String keyword, String areaCode, MealPeriod mealPeriod);
 
     List<DispatchRiderProgressResponse> riderProgress(String mealPeriod, String serveDate);
 
-    DispatchRiderProfileUpsertResponse createRider(String riderName, String displayName, String phone, String areaCode, String employmentStatus, String updatedBy);
+    DispatchRiderProfileUpsertResponse createRider(MealPeriod mealPeriod, String riderName, String displayName, String phone, String areaCode, String employmentStatus, String updatedBy);
 
-    DispatchRiderProfileUpsertResponse updateRiderProfile(long riderId, String riderName, String displayName, String phone, String areaCode, String updatedBy);
+    DispatchRiderProfileUpsertResponse updateRiderProfile(long riderId, MealPeriod mealPeriod, String riderName, String displayName, String phone, String areaCode, String updatedBy);
 
     DispatchRiderAuthBindingResponse riderAuthBinding(long riderId);
 
@@ -113,9 +114,9 @@ public interface DispatchService {
 
     List<DispatchAreaBindingResponse> areaBindings(String mealPeriod, String serveDate);
 
-    DispatchAreaBindingUpdateResultResponse updateAreaBinding(String areaCode, String keywords, Long defaultRiderId, Long backupRiderId, String updatedBy);
+    DispatchAreaBindingUpdateResultResponse updateAreaBinding(MealPeriod mealPeriod, String areaCode, String keywords, Long defaultRiderId, Long backupRiderId, String updatedBy);
 
-    DispatchAreaBindingRemoveResponse removeAreaBinding(String areaCode, long riderId);
+    DispatchAreaBindingRemoveResponse removeAreaBinding(MealPeriod mealPeriod, String areaCode, long riderId);
 
     DispatchAreaRenameResponse renameArea(String areaCode, String newAreaCode);
 

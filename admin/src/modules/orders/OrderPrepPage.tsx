@@ -379,6 +379,7 @@ export function OrderPrepPage() {
     }, currentPage, PAGE_SIZE),
     [items, keywordFilter, mealPeriodFilter, sourceFilter, statusFilter, remarkFilter, currentPage]
   );
+  const orderMealCount = view.filteredItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
   const hasOrderFilters = keywordFilter.trim().length > 0
     || sourceFilter !== "ALL"
     || statusFilter !== "ALL"
@@ -1030,9 +1031,6 @@ export function OrderPrepPage() {
           );
         })}
       </div>
-      <div className="admin-panel-note" style={{ marginBottom: "16px" }}>
-        顾客端下单后会先进入待配送，取消和售后结果会同步回订单页与钱包页。
-      </div>
 
       <div className="toolbar">
         <div className="filter-row">
@@ -1231,7 +1229,7 @@ export function OrderPrepPage() {
                 onClick={() => handleTabChange("ORDERS")}
               >
                 普通订单
-                <span className="segmented-control__count">{view.totalItems}</span>
+                <span className="segmented-control__count">{orderMealCount} 份</span>
               </button>
               <button
                 type="button"

@@ -160,6 +160,7 @@ export function DispatchAreasPage() {
     setSavingArea(assignRiderAreaCode);
     try {
       await updateDispatchAreaBinding(assignRiderAreaCode, {
+        mealPeriod,
         keywords: area.keywords,
         defaultRiderId: rider.riderId
       });
@@ -189,6 +190,7 @@ export function DispatchAreasPage() {
     setSavingArea("__new__");
     try {
       await updateDispatchAreaBinding(newArea.name.trim(), {
+        mealPeriod,
         keywords: newArea.name.trim(),
         defaultRiderId: newArea.riderId ? Number(newArea.riderId) : null
       });
@@ -376,6 +378,7 @@ export function DispatchAreasPage() {
     setSavingArea(areaCode);
     try {
       await updateDispatchAreaBinding(areaCode, {
+        mealPeriod,
         keywords: area.keywords,
         defaultRiderId: Number(selectedRiderId)
       });

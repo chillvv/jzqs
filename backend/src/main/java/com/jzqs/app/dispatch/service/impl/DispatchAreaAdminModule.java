@@ -7,6 +7,7 @@ import com.jzqs.app.dispatch.api.DispatchAreaBindingUpdateResultResponse;
 import com.jzqs.app.dispatch.api.DispatchAreaBlockingOrderResponse;
 import com.jzqs.app.dispatch.api.DispatchAreaDeleteResponse;
 import com.jzqs.app.dispatch.api.DispatchAreaRenameResponse;
+import com.jzqs.app.order.MealPeriod;
 import java.util.List;
 import java.util.Map;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -21,6 +22,7 @@ class DispatchAreaAdminModule {
     }
 
     DispatchAreaBindingUpdateResultResponse updateAreaBinding(
+        MealPeriod mealPeriod,
         String areaCode,
         String keywords,
         Long defaultRiderId,
@@ -28,26 +30,32 @@ class DispatchAreaAdminModule {
         String updatedBy
     ) {
         String normalizedAreaCode = areaCode == null ? null : areaCode.trim();
+        String resolvedMealPeriod = (mealPeriod == null ? MealPeriod.DINNER : mealPeriod).name();
         Long oldDefaultRiderId = null;
         if (normalizedAreaCode != null) {
             oldDefaultRiderId = jdbcTemplate.query(
-                "SELECT default_rider_profile_id FROM dispatch_area_bindings WHERE area_code = ?",
-                ps -> ps.setString(1, normalizedAreaCode),
+                "SELECT default_rider_profile_id FROM dispatch_area_bindings WHERE area_code = ? AND meal_period = ?",
+                ps -> {
+                    ps.setString(1, normalizedAreaCode);
+                    ps.setString(2, resolvedMealPeriod);
+                },
                 rs -> rs.next() ? rs.getLong("default_rider_profile_id") : null
             );
         }
-        releaseRiderFromOtherAreas(normalizedAreaCode, defaultRiderId, backupRiderId);
+        releaseRiderFromOtherAreas(normalizedAreaCode, resolvedMealPeriod, defaultRiderId, backupRiderId);
         if (oldDefaultRiderId != null && oldDefaultRiderId > 0 && !oldDefaultRiderId.equals(defaultRiderId)) {
             jdbcTemplate.update(
-                "UPDATE rider_profiles SET default_area_code = NULL WHERE id = ? AND default_area_code = ?",
+                "UPDATE rider_profiles SET default_area_code = NULL WHERE id = ? AND default_area_code = ? AND meal_period = ?",
                 oldDefaultRiderId,
-                normalizedAreaCode
+                normalizedAreaCode,
+                resolvedMealPeriod
             );
         }
         Integer existing = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM dispatch_area_bindings WHERE area_code = ?",
+            "SELECT COUNT(*) FROM dispatch_area_bindings WHERE area_code = ? AND meal_period = ?",
             Integer.class,
-            normalizedAreaCode
+            normalizedAreaCode,
+            resolvedMealPeriod
         );
         String status = "UPDATED";
         if (existing != null && existing > 0) {
@@ -59,28 +67,31 @@ class DispatchAreaAdminModule {
                         backup_rider_profile_id = ?,
                         updated_by = ?,
                         updated_at = CURRENT_TIMESTAMP
-                    WHERE area_code = ?
+                    WHERE area_code = ? AND meal_period = ?
                     """,
                 keywords,
                 defaultRiderId,
                 backupRiderId,
                 updatedBy,
-                normalizedAreaCode
+                normalizedAreaCode,
+                resolvedMealPeriod
             );
         } else {
             jdbcTemplate.update(
                 """
                     INSERT INTO dispatch_area_bindings (
                         area_code,
+                        meal_period,
                         keywords,
                         default_rider_profile_id,
                         backup_rider_profile_id,
                         updated_by,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                     """,
                 normalizedAreaCode,
+                resolvedMealPeriod,
                 keywords,
                 defaultRiderId,
                 backupRiderId,
@@ -90,10 +101,11 @@ class DispatchAreaAdminModule {
         }
         if (defaultRiderId != null && defaultRiderId > 0) {
             jdbcTemplate.update(
-                "UPDATE rider_profiles SET default_area_code = ?, assigned_by = ?, assigned_at = CURRENT_TIMESTAMP WHERE id = ?",
+                "UPDATE rider_profiles SET default_area_code = ?, assigned_by = ?, assigned_at = CURRENT_TIMESTAMP WHERE id = ? AND meal_period = ?",
                 normalizedAreaCode,
                 updatedBy,
-                defaultRiderId
+                defaultRiderId,
+                resolvedMealPeriod
             );
         }
         return new DispatchAreaBindingUpdateResultResponse(
@@ -106,12 +118,13 @@ class DispatchAreaAdminModule {
     }
 
     /**
-     * 将骑手从其它区域中释放出来，实现双向同步：
+     * 将骑手从其它区域中释放出来，实现双向同步（按餐段隔离）：
      * 1. 默认骑手从其它区域的 default_rider_profile_id 中移除，并清理该骑手的 default_area_code；
      * 2. 备用骑手从其它区域的 backup_rider_profile_id 中移除（不影响其负责区域）。
      */
-    private void releaseRiderFromOtherAreas(String areaCode, Long defaultRiderId, Long backupRiderId) {
+    private void releaseRiderFromOtherAreas(String areaCode, String mealPeriod, Long defaultRiderId, Long backupRiderId) {
         String targetArea = areaCode == null ? "" : areaCode;
+        String targetPeriod = mealPeriod == null ? "" : mealPeriod;
         if (defaultRiderId != null && defaultRiderId > 0) {
             jdbcTemplate.update(
                 """
@@ -120,14 +133,17 @@ class DispatchAreaAdminModule {
                         updated_at = CURRENT_TIMESTAMP
                     WHERE default_rider_profile_id = ?
                       AND area_code <> ?
+                      AND meal_period = ?
                     """,
                 defaultRiderId,
-                targetArea
+                targetArea,
+                targetPeriod
             );
             jdbcTemplate.update(
-                "UPDATE rider_profiles SET default_area_code = NULL WHERE id = ? AND default_area_code <> ?",
+                "UPDATE rider_profiles SET default_area_code = NULL WHERE id = ? AND default_area_code <> ? AND meal_period = ?",
                 defaultRiderId,
-                targetArea
+                targetArea,
+                targetPeriod
             );
         }
         if (backupRiderId != null && backupRiderId > 0) {
@@ -138,23 +154,28 @@ class DispatchAreaAdminModule {
                         updated_at = CURRENT_TIMESTAMP
                     WHERE backup_rider_profile_id = ?
                       AND area_code <> ?
+                      AND meal_period = ?
                     """,
                 backupRiderId,
-                targetArea
+                targetArea,
+                targetPeriod
             );
         }
     }
 
-    DispatchAreaBindingRemoveResponse removeAreaBinding(String areaCode, long riderId) {
+    DispatchAreaBindingRemoveResponse removeAreaBinding(MealPeriod mealPeriod, String areaCode, long riderId) {
+        String resolvedMealPeriod = (mealPeriod == null ? MealPeriod.DINNER : mealPeriod).name();
         jdbcTemplate.update(
-            "DELETE FROM dispatch_area_bindings WHERE area_code = ? AND default_rider_profile_id = ?",
+            "DELETE FROM dispatch_area_bindings WHERE area_code = ? AND meal_period = ? AND default_rider_profile_id = ?",
             areaCode,
+            resolvedMealPeriod,
             riderId
         );
         jdbcTemplate.update(
-            "UPDATE rider_profiles SET default_area_code = NULL WHERE id = ? AND default_area_code = ?",
+            "UPDATE rider_profiles SET default_area_code = NULL WHERE id = ? AND default_area_code = ? AND meal_period = ?",
             riderId,
-            areaCode
+            areaCode,
+            resolvedMealPeriod
         );
         return new DispatchAreaBindingRemoveResponse(areaCode, riderId, "REMOVED");
     }

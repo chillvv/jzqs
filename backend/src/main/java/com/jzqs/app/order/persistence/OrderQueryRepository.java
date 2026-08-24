@@ -112,17 +112,19 @@ public class OrderQueryRepository {
         LocalDate businessDate = serveDate != null ? serveDate : BusinessDateResolver.resolve(jdbcTemplate);
         // 统计口径：仅统计当日出餐、且未取消/未退款的餐次份数
         // （秒退款、已取消的订单不计入顶部卡片，与下方订单面板口径一致）
-        String counted = "serve_date = ? AND status NOT IN ('CANCELLED', 'REFUNDED')";
+        // meal_slot_orders 没有 serve_date 列，需通过 daily_orders 关联获取出餐日期
+        String counted = "mso.status NOT IN ('CANCELLED', 'REFUNDED') AND do.serve_date = ?";
+        String countedFrom = "meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id";
         Integer totalMeals = jdbcTemplate.queryForObject(
-            "SELECT COALESCE(SUM(quantity), 0) FROM meal_slot_orders WHERE " + counted,
+            "SELECT COALESCE(SUM(mso.quantity), 0) FROM " + countedFrom + " WHERE " + counted,
             Integer.class, businessDate
         );
         Integer lunchCount = jdbcTemplate.queryForObject(
-            "SELECT COALESCE(SUM(quantity), 0) FROM meal_slot_orders WHERE " + counted + " AND meal_period = 'LUNCH'",
+            "SELECT COALESCE(SUM(mso.quantity), 0) FROM " + countedFrom + " WHERE " + counted + " AND mso.meal_period = 'LUNCH'",
             Integer.class, businessDate
         );
         Integer dinnerCount = jdbcTemplate.queryForObject(
-            "SELECT COALESCE(SUM(quantity), 0) FROM meal_slot_orders WHERE " + counted + " AND meal_period = 'DINNER'",
+            "SELECT COALESCE(SUM(mso.quantity), 0) FROM " + countedFrom + " WHERE " + counted + " AND mso.meal_period = 'DINNER'",
             Integer.class, businessDate
         );
         Integer selfOrderCount = jdbcTemplate.queryForObject(
@@ -134,11 +136,11 @@ public class OrderQueryRepository {
             Integer.class, businessDate
         );
         Integer subscriptionCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM meal_slot_orders WHERE confirmed_from_subscription = TRUE AND serve_date = ?",
+            "SELECT COUNT(*) FROM " + countedFrom + " WHERE mso.confirmed_from_subscription = TRUE AND do.serve_date = ?",
             Integer.class, businessDate
         );
         Integer adminRemarkCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM meal_slot_orders WHERE merchant_remark IS NOT NULL AND merchant_remark <> '' AND serve_date = ?",
+            "SELECT COUNT(*) FROM " + countedFrom + " WHERE mso.merchant_remark IS NOT NULL AND mso.merchant_remark <> '' AND do.serve_date = ?",
             Integer.class, businessDate
         );
         return new OrderPrepStatsResponse(

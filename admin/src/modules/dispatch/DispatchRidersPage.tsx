@@ -24,6 +24,8 @@ import {
   riderStatusTagClass,
   validateCreateRiderDraft,
   DEFAULT_OPERATOR,
+  MEAL_PERIOD_OPTIONS,
+  type DispatchMealPeriod,
   type NewRiderDraft
 } from "./dispatchCenterLayout.helpers";
 
@@ -39,6 +41,7 @@ export function DispatchRidersPage() {
   const [bindings, setBindings] = useState<DispatchAreaBindingResponse[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("全部");
+  const [mealPeriod, setMealPeriod] = useState<DispatchMealPeriod>("LUNCH");
   const [showAddModal, setShowAddModal] = useState(false);
   const [editRiderId, setEditRiderId] = useState<number | null>(null);
   const [draft, setDraft] = useState<NewRiderDraft>(createEmptyNewRiderDraft());
@@ -52,6 +55,10 @@ export function DispatchRidersPage() {
   useEffect(() => {
     reload().catch((err) => toast(getErrorMessage(err, "加载骑手列表失败"), "error"));
   }, []);
+
+  useEffect(() => {
+    reload().catch((err) => toast(getErrorMessage(err, "加载骑手列表失败"), "error"));
+  }, [mealPeriod]);
 
   useEffect(() => {
     if (!showAddModal || !editRiderId) {
@@ -107,7 +114,10 @@ export function DispatchRidersPage() {
   }, [riders]);
 
   async function reload() {
-    const [r, b] = await Promise.all([fetchDispatchManagedRiders(), fetchDispatchAreaBindings()]);
+    const [r, b] = await Promise.all([
+      fetchDispatchManagedRiders({ mealPeriod }),
+      fetchDispatchAreaBindings(mealPeriod)
+    ]);
     setRiders(r);
     setBindings(b);
   }
@@ -120,6 +130,7 @@ export function DispatchRidersPage() {
 
   function openEdit(rider: DispatchManagedRiderResponse) {
     setDraft({
+      mealPeriod: rider.mealPeriod || "LUNCH",
       riderName: rider.riderName,
       phone: rider.phone || "",
       areaCode: rider.areaCode || ""
@@ -137,6 +148,7 @@ export function DispatchRidersPage() {
     try {
       if (editRiderId) {
         const payload = {
+          mealPeriod: draft.mealPeriod,
           riderName: draft.riderName.trim(),
           displayName: draft.riderName.trim(),
           phone: draft.phone.trim(),
@@ -217,6 +229,17 @@ export function DispatchRidersPage() {
 
       <div className="toolbar">
         <div className="dispatch-toolbar">
+          <div className="dispatch-toolbar__segment">
+            {MEAL_PERIOD_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                className={`segment-btn${mealPeriod === opt.value ? " segment-btn--active" : ""}`}
+                onClick={() => setMealPeriod(opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
           <div className="dispatch-toolbar__search">
             <SafeInput
               wrapperClassName="dispatch-toolbar__search-wrapper"
@@ -344,6 +367,16 @@ export function DispatchRidersPage() {
               placeholder="后台建档后供骑手登录绑定"
             />
             {fieldErrors.phone && <div className="form-error">{fieldErrors.phone}</div>}
+          </label>
+
+          <label className="admin-field">
+            <span className="admin-field-label">餐段</span>
+            <AppSelect
+              value={draft.mealPeriod}
+              options={MEAL_PERIOD_OPTIONS}
+              onChange={(value) => setDraft((d) => ({ ...d, mealPeriod: value as DispatchMealPeriod }))}
+              style={selectStyle}
+            />
           </label>
 
         <label className="admin-field">

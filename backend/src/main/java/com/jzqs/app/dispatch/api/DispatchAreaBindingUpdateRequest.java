@@ -1,9 +1,10 @@
 package com.jzqs.app.dispatch.api;
 
+import com.jzqs.app.order.MealPeriod;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.NotBlank;
 
 public record DispatchAreaBindingUpdateRequest(
+    MealPeriod mealPeriod,
     String keywords,
     Long defaultRiderId,
     Long backupRiderId,

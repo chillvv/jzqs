@@ -461,11 +461,13 @@ export async function fetchDispatchManagedRiders(params?: {
   authStatus?: string;
   keyword?: string;
   areaCode?: string;
+  mealPeriod?: "LUNCH" | "DINNER";
 }) {
   const query = new URLSearchParams();
   if (params?.authStatus) query.set("authStatus", params.authStatus);
   if (params?.keyword) query.set("keyword", params.keyword);
   if (params?.areaCode) query.set("areaCode", params.areaCode);
+  if (params?.mealPeriod) query.set("mealPeriod", params.mealPeriod);
   const suffix = query.toString() ? `?${query.toString()}` : "";
   const response = await http.get<ApiResponse<DispatchManagedRiderResponse[]>>(`/api/admin/dispatch/riders${suffix}`);
   return response.data.data;
@@ -477,6 +479,7 @@ export async function createDispatchRider(payload: DispatchCreateRiderPayload) {
 }
 
 export async function updateDispatchRiderProfile(riderId: number, payload: {
+  mealPeriod?: "LUNCH" | "DINNER";
   riderName: string;
   displayName: string;
   phone: string;
@@ -501,6 +504,7 @@ export async function fetchDispatchAreaBindings(mealPeriod?: "LUNCH" | "DINNER",
 }
 
 export async function updateDispatchAreaBinding(areaCode: string, payload: {
+  mealPeriod?: "LUNCH" | "DINNER";
   keywords?: string | null;
   defaultRiderId: number | null;
   backupRiderId?: number | null;

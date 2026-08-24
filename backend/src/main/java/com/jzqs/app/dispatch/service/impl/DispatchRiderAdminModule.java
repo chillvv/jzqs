@@ -8,6 +8,7 @@ import com.jzqs.app.dispatch.api.DispatchRiderAuthUnbindResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderProfileUpsertResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderStatusResponse;
 import com.jzqs.app.dispatch.api.PendingRiderResponse;
+import com.jzqs.app.order.MealPeriod;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
@@ -57,11 +58,12 @@ class DispatchRiderAdminModule {
         );
     }
 
-    List<DispatchManagedRiderResponse> managedRiders(String authStatus, String keyword, String areaCode) {
+    List<DispatchManagedRiderResponse> managedRiders(String authStatus, String keyword, String areaCode, MealPeriod mealPeriod) {
         StringBuilder sql = new StringBuilder(
             """
                 SELECT
                     rp.id,
+                    rp.meal_period,
                     rp.rider_name,
                     COALESCE(rp.display_name, rp.rider_name) AS display_name,
                     rp.phone,
@@ -89,6 +91,10 @@ class DispatchRiderAdminModule {
                 """
         );
         List<Object> args = new ArrayList<>();
+        if (mealPeriod != null) {
+            sql.append(" AND rp.meal_period = ?");
+            args.add(mealPeriod.name());
+        }
         if (authStatus != null && !authStatus.isBlank()) {
             sql.append(" AND rp.auth_status = ?");
             args.add(authStatus);
@@ -107,6 +113,7 @@ class DispatchRiderAdminModule {
         sql.append(" ORDER BY CASE rp.auth_status WHEN 'ACTIVE' THEN 0 WHEN 'UNASSIGNED' THEN 1 ELSE 2 END, rp.id DESC");
         return jdbcTemplate.query(sql.toString(), (rs, rowNum) -> new DispatchManagedRiderResponse(
             rs.getLong("id"),
+            MealPeriod.valueOf(rs.getString("meal_period")),
             rs.getString("rider_name"),
             rs.getString("display_name"),
             rs.getString("phone"),
@@ -123,6 +130,7 @@ class DispatchRiderAdminModule {
     }
 
     DispatchRiderProfileUpsertResponse createRider(
+        MealPeriod mealPeriod,
         String riderName,
         String displayName,
         String phone,
@@ -132,12 +140,14 @@ class DispatchRiderAdminModule {
         AreaBindingUpdater areaBindingUpdater
     ) {
         String normalizedAreaCode = areaCode == null || areaCode.isBlank() ? null : areaCode.trim();
+        MealPeriod resolvedMealPeriod = mealPeriod == null ? MealPeriod.DINNER : mealPeriod;
         boolean active = "ACTIVE".equalsIgnoreCase(employmentStatus);
         LocalDateTime now = LocalDateTime.now().withNano(0);
         long riderId = insertAndReturnId(
             """
                 INSERT INTO rider_profiles (
                     rider_name,
+                    meal_period,
                     display_name,
                     phone,
                     employment_status,
@@ -148,9 +158,10 @@ class DispatchRiderAdminModule {
                     assigned_at,
                     assigned_by,
                     created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
             riderName,
+            resolvedMealPeriod.name(),
             displayName,
             phone,
             employmentStatus,
@@ -163,10 +174,11 @@ class DispatchRiderAdminModule {
             Timestamp.valueOf(now)
         );
         if (normalizedAreaCode != null && active) {
-            areaBindingUpdater.update(normalizedAreaCode, null, riderId, null, updatedBy);
+            areaBindingUpdater.update(normalizedAreaCode, resolvedMealPeriod, null, riderId, null, updatedBy);
         }
         return new DispatchRiderProfileUpsertResponse(
             riderId,
+            resolvedMealPeriod,
             riderName,
             displayName,
             phone,
@@ -177,6 +189,7 @@ class DispatchRiderAdminModule {
 
     DispatchRiderProfileUpsertResponse updateRiderProfile(
         long riderId,
+        MealPeriod mealPeriod,
         String riderName,
         String displayName,
         String phone,
@@ -185,6 +198,7 @@ class DispatchRiderAdminModule {
         AreaBindingUpdater areaBindingUpdater
     ) {
         String normalizedAreaCode = areaCode == null || areaCode.isBlank() ? null : areaCode.trim();
+        MealPeriod resolvedMealPeriod = mealPeriod == null ? MealPeriod.DINNER : mealPeriod;
         String oldAreaCode = jdbcTemplate.query(
             "SELECT default_area_code FROM rider_profiles WHERE id = ?",
             ps -> ps.setLong(1, riderId),
@@ -194,6 +208,7 @@ class DispatchRiderAdminModule {
             """
                 UPDATE rider_profiles
                 SET rider_name = ?,
+                    meal_period = ?,
                     display_name = ?,
                     phone = ?,
                     default_area_code = ?,
@@ -202,6 +217,7 @@ class DispatchRiderAdminModule {
                 WHERE id = ?
                 """,
             riderName,
+            resolvedMealPeriod.name(),
             displayName,
             phone,
             normalizedAreaCode,
@@ -223,7 +239,7 @@ class DispatchRiderAdminModule {
                 riderId
             );
             if (normalizedAreaCode != null) {
-                areaBindingUpdater.update(normalizedAreaCode, null, riderId, null, updatedBy);
+                areaBindingUpdater.update(normalizedAreaCode, resolvedMealPeriod, null, riderId, null, updatedBy);
             }
         }
         String riderStatus = jdbcTemplate.queryForObject(
@@ -233,6 +249,7 @@ class DispatchRiderAdminModule {
         );
         return new DispatchRiderProfileUpsertResponse(
             riderId,
+            resolvedMealPeriod,
             riderName,
             displayName,
             phone,
@@ -346,6 +363,14 @@ class DispatchRiderAdminModule {
         AreaBindingUpdater areaBindingUpdater
     ) {
         String normalizedAreaCode = areaCode == null || areaCode.isBlank() ? null : areaCode.trim();
+        String riderMealPeriod = jdbcTemplate.query(
+            "SELECT meal_period FROM rider_profiles WHERE id = ?",
+            ps -> ps.setLong(1, riderId),
+            rs -> rs.next() ? rs.getString("meal_period") : null
+        );
+        MealPeriod resolvedMealPeriod = MealPeriod.valueOf(
+            riderMealPeriod == null ? "DINNER" : riderMealPeriod
+        );
         LocalDateTime now = LocalDateTime.now().withNano(0);
         jdbcTemplate.update(
             """
@@ -366,7 +391,7 @@ class DispatchRiderAdminModule {
             riderId
         );
         if (normalizedAreaCode != null) {
-            areaBindingUpdater.update(normalizedAreaCode, null, riderId, null, assignedBy);
+            areaBindingUpdater.update(normalizedAreaCode, resolvedMealPeriod, null, riderId, null, assignedBy);
         }
         return new DispatchRiderActivateResponse(riderId, "ACTIVE", normalizedAreaCode);
     }
@@ -453,7 +478,7 @@ class DispatchRiderAdminModule {
 
     @FunctionalInterface
     interface AreaBindingUpdater {
-        void update(String areaCode, String keywords, Long defaultRiderId, Long backupRiderId, String updatedBy);
+        void update(String areaCode, MealPeriod mealPeriod, String keywords, Long defaultRiderId, Long backupRiderId, String updatedBy);
     }
 
     private record DispatchRiderAuthSource(
