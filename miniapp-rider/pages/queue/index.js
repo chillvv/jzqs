@@ -34,8 +34,6 @@ Page({
     statusBarHeight: 0,
     navBarHeight: 0,
     loading: false,
-    demoActive: false,
-    demoCount: 0,
     viewState: 'checking',
     isEditMode: false,
     batchReferenceMode: false,
@@ -91,6 +89,11 @@ Page({
   async onShow() {
     const app = getApp();
     onboarding.ensureCleanDemo();
+    // 迁移清理：移除旧版本的本地造数标记，避免残留测试假单
+    try {
+      if (wx.getStorageSync('demo_local_gen')) wx.removeStorageSync('demo_local_gen');
+      if (wx.getStorageSync('demo_queue_count')) wx.removeStorageSync('demo_queue_count');
+    } catch (e) {}
     const nextSelectedDate = app.getWorkbenchDate() || this.data.selectedDate || formatDateYMD();
     
     this.setData({ 
@@ -135,45 +138,6 @@ Page({
     }
   },
 
-  applyDemoQueue() {
-    const items = demo.getMockQueueItems();
-    this.setData({
-      allItems: items,
-      queueError: false,
-      queueErrorMessage: '',
-      demoActive: true,
-      demoCount: items.length,
-      loading: false
-    });
-    this.calculateMealStats(items);
-    this.filterCurrentMealItems();
-  },
-
-  // 本地调试：生成/调整假订单数量（仅 demo 模式有效，绝不落库）
-  debugAdjustDemoCount(e) {
-    const delta = Number(e.currentTarget.dataset.delta) || 0;
-    if (!demo.isActive()) {
-      demo.startWithCount(15);
-    }
-    const n = demo.setCount(demo.getCount() + delta);
-    this.applyDemoQueue();
-    wx.showToast({ title: `演示订单：${n} 单`, icon: 'none' });
-  },
-
-  // 本地调试：一键开启/关闭假订单模式
-  debugToggleDemo() {
-    if (demo.isActive()) {
-      demo.endLocalGen();
-      this.setData({ demoActive: false });
-      this.loadQueue();
-      wx.showToast({ title: '已退出演示造数', icon: 'none' });
-    } else {
-      demo.startWithCount(15);
-      this.applyDemoQueue();
-      wx.showToast({ title: '已注入 15 单演示数据', icon: 'none' });
-    }
-  },
-
   hideGuideMask() {
     const comp = this.selectComponent('#guideMask');
     if (comp) comp.hide();
@@ -211,10 +175,6 @@ Page({
 
   async loadQueue(options = {}) {
     const { silent = false } = options;
-    if (demo.isActive()) {
-      this.applyDemoQueue();
-      return;
-    }
     const app = getApp();
     const riderName = app.getActiveRiderName();
     const serveDate = this.data.selectedDate || formatDateYMD();
