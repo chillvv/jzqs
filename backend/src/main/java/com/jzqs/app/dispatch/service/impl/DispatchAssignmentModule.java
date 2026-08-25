@@ -195,6 +195,26 @@ class DispatchAssignmentModule {
     DispatchAreaOrderAssignResponse assignRiderToAreaOrder(String areaCode, long orderId, String riderName) {
         String normalizedAreaCode = requireAreaCode(areaCode);
         String orderMealPeriod = loadOrderContext(orderId).mealPeriod();
+        // 收敛：订单只能在本区域骑手之间切换，禁止把已属于其他区域的骑手跨区拉入。
+        Long riderProfileId = findRiderProfileIdByName(riderName, orderMealPeriod);
+        if (riderProfileId != null) {
+            Integer occupiedElsewhere = jdbcTemplate.queryForObject(
+                """
+                    SELECT COUNT(*) FROM dispatch_area_bindings
+                    WHERE area_code <> ?
+                      AND COALESCE(default_rider_profile_id, backup_rider_profile_id) = ?
+                    """,
+                Integer.class,
+                normalizedAreaCode,
+                riderProfileId
+            );
+            if (occupiedElsewhere != null && occupiedElsewhere > 0) {
+                throw new BusinessException(
+                    ErrorCode.VALIDATION_ERROR,
+                    "骑手「" + riderName + "」已绑定其他区域，订单不能跨区切换骑手。请在本区域骑手范围内选择。"
+                );
+            }
+        }
         dispatchOrder(orderId, resolveAssignmentRiderName(normalizedAreaCode, riderName, orderMealPeriod), normalizedAreaCode, true);
         publishDispatchEvent("dispatch.queue.changed", normalizedAreaCode, riderName, orderId);
         return new DispatchAreaOrderAssignResponse(normalizedAreaCode, orderId, "DISPATCHED");

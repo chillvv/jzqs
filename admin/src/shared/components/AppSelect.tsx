@@ -83,7 +83,8 @@ export function AppSelect({
 
   useEffect(() => {
     if (!open) return;
-    function handleClickOutside(event: MouseEvent) {
+    // 用 pointerdown 替代 mousedown：触屏（手机/平板）上也能点击外部关闭
+    function handleClickOutside(event: PointerEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setOpen(false);
       }
@@ -93,10 +94,10 @@ export function AppSelect({
         setOpen(false);
       }
     }
-    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("pointerdown", handleClickOutside);
     document.addEventListener("keydown", handleKeyDown);
     return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("pointerdown", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
     };
   }, [open]);

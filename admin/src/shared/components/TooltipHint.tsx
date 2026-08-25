@@ -20,6 +20,9 @@ export function TooltipHint({ content, children }: TooltipHintProps) {
       onMouseLeave={() => setVisible(false)}
       onFocus={() => setVisible(true)}
       onBlur={() => setVisible(false)}
+      // 触屏设备没有 hover，点击图标切换显示提示
+      onClick={() => setVisible((prev) => !prev)}
+      style={{ cursor: "pointer" }}
     >
       {children ?? <Info size={14} className="tooltip-hint__icon" />}
       {visible && (

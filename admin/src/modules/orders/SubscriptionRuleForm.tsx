@@ -132,13 +132,14 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
   }, [customerKeyword, allCustomers]);
 
   useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
+    // 用 pointerdown 替代 mousedown：触屏（手机/平板）上也能关闭下拉
+    function onClickOutside(e: PointerEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setShowDropdown(false);
       }
     }
-    document.addEventListener("mousedown", onClickOutside);
-    return () => document.removeEventListener("mousedown", onClickOutside);
+    document.addEventListener("pointerdown", onClickOutside);
+    return () => document.removeEventListener("pointerdown", onClickOutside);
   }, []);
 
   async function loadAddresses(customerId: number) {
@@ -296,7 +297,7 @@ export function SubscriptionRuleForm({ item, onClose }: Props) {
                   {filteredCustomers.map((c, i) => (
                     <div
                       key={c.id}
-                      onMouseDown={() => handleSelectCustomer(c)}
+                      onPointerDown={() => handleSelectCustomer(c)}
                       style={{
                         padding: "10px 14px",
                         cursor: "pointer",

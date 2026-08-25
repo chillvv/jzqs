@@ -158,19 +158,28 @@ export type SubscriptionConfirmationItem = {
   status: string;
 };
 export type DashboardOverviewResponse = {
-  deliveredToday: number;
+  // 今日/明日核心指标（按出餐日 serve_date 口径，与折线图口径一致）
+  todayServeMealCount: number;
+  todayServeLunchCount: number;
+  todayServeDinnerCount: number;
+  todayRechargedMeals: number;
   tomorrowMealCount: number;
   tomorrowLunchCount: number;
   tomorrowDinnerCount: number;
-  newCardsToday: number;
-  rechargeCustomersToday: number;
-  aftersaleToday: number;
-  cancellationsToday: number;
+  tomorrowCustomerCount: number;
+  tomorrowFixedOrderCount: number;
+  // 历史口径（按业务日期，按 create_at/delivered_at 等其它时间口径，保留以兼容）
+  deliveredToday: number;
   totalOrdersToday: number;
   pendingOrdersToday: number;
   pendingDispatchToday: number;
   dispatchingOrdersToday: number;
   deliveredOrdersToday: number;
+  newCardsToday: number;
+  rechargeCustomersToday: number;
+  aftersaleToday: number;
+  cancellationsToday: number;
+  // 待办/异常
   lowBalanceCustomers: number;
   expiringSoonCustomers: number;
   openAftersaleCount: number;
@@ -609,6 +618,7 @@ export type DispatchAreaBindingResponse = {
   orders: DispatchAreaOrderItemResponse[];
   updatedBy: string;
   updatedAt: string;
+  assignableRiderIds?: number[];
 };
 export type DispatchReassignmentResponse = {
   reassignmentId: number;

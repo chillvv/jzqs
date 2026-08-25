@@ -12,6 +12,7 @@ public record DispatchAreaBindingResponse(
     boolean missingRider,
     List<DispatchAreaOrderItemResponse> orders,
     String updatedBy,
-    String updatedAt
+    String updatedAt,
+    List<Long> assignableRiderIds
 ) {
 }

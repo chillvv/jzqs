@@ -7,20 +7,30 @@ import { AdminDialog } from "../../../shared/components/AdminDialog";
 import { AppSelect } from "../../../shared/components/AppSelect";
 import { hasDisplayValue, mealPeriodLabel } from "../dispatchCenterLayout.helpers";
 
+// 触屏设备检测：手机/平板上拖拽（@hello-pangea/dnd）依赖长按激活，与滚动手势冲突极易失败，
+// 因此触屏设备改用「上移/下移」按钮排序，桌面端保留拖拽。
+const isTouchDevice = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+
 function DraggableOrderItem({
   order,
   index,
+  total,
   isReordering,
   selected,
+  isTouchDevice: touch,
   onDetailClick,
-  onToggleSelect
+  onToggleSelect,
+  onMove
 }: {
   order: DispatchAreaOrderItemResponse;
   index: number;
+  total: number;
   isReordering: boolean;
   selected: boolean;
+  isTouchDevice: boolean;
   onDetailClick: () => void;
   onToggleSelect: () => void;
+  onMove: (index: number, direction: -1 | 1) => void;
 }) {
   const statusClass = order.deliveryStatus === "DELIVERED" ? "delivered" : "dispatching";
   const isMultiple = order.quantity && order.quantity > 1;
@@ -30,24 +40,47 @@ function DraggableOrderItem({
   const receiptNote = hasDisplayValue(order.receiptNote) ? order.receiptNote.trim() : "";
 
   return (
-    <Draggable draggableId={itemId} index={index} isDragDisabled={!isReordering}>
+    <Draggable draggableId={itemId} index={index} isDragDisabled={!isReordering || touch}>
       {(provided, snapshot) => (
         <div
           ref={provided.innerRef}
           {...provided.draggableProps}
           className={`dispatch-area-orders__item dispatch-order-tile ${statusClass} ${snapshot.isDragging ? "dragging" : ""} ${!isReordering ? "no-drag" : "reordering"} ${isMultiple ? "multiple-order" : ""} ${selected ? "selected" : ""}`}
           onClick={() => (isReordering ? onToggleSelect() : onDetailClick())}
-          title={isReordering ? "点击勾选，拖拽左侧手柄调整顺序" : "点击查看订单详情"}
+          title={isReordering ? (touch ? "点击勾选，点击 ↑↓ 调整顺序" : "点击勾选，拖拽左侧手柄调整顺序") : "点击查看订单详情"}
         >
           <div className="dispatch-order-tile__top">
             <div className="dispatch-order-tile__left">
-              <div
-                className={`dispatch-order-tile__handle ${isReordering ? "active" : ""}`}
-                {...(isReordering ? provided.dragHandleProps : {})}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <GripVertical size={16} />
-              </div>
+              {isReordering && touch ? (
+                <div className="dispatch-order-tile__move-btns">
+                  <button
+                    type="button"
+                    aria-label="上移"
+                    disabled={index === 0}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onMove(index, -1);
+                    }}
+                  >↑</button>
+                  <button
+                    type="button"
+                    aria-label="下移"
+                    disabled={index === total - 1}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onMove(index, 1);
+                    }}
+                  >↓</button>
+                </div>
+              ) : (
+                <div
+                  className={`dispatch-order-tile__handle ${isReordering ? "active" : ""}`}
+                  {...(isReordering ? provided.dragHandleProps : {})}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <GripVertical size={16} />
+                </div>
+              )}
               {isReordering ? (
                 <span className={`dispatch-order-tile__checkbox ${selected ? "checked" : ""}`}>
                   {selected ? <Check size={12} strokeWidth={3} /> : null}
@@ -109,6 +142,7 @@ interface DispatchAreaDetailDialogProps {
   onSelectOrderDetail: (orderId: number) => void;
   onToggleSelect: (orderId: number) => void;
   onBatchMove: (targetAreaCode: string) => void;
+  onMoveOrder: (index: number, direction: -1 | 1) => void;
 }
 
 export function DispatchAreaDetailDialog({
@@ -129,7 +163,8 @@ export function DispatchAreaDetailDialog({
   onDragEnd,
   onSelectOrderDetail,
   onToggleSelect,
-  onBatchMove
+  onBatchMove,
+  onMoveOrder
 }: DispatchAreaDetailDialogProps) {
   const [batchTargetArea, setBatchTargetArea] = useState("");
 
@@ -185,7 +220,9 @@ export function DispatchAreaDetailDialog({
             <div className="dispatch-inline-note" style={{ marginBottom: "12px" }}>
               <span style={{ display: "flex", alignItems: "center", gap: "8px", color: "#f97316", fontWeight: 600 }}>
                 <GripVertical size={16} />
-                点击卡片勾选（可多选），拖拽左侧手柄调整顺序，完成后点击"完成"
+                {isTouchDevice
+                  ? '点击卡片勾选（可多选），点击卡片左侧 ↑↓ 调整顺序，完成后点击"完成"'
+                  : '点击卡片勾选（可多选），拖拽左侧手柄调整顺序，完成后点击"完成"'}
               </span>
             </div>
           ) : null}
@@ -212,10 +249,13 @@ export function DispatchAreaDetailDialog({
                         key={`order-${order.orderId}-${index}`}
                         order={order}
                         index={index}
+                        total={displayOrders.length}
                         isReordering={isReordering}
                         selected={selectedSet.has(order.orderId)}
+                        isTouchDevice={isTouchDevice}
                         onDetailClick={() => onSelectOrderDetail(order.orderId)}
                         onToggleSelect={() => onToggleSelect(order.orderId)}
+                        onMove={onMoveOrder}
                       />
                     ))}
                     {provided.placeholder}

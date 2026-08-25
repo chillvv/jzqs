@@ -4,6 +4,7 @@ import com.jzqs.app.common.util.BusinessDateResolver;
 import com.jzqs.app.dashboard.api.DashboardOverviewResponse;
 import com.jzqs.app.dashboard.service.DashboardService;
 import com.jzqs.app.subscription.api.LowBalanceSubscriptionItem;
+import java.math.BigDecimal;
 import java.sql.Date;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -30,11 +31,20 @@ public class DashboardServiceImpl implements DashboardService {
             "SELECT COUNT(*) FROM delivery_receipts WHERE CAST(delivered_at AS DATE) = ?",
             businessDate
         );
+        // 今日出餐餐数（按出餐日 serve_date 统计，与折线图口径一致，避免商家看到 3 份单但折线图飙到 53 的困惑）
+        int todayServeMealCount = quantityByServeDate(businessDate, null);
+        int todayServeLunchCount = quantityByServeDate(businessDate, "LUNCH");
+        int todayServeDinnerCount = quantityByServeDate(businessDate, "DINNER");
         int tomorrowMealCount = quantityByServeDate(upcomingServeDate, null);
         int tomorrowLunchCount = quantityByServeDate(upcomingServeDate, "LUNCH");
         int tomorrowDinnerCount = quantityByServeDate(upcomingServeDate, "DINNER");
+        // 明日客户相关
+        int tomorrowCustomerCount = countDistinctCustomersByServeDate(upcomingServeDate);
+        int tomorrowFixedOrderCount = countFixedSubscriptionCustomersByServeDate(upcomingServeDate);
         int newCardsToday = countDistinctCustomersByTransactionType(businessDate, "OPEN");
         int rechargeCustomersToday = countDistinctCustomersByTransactionType(businessDate, "GRANT");
+        // 今日充值餐数（新增销售的口径，因为系统是餐包制，无金额字段，用充值餐数衡量"新增营收"）
+        int rechargedMealsToday = sumMealDeltaByBusinessDate(businessDate, "GRANT") + sumMealDeltaByBusinessDate(businessDate, "OPEN");
         int aftersaleToday = countByBusinessDate(
             "SELECT COUNT(*) FROM aftersale_cases WHERE CAST(created_at AS DATE) = ?",
             businessDate
@@ -55,6 +65,12 @@ public class DashboardServiceImpl implements DashboardService {
             tomorrowMealCount,
             tomorrowLunchCount,
             tomorrowDinnerCount,
+            tomorrowCustomerCount,
+            tomorrowFixedOrderCount,
+            todayServeMealCount,
+            todayServeLunchCount,
+            todayServeDinnerCount,
+            BigDecimal.valueOf(rechargedMealsToday),
             newCardsToday,
             rechargeCustomersToday,
             aftersaleToday,
@@ -260,6 +276,62 @@ public class DashboardServiceImpl implements DashboardService {
         return nvl(jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM aftersale_cases WHERE status IN ('PENDING', 'PROCESSING', 'APPROVED')",
             Integer.class
+        ));
+    }
+
+    /**
+     * 统计指定出餐日期的去重客户数，用于"明日预订客户数"。
+     */
+    private int countDistinctCustomersByServeDate(LocalDate serveDate) {
+        return nvl(jdbcTemplate.queryForObject(
+            """
+            SELECT COUNT(DISTINCT do.customer_id)
+            FROM daily_orders do
+            JOIN meal_slot_orders mso ON mso.daily_order_id = do.id
+            WHERE do.serve_date = ?
+              AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
+              AND do.locked = FALSE
+            """,
+            Integer.class,
+            serveDate
+        ));
+    }
+
+    /**
+     * 统计指定出餐日期通过套餐订阅确认的客户数（confirmed_from_subscription=TRUE）。
+     * 用于"明日固定订餐客户数"。
+     */
+    private int countFixedSubscriptionCustomersByServeDate(LocalDate serveDate) {
+        return nvl(jdbcTemplate.queryForObject(
+            """
+            SELECT COUNT(DISTINCT do.customer_id)
+            FROM daily_orders do
+            JOIN meal_slot_orders mso ON mso.daily_order_id = do.id
+            WHERE do.serve_date = ?
+              AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
+              AND mso.confirmed_from_subscription = TRUE
+            """,
+            Integer.class,
+            serveDate
+        ));
+    }
+
+    /**
+     * 按业务日期汇总 wallet_transactions.meal_delta，用于"今日新增销售餐数"。
+     * 因为系统是餐包制无金额字段，所以充值餐数即为新增销售指标。
+     */
+    private int sumMealDeltaByBusinessDate(LocalDate businessDate, String transactionType) {
+        return nvl(jdbcTemplate.queryForObject(
+            """
+            SELECT COALESCE(SUM(wt.meal_delta), 0)
+            FROM wallet_transactions wt
+            WHERE CAST(wt.created_at AS DATE) = ?
+              AND wt.transaction_type = ?
+              AND wt.refunded = FALSE
+            """,
+            Integer.class,
+            businessDate,
+            transactionType
         ));
     }
 

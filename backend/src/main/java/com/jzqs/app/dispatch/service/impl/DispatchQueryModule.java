@@ -352,6 +352,7 @@ class DispatchQueryModule {
                     .findFirst()
                     .orElse(rs.getString("default_rider_name"));
                 boolean missingRider = !orders.isEmpty() && (currentRiderName == null || currentRiderName.isBlank());
+                List<Long> assignableRiderIds = computeAssignableRiderIds(areaCode);
                 return new DispatchAreaBindingResponse(
                     areaCode,
                     rs.getString("keywords"),
@@ -362,12 +363,57 @@ class DispatchQueryModule {
                     missingRider,
                     orders,
                     rs.getString("updated_by"),
-                    formatTimestamp(rs.getTimestamp("updated_at"))
+                    formatTimestamp(rs.getTimestamp("updated_at")),
+                    assignableRiderIds
                 );
             },
             finalMealPeriod,
             finalMealPeriod
         );
+    }
+
+    /**
+     * 计算某个区域「可指派到订单」的骑手集合：本区域默认/备用骑手 + 所有未被其他区域占用的活跃骑手。
+     * 已绑定为其他区域默认/备用骑手的骑手不可选，避免一个骑手跨多个区域。
+     */
+    private List<Long> computeAssignableRiderIds(String areaCode) {
+        List<Long> occupiedByOthers = jdbcTemplate.query(
+            """
+                SELECT DISTINCT COALESCE(default_rider_profile_id, backup_rider_profile_id) AS rider_profile_id
+                FROM dispatch_area_bindings
+                WHERE area_code <> ?
+                  AND COALESCE(default_rider_profile_id, backup_rider_profile_id) IS NOT NULL
+                """,
+            (rs, rowNum) -> rs.getLong("rider_profile_id"),
+            areaCode
+        );
+        List<Long> ownRiders = jdbcTemplate.query(
+            """
+                SELECT DISTINCT COALESCE(default_rider_profile_id, backup_rider_profile_id) AS rider_profile_id
+                FROM dispatch_area_bindings
+                WHERE area_code = ?
+                  AND COALESCE(default_rider_profile_id, backup_rider_profile_id) IS NOT NULL
+                """,
+            (rs, rowNum) -> rs.getLong("rider_profile_id"),
+            areaCode
+        );
+        List<Long> freeRiders = jdbcTemplate.query(
+            """
+                SELECT id FROM rider_profiles
+                WHERE auth_status = 'ACTIVE'
+                  AND employment_status = 'ACTIVE'
+                  AND id NOT IN (
+                    SELECT COALESCE(default_rider_profile_id, backup_rider_profile_id) AS rider_profile_id
+                    FROM dispatch_area_bindings
+                    WHERE COALESCE(default_rider_profile_id, backup_rider_profile_id) IS NOT NULL
+                  )
+                """,
+            (rs, rowNum) -> rs.getLong("id")
+        );
+        List<Long> result = new ArrayList<>();
+        result.addAll(ownRiders);
+        result.addAll(freeRiders);
+        return result.stream().distinct().filter(id -> !occupiedByOthers.contains(id)).toList();
     }
 
     List<DispatchReassignmentResponse> recentReassignments(String serveDate) {

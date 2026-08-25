@@ -1085,10 +1085,52 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 6px;
-  border-radius: 6px;
+  padding: 8px 10px;
+  border-radius: 8px;
   color: #b6bcc8;
   flex-shrink: 0;
+  touch-action: none;
+}
+
+/* 触屏设备排序按钮：上移/下移 */
+.dispatch-order-tile__move-btns {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  margin-right: 2px;
+}
+
+.dispatch-order-tile__move-btns button {
+  width: 34px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 7px;
+  background: rgba(251, 146, 60, 0.12);
+  color: #c2410c;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+  touch-action: manipulation;
+}
+
+.dispatch-order-tile__move-btns button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+}
+
+.dispatch-order-tile__move-btns button:not(:disabled):active {
+  background: rgba(251, 146, 60, 0.3);
+  transform: scale(0.92);
 }
 
 .dispatch-order-tile__handle.active {
@@ -1255,6 +1297,12 @@ a {
 .dispatch-detail-row {
   display: grid;
   gap: 6px;
+}
+
+.dispatch-detail-row--column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .dispatch-image-grid {
@@ -4538,7 +4586,7 @@ tbody tr:last-child td {
 
 .dashboard-bi__metrics {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -6601,4 +6649,391 @@ tbody tr:last-child td {
   background: #ffffff;
   color: #1d4ed8;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+}
+
+/* ===== 经营看板 v2 ===== */
+.dashboard-bi__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dashboard-bi__quick-nav {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.04));
+}
+
+.dashboard-bi__quick-nav-btn {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 10px;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  transition: background 0.18s ease, transform 0.18s ease;
+  min-width: 92px;
+}
+
+.dashboard-bi__quick-nav-btn:hover {
+  background: linear-gradient(180deg, rgba(219, 234, 254, 0.65), rgba(191, 219, 254, 0.45));
+  transform: translateY(-1px);
+}
+
+.dashboard-bi__quick-nav-title {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-main, #0f172a);
+}
+
+.dashboard-bi__quick-nav-desc {
+  font-size: 11px;
+  color: var(--text-muted, #64748b);
+}
+
+.dashboard-bi__metric-scope {
+  margin-top: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  background: rgba(219, 234, 254, 0.6);
+  color: var(--primary-color, #2563eb);
+  border: 1px solid rgba(96, 165, 250, 0.5);
+}
+
+.dashboard-bi__layout--equal {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+}
+
+.dashboard-bi__panel--highlight {
+  background: linear-gradient(180deg, rgba(238, 242, 255, 0.98) 0%, rgba(224, 231, 255, 0.92) 100%);
+  border-color: rgba(165, 180, 252, 0.5);
+}
+
+/* 今日订单流转（横向进度流程） */
+.dashboard-bi__flow {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.dashboard-bi__flow-step {
+  text-align: left;
+  background: rgba(248, 250, 255, 0.95);
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  border-radius: 16px;
+  padding: 14px 14px 12px;
+  cursor: pointer;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+  font: inherit;
+  color: inherit;
+}
+
+.dashboard-bi__flow-step:hover {
+  transform: translateY(-2px);
+  border-color: rgba(96, 165, 250, 0.85);
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.08);
+}
+
+.dashboard-bi__flow-step-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted, #64748b);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dashboard-bi__flow-step-index {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.12);
+  color: var(--primary-color, #2563eb);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.dashboard-bi__flow-step-name {
+  color: var(--text-main, #0f172a);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.dashboard-bi__flow-step-value {
+  margin-top: 10px;
+  font-size: 30px;
+  line-height: 1;
+  font-weight: 800;
+  color: var(--primary-color, #2563eb);
+}
+
+.dashboard-bi__flow-step-value span {
+  margin-left: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted, #64748b);
+}
+
+.dashboard-bi__flow-step-bar {
+  margin-top: 12px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+
+.dashboard-bi__flow-step-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: currentColor;
+  transition: width 0.3s ease;
+}
+
+.dashboard-bi__flow-step-detail {
+  margin-top: 10px;
+  color: var(--text-sub, #475569);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.dashboard-bi__flow-legend {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px dashed rgba(96, 165, 250, 0.45);
+  background: rgba(239, 246, 255, 0.6);
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text-sub, #475569);
+}
+
+.dashboard-bi__flow-legend strong {
+  margin: 0 4px;
+  color: var(--text-main, #0f172a);
+  font-weight: 800;
+}
+
+/* 明日备餐预览 */
+.dashboard-bi__tomorrow-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.14) 0%, rgba(56, 189, 248, 0.16) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.28);
+}
+
+.dashboard-bi__tomorrow-big {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.dashboard-bi__tomorrow-big-value {
+  font-size: 48px;
+  font-weight: 800;
+  color: var(--text-main, #0f172a);
+  line-height: 1;
+}
+
+.dashboard-bi__tomorrow-big-unit {
+  font-size: 14px;
+  color: var(--text-sub, #475569);
+  font-weight: 700;
+}
+
+.dashboard-bi__tomorrow-customer {
+  color: var(--text-sub, #475569);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.dashboard-bi__tomorrow-customer strong {
+  color: var(--text-main, #0f172a);
+  font-weight: 800;
+  margin: 0 2px;
+}
+
+.dashboard-bi__tomorrow-meals {
+  margin-top: 14px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.dashboard-bi__tomorrow-meal {
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 14px;
+  padding: 14px;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.92);
+  font: inherit;
+  text-align: left;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+
+.dashboard-bi__tomorrow-meal:hover {
+  transform: translateY(-1px);
+  border-color: rgba(96, 165, 250, 0.85);
+}
+
+.dashboard-bi__tomorrow-meal--lunch {
+  border-color: rgba(16, 185, 129, 0.4);
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.85), rgba(255, 255, 255, 0.92));
+}
+
+.dashboard-bi__tomorrow-meal--dinner {
+  border-color: rgba(124, 58, 237, 0.4);
+  background: linear-gradient(180deg, rgba(245, 243, 255, 0.85), rgba(255, 255, 255, 0.92));
+}
+
+.dashboard-bi__tomorrow-meal-period {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-muted, #64748b);
+}
+
+.dashboard-bi__tomorrow-meal-value {
+  margin-top: 6px;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--text-main, #0f172a);
+  line-height: 1;
+}
+
+.dashboard-bi__tomorrow-meal-share {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-sub, #475569);
+}
+
+.dashboard-bi__tomorrow-fixed {
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dashboard-bi__tomorrow-fixed-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  overflow: hidden;
+}
+
+.dashboard-bi__tomorrow-fixed-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #6366f1, #38bdf8);
+  transition: width 0.3s ease;
+}
+
+.dashboard-bi__tomorrow-fixed-note {
+  font-size: 12px;
+  color: var(--text-sub, #475569);
+  line-height: 1.5;
+}
+
+/* 待办列表 */
+.dashboard-bi__todo-list {
+  margin-top: 16px;
+  display: grid;
+  gap: 10px;
+}
+
+.dashboard-bi__todo-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: rgba(255, 255, 255, 0.95);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.dashboard-bi__todo-item:hover {
+  transform: translateY(-1px);
+  border-color: rgba(96, 165, 250, 0.8);
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.06);
+}
+
+.dashboard-bi__todo-bullet {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.dashboard-bi__todo-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.dashboard-bi__todo-label {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text-main, #0f172a);
+}
+
+.dashboard-bi__todo-detail {
+  font-size: 12px;
+  color: var(--text-sub, #475569);
+  line-height: 1.5;
+}
+
+.dashboard-bi__todo-value {
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 800;
+  min-width: 56px;
+  text-align: right;
+}
+
+@media (max-width: 1024px) {
+  .dashboard-bi__layout,
+  .dashboard-bi__layout--equal {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-bi__flow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .dashboard-bi__flow {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-bi__quick-nav {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }

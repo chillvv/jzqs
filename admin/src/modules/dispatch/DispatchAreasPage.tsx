@@ -79,6 +79,8 @@ export function DispatchAreasPage() {
   const [batchMoving, setBatchMoving] = useState(false);
   const [orderDetailId, setOrderDetailId] = useState<number | null>(null);
   const [orderRiderChangeState, setOrderRiderChangeState] = useState<{ orderId: number; riderId: string } | null>(null);
+  const [orderMoveTargetArea, setOrderMoveTargetArea] = useState("");
+  const [movingOrderToArea, setMovingOrderToArea] = useState(false);
   const [deleteConfirmState, setDeleteConfirmState] = useState<{ orderId: number; customerName: string } | null>(null);
   const [submittingDeleteOrder, setSubmittingDeleteOrder] = useState(false);
   const [showAiCorrectionDialog, setShowAiCorrectionDialog] = useState(false);
@@ -126,15 +128,37 @@ export function DispatchAreasPage() {
     });
   }, [riderOptions, boundRiderIds, bindings, assignRiderAreaCode]);
 
-  const areaStats = useMemo(() => buildDispatchAreaStats(bindings), [bindings]);
-  const createAreaNameError = showCreateAreaErrors ? validateAreaName(newArea.name) : "";
-
   const activeArea = useMemo(
     () => bindings.find((item) => item.areaCode === activeAreaCode) ?? null,
     [activeAreaCode, bindings]
   );
+
+  // 切换订单骑手时可选骑手：仅限当前区域可指派骑手，禁止跨区选择。
+  const activeAreaRiderOptions = useMemo(() => {
+    if (!activeArea) return [];
+    const allowedIds = activeArea.assignableRiderIds
+      ? new Set(activeArea.assignableRiderIds.map(String))
+      : null;
+    const fallback = riderOptions.filter((option) =>
+      activeArea.defaultRiderId ? String(activeArea.defaultRiderId) === option.value : !boundRiderIds.has(option.value)
+    );
+    return allowedIds ? riderOptions.filter((option) => allowedIds.has(option.value)) : fallback;
+  }, [activeArea, riderOptions, boundRiderIds]);
+
+  const areaStats = useMemo(() => buildDispatchAreaStats(bindings), [bindings]);
+  const createAreaNameError = showCreateAreaErrors ? validateAreaName(newArea.name) : "";
+
   const activeAreaOrders = activeArea?.orders ?? [];
-  
+
+  // 目标区域选项：当前区域以外的所有区域（订单详情"更换区域"用）
+  const orderTargetAreaOptions = useMemo(
+    () =>
+      bindings
+        .filter((item) => item.areaCode !== activeArea?.areaCode)
+        .map((item) => ({ value: item.areaCode, label: item.areaCode })),
+    [bindings, activeArea?.areaCode]
+  );
+
   // 使用本地状态或原始数据
   const displayOrders = isReordering && localOrders.length > 0 ? localOrders : activeAreaOrders;
   
@@ -291,6 +315,29 @@ export function DispatchAreasPage() {
     }
   }
 
+  // 订单详情：把单个订单从当前区域移到另一个区域
+  async function handleMoveOrderToArea() {
+    if (!activeArea || !orderDetailId || !orderMoveTargetArea || movingOrderToArea) return;
+    if (orderMoveTargetArea === activeArea.areaCode) {
+      toast("目标区域与当前区域相同，无需移动", "error");
+      return;
+    }
+    const sourceAreaCode = activeArea.areaCode;
+    const targetAreaCode = orderMoveTargetArea;
+    setMovingOrderToArea(true);
+    try {
+      await moveOrderToArea(sourceAreaCode, orderDetailId, { targetAreaCode });
+      setOrderMoveTargetArea("");
+      setOrderDetailId(null);
+      await reload();
+      toast(`订单 #${orderDetailId} 已移到「${targetAreaCode}」，请到该区域重新指派骑手`);
+    } catch (err: any) {
+      toast(getErrorMessage(err, "更换区域失败"), "error");
+    } finally {
+      setMovingOrderToArea(false);
+    }
+  }
+
   function handleDragEnd(result: DropResult) {
     if (!result.destination) return;
     const sourceIndex = result.source.index;
@@ -300,6 +347,18 @@ export function DispatchAreasPage() {
       const newItems = Array.from(prevItems);
       const [removed] = newItems.splice(sourceIndex, 1);
       newItems.splice(destIndex, 0, removed);
+      return newItems;
+    });
+  }
+
+  // 触屏设备：通过上移/下移按钮调整顺序（替代拖拽）
+  function handleMoveOrder(index: number, direction: -1 | 1) {
+    setLocalOrders((prevItems) => {
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= prevItems.length) return prevItems;
+      const newItems = Array.from(prevItems);
+      const [removed] = newItems.splice(index, 1);
+      newItems.splice(targetIndex, 0, removed);
       return newItems;
     });
   }
@@ -394,15 +453,19 @@ export function DispatchAreasPage() {
   }
 
   async function handleChangeOrderRider() {
+    // 业务模型：订单 → 区域 → 骑手。
+    // 切换骑手只在当前区域内进行，绝不把订单直接跨区塞给某个骑手；
+    // 若需换区域，请使用订单详情里的"更换区域"（移区后自动清空骑手归待派单）。
     if (!orderRiderChangeState || !activeArea) return;
     const rider = riders.find((r) => String(r.riderId) === orderRiderChangeState.riderId);
     if (!rider) return;
-    setSavingArea(activeArea.areaCode);
+    const sourceAreaCode = activeArea.areaCode;
+    setSavingArea(sourceAreaCode);
     try {
-      await assignRiderToAreaOrder(activeArea.areaCode, orderRiderChangeState.orderId, rider.riderName);
+      await assignRiderToAreaOrder(sourceAreaCode, orderRiderChangeState.orderId, rider.riderName);
       setOrderRiderChangeState(null);
       await reload();
-      toast(`已将订单 #${orderRiderChangeState.orderId} 分配给 ${rider.riderName}`);
+      toast(`已将订单 #${orderRiderChangeState.orderId} 分配给「${sourceAreaCode}」的 ${rider.riderName}`);
     } catch (err: any) {
       toast(getErrorMessage(err, "切换订单骑手失败"), "error");
     } finally {
@@ -573,6 +636,7 @@ export function DispatchAreasPage() {
         onToggleReorder={toggleReorderMode}
         onCancelReorder={cancelReorder}
         onDragEnd={handleDragEnd}
+        onMoveOrder={handleMoveOrder}
         onSelectOrderDetail={setOrderDetailId}
         onToggleSelect={(orderId) =>
           setSelectedOrderIds((prev) =>
@@ -790,12 +854,43 @@ export function DispatchAreasPage() {
                       className="btn btn-outline btn-compact"
                       onClick={() => setOrderRiderChangeState({ 
                         orderId: orderDetail.orderId, 
-                        riderId: activeArea?.defaultRiderId ? String(activeArea.defaultRiderId) : "" 
+                        riderId: activeArea?.defaultRiderId ? String(activeArea.defaultRiderId) : ""
                       })}
                     >
                       <UserPlus size={14} /> 切换骑手
                     </button>
                   </div>
+                </div>
+                <div className="dispatch-detail-row dispatch-detail-row--column">
+                  <div className="admin-panel-note">区域归属</div>
+                  <div>
+                    当前区域：<span className="tag tag-blue">{activeArea?.areaCode || "-"}</span>
+                  </div>
+                  {orderTargetAreaOptions.length > 0 ? (
+                    <>
+                      <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                        <AppSelect
+                          value={orderMoveTargetArea}
+                          placeholder="选择目标区域"
+                          options={orderTargetAreaOptions}
+                          onChange={setOrderMoveTargetArea}
+                          style={{ flex: "1 1 180px", minWidth: 160 }}
+                        />
+                        <button
+                          className="btn btn-primary btn-compact"
+                          disabled={!orderMoveTargetArea || movingOrderToArea}
+                          onClick={() => handleMoveOrderToArea()}
+                        >
+                          <MapPin size={14} /> 确认移区
+                        </button>
+                      </div>
+                      <div className="dispatch-inline-note">
+                        移区后订单将归入目标区域待派单并清空骑手，需重新指派骑手。
+                      </div>
+                    </>
+                  ) : (
+                    <div className="dispatch-inline-note">当前没有其他区域可选。</div>
+                  )}
                 </div>
                 <div className="dispatch-detail-row">
                   <div className="admin-panel-note">用户备注</div>
@@ -856,7 +951,7 @@ export function DispatchAreasPage() {
       <AdminDialog
         open={Boolean(orderRiderChangeState)}
         title="切换订单骑手"
-        description={orderRiderChangeState ? `为订单 #${orderRiderChangeState.orderId} 指定新的配送骑手` : undefined}
+        description={orderRiderChangeState ? `订单 #${orderRiderChangeState.orderId} · 区域：${activeArea?.areaCode || "-"}` : undefined}
         zOffset={20}
         onClose={() => setOrderRiderChangeState(null)}
         footer={
@@ -873,16 +968,19 @@ export function DispatchAreasPage() {
         }
       >
         <label className="admin-field">
-          <span className="admin-field-label">选择骑手</span>
+          <span className="admin-field-label">选择「{activeArea?.areaCode || "-"}」区域的骑手</span>
           <AppSelect
             value={orderRiderChangeState?.riderId || ""}
             placeholder="搜索骑手姓名"
-            options={riderOptions}
+            options={activeAreaRiderOptions}
             showSearch
             onChange={(value) => setOrderRiderChangeState((prev) => prev ? { ...prev, riderId: value } : prev)}
             style={selectStyle}
           />
         </label>
+        <div className="dispatch-inline-note">
+          仅可切换为「{activeArea?.areaCode || "-"}」区域的骑手，订单不会跨区域转移。如需把订单移到其他区域，请使用上方「更换区域」。
+        </div>
       </AdminDialog>
 
       {/* 删除订单确认对话框 */}

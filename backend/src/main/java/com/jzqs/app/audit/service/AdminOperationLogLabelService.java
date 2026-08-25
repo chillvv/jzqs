@@ -525,7 +525,6 @@ public class AdminOperationLogLabelService {
     /** 批量加载一批日志涉及的对象名称，避免逐条查库；同时按手机号反查，兼容对象删除后重建（新ID）的日志 */
     public NameCache loadNameCache(Iterable<LogRef> logs) {
         Set<Long> customerIds = new HashSet<>();
-        log.info("[audit-debug] loadNameCache start, logs={}", java.util.stream.StreamSupport.stream(logs.spliterator(), false).map(LogRef::requestSummary).collect(java.util.stream.Collectors.toList()));
         Set<Long> riderIds = new HashSet<>();
         Set<Long> adminUserIds = new HashSet<>();
         Set<Long> orderIds = new HashSet<>();
@@ -556,7 +555,6 @@ public class AdminOperationLogLabelService {
                 }
             }
         }
-        log.info("[audit-debug] customerIds={} riderIds={} orderIds={}", customerIds, riderIds, orderIds);
         return new NameCache(
             queryNames("SELECT id, name FROM customers WHERE id IN ", customerIds),
             queryNames("SELECT id, rider_name FROM rider_profiles WHERE id IN ", riderIds),
@@ -585,11 +583,7 @@ public class AdminOperationLogLabelService {
         Map<Long, String> names = new HashMap<>();
         jdbcTemplate.query(
             sqlPrefix + "(" + placeholders + ")",
-            rs -> {
-                while (rs.next()) {
-                    names.put(rs.getLong(1), rs.getString(2));
-                }
-            },
+            (org.springframework.jdbc.core.RowCallbackHandler) rs -> names.put(rs.getLong(1), rs.getString(2)),
             params
         );
         return names;
@@ -604,11 +598,7 @@ public class AdminOperationLogLabelService {
         Map<Long, Long> values = new HashMap<>();
         jdbcTemplate.query(
             sqlPrefix + "(" + placeholders + ")",
-            rs -> {
-                while (rs.next()) {
-                    values.put(rs.getLong(1), rs.getLong(2));
-                }
-            },
+            (org.springframework.jdbc.core.RowCallbackHandler) rs -> values.put(rs.getLong(1), rs.getLong(2)),
             params
         );
         return values;
@@ -624,11 +614,7 @@ public class AdminOperationLogLabelService {
         Map<String, String> names = new HashMap<>();
         jdbcTemplate.query(
             sqlPrefix + "(" + placeholders + ")",
-            rs -> {
-                while (rs.next()) {
-                    names.put(rs.getString(1), rs.getString(2));
-                }
-            },
+            (org.springframework.jdbc.core.RowCallbackHandler) rs -> names.put(rs.getString(1), rs.getString(2)),
             params
         );
         return names;

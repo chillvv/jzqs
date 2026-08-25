@@ -1,10 +1,17 @@
 package com.jzqs.app.dashboard.api;
+import java.math.BigDecimal;
 import java.util.List;
 public record DashboardOverviewResponse(
     int deliveredToday,
     int tomorrowMealCount,
     int tomorrowLunchCount,
     int tomorrowDinnerCount,
+    int tomorrowCustomerCount,
+    int tomorrowFixedOrderCount,
+    int todayServeMealCount,
+    int todayServeLunchCount,
+    int todayServeDinnerCount,
+    BigDecimal todayRechargedMeals,
     int newCardsToday,
     int rechargeCustomersToday,
     int aftersaleToday,
