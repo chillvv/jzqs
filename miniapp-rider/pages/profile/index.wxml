@@ -7,24 +7,23 @@
       <image class="header-logo" src="/assets/logo.jpeg" mode="aspectFit"></image>
       <text class="header-title">简知轻食</text>
     </view>
-    <!-- 归属区域：右上角，按餐期展示后台分配的配送区域 -->
-    <view class="header-right" wx:if="{{viewState === 'active' || viewState === 'pending' || viewState === 'blocked'}}">
-      <view class="area-chip">
-        <text class="area-chip-label">午餐</text>
-        <text class="area-chip-value">{{lunchArea}}</text>
-      </view>
-      <view class="area-chip">
-        <text class="area-chip-label">晚餐</text>
-        <text class="area-chip-value">{{dinnerArea}}</text>
-      </view>
-    </view>
   </view>
 
   <view class="profile-header">
     <view class="profile-meta">
       <view class="profile-name">{{displayName}}</view>
       <view class="profile-sub" wx:if="{{viewState === 'active' || viewState === 'pending' || viewState === 'blocked'}}">{{maskedPhone}}</view>
-      <view class="profile-badge member" wx:if="{{viewState === 'active'}}">骑手已开通</view>
+      <!-- 归属区域：手机号下方，按餐期展示后台分配的配送区域 -->
+      <view class="profile-area" wx:if="{{viewState === 'active' || viewState === 'pending' || viewState === 'blocked'}}">
+        <view class="area-chip">
+          <text class="area-chip-label">午餐</text>
+          <text class="area-chip-value">{{lunchArea}}</text>
+        </view>
+        <view class="area-chip">
+          <text class="area-chip-label">晚餐</text>
+          <text class="area-chip-value">{{dinnerArea}}</text>
+        </view>
+      </view>
       <view class="profile-guest-action" wx:if="{{viewState === 'guest' || viewState === 'checking' || viewState === 'loading' || viewState === 'not_found' || viewState === 'unknown'}}" bindtap="goLoginPage">
         去登录 <text class="arrow">›</text>
       </view>

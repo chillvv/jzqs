@@ -55,35 +55,35 @@ page {
   letter-spacing: -0.02em;
 }
 
-/* 归属区域 */
-.header-right {
+/* 归属区域（手机号下方） */
+.profile-area {
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  gap: 16rpx;
+  margin-top: 16rpx;
 }
 
 .area-chip {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  line-height: 1.1;
-  background: rgba(255, 255, 255, 0.18);
-  border: 1rpx solid rgba(255, 255, 255, 0.35);
-  border-radius: 14rpx;
-  padding: 8rpx 14rpx;
+  gap: 10rpx;
+  background: var(--primary-container, #EEF2FF);
+  border: 1rpx solid rgba(37, 99, 235, 0.2);
+  border-radius: 999rpx;
+  padding: 8rpx 20rpx;
 }
 
 .area-chip-label {
-  font-size: 20rpx;
-  color: rgba(255, 255, 255, 0.85);
-  font-weight: 600;
+  font-size: 22rpx;
+  color: var(--brand-dark, #1D4ED8);
+  font-weight: 700;
 }
 
 .area-chip-value {
   font-size: 24rpx;
-  color: #ffffff;
+  color: #111111;
   font-weight: 800;
-  max-width: 160rpx;
+  max-width: 200rpx;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
