@@ -71,8 +71,7 @@ function isRunningFlow() {
   return isRunning;
 }
 
-// 清理残留的演示态（防止上次流程被强制中断后一直停在假数据）
-// 注意：只清除"引导演示"标记，不碰"本地造数"标记
+// 清理残留的演示态（防止上次流程被强制中断后一直停在演示假数据）
 function ensureCleanDemo() {
   if (demo.isActive() && !isRunning) {
     demo.clearOnboardingDemo();
