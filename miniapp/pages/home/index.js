@@ -18,13 +18,22 @@ function formatShortDate(dateText) {
 }
 
 function decorateDay(day) {
+  const isRestDay = day.slotStatus === 'REST';
+  // 店休文案始终明确标注「周几休息」，避免显示含糊的「今日休息」。
+  // 后端默认店休文案模板为「今日休息，不提供餐食」，这里把「今日」替换为真实周几。
+  let restText = '';
+  if (isRestDay) {
+    const weekday = day.weekdayLabel || '';
+    const rawNotice = (day.restNotice || '').trim();
+    restText = rawNotice
+      ? rawNotice.replace(/今日/g, weekday)
+      : `${weekday}固定店休，法定节假日不出餐`;
+  }
   return Object.assign({}, day, {
     shortDate: formatShortDate(day.serveDate),
-    isRestDay: day.slotStatus === 'REST',
+    isRestDay,
     isPendingDay: day.slotStatus === 'UNCONFIGURED',
-    restText: day.slotStatus === 'REST'
-      ? (day.restNotice || `${day.weekdayLabel}固定店休，法定节假日不出餐`)
-      : ''
+    restText
   });
 }
 

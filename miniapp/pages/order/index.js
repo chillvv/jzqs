@@ -187,8 +187,8 @@ Page({
       ];
       const [home, tomorrowMenu, addresses, nightlyStatus] = await Promise.all(tasks);
       const nightlySubscribed = !!(nightlyStatus && nightlyStatus.subscribed);
-      // 已勾选「总是」授权过每晚提醒的用户，默认视为已勾选「同意接收订单通知」；
-      // 未授权的用户保持未勾选，需点击勾选框并成功授权后才能下单。
+      // 是否已开启「总是保持」的每晚用餐提醒，是下单的唯一放行条件（见 submitOrder）。
+      // 未授权或仅单次授权的用户均视为未开启，需点击勾选框并完成「总是保持」授权后才能下单。
       this.setData({ nightlySubscribed, subscribeConsent: nightlySubscribed });
       const defaultAddress = addresses.find((item) => item.isDefault) || addresses[0] || null;
       const menuItems = [tomorrowMenu.lunchItem, tomorrowMenu.dinnerItem].filter(Boolean);
@@ -431,7 +431,7 @@ Page({
    * 之后下单时校验：未勾选（即未真正授权）则下单失败。
    */
   async toggleSubscribeConsent() {
-    // 已勾选「总是」授权过每晚提醒的用户，视为已开启，不可再取消
+    // 已开启「总是保持」每晚提醒的用户，视为已开启，不可再取消
     if (this.data.nightlySubscribed) {
       return;
     }
@@ -446,19 +446,33 @@ Page({
       if (delivery) {
         cacheDeliveryAcceptResult(delivery);
       }
+      // 只有「每晚提醒」授权成功，才写入后端并重新拉取订阅状态，
+      // 由后端返回是否真正开启了「总是保持」（微信单次/总是在前端结果值相同，
+      // 是否「总是」以后端落库状态为准）。
       if (nightly) {
         await saveNightlySubscription(nightly);
-      }
-      // 只要任一订阅授权成功即视为已勾选（可正常接收通知与每晚提醒）
-      const authorized = Boolean(delivery || nightly);
-      this.setData({ subscribeConsent: authorized });
-      if (authorized) {
-        wx.showToast({ title: '已开启用餐提醒', icon: 'success' });
+        const refreshed = await request({
+          url: '/api/mobile/customer/nightly-subscription/status'
+        }).catch(() => null);
+        const nowSubscribed = !!(refreshed && refreshed.subscribed);
+        this.setData({
+          nightlySubscribed: nowSubscribed,
+          subscribeConsent: nowSubscribed
+        });
+        if (nowSubscribed) {
+          wx.showToast({ title: '已开启总是用餐提醒', icon: 'success' });
+        } else {
+          // 后端未落库为「总是保持」：前端结果不计入放行，提示用户需保持开启
+          this.setData({ subscribeConsent: false });
+          wx.showToast({ title: '需开启「总是保持」提醒才能下单', icon: 'none' });
+        }
       } else {
+        // 未授权每晚提醒：不视为已开启
+        this.setData({ subscribeConsent: false });
         wx.showToast({ title: '未开启提醒，无法下单', icon: 'none' });
       }
     } catch (error) {
-      this.setData({ subscribeConsent: false });
+      this.setData({ subscribeConsent: false, nightlySubscribed: false });
       wx.showToast({ title: error.message || '订阅授权失败', icon: 'none' });
     } finally {
       this.setData({ consentingSubscribe: false });
@@ -476,10 +490,10 @@ Page({
       });
       return;
     }
-    // 订阅授权引导：已勾选「总是」授权过每晚提醒的用户不受限制；
-    // 否则必须勾选「同意接收订单通知」才允许下单，避免用户收不到送达通知与每晚提醒。
-    if (!this.data.nightlySubscribed && !this.data.subscribeConsent) {
-      wx.showToast({ title: '请先开启用餐提醒再下单', icon: 'none' });
+    // 强制要求：必须已开启「总是保持」的每晚用餐提醒（由后端订阅状态判定）才能下单。
+    // 仅单次授权、未开启提醒均不允许下单。
+    if (!this.data.nightlySubscribed) {
+      wx.showToast({ title: '请先开启「总是保持」用餐提醒再下单', icon: 'none' });
       return;
     }
     if (this.data.nightClosed) {
