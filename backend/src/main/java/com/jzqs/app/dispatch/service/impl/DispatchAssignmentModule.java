@@ -207,6 +207,16 @@ class DispatchAssignmentModule {
             dispatchOrder(orderId, resolveAssignmentRiderName(normalizedAreaCode, riderName, finalMealPeriod), normalizedAreaCode, true);
             successCount++;
         }
+        // 同步：将区域回写到骑手档案，使骑手小程序「我的」页能展示归属区域。
+        // 与「骑手管理→编辑骑手→选区域」入口保持一致的数据来源（rider_profiles.default_area_code）。
+        if (riderProfileId != null) {
+            jdbcTemplate.update(
+                "UPDATE rider_profiles SET default_area_code = ? WHERE id = ? AND meal_period = ?",
+                normalizedAreaCode,
+                riderProfileId,
+                finalMealPeriod
+            );
+        }
         publishDispatchEvent("dispatch.queue.changed", normalizedAreaCode, riderName, null);
         return new DispatchAreaRiderAssignResponse(
             normalizedAreaCode,
