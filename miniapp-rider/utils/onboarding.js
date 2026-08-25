@@ -72,9 +72,10 @@ function isRunningFlow() {
 }
 
 // 清理残留的演示态（防止上次流程被强制中断后一直停在假数据）
+// 注意：只清除"引导演示"标记，不碰"本地造数"标记
 function ensureCleanDemo() {
   if (demo.isActive() && !isRunning) {
-    demo.end();
+    demo.clearOnboardingDemo();
   }
 }
 

@@ -35,6 +35,7 @@ Page({
     navBarHeight: 0,
     loading: false,
     demoActive: false,
+    demoCount: 0,
     viewState: 'checking',
     isEditMode: false,
     batchReferenceMode: false,
@@ -50,8 +51,23 @@ Page({
     dragging: false,
     dragIndex: -1,
     dragOriginIndex: -1,
+    dragCurrentIndex: -1,
     dragStartY: 0,
     dragTranslateY: 0,
+    itemHeight: 100,
+    listOffset: 0,            // 拖拽时列表内容的 translateY（模拟滚动，绕开 scroll-view）
+
+    // 拖拽自动滚动所需状态
+    dragScrollTop: 0,        // 拖拽开始时的滚动位置
+    scrollTop: 0,            // 当前 scroll-view 滚动位置（受控）
+    scrollViewHeight: 0,    // scroll-view 可视高度
+    scrollViewTop: 0,       // scroll-view 在视口中的绝对 top（边缘判定用）
+    scrollContentHeight: 0, // scroll-view 内部内容总高度
+    scrollAnimating: false,  // 是否在自动滚动态（避免动画抢断手指）
+    autoScrollTimer: null,   // 边缘自动滚动定时器
+    autoScrollDir: 0,        // 1=向下 -1=向上 0=停
+    dragTouchClientY: 0,     // 当前手指在 scroll-view 内的相对 Y（用于边缘判定）
+    scrollIntoView: '',      // scroll-into-view 目标 id（程序滚动）
 
     refresherTriggered: false,
 
@@ -126,10 +142,36 @@ Page({
       queueError: false,
       queueErrorMessage: '',
       demoActive: true,
+      demoCount: items.length,
       loading: false
     });
     this.calculateMealStats(items);
     this.filterCurrentMealItems();
+  },
+
+  // 本地调试：生成/调整假订单数量（仅 demo 模式有效，绝不落库）
+  debugAdjustDemoCount(e) {
+    const delta = Number(e.currentTarget.dataset.delta) || 0;
+    if (!demo.isActive()) {
+      demo.startWithCount(15);
+    }
+    const n = demo.setCount(demo.getCount() + delta);
+    this.applyDemoQueue();
+    wx.showToast({ title: `演示订单：${n} 单`, icon: 'none' });
+  },
+
+  // 本地调试：一键开启/关闭假订单模式
+  debugToggleDemo() {
+    if (demo.isActive()) {
+      demo.endLocalGen();
+      this.setData({ demoActive: false });
+      this.loadQueue();
+      wx.showToast({ title: '已退出演示造数', icon: 'none' });
+    } else {
+      demo.startWithCount(15);
+      this.applyDemoQueue();
+      wx.showToast({ title: '已注入 15 单演示数据', icon: 'none' });
+    }
   },
 
   hideGuideMask() {
@@ -169,7 +211,7 @@ Page({
 
   async loadQueue(options = {}) {
     const { silent = false } = options;
-    if (demo.isActive() && onboarding.isRunningFlow()) {
+    if (demo.isActive()) {
       this.applyDemoQueue();
       return;
     }
@@ -394,7 +436,9 @@ Page({
       dragging: false,
       dragIndex: -1,
       dragOriginIndex: -1,
-      dragTranslateY: 0
+      dragCurrentIndex: -1,
+      dragTranslateY: 0,
+      listOffset: 0
     });
     if (!isEditMode) {
       this.saveOrderSequence();
@@ -515,27 +559,150 @@ Page({
 
     this._cancelLongPress();
     this._longPressTimer = setTimeout(() => {
-      this._activateDrag(index, touch.pageY);
+      this._activateDrag(index, touch.clientY);
     }, 300);
   },
 
   // 激活拖拽状态
   _activateDrag(index, startY) {
-    // 测量卡片高度（列表位置不再需要）
     const query = wx.createSelectorQuery();
     query.select('.order-card').boundingClientRect();
+    query.select('.scroll-area').boundingClientRect();
+    query.select('.orders-list').boundingClientRect();
     query.exec((res) => {
       if (res[0] && res[0].height) {
         this._itemHeight = res[0].height;
       }
+      // scroll-area 的 top 是它在视口中的绝对 Y 坐标，用于边缘判定
+      if (res[1] && res[1].height) {
+        this.setData({
+          scrollViewHeight: res[1].height,
+          scrollViewTop: res[1].top
+        });
+      }
+      if (res[2] && res[2].height) {
+        this.setData({ scrollContentHeight: res[2].height });
+      }
+      // 同步 itemHeight 到 data 供 wxs 视图层计算位移
+      if (this._itemHeight) {
+        this.setData({ itemHeight: this._itemHeight });
+      }
     });
+
+    // 记录拖拽起始的滚动位置，便于后续联合位移计算
+    const currentScrollTop = this.data.scrollTop || 0;
 
     this.setData({
       dragging: true,
       dragIndex: index,
       dragOriginIndex: index,
+      dragCurrentIndex: index,
       dragStartY: startY,
-      dragTranslateY: 0
+      dragScrollTop: currentScrollTop,
+      dragTranslateY: 0,
+      listOffset: 0,
+      scrollAnimating: false
+    });
+  },
+
+  // scroll-view 滚动时同步 scrollTop（受控）
+  onScroll(e) {
+    if (typeof e.detail.scrollTop === 'number') {
+      this.data.scrollTop = e.detail.scrollTop;
+    }
+  },
+
+  // 当手指靠近列表上/下边缘时，自动滚动列表，使拖拽能延伸到屏幕外的项
+  // 注意：clientY 是相对"视口顶部"的，scroll-view 在视口中有顶部偏移（header+toggle），
+  // 必须用 scroll-view 的绝对 top 来做边缘判定，否则永远判不到底部边缘。
+  _checkAutoScroll(clientY) {
+    const edgePx = 120;                      // 边缘触发阈值（px），放宽更易触发
+    const viewH = this.data.scrollViewHeight || 0;
+    const viewTop = this.data.scrollViewTop || 0;
+    if (!viewH) return;
+
+    const viewBottom = viewTop + viewH;       // scroll-view 底部在视口中的绝对 Y
+    let dir = 0;
+    if (clientY < viewTop + edgePx) {
+      // 手指靠近 scroll-view 顶部边缘 → 向上滚
+      dir = -1;
+    } else if (clientY > viewBottom - edgePx) {
+      // 手指靠近 scroll-view 底部边缘 → 向下滚
+      dir = 1;
+    }
+
+    if (dir !== this.data.autoScrollDir) {
+      this.data.autoScrollDir = dir;
+      this._stopAutoScroll();
+      if (dir !== 0) {
+        this._startAutoScroll(dir);
+      }
+    }
+  },
+
+  _startAutoScroll(dir) {
+    // 用 transform 移动 main-content 模拟滚动（绕开 scroll-view，拖拽时 scroll-y=false 屏幕不滚）
+    // dir=1 向下：listOffset 减小（负值，内容上移露出后面的项）
+    // dir=-1 向上：listOffset 增大（正值，内容下移露前面的项）
+    const step = 6;
+    const interval = 20;
+    this.data.autoScrollTimer = setInterval(() => {
+      if (!this.data.dragging) {
+        this._stopAutoScroll();
+        return;
+      }
+      const itemH = this._itemHeight || this.data.itemHeight || 100;
+      let contentH = this.data.scrollContentHeight || 0;
+      if (!contentH) {
+        contentH = (this.data.currentMealItems || []).length * itemH * 1.15;
+      }
+      const curScrollTop = this.data.dragScrollTop || 0;
+      const maxDown = Math.max(0, contentH - curScrollTop);
+      const maxUp = Math.max(0, curScrollTop);
+      let next = (this.data.listOffset || 0) - dir * step;
+      next = Math.max(-maxDown, Math.min(maxUp, next));
+      if (next === (this.data.listOffset || 0)) return; // 到边界不动（不停定时器，避免卡死）
+      // 合并 setData：listOffset + dragCurrentIndex + dragTranslateY 一次设置，减少卡顿
+      const deltaY = (this.data.dragTouchClientY - this.data.dragStartY) - next;
+      const shift = Math.round(deltaY / itemH);
+      const dragCurrentIndex = Math.max(0, Math.min(
+        this.data.dragOriginIndex + shift,
+        (this.data.currentMealItems || []).length - 1
+      ));
+      this.setData({
+        listOffset: next,
+        dragCurrentIndex: dragCurrentIndex,
+        dragTranslateY: deltaY
+      });
+    }, interval);
+  },
+
+  _stopAutoScroll() {
+    if (this.data.autoScrollTimer) {
+      clearInterval(this.data.autoScrollTimer);
+      this.data.autoScrollTimer = null;
+    }
+    this.data.autoScrollDir = 0;
+  },
+
+  // FLIP 模式：只算被拖卡片视觉当前位置 + 跟手指位移，不重排数组
+  // 联合位移 = 手指位移 - listOffset（listOffset 为负表示列表上移露出后面的项）
+  _recalcDragTarget() {
+    if (!this.data.dragging) return;
+    const currentY = this.data.dragTouchClientY;
+    const deltaY = (currentY - this.data.dragStartY) - (this.data.listOffset || 0);
+    const itemHeight = this._itemHeight || this.data.itemHeight || 100;
+    const { dragOriginIndex, currentMealItems } = this.data;
+
+    const shift = Math.round(deltaY / itemHeight);
+    const dragCurrentIndex = Math.max(0, Math.min(
+      dragOriginIndex + shift,
+      currentMealItems.length - 1
+    ));
+
+    this.setData({
+      dragCurrentIndex: dragCurrentIndex,
+      dragTranslateY: deltaY
     });
   },
 
@@ -565,60 +732,66 @@ Page({
     }
 
     if (!e.touches || !e.touches[0]) return;
+    const touch = e.touches[0];
+    this.data.dragTouchClientY = touch.clientY;
 
-    // 节流：限制 setData 频率 ~30fps，减少渲染压力
+    // 节流：FLIP 模式只 setData 两个数字（轻量），16ms ~60fps 更丝滑
     const now = Date.now();
-    if (this._lastDragFrame && now - this._lastDragFrame < 33) return;
+    if (this._lastDragFrame && now - this._lastDragFrame < 16) {
+      // 仍要做边缘检测，保证手指刚进边缘就能触发自动滚动
+      this._checkAutoScroll(touch.clientY);
+      return;
+    }
     this._lastDragFrame = now;
 
-    const currentY = e.touches[0].pageY;
-    const totalDeltaY = currentY - this.data.dragStartY;
-    const { dragIndex, dragOriginIndex, currentMealItems } = this.data;
-    const itemHeight = this._itemHeight || 100;
+    // 联合位移 = 手指位移 + 滚动位移（拖拽中列表自动滚动的部分也要计入）
+    this._recalcDragTarget();
 
-    // 基于累计偏移量计算目标位置（dragOriginIndex + 手指移动的卡片数）
-    const positionsShifted = Math.round(totalDeltaY / itemHeight);
-    const targetIndex = Math.max(0, Math.min(
-      dragOriginIndex + positionsShifted,
-      currentMealItems.length - 1
-    ));
-
-    if (targetIndex !== dragIndex) {
-      const newItems = [...currentMealItems];
-      const [item] = newItems.splice(dragIndex, 1);
-      newItems.splice(targetIndex, 0, item);
-
-      this.setData({
-        currentMealItems: newItems,
-        dragIndex: targetIndex,
-        dragTranslateY: totalDeltaY - ((targetIndex - dragOriginIndex) * itemHeight)
-      });
-    } else {
-      this.setData({
-        dragTranslateY: totalDeltaY - ((dragIndex - dragOriginIndex) * itemHeight)
-      });
-    }
+    // 边缘自动滚动检测
+    this._checkAutoScroll(touch.clientY);
   },
 
-  // 结束拖拽
+  // 结束拖拽（FLIP：先过渡被拖卡片到目标位置，再 splice 重排归位 + 同步 scroll-view 位置）
   onTouchEnd() {
     this._cancelLongPress();
     this._lastDragFrame = null;
+    this._stopAutoScroll();
     if (!this.data.dragging) return;
 
-    // 先过渡到目标位置
-    this.setData({ dragTranslateY: 0 });
+    const { dragOriginIndex, dragCurrentIndex, currentMealItems, dragScrollTop, listOffset } = this.data;
+    const itemHeight = this._itemHeight || this.data.itemHeight || 100;
+    const finalIndex = dragCurrentIndex >= 0 ? dragCurrentIndex : dragOriginIndex;
 
-    // 等待过渡动画完成后再清理
+    // 第一阶段：被拖卡片过渡到目标位置（视觉上落在 dragCurrentIndex）
+    const targetTranslate = (finalIndex - dragOriginIndex) * itemHeight;
+    this.setData({ dragTranslateY: targetTranslate });
+
+    // 第二阶段：过渡完成后 splice 重排数组 + 同步 scroll-view 位置 + 清零
+    // listOffset 归 0（列表 transform 归位），scrollTop 设为 dragScrollTop - listOffset（scroll-view 滚到对应位置）
+    // 两者变化量抵消，视觉无跳变
+    const syncScrollTop = (dragScrollTop || 0) - (listOffset || 0);
     setTimeout(() => {
+      let newItems = currentMealItems;
+      if (finalIndex !== dragOriginIndex && finalIndex >= 0 && finalIndex < currentMealItems.length) {
+        newItems = [...currentMealItems];
+        const [item] = newItems.splice(dragOriginIndex, 1);
+        newItems.splice(finalIndex, 0, item);
+      }
       this.setData({
+        currentMealItems: newItems,
         dragging: false,
         dragIndex: -1,
         dragOriginIndex: -1,
+        dragCurrentIndex: -1,
         dragStartY: 0,
-        dragTranslateY: 0
+        dragTranslateY: 0,
+        dragScrollTop: 0,
+        dragTouchClientY: 0,
+        listOffset: 0,
+        scrollTop: Math.max(0, syncScrollTop),
+        scrollAnimating: false
       });
-    }, 400);
+    }, 200);
   },
 
   async saveOrderSequence() {
@@ -678,7 +851,7 @@ Page({
     this.setData({
       loading: false, isEditMode: false, allItems: [], currentMealItems: [],
       batchReferenceMode: false, batchSubmitting: false, selectedReferenceItemIds: [],
-      dragging: false, dragIndex: -1, dragOriginIndex: -1, dragTranslateY: 0,
+      dragging: false, dragIndex: -1, dragOriginIndex: -1, dragCurrentIndex: -1, dragTranslateY: 0, listOffset: 0,
       showDatePicker: false,
       queueError: false, queueErrorMessage: '',
       lunchStats: { totalCount: 0, deliveredCount: 0, remainingCount: 0 },

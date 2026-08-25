@@ -357,6 +357,54 @@
   font-size: 40rpx;
 }
 
+/* 本地调试造数面板 */
+.debug-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+  padding: 20rpx 24rpx;
+  margin-bottom: 12rpx;
+  background: rgba(37, 99, 235, 0.10);
+  border: 2rpx dashed rgba(37, 99, 235, 0.45);
+  border-radius: 20rpx;
+}
+.debug-title {
+  font-size: 24rpx;
+  color: #1D4ED8;
+  font-weight: 700;
+}
+.debug-count {
+  font-size: 26rpx;
+  color: #1E3A8A;
+  font-weight: 600;
+}
+.debug-btns {
+  display: flex;
+  gap: 16rpx;
+}
+.debug-btn {
+  flex: 1;
+  text-align: center;
+  padding: 14rpx 0;
+  background: #2563EB;
+  color: #fff;
+  font-size: 26rpx;
+  font-weight: 600;
+  border-radius: 14rpx;
+}
+.debug-btn-exit {
+  background: #6B7280;
+}
+
+/* 头部造数入口（开发调试用） */
+.debug-entry {
+  background: rgba(37, 99, 235, 0.12);
+  border: 2rpx dashed rgba(37, 99, 235, 0.5);
+}
+.debug-entry .edit-text {
+  color: #1D4ED8;
+}
+
 .batch-hint {
   display: flex;
   align-items: center;
@@ -833,6 +881,28 @@
   -webkit-backdrop-filter: blur(8px);
   font-size: 22rpx;
   color: #ffffff;
+}
+
+/* 编辑模式浮动完成按钮（fixed，不随 scroll-view 滚动，拖到底部也能点） */
+.edit-float-finish {
+  position: fixed;
+  right: 32rpx;
+  bottom: calc(136rpx + env(safe-area-inset-bottom) + 32rpx);
+  background: linear-gradient(135deg, #16A34A 0%, #15803D 100%);
+  color: #fff;
+  font-size: 30rpx;
+  font-weight: 700;
+  padding: 22rpx 44rpx;
+  border-radius: 999rpx;
+  box-shadow: 0 8rpx 24rpx rgba(22, 163, 74, 0.45);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.edit-float-finish:active {
+  transform: scale(0.96);
+  opacity: 0.92;
 }
 
 .batch-action-bar {

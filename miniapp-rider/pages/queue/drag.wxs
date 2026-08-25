@@ -1,0 +1,36 @@
+// 拖拽排序 FLIP 模式：在视图层计算每张卡片的 translateY，避免每帧 splice 重排数组导致的卡顿
+// - 被拖卡片(index===dragIndex)：跟手指位移 dragTranslateY
+// - 让位区间卡片：向上拖时下方卡片下移一格，向下拖时上方卡片上移一格
+// - 其他卡片：0
+function translate(index, dragging, dragIndex, dragCurrentIndex, dragTranslateY, itemHeight) {
+  if (!dragging) return 0;
+  // 被拖卡片跟手指
+  if (index === dragIndex) {
+    return dragTranslateY;
+  }
+  // 让位：被拖卡片从 dragIndex 视觉移到 dragCurrentIndex
+  if (dragCurrentIndex > dragIndex) {
+    // 向下拖：[dragIndex+1, dragCurrentIndex] 的卡片上移一格
+    if (index > dragIndex && index <= dragCurrentIndex) {
+      return -itemHeight;
+    }
+  } else if (dragCurrentIndex < dragIndex) {
+    // 向上拖：[dragCurrentIndex, dragIndex-1] 的卡片下移一格
+    if (index >= dragCurrentIndex && index < dragIndex) {
+      return itemHeight;
+    }
+  }
+  return 0;
+}
+
+// 过渡：被拖卡片无过渡（跟手指），其他卡片短过渡平滑让位
+function transition(index, dragging, dragIndex) {
+  if (!dragging) return 'transform 0.25s ease';
+  if (index === dragIndex) return 'none';
+  return 'transform 0.18s ease-out';
+}
+
+module.exports = {
+  translate: translate,
+  transition: transition
+};
