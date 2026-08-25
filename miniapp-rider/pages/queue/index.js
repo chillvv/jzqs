@@ -128,7 +128,7 @@ Page({
     onboarding.maybeAutoStart();
     this.startAutoRefresh();
     this.startRealtimeSync();
-    await this.loadQueue();
+    await this.loadQueue({ silent: true });
     this.showGuide();
   },
 
@@ -155,7 +155,7 @@ Page({
 
   onScrollRefresh() {
     if (this.data.viewState !== 'active') { this.onShow(); return; }
-    this.loadQueue().finally(() => {
+    this.loadQueue({ silent: true }).finally(() => {
       this.setData({ refresherTriggered: false });
     });
   },
@@ -380,7 +380,7 @@ Page({
       ...buildWorkbenchDateState(date),
       showDatePicker: false
     });
-    await this.loadQueue();
+    await this.loadQueue({ silent: true });
   },
 
   // ========== 拖拽排序（v2 - 插入索引 + 平移动画）==========
@@ -491,7 +491,7 @@ Page({
         batchSubmitting: false,
         selectedReferenceItemIds: []
       });
-      await this.loadQueue();
+      await this.loadQueue({ silent: true });
     } catch (error) {
       wx.hideLoading();
       if (error && error.errMsg && error.errMsg.includes('cancel')) {
@@ -770,11 +770,11 @@ Page({
     try {
       await taskService.saveOrderSequence(ids);
       wx.showToast({ title: '顺序已保存', icon: 'success' });
-      await this.loadQueue();
+      await this.loadQueue({ silent: true });
     } catch (error) {
       wx.showToast({ title: error.message || '保存失败', icon: 'none' });
       // 失败回滚本地乐观更新：重新拉取服务器真实顺序，避免界面顺序与数据库不一致
-      await this.loadQueue();
+      await this.loadQueue({ silent: true });
     }
   },
 
