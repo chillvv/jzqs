@@ -21,6 +21,8 @@ public record RiderCreateRequest(
 
     String employmentStatus,
 
-    String remark
+    String remark,
+
+    String mealPeriod
 ) {
 }

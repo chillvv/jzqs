@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { MapPinned, PackageCheck, Truck, UserRound } from "lucide-react";
+import { ClipboardList, MapPinned, PackageCheck, Truck } from "lucide-react";
 import { AdminDialog } from "../../shared/components/AdminDialog";
 import { toast } from "../../shared/components/Toast";
 import { deleteDeliveryReceiptImage, recordDeliveryReceipt, uploadDeliveryReceiptImage } from "../../shared/api/http";
@@ -283,10 +283,10 @@ export function DispatchProgressPage() {
             </div>
             <div className="dispatch-stat-card">
               <div className="admin-panel-note" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <UserRound size={16} />
-                在线进度卡
+                <ClipboardList size={16} />
+                总份数
               </div>
-              <div className="dispatch-stat-card__value">{progressGroups.length}</div>
+              <div className="dispatch-stat-card__value">{summary.totalOrders}</div>
             </div>
             <div className="dispatch-stat-card">
               <div className="admin-panel-note" style={{ display: "flex", alignItems: "center", gap: "8px" }}>

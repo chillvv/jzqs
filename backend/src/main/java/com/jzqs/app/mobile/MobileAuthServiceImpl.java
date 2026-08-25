@@ -569,8 +569,17 @@ public class MobileAuthServiceImpl implements MobileAuthService {
     }
 
     private Long findRiderIdByPhone(String phone) {
+        // 同名骑手可能有多条档案（按餐期分裂）。优先返回已绑定微信(current_openid 非空)的
+        // 那条主档案，保证登录骑手 ID 与派单写入 dispatch_assignments.rider_profile_id 的 ID 一致。
         return jdbcTemplate.query(
-            "SELECT id FROM rider_profiles WHERE phone = ?",
+            """
+                SELECT id FROM rider_profiles
+                WHERE phone = ?
+                ORDER BY
+                    CASE WHEN current_openid IS NOT NULL AND current_openid <> '' THEN 0 ELSE 1 END,
+                    id
+                LIMIT 1
+                """,
             ps -> ps.setString(1, phone),
             rs -> rs.next() ? rs.getLong(1) : null
         );

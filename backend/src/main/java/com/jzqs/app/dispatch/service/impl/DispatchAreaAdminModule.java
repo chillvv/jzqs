@@ -33,8 +33,6 @@ class DispatchAreaAdminModule {
     ) {
         String normalizedAreaCode = areaCode == null ? null : areaCode.trim();
         String resolvedMealPeriod = (mealPeriod == null ? MealPeriod.DINNER : mealPeriod).name();
-        // 区域配置只负责「归区域」的记忆（area_code + keywords），不绑定默认骑手自动派单。
-        // 骑手跨区互斥在手动分配骑手（assignRiderToArea）时处理。
         Integer existing = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM dispatch_area_bindings WHERE area_code = ? AND meal_period = ?",
             Integer.class,

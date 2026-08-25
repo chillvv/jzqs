@@ -192,7 +192,7 @@ class DispatchAssignmentModule {
                 FROM dispatch_assignments da
                 JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
                 WHERE da.area_code = ?
-                  AND da.status IN ('AREA_ASSIGNED', 'DISPATCHING')
+                  AND da.status IN ('PENDING', 'AREA_ASSIGNED', 'DISPATCHING')
                   AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
                 ORDER BY da.sequence_number, da.id
                 """,
@@ -500,9 +500,17 @@ class DispatchAssignmentModule {
                 continue;
             }
             String defaultRiderName = resolveDefaultRiderName(areaCode, order.mealPeriod());
-            if (defaultRiderName != null) {
-                dispatchOrder(orderId, defaultRiderName, areaCode, true);
+            String targetRiderName = defaultRiderName;
+            // 区域没有配置默认骑手时，跟随该区域「当前已有骑手」：
+            // 一旦区域分配过骑手，后续进入的订单（含记忆归区）全部归属到同一骑手，
+            // 避免出现「同区域一部分有骑手、一部分没有」的中间态。
+            if (targetRiderName == null) {
+                targetRiderName = resolveAreaCurrentRiderName(areaCode, order.mealPeriod(), order.serveDate());
+            }
+            if (targetRiderName != null) {
+                dispatchOrder(orderId, targetRiderName, areaCode, true);
             } else {
+                // 区域尚未分配过任何骑手：仅归区、骑手留空（待分配骑手），这是合法状态。
                 int sequenceNumber = nextAreaSequence(areaCode, order.serveDate(), order.mealPeriod());
                 insertAndReturnId(
                     """
@@ -678,6 +686,33 @@ class DispatchAssignmentModule {
         return riderNames.isEmpty() ? null : riderNames.get(0);
     }
 
+    /**
+     * 取该区域当前已有的骑手（从当天该餐段已有的 dispatch_assignments 中取一个非空的骑手名）。
+     * 用于「后续订单跟随区域当前骑手」：一旦区域分配过骑手，新进订单全部归属到同一人。
+     */
+    private String resolveAreaCurrentRiderName(String areaCode, String mealPeriod, LocalDate serveDate) {
+        List<String> riderNames = jdbcTemplate.query(
+            """
+                SELECT da.rider_name
+                FROM dispatch_assignments da
+                JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
+                JOIN daily_orders doo ON doo.id = mso.daily_order_id
+                WHERE da.area_code = ?
+                  AND doo.serve_date = ?
+                  AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
+                  AND da.rider_name IS NOT NULL
+                  AND da.rider_name <> ''
+                LIMIT 1
+                """,
+            (rs, rowNum) -> rs.getString("rider_name"),
+            areaCode,
+            serveDate,
+            mealPeriod,
+            mealPeriod
+        );
+        return riderNames.isEmpty() ? null : riderNames.get(0);
+    }
+
     private String resolveAssignmentRiderName(String areaCode, String riderName, String mealPeriod) {
         if (riderName != null && !riderName.isBlank()) {
             return riderName.trim();
@@ -824,6 +859,7 @@ class DispatchAssignmentModule {
     }
 
     private Long findRiderProfileIdByName(String riderName, String mealPeriod) {
+        // 1) 优先按 (rider_name, meal_period) 精确匹配，保证午餐/晚餐分中心隔离
         List<Long> ids = jdbcTemplate.query(
             """
                 SELECT id FROM rider_profiles
@@ -836,7 +872,24 @@ class DispatchAssignmentModule {
             mealPeriod,
             mealPeriod
         );
-        return ids.isEmpty() ? null : ids.get(0);
+        if (!ids.isEmpty()) {
+            return ids.get(0);
+        }
+        // 2) 回退：无明确餐期时，优先返回已绑定微信(current_openid 非空)的同名主档案，
+        //    避免午餐单被派到晚餐档案（或反之），确保与小程序登录档案一致。
+        List<Long> fallback = jdbcTemplate.query(
+            """
+                SELECT id FROM rider_profiles
+                WHERE rider_name = ?
+                ORDER BY
+                    CASE WHEN current_openid IS NOT NULL AND current_openid <> '' THEN 0 ELSE 1 END,
+                    id
+                LIMIT 1
+                """,
+            (rs, rowNum) -> rs.getLong("id"),
+            riderName
+        );
+        return fallback.isEmpty() ? null : fallback.get(0);
     }
 
     private void markDispatchExceptionResolved(long mealSlotOrderId, String resolvedBy) {

@@ -95,6 +95,9 @@ export function parseAdminAuthSession(rawValue: string | null | undefined): Admi
   return session;
 }
 
+// 重新登录浏览器时，清空所有页面的筛选记忆，让各页面回到默认筛选状态。
+export { clearPageMemories } from "../../shared/hooks/usePersistedState";
+
 function normalizeText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }

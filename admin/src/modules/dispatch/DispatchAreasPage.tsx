@@ -71,6 +71,7 @@ export function DispatchAreasPage() {
   const [activeAreaCode, setActiveAreaCode] = useState<string | null>(null);
   const [assignRiderAreaCode, setAssignRiderAreaCode] = useState<string | null>(null);
   const [selectedRiderId, setSelectedRiderId] = useState("");
+  const [riderSearch, setRiderSearch] = useState("");
   const [isReordering, setIsReordering] = useState(false);
   const [localOrders, setLocalOrders] = useState<DispatchAreaOrderItemResponse[]>([]);
   const [selectedOrderIds, setSelectedOrderIds] = useState<number[]>([]);
@@ -91,37 +92,67 @@ export function DispatchAreasPage() {
     toast(getErrorMessage(loadError, "加载区域与骑手失败"), "error");
   }, [loadError]);
 
-  const riderOptions = useMemo(
-    () =>
-      riders
-        .filter((rider) => rider.authStatus === "ACTIVE")
-        .map((rider) => ({ label: `${rider.riderName} (${rider.phone || "--"})`, value: String(rider.riderId) })),
-    [riders]
-  );
-
-  // 已绑定为某区域默认骑手的骑手，不允许再绑定到其他区域
-  const boundRiderIds = useMemo(() => {
-    const ids = new Set<string>();
+  // 已绑定为某区域默认骑手的骑手及其所属区域（含当前区域），用于展示"已被XX区域使用"
+  const boundRiderMap = useMemo(() => {
+    const map = new Map<string, string>();
     bindings.forEach((b) => {
       if (b.defaultRiderId) {
-        ids.add(String(b.defaultRiderId));
+        map.set(String(b.defaultRiderId), b.areaCode);
       }
     });
-    return ids;
+    return map;
   }, [bindings]);
 
-  const assignableRiderOptions = useMemo(() => {
+  // 更换骑手弹窗里展示的骑手列表：启用/停用均展示，让商家清楚看到状态
+  const riderReplaceList = useMemo(() => {
     const currentArea = assignRiderAreaCode
       ? bindings.find((b) => b.areaCode === assignRiderAreaCode)
       : null;
     const currentRiderId = currentArea?.defaultRiderId ? String(currentArea.defaultRiderId) : null;
-    return riderOptions.filter((option) => {
-      if (currentRiderId && option.value === currentRiderId) {
-        return true;
-      }
-      return !boundRiderIds.has(option.value);
-    });
-  }, [riderOptions, boundRiderIds, bindings, assignRiderAreaCode]);
+
+    return riders
+      .filter((rider) => rider.mealPeriod === mealPeriod)
+      .map((rider) => {
+        const riderId = String(rider.riderId);
+        const disabled = rider.authStatus !== "ACTIVE";
+        const occupiedBy = boundRiderMap.get(riderId);
+        // 已停用 或 已被其他区域占用（当前区域自己的骑手除外）→ 不可选
+        const blocked = disabled || (Boolean(occupiedBy) && occupiedBy !== assignRiderAreaCode);
+        let badge: { text: string; kind: "danger" | "warn" } | null = null;
+        if (disabled) {
+          badge = { text: "已停用", kind: "danger" };
+        } else if (occupiedBy && occupiedBy !== assignRiderAreaCode) {
+          badge = { text: `已被 ${occupiedBy} 使用`, kind: "warn" };
+        }
+        return {
+          riderId,
+          riderName: rider.riderName,
+          phone: rider.phone || "--",
+          disabled,
+          occupiedBy: occupiedBy && occupiedBy !== assignRiderAreaCode ? occupiedBy : null,
+          blocked,
+          badge,
+          isCurrent: riderId === currentRiderId
+        };
+      });
+  }, [riders, mealPeriod, boundRiderMap, assignRiderAreaCode, bindings]);
+
+  const filteredRiderReplaceList = useMemo(() => {
+    const kw = riderSearch.trim().toLowerCase();
+    if (!kw) return riderReplaceList;
+    return riderReplaceList.filter(
+      (r) => r.riderName.toLowerCase().includes(kw) || r.phone.toLowerCase().includes(kw)
+    );
+  }, [riderReplaceList, riderSearch]);
+
+  // 创建区域时可绑定的骑手：启用且未被任何区域占用
+  const creatableRiderOptions = useMemo(
+    () =>
+      riders
+        .filter((rider) => rider.mealPeriod === mealPeriod && rider.authStatus === "ACTIVE" && !boundRiderMap.has(String(rider.riderId)))
+        .map((rider) => ({ label: `${rider.riderName} (${rider.phone || "--"})`, value: String(rider.riderId) })),
+    [riders, mealPeriod, boundRiderMap]
+  );
 
   const activeArea = useMemo(
     () => bindings.find((item) => item.areaCode === activeAreaCode) ?? null,
@@ -164,6 +195,11 @@ export function DispatchAreasPage() {
     const area = bindings.find((item) => item.areaCode === assignRiderAreaCode);
     const rider = riders.find((item) => String(item.riderId) === selectedRiderId);
     if (!area || !rider) return;
+    const occupiedBy = boundRiderMap.get(selectedRiderId);
+    if (rider.authStatus !== "ACTIVE" || (occupiedBy && occupiedBy !== assignRiderAreaCode)) {
+      toast("该骑手已停用或已被其他区域使用，无法绑定", "error");
+      return;
+    }
     setSavingArea(assignRiderAreaCode);
     try {
       await updateDispatchAreaBinding(assignRiderAreaCode, {
@@ -548,7 +584,7 @@ export function DispatchAreasPage() {
           <AppSelect
             value={newArea.riderId}
             placeholder="可选：立即添加骑手"
-            options={[{ label: "暂不添加骑手", value: "" }, ...assignableRiderOptions]}
+            options={[{ label: "暂不添加骑手", value: "" }, ...creatableRiderOptions]}
             onChange={(value) => setNewArea((prev) => ({ ...prev, riderId: value }))}
             style={selectStyle}
           />
@@ -575,6 +611,7 @@ export function DispatchAreasPage() {
           if (!activeArea) return;
           setAssignRiderAreaCode(activeArea.areaCode);
           setSelectedRiderId(activeArea.defaultRiderId ? String(activeArea.defaultRiderId) : "");
+          setRiderSearch("");
         }}
         onOpenAiCorrection={() => setShowAiCorrectionDialog(true)}
         onStartRename={() => activeArea && startRename(activeArea.areaCode)}
@@ -712,6 +749,7 @@ export function DispatchAreasPage() {
         onClose={() => {
           setAssignRiderAreaCode(null);
           setSelectedRiderId("");
+          setRiderSearch("");
         }}
         footer={
           <>
@@ -731,20 +769,73 @@ export function DispatchAreasPage() {
       >
         <label className="admin-field">
           <span className="admin-field-label">选择骑手</span>
-          <AppSelect
-            value={selectedRiderId}
-            placeholder="搜索骑手姓名"
-            options={assignableRiderOptions}
-            showSearch
-            onChange={(value) => setSelectedRiderId(value)}
-            style={selectStyle}
+          <SafeInput
+            value={riderSearch}
+            onValueChange={setRiderSearch}
+            placeholder="搜索骑手姓名或手机号"
+            style={{ width: "100%", marginBottom: 8 }}
           />
-        </label>
-        {assignableRiderOptions.length < riderOptions.length ? (
-          <div className="dispatch-inline-note" style={{ marginTop: 8 }}>
-            已绑定其他区域的骑手不可选（同一骑手不允许负责多个区域）
+          <div style={{ display: "grid", gap: "8px", maxHeight: 320, overflowY: "auto", paddingRight: 4 }}>
+            {filteredRiderReplaceList.map((r) => {
+              const selected = selectedRiderId === r.riderId;
+              const blocked = r.blocked && !selected;
+              return (
+                <button
+                  key={r.riderId}
+                  type="button"
+                  disabled={r.blocked}
+                  onClick={() => {
+                    if (r.blocked) return;
+                    setSelectedRiderId(r.riderId);
+                  }}
+                  className={`rider-replace-item${selected ? " is-selected" : ""}${blocked ? " is-blocked" : ""}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 10,
+                    width: "100%",
+                    textAlign: "left",
+                    padding: "10px 12px",
+                    borderRadius: 8,
+                    border: selected ? "1px solid #2f6df6" : "1px solid #e3e6ee",
+                    background: selected ? "#eef3ff" : blocked ? "#f6f7f9" : "#fff",
+                    color: blocked ? "#9aa0ac" : "#1f2430",
+                    cursor: r.blocked ? "not-allowed" : "pointer",
+                    opacity: blocked ? 0.7 : 1
+                  }}
+                >
+                  <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    <span style={{ fontWeight: 600, whiteSpace: "nowrap" }}>{r.riderName}</span>
+                    <span style={{ color: blocked ? "#aab0bc" : "#8a90a0", fontSize: 12 }}>{r.phone}</span>
+                    {r.isCurrent ? <span className="tag tag-gray" style={{ fontSize: 11 }}>当前</span> : null}
+                  </span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                    {r.badge ? (
+                      <span
+                        className={r.badge.kind === "danger" ? "tag tag-red" : "tag tag-amber"}
+                        style={{ fontSize: 11 }}
+                      >
+                        {r.badge.text}
+                      </span>
+                    ) : null}
+                    {selected ? <span className="tag tag-blue" style={{ fontSize: 11 }}>已选</span> : null}
+                  </span>
+                </button>
+              );
+            })}
+            {filteredRiderReplaceList.length === 0 ? (
+              riderReplaceList.length === 0 ? (
+                <div className="dispatch-inline-note">当前{mealPeriodLabel(mealPeriod)}暂无可用骑手，请先在骑手管理中添加。</div>
+              ) : (
+                <div className="dispatch-inline-note">未找到匹配的骑手，请调整搜索关键词。</div>
+              )
+            ) : null}
           </div>
-        ) : null}
+        </label>
+        <div className="dispatch-inline-note" style={{ marginTop: 8 }}>
+          同一骑手不能同时负责多个区域；<b>已停用</b>或<b>已被其他区域使用</b>的骑手不可选（灰色显示）。
+        </div>
       </AdminDialog>
 
       <AdminDialog

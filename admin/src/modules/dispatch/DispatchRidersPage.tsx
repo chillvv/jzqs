@@ -18,16 +18,16 @@ import { AdminDialog } from "../../shared/components/AdminDialog";
 import { SafeInput } from "../../shared/components/SafeInput";
 import { toast } from "../../shared/components/Toast";
 import {
-  buildCreateRiderPayload,
   createEmptyNewRiderDraft,
   riderStatusLabel,
   riderStatusTagClass,
   validateCreateRiderDraft,
-  DEFAULT_OPERATOR,
-  MEAL_PERIOD_OPTIONS,
+  mergeRidersByMealPeriod,
   type DispatchMealPeriod,
+  type MergedRider,
   type NewRiderDraft
 } from "./dispatchCenterLayout.helpers";
+import { usePersistedState, PAGE_MEMORY_KEYS } from "../../shared/hooks/usePersistedState";
 
 const selectStyle: React.CSSProperties = { width: "100%" };
 
@@ -35,19 +35,28 @@ function getErrorMessage(error: any, fallback: string) {
   return error?.response?.data?.message || error?.message || fallback;
 }
 
+const STATUS_FILTER_OPTIONS = [
+  { label: "全部人员", value: "全部" },
+  { label: "午餐启用中", value: "LUNCH_ACTIVE" },
+  { label: "午餐已停用", value: "LUNCH_DISABLED" },
+  { label: "晚餐启用中", value: "DINNER_ACTIVE" },
+  { label: "晚餐已停用", value: "DINNER_DISABLED" }
+];
+
 export function DispatchRidersPage() {
   const nameInputRef = useRef<HTMLInputElement | null>(null);
-  const [riders, setRiders] = useState<DispatchManagedRiderResponse[]>([]);
-  const [bindings, setBindings] = useState<DispatchAreaBindingResponse[]>([]);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("全部");
-  const [mealPeriod, setMealPeriod] = useState<DispatchMealPeriod>("LUNCH");
+  const [lunchRiders, setLunchRiders] = useState<DispatchManagedRiderResponse[]>([]);
+  const [dinnerRiders, setDinnerRiders] = useState<DispatchManagedRiderResponse[]>([]);
+  const [lunchBindings, setLunchBindings] = useState<DispatchAreaBindingResponse[]>([]);
+  const [dinnerBindings, setDinnerBindings] = useState<DispatchAreaBindingResponse[]>([]);
+  const [search, setSearch] = usePersistedState<string>(PAGE_MEMORY_KEYS.dispatchRidersSearch, "");
+  const [statusFilter, setStatusFilter] = usePersistedState<string>(PAGE_MEMORY_KEYS.dispatchRidersStatus, "全部");
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editRiderId, setEditRiderId] = useState<number | null>(null);
+  const [editRider, setEditRider] = useState<MergedRider | null>(null);
   const [draft, setDraft] = useState<NewRiderDraft>(createEmptyNewRiderDraft());
   const [saving, setSaving] = useState(false);
-  const [togglingId, setTogglingId] = useState<number | null>(null);
-  const [deleteConfirmRider, setDeleteConfirmRider] = useState<DispatchManagedRiderResponse | null>(null);
+  const [togglingKey, setTogglingKey] = useState<string | null>(null);
+  const [deleteConfirmRider, setDeleteConfirmRider] = useState<MergedRider | null>(null);
   const [deleting, setDeleting] = useState(false);
   const fieldErrors = validateCreateRiderDraft(draft);
   const canSubmit = !fieldErrors.riderName && !fieldErrors.phone;
@@ -57,11 +66,7 @@ export function DispatchRidersPage() {
   }, []);
 
   useEffect(() => {
-    reload().catch((err) => toast(getErrorMessage(err, "加载骑手列表失败"), "error"));
-  }, [mealPeriod]);
-
-  useEffect(() => {
-    if (!showAddModal || !editRiderId) {
+    if (!showAddModal || !editRider) {
       return;
     }
     const frameId = window.requestAnimationFrame(() => {
@@ -69,74 +74,129 @@ export function DispatchRidersPage() {
       nameInputRef.current?.select();
     });
     return () => window.cancelAnimationFrame(frameId);
-  }, [showAddModal, editRiderId]);
+  }, [showAddModal, editRider]);
 
-  const riderAreas = useMemo(() => {
-    const map = new Map<number, string[]>();
-    bindings.forEach((b) => {
-      if (b.defaultRiderId !== null && !map.has(b.defaultRiderId)) {
-        map.set(b.defaultRiderId, []);
-      }
-      if (b.defaultRiderId !== null) {
-        map.get(b.defaultRiderId)!.push(b.areaCode);
-      }
-    });
-    return map;
-  }, [bindings]);
+  // 合并午餐/晚餐骑手为人员维度列表
+  const mergedRiders = useMemo(
+    () => mergeRidersByMealPeriod(lunchRiders, dinnerRiders),
+    [lunchRiders, dinnerRiders]
+  );
 
-  const areaOptions = useMemo(
+  const lunchAreaOptions = useMemo(
     () => [
       { label: "暂不指定区域", value: "" },
-      ...bindings.map((b) => ({ label: b.areaCode, value: b.areaCode }))
+      ...lunchBindings.map((b) => ({ label: b.areaCode, value: b.areaCode }))
     ],
-    [bindings]
+    [lunchBindings]
+  );
+
+  const dinnerAreaOptions = useMemo(
+    () => [
+      { label: "暂不指定区域", value: "" },
+      ...dinnerBindings.map((b) => ({ label: b.areaCode, value: b.areaCode }))
+    ],
+    [dinnerBindings]
   );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return riders.filter((r) => {
-      if (statusFilter !== "全部" && r.authStatus !== statusFilter) return false;
-      if (q && !r.riderName.toLowerCase().includes(q) && !(r.phone || "").includes(q)) return false;
-      return true;
+    return mergedRiders.filter((m) => {
+      if (q && !m.riderName.toLowerCase().includes(q) && !(m.phone || "").includes(q)) return false;
+      switch (statusFilter) {
+        case "LUNCH_ACTIVE":
+          return m.lunch?.authStatus === "ACTIVE";
+        case "LUNCH_DISABLED":
+          return m.lunch != null && m.lunch.authStatus !== "ACTIVE";
+        case "DINNER_ACTIVE":
+          return m.dinner?.authStatus === "ACTIVE";
+        case "DINNER_DISABLED":
+          return m.dinner != null && m.dinner.authStatus !== "ACTIVE";
+        default:
+          return true;
+      }
     });
-  }, [riders, search, statusFilter]);
+  }, [mergedRiders, search, statusFilter]);
 
   const riderStats = useMemo(() => {
-    const activeCount = riders.filter((rider) => rider.authStatus === "ACTIVE").length;
-    const disabledCount = riders.filter((rider) => rider.authStatus === "DISABLED").length;
-    const totalTasks = riders.reduce((sum, rider) => sum + rider.todayTaskCount, 0);
+    const lunchActive = mergedRiders.filter((m) => m.lunch?.authStatus === "ACTIVE").length;
+    const dinnerActive = mergedRiders.filter((m) => m.dinner?.authStatus === "ACTIVE").length;
+    const totalTasks = mergedRiders.reduce(
+      (sum, m) => sum + (m.lunch?.todayTaskCount ?? 0) + (m.dinner?.todayTaskCount ?? 0),
+      0
+    );
     return {
-      totalCount: riders.length,
-      activeCount,
-      disabledCount,
+      totalCount: mergedRiders.length,
+      lunchActive,
+      dinnerActive,
       totalTasks
     };
-  }, [riders]);
+  }, [mergedRiders]);
 
   async function reload() {
-    const [r, b] = await Promise.all([
-      fetchDispatchManagedRiders({ mealPeriod }),
-      fetchDispatchAreaBindings(mealPeriod)
+    const [lunchR, dinnerR, lunchB, dinnerB] = await Promise.all([
+      fetchDispatchManagedRiders({ mealPeriod: "LUNCH" }),
+      fetchDispatchManagedRiders({ mealPeriod: "DINNER" }),
+      fetchDispatchAreaBindings("LUNCH"),
+      fetchDispatchAreaBindings("DINNER")
     ]);
-    setRiders(r);
-    setBindings(b);
+    setLunchRiders(lunchR);
+    setDinnerRiders(dinnerR);
+    setLunchBindings(lunchB);
+    setDinnerBindings(dinnerB);
   }
 
   function openAdd() {
     setDraft(createEmptyNewRiderDraft());
-    setEditRiderId(null);
+    setEditRider(null);
     setShowAddModal(true);
   }
 
-  function openEdit(rider: DispatchManagedRiderResponse) {
+  function openEdit(rider: MergedRider) {
     setDraft({
-      mealPeriod: rider.mealPeriod || "LUNCH",
       riderName: rider.riderName,
       phone: rider.phone || "",
-      areaCode: rider.areaCode || ""
+      lunchEnabled: rider.lunch?.authStatus === "ACTIVE",
+      lunchAreaCode: rider.lunch?.areaCode || "",
+      dinnerEnabled: rider.dinner?.authStatus === "ACTIVE",
+      dinnerAreaCode: rider.dinner?.areaCode || ""
     });
-    setEditRiderId(rider.riderId);
+    setEditRider(rider);
     setShowAddModal(true);
+  }
+
+  async function saveMeal(
+    meal: DispatchMealPeriod,
+    existing: DispatchManagedRiderResponse | null,
+    enabled: boolean,
+    areaCode: string,
+    riderName: string,
+    phone: string
+  ) {
+    const base = {
+      mealPeriod: meal,
+      riderName,
+      displayName: riderName,
+      phone,
+      areaCode: areaCode.trim()
+    };
+    if (existing) {
+      // 已建档：先同步基础信息，再按需启用/停用
+      await updateDispatchRiderProfile(existing.riderId, base);
+      if (enabled && existing.authStatus !== "ACTIVE") {
+        await activateDispatchRider(existing.riderId, { riderName, areaCode: areaCode.trim() });
+      } else if (!enabled && existing.authStatus === "ACTIVE") {
+        await disableDispatchRider(existing.riderId);
+      }
+    } else if (enabled) {
+      await createDispatchRider({
+        mealPeriod: meal,
+        riderName,
+        displayName: riderName,
+        phone,
+        areaCode: areaCode.trim() || undefined,
+        employmentStatus: "ACTIVE"
+      });
+    }
   }
 
   async function handleSave() {
@@ -146,52 +206,72 @@ export function DispatchRidersPage() {
     }
     setSaving(true);
     try {
-      if (editRiderId) {
-        const payload = {
-          mealPeriod: draft.mealPeriod,
-          riderName: draft.riderName.trim(),
-          displayName: draft.riderName.trim(),
-          phone: draft.phone.trim(),
-          areaCode: draft.areaCode.trim()
-        };
-        await updateDispatchRiderProfile(editRiderId, payload);
-        setShowAddModal(false);
-        await reload();
+      const riderName = draft.riderName.trim();
+      const phone = draft.phone.trim();
+      if (editRider) {
+        await saveMeal("LUNCH", editRider.lunch, draft.lunchEnabled, draft.lunchAreaCode, riderName, phone);
+        await saveMeal("DINNER", editRider.dinner, draft.dinnerEnabled, draft.dinnerAreaCode, riderName, phone);
       } else {
-        await createDispatchRider(buildCreateRiderPayload(draft));
-        setShowAddModal(false);
-        await reload();
+        if (draft.lunchEnabled) {
+          await createDispatchRider({
+            mealPeriod: "LUNCH",
+            riderName,
+            displayName: riderName,
+            phone,
+            areaCode: draft.lunchAreaCode.trim() || undefined,
+            employmentStatus: "ACTIVE"
+          });
+        }
+        if (draft.dinnerEnabled) {
+          await createDispatchRider({
+            mealPeriod: "DINNER",
+            riderName,
+            displayName: riderName,
+            phone,
+            areaCode: draft.dinnerAreaCode.trim() || undefined,
+            employmentStatus: "ACTIVE"
+          });
+        }
       }
-      toast(editRiderId ? "骑手信息已更新" : "骑手已创建");
+      setShowAddModal(false);
+      await reload();
+      toast(editRider ? "骑手信息已更新" : "骑手已创建");
     } catch (err: any) {
-      toast(getErrorMessage(err, editRiderId ? "保存骑手失败" : "创建骑手失败"), "error");
+      toast(getErrorMessage(err, editRider ? "保存骑手失败" : "创建骑手失败"), "error");
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleToggle(rider: DispatchManagedRiderResponse) {
-    setTogglingId(rider.riderId);
+  async function handleToggleMeal(rider: MergedRider, meal: DispatchMealPeriod) {
+    const target = meal === "LUNCH" ? rider.lunch : rider.dinner;
+    if (!target) return;
+    const key = `${meal}:${rider.riderName}`;
+    setTogglingKey(key);
     try {
-      if (rider.authStatus === "ACTIVE") {
-        await disableDispatchRider(rider.riderId);
+      if (target.authStatus === "ACTIVE") {
+        await disableDispatchRider(target.riderId);
       } else {
-        await activateDispatchRider(rider.riderId, {
-          riderName: rider.riderName,
-          areaCode: rider.areaCode || ""
+        await activateDispatchRider(target.riderId, {
+          riderName: target.riderName,
+          areaCode: target.areaCode || ""
         });
       }
       await reload();
+    } catch (err: any) {
+      toast(getErrorMessage(err, "操作失败"), "error");
     } finally {
-      setTogglingId(null);
+      setTogglingKey(null);
     }
   }
 
   async function handleDelete() {
     if (!deleteConfirmRider) return;
+    const target = deleteConfirmRider.lunch ?? deleteConfirmRider.dinner;
+    if (!target) return;
     setDeleting(true);
     try {
-      await deleteDispatchRider(deleteConfirmRider.riderId);
+      await deleteDispatchRider(target.riderId);
       setDeleteConfirmRider(null);
       await reload();
       toast("骑手已删除");
@@ -202,23 +282,52 @@ export function DispatchRidersPage() {
     }
   }
 
+  function renderMealCell(rider: MergedRider, meal: DispatchMealPeriod) {
+    const record = meal === "LUNCH" ? rider.lunch : rider.dinner;
+    const key = `${meal}:${rider.riderName}`;
+    const busy = togglingKey === key;
+    if (!record) {
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
+          <span className="tag tag-gray" style={{ fontSize: 11 }}>未建档</span>
+        </div>
+      );
+    }
+    const active = record.authStatus === "ACTIVE";
+    return (
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
+        <span className={`tag ${riderStatusTagClass(record.authStatus)}`} style={{ fontSize: 11 }}>
+          {riderStatusLabel(record.authStatus)}
+        </span>
+        <button
+          className={`btn btn-compact ${active ? "btn btn-outline" : "btn btn-primary"}`}
+          disabled={busy}
+          onClick={() => handleToggleMeal(rider, meal)}
+          style={{ fontSize: 12, padding: "3px 10px" }}
+        >
+          {busy ? "处理中..." : active ? "停用" : "启用"}
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="admin-stack">
       <div className="stat-row">
         <div className="stat-card">
           <div className="stat-title">骑手总数</div>
           <div className="stat-val">{riderStats.totalCount}<span>人</span></div>
-          <div className="stat-footer">当前已创建账号</div>
+          <div className="stat-footer">统一人员档案</div>
         </div>
         <div className="stat-card">
-          <div className="stat-title">启用中</div>
-          <div className="stat-val">{riderStats.activeCount}<span>人</span></div>
-          <div className="stat-footer">可接单骑手</div>
+          <div className="stat-title">午餐启用</div>
+          <div className="stat-val">{riderStats.lunchActive}<span>人</span></div>
+          <div className="stat-footer">午餐可接单骑手</div>
         </div>
         <div className="stat-card">
-          <div className="stat-title">已停用</div>
-          <div className="stat-val">{riderStats.disabledCount}<span>人</span></div>
-          <div className="stat-footer">已暂停派单</div>
+          <div className="stat-title">晚餐启用</div>
+          <div className="stat-val">{riderStats.dinnerActive}<span>人</span></div>
+          <div className="stat-footer">晚餐可接单骑手</div>
         </div>
         <div className="stat-card">
           <div className="stat-title">今日任务量</div>
@@ -229,17 +338,6 @@ export function DispatchRidersPage() {
 
       <div className="toolbar">
         <div className="dispatch-toolbar">
-          <div className="dispatch-toolbar__segment">
-            {MEAL_PERIOD_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                className={`segment-btn${mealPeriod === opt.value ? " segment-btn--active" : ""}`}
-                onClick={() => setMealPeriod(opt.value)}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
           <div className="dispatch-toolbar__search">
             <SafeInput
               wrapperClassName="dispatch-toolbar__search-wrapper"
@@ -252,13 +350,9 @@ export function DispatchRidersPage() {
           <div className="dispatch-toolbar__actions">
             <AppSelect
               value={statusFilter}
-              options={[
-                { label: "全部状态", value: "全部" },
-                { label: "启用中", value: "ACTIVE" },
-                { label: "已停用", value: "DISABLED" }
-              ]}
+              options={STATUS_FILTER_OPTIONS}
               onChange={(v) => setStatusFilter(v)}
-              style={{ ...selectStyle, width: "140px" }}
+              style={{ ...selectStyle, width: "160px" }}
             />
             <button className="btn btn-primary" onClick={openAdd}>
               <PlusCircle size={16} /> 新增骑手
@@ -274,49 +368,46 @@ export function DispatchRidersPage() {
           <div className="dispatch-table-toolbar">
             <div>
               <div className="dispatch-section__title">骑手列表</div>
-              <div className="dispatch-section__note">增删改入口统一收在弹窗里，列表只负责查看状态和快速启停。</div>
+              <div className="dispatch-section__note">
+                同一骑手统一为一条人员档案，午餐、晚餐的启用状态与负责区域分别维护。
+              </div>
             </div>
             <span className="dispatch-table-toolbar__count">共 {filtered.length} 条结果</span>
           </div>
           <div className="table-responsive table-responsive--fixed-height" style={{ overflowX: "auto" }}>
-            <table style={{ minWidth: "900px", width: "100%" }}>
+            <table style={{ minWidth: "1000px", width: "100%" }}>
               <thead>
                 <tr>
                   <th style={{ width: "120px" }}>姓名</th>
                   <th style={{ width: "140px" }}>手机号</th>
-                  <th style={{ width: "100px" }}>状态</th>
-                  <th style={{ minWidth: "160px" }}>负责区域</th>
+                  <th style={{ width: "140px" }}>午餐</th>
+                  <th style={{ width: "140px" }}>晚餐</th>
                   <th style={{ width: "120px" }}>今日任务</th>
                   <th style={{ width: "180px" }}>最近登录</th>
-                  <th style={{ width: "200px" }}>操作</th>
+                  <th style={{ width: "160px" }}>操作</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((r) => {
-                  const areas = riderAreas.get(r.riderId) || [];
+                {filtered.map((m) => {
+                  const totalDelivered = (m.lunch?.todayDeliveredCount ?? 0) + (m.dinner?.todayDeliveredCount ?? 0);
+                  const totalTask = (m.lunch?.todayTaskCount ?? 0) + (m.dinner?.todayTaskCount ?? 0);
+                  const lastLogin = m.lunch?.lastLoginAt || m.dinner?.lastLoginAt || m.lunch?.firstLoginAt || m.dinner?.firstLoginAt || "--";
                   return (
-                    <tr key={r.riderId}>
-                      <td><strong>{r.riderName}</strong></td>
-                      <td>{r.phone || "--"}</td>
-                      <td><span className={`tag ${riderStatusTagClass(r.authStatus)}`}>{riderStatusLabel(r.authStatus)}</span></td>
-                      <td>{areas.length > 0 ? areas.join(" / ") : "--"}</td>
-                      <td>{r.todayDeliveredCount} / {r.todayTaskCount}</td>
-                      <td>{r.lastLoginAt || r.firstLoginAt || "--"}</td>
+                    <tr key={m.riderName}>
+                      <td><strong>{m.riderName}</strong></td>
+                      <td>{m.phone || "--"}</td>
+                      <td>{renderMealCell(m, "LUNCH")}</td>
+                      <td>{renderMealCell(m, "DINNER")}</td>
+                      <td>{totalDelivered} / {totalTask}</td>
+                      <td>{lastLogin}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <div style={{ display: "flex", gap: "6px", flexWrap: "nowrap" }}>
-                          <button className="btn btn-outline btn-compact" onClick={() => openEdit(r)}>
+                          <button className="btn btn-outline btn-compact" onClick={() => openEdit(m)}>
                             <UserCog size={14} /> 编辑
                           </button>
                           <button
-                            className={`btn btn-compact ${r.authStatus === "ACTIVE" ? "btn btn-outline" : "btn btn-primary"}`}
-                            disabled={togglingId === r.riderId}
-                            onClick={() => handleToggle(r)}
-                          >
-                            {r.authStatus === "ACTIVE" ? "停用" : "启用"}
-                          </button>
-                          <button
                             className="btn-delete btn-compact"
-                            onClick={() => setDeleteConfirmRider(r)}
+                            onClick={() => setDeleteConfirmRider(m)}
                           >
                             <Trash2 size={14} /> 删除
                           </button>
@@ -333,61 +424,87 @@ export function DispatchRidersPage() {
 
       <AdminDialog
         open={showAddModal}
-        title={editRiderId ? "编辑骑手" : "新增骑手"}
-        description={editRiderId ? "修改骑手姓名、登录手机号或负责区域。" : "后台新增骑手后，骑手即可使用对应手机号完成登录绑定。"}
+        title={editRider ? "编辑骑手" : "新增骑手"}
+        description={editRider ? "修改骑手基础信息，并分别维护午餐/晚餐的启用状态与负责区域。" : "一次建档，自动可用于午餐和晚餐；如某餐不使用可取消勾选。"}
         width={640}
         onClose={saving ? () => undefined : () => setShowAddModal(false)}
         footer={
           <>
             <button className="btn btn-outline" disabled={saving} onClick={() => setShowAddModal(false)}>取消</button>
             <button className="btn btn-primary" disabled={saving || !canSubmit} onClick={handleSave}>
-              {saving ? "保存中..." : editRiderId ? "保存修改" : "创建骑手"}
+              {saving ? "保存中..." : editRider ? "保存修改" : "创建骑手"}
             </button>
           </>
         }
       >
         <label className="admin-field">
-            <span className="admin-field-label">姓名</span>
-            <SafeInput
-              ref={nameInputRef}
-              wrapperClassName={fieldErrors.riderName ? "admin-input--error" : ""}
-              value={draft.riderName}
-              onValueChange={(value) => setDraft((d) => ({ ...d, riderName: value }))}
-              placeholder="骑手全名"
-            />
-            {fieldErrors.riderName && <div className="form-error">{fieldErrors.riderName}</div>}
-          </label>
-
-          <label className="admin-field">
-            <span className="admin-field-label">手机号</span>
-            <SafeInput
-              wrapperClassName={fieldErrors.phone ? "admin-input--error" : ""}
-              value={draft.phone}
-              onValueChange={(value) => setDraft((d) => ({ ...d, phone: value }))}
-              placeholder="后台建档后供骑手登录绑定"
-            />
-            {fieldErrors.phone && <div className="form-error">{fieldErrors.phone}</div>}
-          </label>
-
-          <label className="admin-field">
-            <span className="admin-field-label">餐段</span>
-            <AppSelect
-              value={draft.mealPeriod}
-              options={MEAL_PERIOD_OPTIONS}
-              onChange={(value) => setDraft((d) => ({ ...d, mealPeriod: value as DispatchMealPeriod }))}
-              style={selectStyle}
-            />
-          </label>
+          <span className="admin-field-label">姓名</span>
+          <SafeInput
+            ref={nameInputRef}
+            wrapperClassName={fieldErrors.riderName ? "admin-input--error" : ""}
+            value={draft.riderName}
+            onValueChange={(value) => setDraft((d) => ({ ...d, riderName: value }))}
+            placeholder="骑手全名"
+          />
+          {fieldErrors.riderName && <div className="form-error">{fieldErrors.riderName}</div>}
+        </label>
 
         <label className="admin-field">
-          <span className="admin-field-label">负责区域</span>
-          <AppSelect
-            value={draft.areaCode}
-            options={areaOptions}
-            onChange={(value) => setDraft((d) => ({ ...d, areaCode: value }))}
-            style={selectStyle}
+          <span className="admin-field-label">手机号</span>
+          <SafeInput
+            wrapperClassName={fieldErrors.phone ? "admin-input--error" : ""}
+            value={draft.phone}
+            onValueChange={(value) => setDraft((d) => ({ ...d, phone: value }))}
+            placeholder="后台建档后供骑手登录绑定"
           />
+          {fieldErrors.phone && <div className="form-error">{fieldErrors.phone}</div>}
         </label>
+
+        <div style={{ display: "grid", gap: "12px", marginTop: 4 }}>
+          <div style={{ border: "1px solid #e3e6ee", borderRadius: 8, padding: "10px 12px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <strong>午餐</strong>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13 }}>
+                <input
+                  type="checkbox"
+                  checked={draft.lunchEnabled}
+                  onChange={(e) => setDraft((d) => ({ ...d, lunchEnabled: e.target.checked }))}
+                />
+                启用
+              </label>
+            </div>
+            <AppSelect
+              value={draft.lunchAreaCode}
+              options={lunchAreaOptions}
+              placeholder="午餐负责区域"
+              disabled={!draft.lunchEnabled}
+              onChange={(value) => setDraft((d) => ({ ...d, lunchAreaCode: value }))}
+              style={selectStyle}
+            />
+          </div>
+
+          <div style={{ border: "1px solid #e3e6ee", borderRadius: 8, padding: "10px 12px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <strong>晚餐</strong>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13 }}>
+                <input
+                  type="checkbox"
+                  checked={draft.dinnerEnabled}
+                  onChange={(e) => setDraft((d) => ({ ...d, dinnerEnabled: e.target.checked }))}
+                />
+                启用
+              </label>
+            </div>
+            <AppSelect
+              value={draft.dinnerAreaCode}
+              options={dinnerAreaOptions}
+              placeholder="晚餐负责区域"
+              disabled={!draft.dinnerEnabled}
+              onChange={(value) => setDraft((d) => ({ ...d, dinnerAreaCode: value }))}
+              style={selectStyle}
+            />
+          </div>
+        </div>
       </AdminDialog>
 
       <AdminDialog
@@ -411,7 +528,7 @@ export function DispatchRidersPage() {
         }
       >
         <div style={{ padding: "12px 0", color: "var(--text-sub)" }}>
-          删除后，该骑手的所有信息将被永久移除，包括：
+          删除后，该骑手（含午餐、晚餐档案）的所有信息将被永久移除，包括：
           <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
             <li>账号信息</li>
             <li>区域绑定</li>

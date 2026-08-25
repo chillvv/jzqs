@@ -128,30 +128,33 @@ class DispatchQueryModule {
         String finalMealPeriod = normalizedMealPeriod(mealPeriod);
 
         dispatchAssignmentModule.ensureRememberedAssignments(mealPeriod);
+        // 未分配区域：尚未写入 dispatch_assignments 的晚餐订单（排除已取消/退款）。
+        // 注意：不能用 mso.status='PENDING_DISPATCH' 判断，因为区域分配后 mso 可能仍保持 PENDING_DISPATCH；
+        // 也不能用 rider_address_bindings 排除，否则已绑定骑手但待分配的订单会被两边都漏掉。
         int pendingCount = queryCount(
             """
                 SELECT COALESCE(SUM(mso.quantity), 0)
                 FROM meal_slot_orders mso
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
                 LEFT JOIN dispatch_assignments da ON da.meal_slot_order_id = mso.id
-                LEFT JOIN rider_address_bindings rab ON rab.customer_id = doo.customer_id AND rab.address_id = mso.address_id AND rab.rider_profile_id IS NOT NULL
-                WHERE mso.status = 'PENDING_DISPATCH'
+                WHERE mso.status NOT IN ('CANCELLED', 'REFUNDED')
                   AND doo.serve_date = ?
                   AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
                   AND da.id IS NULL
-                  AND rab.id IS NULL
                 """,
             targetDate,
             finalMealPeriod,
             finalMealPeriod
         );
+        // 已分配区域：已写入 dispatch_assignments 的晚餐订单（含 AREA_ASSIGNED 与 DISPATCHING），
+        // 与未分配区域互补，保证 未分配 + 已分配 = 订单中心总份数。
         int dispatchingCount = queryCount(
             """
                 SELECT COALESCE(SUM(mso.quantity), 0)
                 FROM dispatch_assignments da
                 JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
-                WHERE da.status = 'DISPATCHING'
+                WHERE mso.status NOT IN ('CANCELLED', 'REFUNDED')
                   AND doo.serve_date = ?
                   AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
                 """,

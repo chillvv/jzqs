@@ -90,7 +90,7 @@ const homeLoaders = {
 
 const areasLoaders = {
   bindings: ({ mealPeriod, serveDate }: DispatchScope) => fetchDispatchAreaBindings(mealPeriod, serveDate),
-  riders: () => fetchDispatchManagedRiders()
+  riders: ({ mealPeriod }: DispatchScope) => fetchDispatchManagedRiders({ mealPeriod })
 };
 
 const progressLoaders = {

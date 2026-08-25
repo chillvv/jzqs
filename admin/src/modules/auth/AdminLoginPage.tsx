@@ -10,6 +10,7 @@ import {
   buildAdminAuthSession,
   buildInitialAdminLoginForm,
   buildSavedAdminCredentials,
+  clearPageMemories,
   parseAdminAuthSession,
   parseSavedAdminCredentials
 } from "./adminAuth.helpers";
@@ -46,6 +47,8 @@ export function AdminLoginPage() {
     try {
       const response = await adminLogin(form.phone.trim(), form.password);
       const session = buildAdminAuthSession(response);
+      // 重新登录浏览器：清空所有页面的筛选记忆，回到默认筛选状态。
+      clearPageMemories();
       window.localStorage.setItem(ADMIN_AUTH_STORAGE_KEY, JSON.stringify(session));
       const savedCredentials = buildSavedAdminCredentials(form);
       if (savedCredentials) {

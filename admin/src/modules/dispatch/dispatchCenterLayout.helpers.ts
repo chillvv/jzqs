@@ -11,10 +11,20 @@ import type {
 type DispatchOverviewLike = Partial<DispatchOverviewResponse>;
 
 export type NewRiderDraft = {
-  mealPeriod: DispatchMealPeriod;
   riderName: string;
   phone: string;
-  areaCode: string;
+  lunchEnabled: boolean;
+  lunchAreaCode: string;
+  dinnerEnabled: boolean;
+  dinnerAreaCode: string;
+};
+
+/** 人员维度的骑手：同一骑手在午餐/晚餐可能各有一条档案记录，状态、归属区域彼此独立 */
+export type MergedRider = {
+  riderName: string;
+  phone: string;
+  lunch: DispatchManagedRiderResponse | null;
+  dinner: DispatchManagedRiderResponse | null;
 };
 
 export const DEFAULT_OPERATOR = "管理员";
@@ -31,11 +41,45 @@ type DispatchAreaBindingLike = Omit<DispatchAreaBindingResponse, "orders"> & {
 
 export function createEmptyNewRiderDraft(): NewRiderDraft {
   return {
-    mealPeriod: "LUNCH",
     riderName: "",
     phone: "",
-    areaCode: ""
+    lunchEnabled: true,
+    lunchAreaCode: "",
+    dinnerEnabled: true,
+    dinnerAreaCode: ""
   };
+}
+
+/** 将午餐、晚餐两批骑手档案按 riderName 合并为"人员"列表，一人一行 */
+export function mergeRidersByMealPeriod(
+  lunchRiders: DispatchManagedRiderResponse[],
+  dinnerRiders: DispatchManagedRiderResponse[]
+): MergedRider[] {
+  const map = new Map<string, MergedRider>();
+  const push = (rider: DispatchManagedRiderResponse) => {
+    const key = rider.riderName;
+    const existing = map.get(key);
+    if (existing) {
+      if (rider.mealPeriod === "LUNCH") {
+        existing.lunch = rider;
+      } else {
+        existing.dinner = rider;
+      }
+      if (!existing.phone && rider.phone) {
+        existing.phone = rider.phone;
+      }
+    } else {
+      map.set(key, {
+        riderName: key,
+        phone: rider.phone || "",
+        lunch: rider.mealPeriod === "LUNCH" ? rider : null,
+        dinner: rider.mealPeriod === "DINNER" ? rider : null
+      });
+    }
+  };
+  lunchRiders.forEach(push);
+  dinnerRiders.forEach(push);
+  return Array.from(map.values());
 }
 
 export function buildDispatchWorkspaceNav() {
@@ -235,13 +279,15 @@ export function validateAreaName(value: string) {
   return "";
 }
 
-export function buildCreateRiderPayload(draft: NewRiderDraft) {
+export function buildCreateRiderPayload(draft: NewRiderDraft, mealPeriod: DispatchMealPeriod) {
+  const enabled = mealPeriod === "LUNCH" ? draft.lunchEnabled : draft.dinnerEnabled;
+  const areaCode = mealPeriod === "LUNCH" ? draft.lunchAreaCode : draft.dinnerAreaCode;
   return {
-    mealPeriod: draft.mealPeriod,
+    mealPeriod,
     riderName: draft.riderName.trim(),
     displayName: draft.riderName.trim(),
     phone: draft.phone.trim(),
-    areaCode: draft.areaCode.trim() || undefined,
-    employmentStatus: "ACTIVE"
+    areaCode: enabled ? (areaCode.trim() || undefined) : undefined,
+    employmentStatus: enabled ? "ACTIVE" : "DISABLED"
   };
 }

@@ -100,7 +100,8 @@ export function DispatchReleasePage() {
 
   const filteredItems = useMemo(() => items.filter((item) => item.mealPeriod === mealPeriod), [items, mealPeriod]);
 
-  // 当前是否已过本餐期释放时间：未到点时无需手动操作，仅展示"等待自动释放"提示，避免商家误会
+  // 当前是否已过本餐期释放时间：未到点时商家可"立即释放"提前放出；
+  // 到点后系统会自动释放，无需手动操作，此时不再显示按钮。
   const releasePassed = useMemo(() => {
     try {
       const [h, m] = currentReleaseTime.split(":").map((v) => parseInt(v, 10));
@@ -113,7 +114,7 @@ export function DispatchReleasePage() {
   }, [currentReleaseTime]);
 
   function renderOrderCard(item: DeliveryReleasePendingItem) {
-    const showReleaseButton = releasePassed;
+    const showReleaseButton = !releasePassed;
     return (
       <div
         key={item.orderId}
@@ -147,7 +148,7 @@ export function DispatchReleasePage() {
             </button>
           ) : (
             <span className="tag tag-gray" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
-              等待 {currentReleaseTime} 自动释放
+              已过 {currentReleaseTime}，已自动释放
             </span>
           )}
         </div>
@@ -163,7 +164,7 @@ export function DispatchReleasePage() {
             <div className="dispatch-section__title">待释放送达</div>
             <div className="dispatch-section__note">
               骑手已送达、但未到释放时间的订单会显示在这里。释放时间取自「系统设置 - 餐包提醒」，可修改。
-              到点后订单会自动对用户可见并发送提醒；遇特殊情况可对个别订单"立即释放"。
+              在释放时间之前，遇特殊情况可对个别订单"立即释放"提前放出；到点后订单会自动对用户可见并发送提醒，无需手动操作。
             </div>
           </div>
           <div className="dispatch-toolbar__actions">

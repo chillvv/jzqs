@@ -110,7 +110,7 @@ export function buildDashboardHeroMetrics(data: DashboardOverviewResponse): Dash
       value: data.deliveredOrdersToday,
       unit: "份",
       tone: "emerald",
-      detail: "按当日回执统计",
+      detail: "今日出餐且已送达",
       scope: "today",
       path: "/orders"
     },

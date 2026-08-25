@@ -77,6 +77,7 @@ import { DatePicker } from "../../shared/components/DatePicker";
 import { toast } from "../../shared/components/Toast";
 import { formatLocalDateInputValue } from "../../shared/utils/dateTime";
 import { useServeDate } from "../../shared/hooks/useServeDate";
+import { usePersistedState, PAGE_MEMORY_KEYS } from "../../shared/hooks/usePersistedState";
 import { SubscriptionManagementTab, type SubscriptionManagementFilters, type SubscriptionMealPeriod, type SubscriptionStatusFilter } from "./SubscriptionManagementTab";
 
 function defaultFilterDate() {
@@ -85,7 +86,6 @@ function defaultFilterDate() {
 
 const DEFAULT_FILTER_DATE = defaultFilterDate();
 const PAGE_SIZE = 10;
-const ORDER_PREP_MEAL_PERIOD_STORAGE_KEY = "admin-order-prep-meal-period";
 const MAX_RECEIPT_FILE_SIZE = 5 * 1024 * 1024;
 const RECEIPT_UPLOAD_INPUT_ID = "admin-receipt-upload-input";
 
@@ -110,14 +110,6 @@ function getReceiptUploadErrorMessage(error: any) {
     return "图片太大，请上传 5MB 以内的图片";
   }
   return error?.response?.data?.message || error?.message || "上传回执图片失败";
-}
-
-function resolveStoredOrderMealPeriod() {
-  if (typeof window === "undefined") {
-    return "LUNCH" as OrderPrepMealPeriodFilter;
-  }
-  const storedValue = window.localStorage.getItem(ORDER_PREP_MEAL_PERIOD_STORAGE_KEY);
-  return storedValue === "DINNER" ? "DINNER" : "LUNCH";
 }
 
 export function OrderPrepPage() {
@@ -149,15 +141,18 @@ export function OrderPrepPage() {
   const [isPreviewCheckOpen, setIsPreviewCheckOpen] = useState(false);
 
   // Pagination & Filter state
-  const [currentPage, setCurrentPage] = useState(1);
-  const [activeTab, setActiveTab] = useState<OrderPrepTab>("ORDERS");
+  const [currentPage, setCurrentPage] = usePersistedState<number>(PAGE_MEMORY_KEYS.orderCurrentPage, 1);
+  const [activeTab, setActiveTab] = usePersistedState<OrderPrepTab>(PAGE_MEMORY_KEYS.orderActiveTab, "ORDERS");
   const [hasManualTabSelection, setHasManualTabSelection] = useState(false);
   const [filterDate, setFilterDate] = useServeDate();
-  const [mealPeriodFilter, setMealPeriodFilter] = useState<OrderPrepMealPeriodFilter>(() => resolveStoredOrderMealPeriod());
-  const [sourceFilter, setSourceFilter] = useState<OrderPrepSourceFilter>("ALL");
-  const [statusFilter, setStatusFilter] = useState<OrderPrepStatusFilter>("ALL");
-  const [remarkFilter, setRemarkFilter] = useState<OrderPrepRemarkFilter>("ALL");
-  const [keywordFilter, setKeywordFilter] = useState("");
+  const [mealPeriodFilter, setMealPeriodFilter] = usePersistedState<OrderPrepMealPeriodFilter>(
+    PAGE_MEMORY_KEYS.orderMealPeriod,
+    "LUNCH"
+  );
+  const [sourceFilter, setSourceFilter] = usePersistedState<OrderPrepSourceFilter>(PAGE_MEMORY_KEYS.orderSourceFilter, "ALL");
+  const [statusFilter, setStatusFilter] = usePersistedState<OrderPrepStatusFilter>(PAGE_MEMORY_KEYS.orderStatusFilter, "ALL");
+  const [remarkFilter, setRemarkFilter] = usePersistedState<OrderPrepRemarkFilter>(PAGE_MEMORY_KEYS.orderRemarkFilter, "ALL");
+  const [keywordFilter, setKeywordFilter] = usePersistedState<string>(PAGE_MEMORY_KEYS.orderKeyword, "");
   const [subscriptionFilters, setSubscriptionFilters] = useState<SubscriptionManagementFilters>({
     keyword: "",
     statusFilter: "ALL",
@@ -435,12 +430,6 @@ export function OrderPrepPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [items, keywordFilter, mealPeriodFilter, sourceFilter, statusFilter, remarkFilter]);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(ORDER_PREP_MEAL_PERIOD_STORAGE_KEY, mealPeriodFilter);
-    }
-  }, [mealPeriodFilter]);
 
   useEffect(() => {
     setActiveTab((currentTab) => {

@@ -49,12 +49,14 @@ public class DashboardServiceImpl implements DashboardService {
             "SELECT COUNT(*) FROM aftersale_cases WHERE CAST(created_at AS DATE) = ?",
             businessDate
         );
-        int cancellationsToday = quantityByCreatedDateAndStatus(businessDate, "CANCELLED");
-        int totalOrdersToday = quantityByCreatedDateAndStatus(businessDate, null);
-        int pendingOrdersToday = quantityByCreatedDateAndStatuses(businessDate, List.of("PENDING_CONFIRMATION", "CONFIRMED"));
-        int pendingDispatchToday = quantityByCreatedDateAndStatus(businessDate, "PENDING_DISPATCH");
-        int dispatchingOrdersToday = quantityByCreatedDateAndStatus(businessDate, "DISPATCHING");
-        int deliveredOrdersToday = quantityByCreatedDateAndStatus(businessDate, "DELIVERED");
+        // 统一按出餐日 serve_date 口径：今天的单 = 今天要出餐的单，与"今日出餐"对齐
+        int cancellationsToday = quantityByServeDateAndStatus(businessDate, "CANCELLED");
+        int totalOrdersToday = quantityByServeDate(businessDate, null);
+        int pendingDispatchToday = quantityByServeDateAndStatus(businessDate, "PENDING_DISPATCH");
+        int dispatchingOrdersToday = quantityByServeDateAndStatus(businessDate, "DISPATCHING");
+        int deliveredOrdersToday = quantityByServeDateAndStatus(businessDate, "DELIVERED");
+        // 待处理 = 今日总单 - 已进入派单流转(待派单+配送中+已送达) - 取消，保证面板严格对账闭合
+        int pendingOrdersToday = Math.max(0, totalOrdersToday - pendingDispatchToday - dispatchingOrdersToday - deliveredOrdersToday - cancellationsToday);
         int lowBalanceCustomers = countLowBalanceCustomers(settings.lowBalanceThreshold());
         int expiringSoonCustomers = countExpiringSoonCustomers(settings.expiryReminderDays());
         int openAftersaleCount = countOpenAftersales();
@@ -194,6 +196,28 @@ public class DashboardServiceImpl implements DashboardService {
             Integer.class,
             serveDate,
             mealPeriod
+        ));
+    }
+
+    private int quantityByServeDateAndStatus(LocalDate serveDate, String status) {
+        return nvl(jdbcTemplate.queryForObject(
+            "SELECT COALESCE(SUM(mso.quantity), 0) FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE do.serve_date = ? AND mso.status = ?",
+            Integer.class,
+            serveDate,
+            status
+        ));
+    }
+
+    private int quantityByServeDateAndStatuses(LocalDate serveDate, List<String> statuses) {
+        if (statuses.isEmpty()) {
+            return 0;
+        }
+        return nvl(jdbcTemplate.queryForObject(
+            "SELECT COALESCE(SUM(mso.quantity), 0) FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE do.serve_date = ? AND mso.status IN (?, ?)",
+            Integer.class,
+            serveDate,
+            statuses.get(0),
+            statuses.get(1)
         ));
     }
 
