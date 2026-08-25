@@ -128,8 +128,8 @@ class MiniappOrderModule {
                 Timestamp.valueOf(mergeTime),
                 customerId
             );
-            jdbcTemplate.update("UPDATE meal_wallets SET reserved_meals = reserved_meals + 1 WHERE id = ?", walletId);
-            insertWalletTransaction(walletId, "RESERVE", -1, "小程序", "用户自主下单加餐占用餐次", mergeTime, mergeTargetOrderId);
+            jdbcTemplate.update("UPDATE meal_wallets SET consumed_meals = consumed_meals + 1 WHERE id = ?", walletId);
+            insertWalletTransaction(walletId, "CONSUME", -1, "小程序", "用户自主下单加餐", mergeTime, mergeTargetOrderId);
             attemptWriteOrderSnapshot(
                 mergeTargetOrderId,
                 customerId,
@@ -168,8 +168,8 @@ class MiniappOrderModule {
             Timestamp.valueOf(now),
             customerId
         );
-        jdbcTemplate.update("UPDATE meal_wallets SET reserved_meals = reserved_meals + 1 WHERE id = ?", walletId);
-        insertWalletTransaction(walletId, "RESERVE", -1, "小程序", "用户自主下单占用餐次", now, mealSlotOrderId);
+        jdbcTemplate.update("UPDATE meal_wallets SET consumed_meals = consumed_meals + 1 WHERE id = ?", walletId);
+        insertWalletTransaction(walletId, "CONSUME", -1, "小程序", "用户自主下单加餐", now, mealSlotOrderId);
         attemptWriteOrderSnapshot(mealSlotOrderId, customerId, finalUserNote, snapshotTime);
 
         jdbcTemplate.execute("/* force flush */ SELECT 1");
@@ -329,7 +329,7 @@ class MiniappOrderModule {
 
     private int remainingMealsForUpdate(long walletId) {
         Integer count = jdbcTemplate.query(
-            "SELECT total_meals - reserved_meals - consumed_meals AS remaining FROM meal_wallets WHERE id = ? FOR UPDATE",
+            "SELECT total_meals - consumed_meals AS remaining FROM meal_wallets WHERE id = ? FOR UPDATE",
             ps -> ps.setLong(1, walletId),
             rs -> rs.next() ? rs.getInt("remaining") : null
         );

@@ -4,6 +4,7 @@ import com.jzqs.app.settings.api.OperationSettingsResponse;
 import com.jzqs.app.settings.service.SettingsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -20,6 +21,7 @@ public class DeliverySubscribeScheduler {
         this.settingsService = settingsService;
     }
 
+    @Async("backgroundTaskExecutor")
     @Scheduled(cron = "0 * * * * ?")
     public void sendConfiguredNotifications() {
         OperationSettingsResponse settings = settingsService.operationSettings();

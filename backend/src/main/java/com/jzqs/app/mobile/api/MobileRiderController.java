@@ -34,7 +34,7 @@ public class MobileRiderController {
         @RequestAttribute(value = "riderName", required = false) String riderName,
         @RequestAttribute(value = "riderId", required = false) Long riderId
     ) {
-        return ApiResponse.success(mobilePortalService.riderTasks(resolveCurrentRiderName(riderName, riderId)));
+        return ApiResponse.success(mobilePortalService.riderTasks(riderId));
     }
 
     @GetMapping("/summary")
@@ -43,7 +43,7 @@ public class MobileRiderController {
         @RequestAttribute(value = "riderId", required = false) Long riderId,
         @RequestParam(required = false) String serveDate
     ) {
-        return ApiResponse.success(mobilePortalService.riderSummary(resolveCurrentRiderName(riderName, riderId), serveDate));
+        return ApiResponse.success(mobilePortalService.riderSummary(riderId, serveDate));
     }
 
     @GetMapping("/queue")
@@ -52,7 +52,7 @@ public class MobileRiderController {
         @RequestAttribute(value = "riderId", required = false) Long riderId,
         @RequestParam(required = false) String serveDate
     ) {
-        return ApiResponse.success(mobilePortalService.riderQueue(resolveCurrentRiderName(riderName, riderId), serveDate));
+        return ApiResponse.success(mobilePortalService.riderQueue(riderId, serveDate));
     }
 
     @PostMapping(value = "/uploads/receipt", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -61,7 +61,7 @@ public class MobileRiderController {
         @RequestAttribute(value = "riderId", required = false) Long riderId,
         @RequestPart("file") MultipartFile file
     ) {
-        return ApiResponse.success(mobilePortalService.uploadRiderReceipt(resolveCurrentRiderName(riderName, riderId), file));
+        return ApiResponse.success(mobilePortalService.uploadRiderReceipt(riderId, file));
     }
 
     @PostMapping("/tasks/{mealSlotOrderId}/receipt")
@@ -73,7 +73,7 @@ public class MobileRiderController {
     ) {
         DeliveryReceiptRecordResponse response = mobilePortalService.submitRiderReceipt(
             mealSlotOrderId,
-            resolveCurrentRiderName(riderName, riderId),
+            riderId,
             request.receiptFileKey(),
             request.receiptNote(),
             request.deliveredAt()
@@ -90,7 +90,7 @@ public class MobileRiderController {
     ) {
         DeliveryReceiptRecordResponse response = mobilePortalService.updateRiderReceipt(
             mealSlotOrderId,
-            resolveCurrentRiderName(riderName, riderId),
+            riderId,
             request.receiptFileKey(),
             request.receiptNote(),
             request.deliveredAt()
@@ -105,7 +105,7 @@ public class MobileRiderController {
         @Valid @RequestBody RiderReorderRequest request
     ) {
         RiderQueueReorderResponse response = mobilePortalService.reorderRiderQueue(
-            resolveCurrentRiderName(riderName, riderId),
+            riderId,
             request.batchItemIds()
         );
         return ApiResponse.success(response);
@@ -118,7 +118,7 @@ public class MobileRiderController {
         @PathVariable long batchItemId
     ) {
         RiderQueueItemActionResponse response = mobilePortalService.deferRiderQueueItem(
-            resolveCurrentRiderName(riderName, riderId),
+            riderId,
             batchItemId
         );
         return ApiResponse.success(response);
@@ -131,7 +131,7 @@ public class MobileRiderController {
         @PathVariable long batchItemId
     ) {
         RiderQueueItemActionResponse response = mobilePortalService.resumeRiderQueueItem(
-            resolveCurrentRiderName(riderName, riderId),
+            riderId,
             batchItemId
         );
         return ApiResponse.success(response);
@@ -146,7 +146,7 @@ public class MobileRiderController {
     ) {
         RiderDeliveryExceptionReportResponse response = mobilePortalService.reportDeliveryException(
             mealSlotOrderId,
-            resolveCurrentRiderName(riderName, riderId),
+            riderId,
             request.exceptionType(),
             request.exceptionNote(),
             request.exceptionImages()
@@ -159,16 +159,6 @@ public class MobileRiderController {
         @RequestAttribute(value = "riderName", required = false) String riderName,
         @RequestAttribute(value = "riderId", required = false) Long riderId
     ) {
-        return ApiResponse.success(mobilePortalService.riderCompletedToday(resolveCurrentRiderName(riderName, riderId)));
-    }
-
-    private String resolveCurrentRiderName(String riderName, Long riderId) {
-        if (riderName != null && !riderName.isBlank()) {
-            return riderName;
-        }
-        if (riderId == null) {
-            throw new IllegalArgumentException("缺少骑手认证信息");
-        }
-        return mobileAuthService.riderProfile(riderId).riderName();
+        return ApiResponse.success(mobilePortalService.riderCompletedToday(riderId));
     }
 }

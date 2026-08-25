@@ -171,9 +171,9 @@ public class OrderOperationRepository {
         );
     }
 
-    public void releaseReservedMeals(long walletId, int quantity) {
+    public void decreaseConsumedMeals(long walletId, int quantity) {
         jdbcTemplate.update(
-            "UPDATE meal_wallets SET reserved_meals = CASE WHEN reserved_meals >= ? THEN reserved_meals - ? ELSE 0 END WHERE id = ?",
+            "UPDATE meal_wallets SET consumed_meals = CASE WHEN consumed_meals >= ? THEN consumed_meals - ? ELSE 0 END WHERE id = ?",
             quantity,
             quantity,
             walletId
@@ -266,7 +266,7 @@ public class OrderOperationRepository {
 
     public Integer findRemainingMeals(long walletId) {
         return jdbcTemplate.query(
-            "SELECT (total_meals - reserved_meals - consumed_meals) FROM meal_wallets WHERE id = ?",
+            "SELECT (total_meals - consumed_meals) FROM meal_wallets WHERE id = ?",
             ps -> ps.setLong(1, walletId),
             rs -> rs.next() ? rs.getInt(1) : 0
         );
@@ -352,8 +352,8 @@ public class OrderOperationRepository {
         );
     }
 
-    public void increaseReservedMeals(long walletId, int quantity) {
-        jdbcTemplate.update("UPDATE meal_wallets SET reserved_meals = reserved_meals + ? WHERE id = ?", quantity, walletId);
+    public void increaseConsumedMeals(long walletId, int quantity) {
+        jdbcTemplate.update("UPDATE meal_wallets SET consumed_meals = consumed_meals + ? WHERE id = ?", quantity, walletId);
     }
 
     public long insertMealSlotOrder(long dailyOrderId, String mealPeriod, String deliveryMealPeriod, int quantity, long addressId, String merchantRemark, String source, boolean confirmedFromSubscription) {

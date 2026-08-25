@@ -16,6 +16,7 @@ import com.jzqs.app.order.persistence.OrderOperationRepository;
 import com.jzqs.app.order.persistence.OrderSupportRepository;
 import com.jzqs.app.order.service.OrderNoteSnapshotService;
 import com.jzqs.app.order.service.OrderOperationService;
+import com.jzqs.app.common.util.TimeUtils;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -151,8 +152,8 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
             if (customerId != null) {
                 Long walletId = findActiveWalletIdByCustomerId(customerId);
                 if (walletId != null) {
-                    orderOperationRepository.releaseReservedMeals(walletId, quantity);
-                    insertWalletTransactionByAdmin(walletId, "RELEASE", quantity, "取消订单释放餐次", orderId);
+                    orderOperationRepository.decreaseConsumedMeals(walletId, quantity);
+                    insertWalletTransactionByAdmin(walletId, "REFUND", quantity, "取消订单退回餐次", orderId);
                 }
             }
         }
@@ -177,11 +178,21 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
         String status = orderInfo.status();
         int quantity = orderInfo.quantity();
 
+        // 只有已取消(CANCELLED)的订单才允许删除。
+        // 在途/已支付订单只能由订单中心走"取消+退款"流程，不得直接从配送中心销毁，
+        // 否则会出现已扣款/已扣餐次但订单丢失、无法分配配送的链路错乱。
+        if (!"CANCELLED".equals(status)) {
+            throw new BusinessException(
+                ErrorCode.ORDER_STATUS_INVALID,
+                "仅已取消(CANCELLED)的订单可删除，请先在订单中心取消并退款后再操作"
+            );
+        }
+
         if (!"CANCELLED".equals(status) && customerId != null) {
             Long walletId = findActiveWalletIdByCustomerId(customerId);
             if (walletId != null) {
-                orderOperationRepository.releaseReservedMeals(walletId, quantity);
-                insertWalletTransactionByAdmin(walletId, "RELEASE", quantity, "删除订单释放餐次", orderId);
+                orderOperationRepository.decreaseConsumedMeals(walletId, quantity);
+                insertWalletTransactionByAdmin(walletId, "REFUND", quantity, "删除订单退回餐次", orderId);
             }
         }
 
@@ -266,12 +277,12 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
                 resolvedMerchantRemark
             );
             orderOperationRepository.mergeOrderQuantityAndRemark(mergeTargetOrderId, quantity, mergedMerchantRemark);
-            orderOperationRepository.increaseReservedMeals(walletId, quantity);
+            orderOperationRepository.increaseConsumedMeals(walletId, quantity);
             insertWalletTransactionByAdmin(
                 walletId,
-                "RESERVE",
+                "CONSUME",
                 -quantity,
-                "SUBSCRIPTION".equals(source) ? "固定订餐自动扣餐" : "代客录单加餐占用餐次",
+                "SUBSCRIPTION".equals(source) ? "固定订餐自动扣餐" : "代客录单加餐",
                 mergeTargetOrderId
             );
             refreshBatchAndPublishEvents(customerId, mergeTargetOrderId);
@@ -288,13 +299,13 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
             source,
             "SUBSCRIPTION".equals(source)
         );
-        LocalDateTime snapshotTime = LocalDateTime.now();
-        orderOperationRepository.increaseReservedMeals(walletId, quantity);
+        LocalDateTime snapshotTime = TimeUtils.now();
+        orderOperationRepository.increaseConsumedMeals(walletId, quantity);
         insertWalletTransactionByAdmin(
             walletId,
-            "RESERVE",
+            "CONSUME",
             -quantity,
-            "SUBSCRIPTION".equals(source) ? "固定订餐自动扣餐" : "代客录单占用餐次",
+            "SUBSCRIPTION".equals(source) ? "固定订餐自动扣餐" : "代客录单加餐",
             mealSlotOrderId
         );
         String normalizedSnapshotNote = normalizeSnapshotNote(resolvedMerchantRemark);

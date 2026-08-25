@@ -21,7 +21,7 @@ class RiderOrderStatusRevertModule {
     }
 
     @Transactional
-    RiderOrderStatusRevertResponse revertOrderStatus(long mealSlotOrderId, String riderName) {
+    RiderOrderStatusRevertResponse revertOrderStatus(long mealSlotOrderId, Long riderId) {
         Long batchItemId = jdbcTemplate.query(
             """
                 SELECT dbi.id
@@ -29,12 +29,12 @@ class RiderOrderStatusRevertModule {
                 JOIN dispatch_batches db ON db.id = dbi.batch_id
                 JOIN rider_profiles rp ON rp.id = db.rider_profile_id
                 WHERE dbi.meal_slot_order_id = ?
-                  AND rp.rider_name = ?
+                  AND db.rider_profile_id = ?
                   AND dbi.item_status = 'DELIVERED'
                 """,
             ps -> {
                 ps.setLong(1, mealSlotOrderId);
-                ps.setString(2, riderName);
+                ps.setLong(2, riderId);
             },
             rs -> rs.next() ? rs.getLong(1) : null
         );

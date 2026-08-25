@@ -46,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -188,7 +189,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         PackageAlert packageAlert = evaluatePackageAlert(wallet, remainingMeals, loadPackageReminderSettings());
         CustomerWalletDetailResponse walletDetail = new CustomerWalletDetailResponse(
             nvl(wallet.getTotalMeals()),
-            nvl(wallet.getReservedMeals()),
+            0,
             nvl(wallet.getConsumedMeals()),
             remainingMeals,
             formatDateTime(wallet.getOpenedAt()),
@@ -279,11 +280,24 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
 
         if (initialMealDelta > 0) {
             MealWalletEntity wallet = findOrCreateWallet(customer.getId());
-            wallet.setTotalMeals(nvl(wallet.getTotalMeals()) + initialMealDelta);
             LocalDateTime grantExpiredAt = resolveWalletExpiry(initialValidityDays);
-            wallet.setExpiredAt(grantExpiredAt);
-            wallet.setLastAdjustedAt(now());
-            mealWalletMapper.updateById(wallet);
+            // 原子自增，避免初始建档加餐被并发覆盖
+            int updated = jdbcTemplate.update(
+                """
+                    UPDATE meal_wallets
+                    SET total_meals = total_meals + ?,
+                        expired_at = ?,
+                        last_adjusted_at = ?
+                    WHERE id = ?
+                    """,
+                initialMealDelta,
+                Timestamp.valueOf(grantExpiredAt),
+                Timestamp.valueOf(now()),
+                wallet.getId()
+            );
+            if (updated == 0) {
+                throw new BusinessException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH, "钱包更新失败，请重试");
+            }
             insertWalletTransaction(wallet.getId(), "GRANT", initialMealDelta, currentOperator(), initialMealRemark, grantExpiredAt);
         }
 
@@ -474,12 +488,25 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         // 统一过期时间：优先使用日历指定的 expiredAt，否则按当前北京时间 + validityDays 计算
         LocalDateTime grantExpiredAt = resolveGrantExpiry(request);
         MealWalletEntity wallet = findOrCreateWallet(customerId);
-        wallet.setTotalMeals(nvl(wallet.getTotalMeals()) + request.mealDelta());
-        wallet.setExpiredAt(grantExpiredAt);
-        wallet.setLastAdjustedAt(now());
-        mealWalletMapper.updateById(wallet);
+        // 原子自增，避免"读-改-写"整行覆盖导致并发加餐丢失
+        int updated = jdbcTemplate.update(
+            """
+                UPDATE meal_wallets
+                SET total_meals = total_meals + ?,
+                    expired_at = ?,
+                    last_adjusted_at = ?
+                WHERE id = ?
+                """,
+            request.mealDelta(),
+            Timestamp.valueOf(grantExpiredAt),
+            Timestamp.valueOf(now()),
+            wallet.getId()
+        );
+        if (updated == 0) {
+            throw new BusinessException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH, "钱包更新失败，请重试");
+        }
         insertWalletTransaction(wallet.getId(), "GRANT", request.mealDelta(), request.operatorName(), request.operatorId(), request.remark(), grantExpiredAt);
-        int remainingMeals = remainingMeals(wallet);
+        int remainingMeals = querySnapshotBalance(wallet.getId());
         return buildAdjustResult(customerId, remainingMeals);
     }
 
@@ -487,15 +514,25 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
     @Transactional
     public CustomerWalletAdjustResponse deductMeals(long customerId, WalletAdjustRequest request) {
         MealWalletEntity wallet = findOrCreateWallet(customerId);
-        int remainingMeals = remainingMeals(wallet);
-        if (remainingMeals < request.mealDelta()) {
+        // 原子扣减 + 数据库层余额校验，避免并发扣成负数
+        int updated = jdbcTemplate.update(
+            """
+                UPDATE meal_wallets
+                SET total_meals = total_meals - ?,
+                    last_adjusted_at = ?
+                WHERE id = ?
+                  AND (total_meals - consumed_meals) >= ?
+                """,
+            request.mealDelta(),
+            Timestamp.valueOf(now()),
+            wallet.getId(),
+            request.mealDelta()
+        );
+        if (updated == 0) {
             throw new BusinessException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH, "客户余额不足，无法继续扣餐");
         }
-        int nextTotal = nvl(wallet.getTotalMeals()) - request.mealDelta();
-        wallet.setTotalMeals(nextTotal);
-        mealWalletMapper.updateById(wallet);
         insertWalletTransaction(wallet.getId(), "MANUAL_DEDUCT", -request.mealDelta(), request.operatorName(), request.operatorId(), request.remark(), null);
-        remainingMeals = remainingMeals(wallet);
+        int remainingMeals = querySnapshotBalance(wallet.getId());
         return buildAdjustResult(customerId, remainingMeals);
     }
 
@@ -632,16 +669,29 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
     }
 
     private MealWalletEntity findOrCreateWallet(long customerId) {
-        MealWalletEntity wallet = mealWalletMapper.selectOne(
+        MealWalletEntity wallet = findActiveWalletOrNull(customerId);
+        if (wallet != null) {
+            return wallet;
+        }
+        try {
+            return createInitialWallet(customerId);
+        } catch (DuplicateKeyException ex) {
+            // 并发下已由其他请求创建了生效钱包（数据库唯一约束兜底），重新读取返回
+            MealWalletEntity existing = findActiveWalletOrNull(customerId);
+            if (existing != null) {
+                return existing;
+            }
+            throw ex;
+        }
+    }
+
+    private MealWalletEntity findActiveWalletOrNull(long customerId) {
+        return mealWalletMapper.selectOne(
             new LambdaQueryWrapper<MealWalletEntity>()
                 .eq(MealWalletEntity::getCustomerId, customerId)
                 .eq(MealWalletEntity::getActive, true)
                 .last("LIMIT 1")
         );
-        if (wallet == null) {
-            wallet = createInitialWallet(customerId);
-        }
-        return wallet;
     }
 
     private MealWalletEntity createInitialWallet(long customerId) {
@@ -997,7 +1047,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
     }
 
     private int remainingMeals(MealWalletEntity wallet) {
-        return nvl(wallet.getTotalMeals()) - nvl(wallet.getReservedMeals()) - nvl(wallet.getConsumedMeals());
+        return nvl(wallet.getTotalMeals()) - nvl(wallet.getConsumedMeals());
     }
 
     private int nvl(Integer value) {
@@ -1057,7 +1107,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
 
     private Integer querySnapshotBalance(long walletId) {
         Integer value = jdbcTemplate.queryForObject(
-            "SELECT total_meals - reserved_meals - consumed_meals FROM meal_wallets WHERE id = ?",
+            "SELECT total_meals - consumed_meals FROM meal_wallets WHERE id = ?",
             Integer.class,
             walletId
         );

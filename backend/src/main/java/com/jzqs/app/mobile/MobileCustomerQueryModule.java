@@ -89,7 +89,7 @@ class MobileCustomerQueryModule {
                     c.phone,
                     COALESCE(pp.package_name, '未开通套餐') AS package_name,
                     COALESCE(mw.total_meals, 0) AS total_meals,
-                    COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) AS remaining_meals,
+                    COALESCE(mw.total_meals - mw.consumed_meals, 0) AS remaining_meals,
                     mw.expired_at,
                     c.merchant_remark,
                     (

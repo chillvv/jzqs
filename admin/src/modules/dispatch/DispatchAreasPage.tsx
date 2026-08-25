@@ -4,7 +4,6 @@ import type { DropResult } from "@hello-pangea/dnd";
 import {
   DispatchAreaDeleteBlockedError,
   deleteDispatchArea,
-  deleteOrder,
   moveOrderToArea,
   renameDispatchArea,
   assignRiderToArea,
@@ -79,8 +78,6 @@ export function DispatchAreasPage() {
   const [orderDetailId, setOrderDetailId] = useState<number | null>(null);
   const [orderMoveTargetArea, setOrderMoveTargetArea] = useState("");
   const [movingOrderToArea, setMovingOrderToArea] = useState(false);
-  const [deleteConfirmState, setDeleteConfirmState] = useState<{ orderId: number; customerName: string } | null>(null);
-  const [submittingDeleteOrder, setSubmittingDeleteOrder] = useState(false);
   const [showAiCorrectionDialog, setShowAiCorrectionDialog] = useState(false);
   const { bindings, riders, loadError, reload } = useDispatchAreasLiveData(
     { serveDate, mealPeriod },
@@ -216,27 +213,6 @@ export function DispatchAreasPage() {
     }
   }
 
-  async function handleDeleteOrder(orderId: number, customerName: string) {
-    setDeleteConfirmState({ orderId, customerName });
-  }
-
-  async function confirmDeleteOrder() {
-    if (!deleteConfirmState) return;
-
-    if (submittingDeleteOrder) return;
-    setSubmittingDeleteOrder(true);
-    try {
-      await deleteOrder(deleteConfirmState.orderId);
-      setDeleteConfirmState(null);
-      await reload();
-      toast("订单已删除");
-    } catch (err: any) {
-      toast(getErrorMessage(err, "删除订单失败"), "error");
-    } finally {
-      setSubmittingDeleteOrder(false);
-    }
-  }
-
   function toggleReorderMode() {
     if (isReordering) {
       saveOrderSequence();
@@ -273,6 +249,11 @@ export function DispatchAreasPage() {
       toast("区域内订单顺序已更新");
     } catch (err: any) {
       toast(getErrorMessage(err, "保存排序失败"), "error");
+      // 失败回滚本地乐观更新：退出编辑模式并重新拉取服务器真实顺序，避免界面顺序与数据库不一致
+      await reload();
+      setIsReordering(false);
+      setLocalOrders([]);
+      setSelectedOrderIds([]);
     } finally {
       setSavingArea(null);
     }
@@ -773,18 +754,7 @@ export function DispatchAreasPage() {
         zOffset={10}
         onClose={() => setOrderDetailId(null)}
         footer={
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" }}>
-            <button
-              className="btn-delete btn-compact"
-              onClick={() => {
-                if (orderDetail) {
-                  setOrderDetailId(null);
-                  handleDeleteOrder(orderDetail.orderId, orderDetail.customerName);
-                }
-              }}
-            >
-              <Trash2 size={14} /> 删除订单
-            </button>
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", width: "100%" }}>
             <button className="btn btn-outline" onClick={() => setOrderDetailId(null)}>关闭</button>
           </div>
         }
@@ -900,43 +870,6 @@ export function DispatchAreasPage() {
             </div>
           </div>
         ) : null}
-      </AdminDialog>
-
-      {/* 删除订单确认对话框 */}
-      <AdminDialog
-        open={Boolean(deleteConfirmState)}
-        title="⚠️ 删除订单"
-        width={500}
-        zOffset={20}
-        onClose={submittingDeleteOrder ? () => undefined : () => setDeleteConfirmState(null)}
-        footer={
-          <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-            <button className="btn btn-outline" disabled={submittingDeleteOrder} onClick={() => setDeleteConfirmState(null)}>取消</button>
-            <button 
-              className="btn-delete"
-              disabled={submittingDeleteOrder}
-              onClick={() => confirmDeleteOrder().catch((err) => toast(getErrorMessage(err, "删除订单失败"), "error"))}
-            >
-              <Trash2 size={16} />
-              {submittingDeleteOrder ? "确认删除中..." : "确认删除"}
-            </button>
-          </div>
-        }
-      >
-        {deleteConfirmState && (
-          <div style={{ display: "grid", gap: "16px" }}>
-            <div className="delete-confirm-details">
-              <div className="delete-confirm-details__item">
-                <span className="delete-confirm-details__label">客户：</span>
-                <span className="delete-confirm-details__value">{deleteConfirmState.customerName}</span>
-              </div>
-              <div className="delete-confirm-details__item">
-                <span className="delete-confirm-details__label">订单ID：</span>
-                <span className="delete-confirm-details__value">{deleteConfirmState.orderId}</span>
-              </div>
-            </div>
-          </div>
-        )}
       </AdminDialog>
     </div>
   );

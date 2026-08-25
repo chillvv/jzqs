@@ -65,6 +65,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     private final NightlyReminderModule nightlyReminderModule;
     private final MiniappOrderModule miniappOrderModule;
     private final MobileAddressModule mobileAddressModule;
+    private final MobileAuthService mobileAuthService;
     private final WeChatService weChatService;
     private final LocalTime selfOrderCutoffTime;
 
@@ -85,6 +86,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         NightlyReminderModule nightlyReminderModule,
         MiniappOrderModule miniappOrderModule,
         MobileAddressModule mobileAddressModule,
+        MobileAuthService mobileAuthService,
         @org.springframework.beans.factory.annotation.Value("${app.mobile.self-order-cutoff:23:00}") String selfOrderCutoff
     ) {
         this.jdbcTemplate = jdbcTemplate;
@@ -101,6 +103,7 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         this.nightlyReminderModule = nightlyReminderModule;
         this.miniappOrderModule = miniappOrderModule;
         this.mobileAddressModule = mobileAddressModule;
+        this.mobileAuthService = mobileAuthService;
         this.weChatService = weChatService;
         this.selfOrderCutoffTime = LocalTime.parse(selfOrderCutoff);
     }
@@ -423,116 +426,116 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     }
 
     @Override
-    public PageResponse<RiderTaskItemResponse> riderTasks(String riderName) {
-        return riderQueueSupport.riderTasks(riderName);
+    public PageResponse<RiderTaskItemResponse> riderTasks(Long riderId) {
+        return riderQueueSupport.riderTasks(riderId);
     }
 
     @Override
-    public RiderBatchSummaryResponse riderSummary(String riderName, String serveDate) {
-        return riderQueueSupport.riderSummary(riderName, serveDate);
+    public RiderBatchSummaryResponse riderSummary(Long riderId, String serveDate) {
+        return riderQueueSupport.riderSummary(riderId, serveDate);
     }
 
     @Override
-    public PageResponse<RiderQueueItemResponse> riderQueue(String riderName, String serveDate) {
-        return riderQueueSupport.riderQueue(riderName, serveDate);
+    public PageResponse<RiderQueueItemResponse> riderQueue(Long riderId, String serveDate) {
+        return riderQueueSupport.riderQueue(riderId, serveDate);
     }
 
     @Override
-    public RiderQueueItemResponse riderQueueItem(long queueItemId, String riderName, String serveDate, Long mealSlotOrderId) {
-        return riderQueueSupport.riderQueueItem(queueItemId, riderName, serveDate, mealSlotOrderId);
+    public RiderQueueItemResponse riderQueueItem(long queueItemId, Long riderId, String serveDate, Long mealSlotOrderId) {
+        return riderQueueSupport.riderQueueItem(queueItemId, riderId, serveDate, mealSlotOrderId);
     }
 
     @Override
-    public RiderAddressReferenceResponse riderAddressReference(String riderName, long addressId) {
-        return riderDeliveryEvidenceModule.riderAddressReference(riderName, addressId);
-    }
-
-    @Override
-    @Transactional
-    public RiderAddressReferenceBatchSaveResponse saveBatchAddressReferenceImage(String riderName, RiderBatchAddressReferenceRequest request) {
-        return riderDeliveryEvidenceModule.saveBatchAddressReferenceImage(riderName, request);
+    public RiderAddressReferenceResponse riderAddressReference(Long riderId, long addressId) {
+        return riderDeliveryEvidenceModule.riderAddressReference(riderId, addressId);
     }
 
     @Override
     @Transactional
-    public RiderAddressReferenceReplaceResponse replaceAddressReferenceImage(String riderName, long addressId, String referenceImageUrl) {
-        return riderDeliveryEvidenceModule.replaceAddressReferenceImage(riderName, addressId, referenceImageUrl);
-    }
-
-    @Override
-    public RiderDeliveryUploadResponse uploadRiderReceipt(String riderName, MultipartFile file) {
-        return riderReceiptStorageSupport.uploadRiderReceipt(riderName, file);
+    public RiderAddressReferenceBatchSaveResponse saveBatchAddressReferenceImage(Long riderId, RiderBatchAddressReferenceRequest request) {
+        return riderDeliveryEvidenceModule.saveBatchAddressReferenceImage(riderId, request);
     }
 
     @Override
     @Transactional
-    public DeliveryReceiptRecordResponse submitRiderReceipt(long mealSlotOrderId, String riderName, String receiptFileKey, String receiptNote, String deliveredAt) {
+    public RiderAddressReferenceReplaceResponse replaceAddressReferenceImage(Long riderId, long addressId, String referenceImageUrl) {
+        return riderDeliveryEvidenceModule.replaceAddressReferenceImage(riderId, addressId, referenceImageUrl);
+    }
+
+    @Override
+    public RiderDeliveryUploadResponse uploadRiderReceipt(Long riderId, MultipartFile file) {
+        return riderReceiptStorageSupport.uploadRiderReceipt(resolveRiderName(riderId), file);
+    }
+
+    @Override
+    @Transactional
+    public DeliveryReceiptRecordResponse submitRiderReceipt(long mealSlotOrderId, Long riderId, String receiptFileKey, String receiptNote, String deliveredAt) {
         DeliveryReceiptRecordResponse result = riderDeliveryEvidenceModule.submitRiderReceipt(
             mealSlotOrderId,
-            riderName,
+            riderId,
             receiptFileKey,
             receiptNote,
             deliveredAt
         );
         publishCustomerOrderChanged(mealSlotOrderId);
-        publishRiderEvent("dispatch.receipt.changed", riderName, mealSlotOrderId);
+        publishRiderEvent("dispatch.receipt.changed", riderId, mealSlotOrderId);
         return result;
     }
 
     @Override
     @Transactional
-    public DeliveryReceiptRecordResponse updateRiderReceipt(long mealSlotOrderId, String riderName, String receiptFileKey, String receiptNote, String deliveredAt) {
+    public DeliveryReceiptRecordResponse updateRiderReceipt(long mealSlotOrderId, Long riderId, String receiptFileKey, String receiptNote, String deliveredAt) {
         DeliveryReceiptRecordResponse result = riderDeliveryEvidenceModule.updateRiderReceipt(
             mealSlotOrderId,
-            riderName,
+            riderId,
             receiptFileKey,
             receiptNote,
             deliveredAt
         );
         publishCustomerOrderChanged(mealSlotOrderId);
-        publishRiderEvent("dispatch.receipt.changed", riderName, mealSlotOrderId);
+        publishRiderEvent("dispatch.receipt.changed", riderId, mealSlotOrderId);
         return result;
     }
 
     @Override
     @Transactional
-    public DeliveryReceiptDeleteResponse deleteRiderReceiptImage(long mealSlotOrderId, String riderName) {
-        DeliveryReceiptDeleteResponse result = riderDeliveryEvidenceModule.deleteRiderReceiptImage(mealSlotOrderId, riderName);
+    public DeliveryReceiptDeleteResponse deleteRiderReceiptImage(long mealSlotOrderId, Long riderId) {
+        DeliveryReceiptDeleteResponse result = riderDeliveryEvidenceModule.deleteRiderReceiptImage(mealSlotOrderId, riderId);
         publishCustomerOrderChanged(mealSlotOrderId);
-        publishRiderEvent("dispatch.receipt.changed", riderName, mealSlotOrderId);
+        publishRiderEvent("dispatch.receipt.changed", riderId, mealSlotOrderId);
         return result;
     }
 
     @Override
     @Transactional
-    public RiderQueueReorderResponse reorderRiderQueue(String riderName, List<Long> batchItemIds) {
-        return riderQueueSupport.reorderRiderQueue(riderName, batchItemIds);
+    public RiderQueueReorderResponse reorderRiderQueue(Long riderId, List<Long> batchItemIds) {
+        return riderQueueSupport.reorderRiderQueue(riderId, batchItemIds);
     }
 
     @Override
     @Transactional
-    public RiderQueueItemActionResponse deferRiderQueueItem(String riderName, long batchItemId) {
-        return riderQueueSupport.deferRiderQueueItem(riderName, batchItemId);
+    public RiderQueueItemActionResponse deferRiderQueueItem(Long riderId, long batchItemId) {
+        return riderQueueSupport.deferRiderQueueItem(riderId, batchItemId);
     }
 
     @Override
     @Transactional
-    public RiderQueueItemActionResponse resumeRiderQueueItem(String riderName, long batchItemId) {
-        return riderQueueSupport.resumeRiderQueueItem(riderName, batchItemId);
+    public RiderQueueItemActionResponse resumeRiderQueueItem(Long riderId, long batchItemId) {
+        return riderQueueSupport.resumeRiderQueueItem(riderId, batchItemId);
     }
 
     @Override
     @Transactional
     public RiderDeliveryExceptionReportResponse reportDeliveryException(
         long mealSlotOrderId,
-        String riderName,
+        Long riderId,
         String exceptionType,
         String exceptionNote,
         List<String> exceptionImages
     ) {
         return riderQueueSupport.reportDeliveryException(
             mealSlotOrderId,
-            riderName,
+            riderId,
             exceptionType,
             exceptionNote,
             exceptionImages
@@ -540,21 +543,21 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     }
 
     @Override
-    public PageResponse<RiderTaskItemResponse> riderCompletedToday(String riderName) {
-        return riderQueueSupport.riderCompletedToday(riderName);
+    public PageResponse<RiderTaskItemResponse> riderCompletedToday(Long riderId) {
+        return riderQueueSupport.riderCompletedToday(riderId);
     }
 
     @Override
-    public RiderOrderStatusRevertResponse revertOrderStatus(long mealSlotOrderId, String riderName) {
-        RiderOrderStatusRevertResponse result = riderOrderStatusRevertModule.revertOrderStatus(mealSlotOrderId, riderName);
+    public RiderOrderStatusRevertResponse revertOrderStatus(long mealSlotOrderId, Long riderId) {
+        RiderOrderStatusRevertResponse result = riderOrderStatusRevertModule.revertOrderStatus(mealSlotOrderId, riderId);
         publishCustomerOrderChanged(mealSlotOrderId);
-        publishRiderEvent("dispatch.receipt.changed", riderName, mealSlotOrderId);
+        publishRiderEvent("dispatch.receipt.changed", riderId, mealSlotOrderId);
         return result;
     }
 
     @Override
-    public RiderOrderSequenceSaveResponse saveOrderSequence(String riderName, String mealPeriod, List<Long> batchItemIds) {
-        return riderOrderSequenceModule.saveOrderSequence(riderName, mealPeriod, batchItemIds);
+    public RiderOrderSequenceSaveResponse saveOrderSequence(Long riderId, String mealPeriod, List<Long> batchItemIds) {
+        return riderOrderSequenceModule.saveOrderSequence(riderId, mealPeriod, batchItemIds);
     }
 
     private String safeString(Object value) {
@@ -580,8 +583,15 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         return customerId;
     }
 
-    private void publishRiderEvent(String eventType, String riderName, Object orderId) {
-        realtimeAudienceModule.publishRiderEvent(eventType, riderName, orderId);
+    private void publishRiderEvent(String eventType, Long riderId, Object orderId) {
+        realtimeAudienceModule.publishRiderEvent(eventType, resolveRiderName(riderId), orderId);
+    }
+
+    private String resolveRiderName(Long riderId) {
+        if (riderId == null) {
+            return "";
+        }
+        return mobileAuthService.riderProfile(riderId).riderName();
     }
 
     private void publishCustomerEvent(String eventType, long customerId, Object orderId) {

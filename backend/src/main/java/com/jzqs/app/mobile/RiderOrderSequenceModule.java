@@ -21,7 +21,7 @@ class RiderOrderSequenceModule {
 
     @Transactional
     RiderOrderSequenceSaveResponse saveOrderSequence(
-        String riderName,
+        Long riderId,
         String mealPeriod,
         List<Long> batchItemIds
     ) {
@@ -37,12 +37,12 @@ class RiderOrderSequenceModule {
                 SELECT db.id
                 FROM dispatch_batches db
                 JOIN rider_profiles rp ON rp.id = db.rider_profile_id
-                WHERE rp.rider_name = ?
+                WHERE db.rider_profile_id = ?
                   AND db.meal_period = ?
                   AND db.serve_date = CURRENT_DATE
                 """,
             ps -> {
-                ps.setString(1, riderName);
+                ps.setLong(1, riderId);
                 ps.setString(2, mealPeriod);
             },
             rs -> rs.next() ? rs.getLong(1) : null
@@ -118,7 +118,7 @@ class RiderOrderSequenceModule {
                       AND item_status != 'DELIVERED'
                     """,
                 newSequence,
-                riderName,
+                resolveRiderName(riderId),
                 Timestamp.valueOf(now),
                 batchItemId,
                 batchId
@@ -139,10 +139,22 @@ class RiderOrderSequenceModule {
                 WHERE id = ?
                 """,
             Timestamp.valueOf(now),
-            riderName,
+            resolveRiderName(riderId),
             batchId
         );
 
         return new RiderOrderSequenceSaveResponse(true, "订单排序已保存", batchId, batchItemIds.size());
+    }
+
+    private String resolveRiderName(Long riderId) {
+        if (riderId == null) {
+            return "";
+        }
+        List<String> names = jdbcTemplate.query(
+            "SELECT rider_name FROM rider_profiles WHERE id = ?",
+            (rs, rowNum) -> rs.getString("rider_name"),
+            riderId
+        );
+        return names.isEmpty() ? "" : names.get(0);
     }
 }

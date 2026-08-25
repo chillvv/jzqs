@@ -141,54 +141,15 @@ public class DeliveryServiceImpl implements DeliveryService {
         );
         jdbcTemplate.update("UPDATE meal_slot_orders SET status = 'DELIVERED' WHERE id = ?", orderId);
         jdbcTemplate.update("UPDATE dispatch_assignments SET status = 'DELIVERED' WHERE meal_slot_order_id = ?", orderId);
-        WalletConsumeContext walletInfo = jdbcTemplate.query(
-            """
-                SELECT mw.id AS wallet_id, COALESCE(mso.quantity, 1) AS quantity
-                FROM meal_slot_orders mso
-                LEFT JOIN daily_orders do ON do.id = mso.daily_order_id
-                LEFT JOIN meal_wallets mw
-                    ON mw.customer_id = do.customer_id
-                   AND mw.active = TRUE
-                   AND (mw.expired_at IS NULL OR mw.expired_at >= CURRENT_TIMESTAMP)
-                WHERE mso.id = ?
-                ORDER BY mw.id DESC
-                LIMIT 1
-                """,
-            ps -> ps.setLong(1, orderId),
-            rs -> {
-                if (!rs.next()) {
-                    return null;
-                }
-                long walletIdValue = rs.getLong("wallet_id");
-                return new WalletConsumeContext(rs.wasNull() ? null : walletIdValue, rs.getInt("quantity"));
-            }
-        );
-        Long walletId = walletInfo == null ? null : walletInfo.walletId();
-        int quantity = walletInfo == null ? 1 : walletInfo.quantity();
-        String walletAction = "SKIPPED";
-        if (walletId != null) {
-            jdbcTemplate.update(
-                "UPDATE meal_wallets SET reserved_meals = CASE WHEN reserved_meals >= ? THEN reserved_meals - ? ELSE 0 END, consumed_meals = consumed_meals + ? WHERE id = ?",
-                quantity,
-                quantity,
-                quantity,
-                walletId
-            );
-            insertWalletTransaction(walletId, "CONSUME", -quantity, "系统", "送达后核销餐次", orderId);
-            walletAction = "CONSUMED";
-        }
         return new DeliveryReceiptRecordResponse(
             orderId,
             "DELIVERED",
-            walletAction,
+            "ALREADY_CONSUMED",
             "SKIPPED",
             receiptUrl,
             visibleAt,
             expiresAt
         );
-    }
-
-    private record WalletConsumeContext(Long walletId, int quantity) {
     }
 
     private Timestamp parseTimestamp(String rawValue, String errorMessage) {
@@ -210,18 +171,6 @@ public class DeliveryServiceImpl implements DeliveryService {
         } catch (DateTimeParseException ignored) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, errorMessage);
         }
-    }
-
-    private void insertWalletTransaction(long walletId, String transactionType, int mealDelta, String operatorName, String remark, Long relatedOrderId) {
-        jdbcTemplate.update(
-            "INSERT INTO wallet_transactions (wallet_id, transaction_type, meal_delta, operator_name, remark, created_at, related_order_id) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)",
-            walletId,
-            transactionType,
-            mealDelta,
-            operatorName,
-            remark,
-            relatedOrderId
-        );
     }
 
     private long insertAndReturnId(String sql, Object... args) {

@@ -10,6 +10,7 @@ import com.jzqs.app.aftersale.service.AftersaleService;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.common.security.AdminRequestContextSupport;
+import com.jzqs.app.common.util.TimeUtils;
 import com.jzqs.app.mobile.api.MobileAfterSaleItemResponse;
 import com.jzqs.app.mobile.api.MobileCreateAfterSaleRequest;
 import com.jzqs.app.mobile.api.MobileCreateAfterSaleResponse;
@@ -302,7 +303,7 @@ public class AftersaleServiceImpl implements AftersaleService {
                 null,
                 null,
                 null,
-                LocalDateTime.now()
+                TimeUtils.now()
             );
         }
         jdbcTemplate.update(
@@ -473,7 +474,7 @@ public class AftersaleServiceImpl implements AftersaleService {
         boolean refundBlocking,
         String operatorName
     ) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = TimeUtils.now();
         return insertAndReturnId(
             """
                 INSERT INTO aftersale_cases (
@@ -568,15 +569,10 @@ public class AftersaleServiceImpl implements AftersaleService {
     }
 
     private void rollbackMeal(long walletId, String orderStatus, int quantity) {
-        if ("DELIVERED".equals(orderStatus)) {
-            jdbcTemplate.update(
-                "UPDATE meal_wallets SET consumed_meals = CASE WHEN consumed_meals >= ? THEN consumed_meals - ? ELSE 0 END WHERE id = ?",
-                quantity, quantity, walletId
-            );
-            return;
-        }
+        // 退款加回：扣餐统一发生在下单/加餐时（直接扣 consumed_meals），
+        // 无论是否已送达，退款都只将 consumed_meals 加回，不再有预留层。
         jdbcTemplate.update(
-            "UPDATE meal_wallets SET reserved_meals = CASE WHEN reserved_meals >= ? THEN reserved_meals - ? ELSE 0 END WHERE id = ?",
+            "UPDATE meal_wallets SET consumed_meals = CASE WHEN consumed_meals >= ? THEN consumed_meals - ? ELSE 0 END WHERE id = ?",
             quantity, quantity, walletId
         );
     }
@@ -642,7 +638,7 @@ public class AftersaleServiceImpl implements AftersaleService {
                 originalTransactionId,
                 reasonCode,
                 reasonText,
-                LocalDateTime.now()
+                TimeUtils.now()
             );
             if (originalTransactionId != null) {
                 markOriginalTransactionRefunded(
@@ -701,7 +697,11 @@ public class AftersaleServiceImpl implements AftersaleService {
     }
 
     private Long findOriginalTransactionId(long walletId, long orderId, String orderStatus) {
-        String originalType = "DELIVERED".equals(orderStatus) ? "CONSUME" : "RESERVE";
+        // 扣餐统一发生在下单/加餐时（CONSUME 流水），退款按原 CONSUME 记录额度退回。
+        return queryOriginalTransactionId(walletId, orderId, "CONSUME");
+    }
+
+    private Long queryOriginalTransactionId(long walletId, long orderId, String transactionType) {
         return jdbcTemplate.query(
             """
                 SELECT id
@@ -715,7 +715,7 @@ public class AftersaleServiceImpl implements AftersaleService {
                 """,
             ps -> {
                 ps.setLong(1, walletId);
-                ps.setString(2, originalType);
+                ps.setString(2, transactionType);
                 ps.setLong(3, orderId);
                 ps.setLong(4, orderId);
             },
@@ -797,7 +797,7 @@ public class AftersaleServiceImpl implements AftersaleService {
 
     private int querySnapshotBalance(long walletId) {
         Integer balance = jdbcTemplate.queryForObject(
-            "SELECT total_meals - reserved_meals - consumed_meals FROM meal_wallets WHERE id = ?",
+            "SELECT total_meals - consumed_meals FROM meal_wallets WHERE id = ?",
             Integer.class,
             walletId
         );

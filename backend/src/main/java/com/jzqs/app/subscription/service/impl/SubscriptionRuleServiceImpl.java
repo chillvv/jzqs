@@ -11,6 +11,7 @@ import com.jzqs.app.subscription.mapper.SubscriptionRuleMapper;
 import com.jzqs.app.subscription.model.entity.SubscriptionRuleEntity;
 import com.jzqs.app.subscription.service.SubscriptionRuleService;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,7 +53,7 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
                 sr.is_priority_follow,
                 sr.paused,
                 sr.active,
-                COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) AS remaining_meals,
+                COALESCE(mw.total_meals - mw.consumed_meals, 0) AS remaining_meals,
                 sr.created_at,
                 sr.updated_at
             FROM subscription_rules sr
@@ -128,6 +129,8 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
     @Transactional
     public SubscriptionRuleResponse createRule(SubscriptionRuleRequest request) {
         validateRule(request, false);
+        // 每客户至多一条固定订餐计划（uk_subscription_rules_customer 唯一约束兜底）
+        requireNoOtherRule(request.customerId(), null);
 
         SubscriptionRuleEntity entity = new SubscriptionRuleEntity();
         entity.setCustomerId(request.customerId());
@@ -148,7 +151,12 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
         entity.setCreatedAt(LocalDateTime.now());
         entity.setUpdatedAt(LocalDateTime.now());
 
-        subscriptionRuleMapper.insert(entity);
+        try {
+            subscriptionRuleMapper.insert(entity);
+        } catch (DuplicateKeyException ex) {
+            // 并发创建同一客户的计划：唯一约束拦截后给出与预检一致的业务提示
+            throw new BusinessException(ErrorCode.SUBSCRIPTION_RULE_ALREADY_EXISTS, "该客户已存在固定订餐计划，请直接编辑原计划");
+        }
 
         return getRuleById(entity.getId());
     }
@@ -164,6 +172,8 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
         // 计划若已开始（原开始日期早于明天），编辑时允许保留原开始日期，不强制"明天起"
         boolean alreadyStarted = entity.getStartDate().isBefore(LocalDate.now().plusDays(1));
         validateRule(request, alreadyStarted);
+        // 编辑可能切换归属客户：目标客户已有其他计划时直接拦截（唯一约束兜底）
+        requireNoOtherRule(request.customerId(), id);
 
         entity.setCustomerId(request.customerId());
         entity.setStartDate(request.startDate());
@@ -180,7 +190,12 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
         entity.setIsPriorityFollow(request.isPriorityFollow());
         entity.setUpdatedAt(LocalDateTime.now());
 
-        subscriptionRuleMapper.updateById(entity);
+        try {
+            subscriptionRuleMapper.updateById(entity);
+        } catch (DuplicateKeyException ex) {
+            // 并发下目标客户被创建了新计划：唯一约束拦截后给出与预检一致的业务提示
+            throw new BusinessException(ErrorCode.SUBSCRIPTION_RULE_ALREADY_EXISTS, "该客户已存在固定订餐计划，请直接编辑原计划");
+        }
 
         return getRuleById(id);
     }
@@ -272,20 +287,55 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
             entity.setDefaultAddressId(defaultAddressId);
         }
 
+        applyCustomerRuleUpdate(entity, request);
+
+        if (entity.getId() == null) {
+            try {
+                subscriptionRuleMapper.insert(entity);
+            } catch (DuplicateKeyException ex) {
+                // 并发首次开启固定订餐：另一请求已插入该客户的规则，改为更新同一条
+                //（uk_subscription_rules_customer 唯一约束兜底，避免移动端 selectOne 因多行抛错）
+                SubscriptionRuleEntity existing = subscriptionRuleMapper.selectOne(
+                    new QueryWrapper<SubscriptionRuleEntity>().eq("customer_id", customerId));
+                if (existing == null) {
+                    throw ex;
+                }
+                applyCustomerRuleUpdate(existing, request);
+                subscriptionRuleMapper.updateById(existing);
+            }
+        } else {
+            subscriptionRuleMapper.updateById(entity);
+        }
+
+        return getRuleByCustomerId(customerId);
+    }
+
+    /** 预检：每客户至多一条固定订餐计划（最终防线为 uk_subscription_rules_customer 唯一约束）。 */
+    private void requireNoOtherRule(long customerId, Long excludeId) {
+        Integer count = excludeId == null
+            ? jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM subscription_rules WHERE customer_id = ?",
+                Integer.class,
+                customerId
+            )
+            : jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM subscription_rules WHERE customer_id = ? AND id <> ?",
+                Integer.class,
+                customerId,
+                excludeId
+            );
+        if (count != null && count > 0) {
+            throw new BusinessException(ErrorCode.SUBSCRIPTION_RULE_ALREADY_EXISTS, "该客户已存在固定订餐计划，请直接编辑原计划");
+        }
+    }
+
+    private void applyCustomerRuleUpdate(SubscriptionRuleEntity entity, com.jzqs.app.mobile.api.MobileSubscriptionRuleRequest request) {
         entity.setActive(request.enabled());
         entity.setPaused(!request.enabled());
         entity.setWeekDays(request.weekDays() != null ? request.weekDays() : "1,2,3,4,5");
         entity.setLunchEnabled(request.lunchEnabled());
         entity.setDinnerEnabled(request.dinnerEnabled());
         entity.setUpdatedAt(LocalDateTime.now());
-
-        if (entity.getId() == null) {
-            subscriptionRuleMapper.insert(entity);
-        } else {
-            subscriptionRuleMapper.updateById(entity);
-        }
-
-        return getRuleByCustomerId(customerId);
     }
 
     private void validateRule(SubscriptionRuleRequest request, boolean allowPastStart) {

@@ -27,7 +27,9 @@ class Auth {
       riderStatus: 'UNAUTHORIZED',
       workbenchEnabled: false,
       riderName: '',
-      phone: ''
+      phone: '',
+      assignAreaLunch: '',
+      assignAreaDinner: ''
     };
   }
 
@@ -249,6 +251,9 @@ class Auth {
       this.globalData.workbenchEnabled = profile.workbenchEnabled;
       this.globalData.riderName = profile.riderName;
       this.globalData.phone = profile.phone;
+      // 后台按餐段（午餐/晚餐）分别分配的归属区域
+      this.globalData.assignAreaLunch = profile.lunchAreaCode || '';
+      this.globalData.assignAreaDinner = profile.dinnerAreaCode || '';
     } catch (error) {
       console.error('[Auth] 加载骑手信息失败:', error);
     }
@@ -278,6 +283,8 @@ class Auth {
       this.globalData.workbenchEnabled = false;
       this.globalData.riderName = '';
       this.globalData.phone = '';
+      this.globalData.assignAreaLunch = '';
+      this.globalData.assignAreaDinner = '';
       this.globalData.openid = '';
     }
   }
@@ -293,6 +300,8 @@ class Auth {
         workbenchEnabled: this.globalData.workbenchEnabled,
         riderName: this.globalData.riderName,
         phone: this.globalData.phone,
+        assignAreaLunch: this.globalData.assignAreaLunch,
+        assignAreaDinner: this.globalData.assignAreaDinner,
         openid: this.globalData.openid
       });
     } catch (_) {}
@@ -314,6 +323,8 @@ class Auth {
         : this.globalData.workbenchEnabled;
       this.globalData.riderName = savedState.riderName || this.globalData.riderName;
       this.globalData.phone = savedState.phone || this.globalData.phone;
+      this.globalData.assignAreaLunch = savedState.assignAreaLunch || '';
+      this.globalData.assignAreaDinner = savedState.assignAreaDinner || '';
       this.globalData.openid = savedState.openid || this.globalData.openid;
     } catch (_) {}
   }

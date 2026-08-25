@@ -35,7 +35,7 @@ final class DispatchLegacyWiring {
             new DispatchRouteScoringService(),
             batchModule,
             new DispatchRiderAdminModule(jdbcTemplate),
-            new DispatchAreaAdminModule(jdbcTemplate),
+            new DispatchAreaAdminModule(jdbcTemplate, assignmentModule),
             assignmentModule,
             new DispatchNotificationModule(jdbcTemplate),
             queryModule,

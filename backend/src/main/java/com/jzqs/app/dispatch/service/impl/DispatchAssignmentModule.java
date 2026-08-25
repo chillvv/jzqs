@@ -163,6 +163,29 @@ class DispatchAssignmentModule {
         String normalizedAreaCode = requireAreaCode(areaCode);
         String finalMealPeriod = normalizedMealPeriod(mealPeriod);
 
+        // 跨区互斥：骑手通过 rider_profiles.default_area_code 归属唯一区域，
+        // 已属于其他区域则不允许跨区把该区域订单全部分配给它。
+        Long riderProfileId = findRiderProfileIdByName(riderName, finalMealPeriod);
+        if (riderProfileId != null) {
+            Integer occupiedElsewhere = jdbcTemplate.queryForObject(
+                """
+                    SELECT COUNT(*) FROM rider_profiles
+                    WHERE id = ?
+                      AND default_area_code IS NOT NULL
+                      AND default_area_code <> ?
+                    """,
+                Integer.class,
+                riderProfileId,
+                normalizedAreaCode
+            );
+            if (occupiedElsewhere != null && occupiedElsewhere > 0) {
+                throw new BusinessException(
+                    ErrorCode.VALIDATION_ERROR,
+                    "骑手「" + riderName + "」已归属其他区域，不能跨区分配。请在本区域骑手范围内选择。"
+                );
+            }
+        }
+
         List<Long> orderIds = jdbcTemplate.query(
             """
                 SELECT da.meal_slot_order_id
@@ -198,20 +221,23 @@ class DispatchAssignmentModule {
         // 收敛：订单只能在本区域骑手之间切换，禁止把已属于其他区域的骑手跨区拉入。
         Long riderProfileId = findRiderProfileIdByName(riderName, orderMealPeriod);
         if (riderProfileId != null) {
+            // 跨区互斥：骑手通过 rider_profiles.default_area_code 归属唯一区域，
+            // 已属于其他区域则不允许把本区域订单跨区分配给该骑手。
             Integer occupiedElsewhere = jdbcTemplate.queryForObject(
                 """
-                    SELECT COUNT(*) FROM dispatch_area_bindings
-                    WHERE area_code <> ?
-                      AND COALESCE(default_rider_profile_id, backup_rider_profile_id) = ?
+                    SELECT COUNT(*) FROM rider_profiles
+                    WHERE id = ?
+                      AND default_area_code IS NOT NULL
+                      AND default_area_code <> ?
                     """,
                 Integer.class,
-                normalizedAreaCode,
-                riderProfileId
+                riderProfileId,
+                normalizedAreaCode
             );
             if (occupiedElsewhere != null && occupiedElsewhere > 0) {
                 throw new BusinessException(
                     ErrorCode.VALIDATION_ERROR,
-                    "骑手「" + riderName + "」已绑定其他区域，订单不能跨区切换骑手。请在本区域骑手范围内选择。"
+                    "骑手「" + riderName + "」已归属其他区域，不能跨区分配。请在本区域骑手范围内选择。"
                 );
             }
         }
@@ -285,6 +311,13 @@ class DispatchAssignmentModule {
             orderId,
             normalizedAreaCode
         );
+        // 区域一旦绑定了骑手，移入的订单必须立即归属于该区域骑手，
+        // 不允许出现「仅归区、未派单」(rider_name 为空) 的中间态。
+        String targetDefaultRider = resolveDefaultRiderName(normalizedTargetAreaCode, orderContext.mealPeriod());
+        if (targetDefaultRider != null) {
+            dispatchOrder(orderId, targetDefaultRider, normalizedTargetAreaCode, true);
+            publishDispatchEvent("dispatch.queue.changed", normalizedTargetAreaCode, targetDefaultRider, orderId);
+        }
         syncAddressBindingForArea(orderId, normalizedTargetAreaCode, updatedBy, "AREA_MOVED");
         publishDispatchEvent("dispatch.assignment.changed", normalizedTargetAreaCode, null, orderId);
         return new DispatchOrderAreaMoveResponse(normalizedAreaCode, orderId, normalizedTargetAreaCode);
@@ -355,7 +388,14 @@ class DispatchAssignmentModule {
     }
 
     private void dispatchOrder(long orderId, String riderName, String areaCode, boolean syncAddressBinding) {
-        jdbcTemplate.update("UPDATE meal_slot_orders SET status = 'DISPATCHING' WHERE id = ?", orderId);
+        // 状态前置校验：仅允许"待派单/派送中"的订单被派单，阻止已送达订单被非法回退为派送中
+        int statusUpdated = jdbcTemplate.update(
+            "UPDATE meal_slot_orders SET status = 'DISPATCHING' WHERE id = ? AND status IN ('PENDING_DISPATCH', 'DISPATCHING')",
+            orderId
+        );
+        if (statusUpdated == 0) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "订单状态已变更，无法派单，请刷新后重试");
+        }
         DispatchOrderContext orderContext = loadOrderContext(orderId);
         long riderProfileId = ensureRiderProfile(riderName, areaCode, orderContext.mealPeriod());
         int sequenceNumber = nextAreaSequence(

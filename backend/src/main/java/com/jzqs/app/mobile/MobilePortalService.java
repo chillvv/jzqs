@@ -112,37 +112,37 @@ public interface MobilePortalService {
 
     PageResponse<WalletTransactionResponse> walletTransactions(long customerId);
 
-    PageResponse<RiderTaskItemResponse> riderTasks(String riderName);
+    PageResponse<RiderTaskItemResponse> riderTasks(Long riderId);
 
-    RiderBatchSummaryResponse riderSummary(String riderName, String serveDate);
+    RiderBatchSummaryResponse riderSummary(Long riderId, String serveDate);
 
-    PageResponse<RiderQueueItemResponse> riderQueue(String riderName, String serveDate);
+    PageResponse<RiderQueueItemResponse> riderQueue(Long riderId, String serveDate);
 
-    RiderQueueItemResponse riderQueueItem(long queueItemId, String riderName, String serveDate, Long mealSlotOrderId);
+    RiderQueueItemResponse riderQueueItem(long queueItemId, Long riderId, String serveDate, Long mealSlotOrderId);
 
-    RiderAddressReferenceResponse riderAddressReference(String riderName, long addressId);
+    RiderAddressReferenceResponse riderAddressReference(Long riderId, long addressId);
 
-    RiderAddressReferenceBatchSaveResponse saveBatchAddressReferenceImage(String riderName, RiderBatchAddressReferenceRequest request);
+    RiderAddressReferenceBatchSaveResponse saveBatchAddressReferenceImage(Long riderId, RiderBatchAddressReferenceRequest request);
 
-    RiderAddressReferenceReplaceResponse replaceAddressReferenceImage(String riderName, long addressId, String referenceImageUrl);
+    RiderAddressReferenceReplaceResponse replaceAddressReferenceImage(Long riderId, long addressId, String referenceImageUrl);
 
-    RiderDeliveryUploadResponse uploadRiderReceipt(String riderName, MultipartFile file);
+    RiderDeliveryUploadResponse uploadRiderReceipt(Long riderId, MultipartFile file);
 
-    DeliveryReceiptRecordResponse submitRiderReceipt(long mealSlotOrderId, String riderName, String receiptFileKey, String receiptNote, String deliveredAt);
+    DeliveryReceiptRecordResponse submitRiderReceipt(long mealSlotOrderId, Long riderId, String receiptFileKey, String receiptNote, String deliveredAt);
 
-    DeliveryReceiptRecordResponse updateRiderReceipt(long mealSlotOrderId, String riderName, String receiptFileKey, String receiptNote, String deliveredAt);
+    DeliveryReceiptRecordResponse updateRiderReceipt(long mealSlotOrderId, Long riderId, String receiptFileKey, String receiptNote, String deliveredAt);
 
-    DeliveryReceiptDeleteResponse deleteRiderReceiptImage(long mealSlotOrderId, String riderName);
+    DeliveryReceiptDeleteResponse deleteRiderReceiptImage(long mealSlotOrderId, Long riderId);
 
-    RiderQueueReorderResponse reorderRiderQueue(String riderName, List<Long> batchItemIds);
+    RiderQueueReorderResponse reorderRiderQueue(Long riderId, List<Long> batchItemIds);
 
-    RiderQueueItemActionResponse deferRiderQueueItem(String riderName, long batchItemId);
+    RiderQueueItemActionResponse deferRiderQueueItem(Long riderId, long batchItemId);
 
-    RiderQueueItemActionResponse resumeRiderQueueItem(String riderName, long batchItemId);
+    RiderQueueItemActionResponse resumeRiderQueueItem(Long riderId, long batchItemId);
 
-    RiderDeliveryExceptionReportResponse reportDeliveryException(long mealSlotOrderId, String riderName, String exceptionType, String exceptionNote, List<String> exceptionImages);
+    RiderDeliveryExceptionReportResponse reportDeliveryException(long mealSlotOrderId, Long riderId, String exceptionType, String exceptionNote, List<String> exceptionImages);
 
-    PageResponse<RiderTaskItemResponse> riderCompletedToday(String riderName);
+    PageResponse<RiderTaskItemResponse> riderCompletedToday(Long riderId);
 
     /**
      * 撤回订单状态
@@ -152,7 +152,7 @@ public interface MobilePortalService {
      * @param riderName 骑手姓名
      * @return 操作结果
      */
-    RiderOrderStatusRevertResponse revertOrderStatus(long mealSlotOrderId, String riderName);
+    RiderOrderStatusRevertResponse revertOrderStatus(long mealSlotOrderId, Long riderId);
 
     /**
      * 保存订单排序
@@ -163,5 +163,5 @@ public interface MobilePortalService {
      * @param batchItemIds 排序后的批次项ID列表
      * @return 操作结果
      */
-    RiderOrderSequenceSaveResponse saveOrderSequence(String riderName, String mealPeriod, List<Long> batchItemIds);
+    RiderOrderSequenceSaveResponse saveOrderSequence(Long riderId, String mealPeriod, List<Long> batchItemIds);
 }

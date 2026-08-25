@@ -7,6 +7,17 @@
       <image class="header-logo" src="/assets/logo.jpeg" mode="aspectFit"></image>
       <text class="header-title">简知轻食</text>
     </view>
+    <!-- 归属区域：右上角，按餐期展示后台分配的配送区域 -->
+    <view class="header-right" wx:if="{{viewState === 'active' || viewState === 'pending' || viewState === 'blocked'}}">
+      <view class="area-chip">
+        <text class="area-chip-label">午餐</text>
+        <text class="area-chip-value">{{lunchArea}}</text>
+      </view>
+      <view class="area-chip">
+        <text class="area-chip-label">晚餐</text>
+        <text class="area-chip-value">{{dinnerArea}}</text>
+      </view>
+    </view>
   </view>
 
   <view class="profile-header">

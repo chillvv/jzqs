@@ -6,6 +6,8 @@ public record RiderAuthProfileResponse(
     String displayName,
     String phone,
     String areaCode,
+    String lunchAreaCode,
+    String dinnerAreaCode,
     String riderStatus,
     boolean workbenchEnabled,
     String firstLoginAt,

@@ -48,6 +48,7 @@ public class GlobalExceptionHandler {
             case DISPATCH_AREA_HAS_ACTIVE_ORDERS,
                  ALREADY_ORDERED,
                  USERNAME_ALREADY_EXISTS,
+                 SUBSCRIPTION_RULE_ALREADY_EXISTS,
                  REPEAT_SUBMISSION -> HttpStatus.CONFLICT;
             case WALLET_BALANCE_NOT_ENOUGH,
                  ORDERING_DISABLED,

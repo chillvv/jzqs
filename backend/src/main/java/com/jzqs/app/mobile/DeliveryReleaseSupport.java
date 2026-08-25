@@ -58,8 +58,7 @@ public class DeliveryReleaseSupport {
                 JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
                 LEFT JOIN customer_delivery_subscriptions cds ON cds.meal_slot_order_id = mso.id
                 WHERE mso.status = 'DELIVERED'
-                  AND mso.visible_to_customer = TRUE
-                  AND dr.visible_at > CURRENT_TIMESTAMP
+                  AND dr.visible_to_customer = FALSE
                 """);
         List<Object> params = new java.util.ArrayList<>();
         if (serveDate != null && !serveDate.isBlank()) {

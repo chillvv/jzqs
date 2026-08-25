@@ -44,8 +44,8 @@ class RiderDeliveryEvidenceModule {
         this.realtimeAudienceModule = realtimeAudienceModule;
     }
 
-    RiderAddressReferenceResponse riderAddressReference(String riderName, long addressId) {
-        requireRiderName(riderName);
+    RiderAddressReferenceResponse riderAddressReference(Long riderId, long addressId) {
+        requireRiderId(riderId);
         if (addressId <= 0) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "地址不能为空");
         }
@@ -67,8 +67,8 @@ class RiderDeliveryEvidenceModule {
         return results.get(0);
     }
 
-    RiderAddressReferenceBatchSaveResponse saveBatchAddressReferenceImage(String riderName, RiderBatchAddressReferenceRequest request) {
-        requireRiderName(riderName);
+    RiderAddressReferenceBatchSaveResponse saveBatchAddressReferenceImage(Long riderId, RiderBatchAddressReferenceRequest request) {
+        requireRiderId(riderId);
         if (request == null || request.addressIds() == null || request.addressIds().isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请选择至少一个地址");
         }
@@ -89,14 +89,14 @@ class RiderDeliveryEvidenceModule {
         int updatedCount = 0;
         String normalizedReferenceImageUrl = riderReceiptStorageSupport.buildReceiptUrl(request.referenceImageUrl());
         for (Long addressId : uniqueAddressIds) {
-            upsertAddressReferenceImage(addressId, normalizedReferenceImageUrl, null, riderName);
+            upsertAddressReferenceImage(addressId, normalizedReferenceImageUrl, null, resolveRiderName(riderId));
             updatedCount++;
         }
         return new RiderAddressReferenceBatchSaveResponse(updatedCount, new ArrayList<>(uniqueAddressIds));
     }
 
-    RiderAddressReferenceReplaceResponse replaceAddressReferenceImage(String riderName, long addressId, String referenceImageUrl) {
-        requireRiderName(riderName);
+    RiderAddressReferenceReplaceResponse replaceAddressReferenceImage(Long riderId, long addressId, String referenceImageUrl) {
+        requireRiderId(riderId);
         if (addressId <= 0) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "地址不能为空");
         }
@@ -104,12 +104,12 @@ class RiderDeliveryEvidenceModule {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "参考图不能为空");
         }
         String normalizedReferenceImageUrl = riderReceiptStorageSupport.buildReceiptUrl(referenceImageUrl);
-        upsertAddressReferenceImage(addressId, normalizedReferenceImageUrl, null, riderName);
+        upsertAddressReferenceImage(addressId, normalizedReferenceImageUrl, null, resolveRiderName(riderId));
         return new RiderAddressReferenceReplaceResponse(addressId, normalizedReferenceImageUrl, true);
     }
 
-    DeliveryReceiptRecordResponse submitRiderReceipt(long mealSlotOrderId, String riderName, String receiptFileKey, String receiptNote, String deliveredAt) {
-        requireRiderReceiptTask(mealSlotOrderId, riderName, true, "未找到可提交回执的配送任务");
+    DeliveryReceiptRecordResponse submitRiderReceipt(long mealSlotOrderId, Long riderId, String receiptFileKey, String receiptNote, String deliveredAt) {
+        requireRiderReceiptTask(mealSlotOrderId, riderId, true, "未找到可提交回执的配送任务");
         String finalReceiptUrl = isBlank(receiptFileKey)
             ? ""
             : riderReceiptStorageSupport.buildReceiptUrl(receiptFileKey);
@@ -137,7 +137,7 @@ class RiderDeliveryEvidenceModule {
         riderQueueSupport.refreshQueueStateForOrder(mealSlotOrderId);
         try {
             Long addressId = findAddressIdByMealSlotOrderId(mealSlotOrderId);
-            saveAddressReferenceImageIfAbsent(addressId == null ? 0L : addressId, mealSlotOrderId, finalReceiptUrl, riderName);
+            saveAddressReferenceImageIfAbsent(addressId == null ? 0L : addressId, mealSlotOrderId, finalReceiptUrl, resolveRiderName(riderId));
         } catch (Exception ignored) {
             // Keep receipt submission successful even if reference-image auto-save fails.
         }
@@ -147,8 +147,8 @@ class RiderDeliveryEvidenceModule {
         return result;
     }
 
-    DeliveryReceiptRecordResponse updateRiderReceipt(long mealSlotOrderId, String riderName, String receiptFileKey, String receiptNote, String deliveredAt) {
-        requireRiderReceiptTask(mealSlotOrderId, riderName, false, "未找到该配送任务");
+    DeliveryReceiptRecordResponse updateRiderReceipt(long mealSlotOrderId, Long riderId, String receiptFileKey, String receiptNote, String deliveredAt) {
+        requireRiderReceiptTask(mealSlotOrderId, riderId, false, "未找到该配送任务");
         String previousReceiptUrl = requireExistingReceiptUrl(mealSlotOrderId);
 
         String finalReceiptUrl = isBlank(receiptFileKey)
@@ -192,8 +192,8 @@ class RiderDeliveryEvidenceModule {
         );
     }
 
-    DeliveryReceiptDeleteResponse deleteRiderReceiptImage(long mealSlotOrderId, String riderName) {
-        requireRiderReceiptTask(mealSlotOrderId, riderName, false, "未找到该配送任务");
+    DeliveryReceiptDeleteResponse deleteRiderReceiptImage(long mealSlotOrderId, Long riderId) {
+        requireRiderReceiptTask(mealSlotOrderId, riderId, false, "未找到该配送任务");
         String previousReceiptUrl = requireExistingReceiptUrl(mealSlotOrderId);
 
         jdbcTemplate.update(
@@ -210,9 +210,9 @@ class RiderDeliveryEvidenceModule {
         return new DeliveryReceiptDeleteResponse(mealSlotOrderId, "DELIVERED", "", true);
     }
 
-    private void requireRiderName(String riderName) {
-        if (isBlank(riderName)) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "骑手姓名不能为空");
+    private void requireRiderId(Long riderId) {
+        if (riderId == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "骑手信息不能为空");
         }
     }
 
@@ -291,19 +291,19 @@ class RiderDeliveryEvidenceModule {
         );
     }
 
-    private void requireRiderReceiptTask(long mealSlotOrderId, String riderName, boolean requireDispatchingStatus, String notFoundMessage) {
+    private void requireRiderReceiptTask(long mealSlotOrderId, Long riderId, boolean requireDispatchingStatus, String notFoundMessage) {
         String sql = requireDispatchingStatus
             ? """
                 SELECT COUNT(*)
                 FROM dispatch_assignments
-                WHERE meal_slot_order_id = ? AND rider_name = ? AND status = 'DISPATCHING'
+                WHERE meal_slot_order_id = ? AND rider_profile_id = ? AND status = 'DISPATCHING'
                 """
             : """
                 SELECT COUNT(*)
                 FROM dispatch_assignments
-                WHERE meal_slot_order_id = ? AND rider_name = ?
+                WHERE meal_slot_order_id = ? AND rider_profile_id = ?
                 """;
-        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, mealSlotOrderId, riderName);
+        Integer count = jdbcTemplate.queryForObject(sql, Integer.class, mealSlotOrderId, riderId);
         if (count == null || count == 0) {
             throw new BusinessException(ErrorCode.RIDER_TASK_NOT_FOUND, notFoundMessage);
         }
@@ -363,6 +363,18 @@ class RiderDeliveryEvidenceModule {
 
     private String normalizeNote(String note) {
         return isBlank(note) ? "-" : note.trim();
+    }
+
+    private String resolveRiderName(Long riderId) {
+        if (riderId == null) {
+            return "";
+        }
+        List<String> names = jdbcTemplate.query(
+            "SELECT rider_name FROM rider_profiles WHERE id = ?",
+            (rs, rowNum) -> rs.getString("rider_name"),
+            riderId
+        );
+        return names.isEmpty() ? "" : names.get(0);
     }
 
     private boolean isBlank(String value) {

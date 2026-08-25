@@ -67,7 +67,6 @@ public class NightlyReminderModule {
             LEFT JOIN (
                 SELECT customer_id,
                        COALESCE(SUM(total_meals), 0)
-                           - COALESCE(SUM(reserved_meals), 0)
                            - COALESCE(SUM(consumed_meals), 0) AS remaining_meals
                 FROM meal_wallets
                 WHERE active = TRUE
@@ -129,7 +128,6 @@ public class NightlyReminderModule {
                 LEFT JOIN (
                     SELECT customer_id,
                            COALESCE(SUM(total_meals), 0)
-                               - COALESCE(SUM(reserved_meals), 0)
                                - COALESCE(SUM(consumed_meals), 0) AS remaining_meals
                     FROM meal_wallets
                     WHERE active = TRUE

@@ -110,7 +110,7 @@ public class RiderController {
         @RequestAttribute(value = "riderName", required = false) String riderName,
         @RequestAttribute(value = "riderId", required = false) Long riderId
     ) {
-        return ApiResponse.success(mobileAuthService.riderProfile(resolveCurrentRiderName(riderName, riderId)));
+        return ApiResponse.success(mobileAuthService.riderProfile(riderId));
     }
 
     // ==================== 订单相关 ====================
@@ -129,7 +129,7 @@ public class RiderController {
         @RequestAttribute(value = "riderName", required = false) String riderName,
         @RequestAttribute(value = "riderId", required = false) Long riderId
     ) {
-        return ApiResponse.success(mobilePortalService.riderQueue(resolveCurrentRiderName(riderName, riderId), serveDate));
+        return ApiResponse.success(mobilePortalService.riderQueue(riderId, serveDate));
     }
 
     /**
@@ -149,7 +149,7 @@ public class RiderController {
     ) {
         return ApiResponse.success(mobilePortalService.riderQueueItem(
             orderId,
-            resolveCurrentRiderName(riderName, riderId),
+            riderId,
             serveDate,
             mealSlotOrderId
         ));
@@ -163,7 +163,7 @@ public class RiderController {
         @RequestAttribute(value = "riderName", required = false) String riderName,
         @RequestAttribute(value = "riderId", required = false) Long riderId
     ) {
-        return ApiResponse.success(mobilePortalService.riderAddressReference(resolveCurrentRiderName(riderName, riderId), addressId));
+        return ApiResponse.success(mobilePortalService.riderAddressReference(riderId, addressId));
     }
 
     @PostMapping("/address-reference/batch")
@@ -173,7 +173,7 @@ public class RiderController {
         @RequestAttribute(value = "riderId", required = false) Long riderId,
         @Valid @RequestBody RiderBatchAddressReferenceRequest request
     ) {
-        return ApiResponse.success(mobilePortalService.saveBatchAddressReferenceImage(resolveCurrentRiderName(riderName, riderId), request));
+        return ApiResponse.success(mobilePortalService.saveBatchAddressReferenceImage(riderId, request));
     }
 
     @PostMapping("/address-reference/{addressId}")
@@ -187,7 +187,7 @@ public class RiderController {
     ) {
         return ApiResponse.success(
             mobilePortalService.replaceAddressReferenceImage(
-                resolveCurrentRiderName(riderName, riderId),
+                riderId,
                 addressId,
                 request.referenceImageUrl()
             )
@@ -208,7 +208,7 @@ public class RiderController {
     ) {
         return ApiResponse.success(mobilePortalService.submitRiderReceipt(
             orderId,
-            resolveCurrentRiderName(riderName, riderId),
+            riderId,
             request.receiptFileKey(),
             request.receiptNote(),
             request.deliveredAt()
@@ -227,7 +227,7 @@ public class RiderController {
         @RequestAttribute(value = "riderName", required = false) String riderName,
         @RequestAttribute(value = "riderId", required = false) Long riderId
     ) {
-        return ApiResponse.success(mobilePortalService.revertOrderStatus(orderId, resolveCurrentRiderName(riderName, riderId)));
+        return ApiResponse.success(mobilePortalService.revertOrderStatus(orderId, riderId));
     }
 
     /**
@@ -241,7 +241,7 @@ public class RiderController {
         @RequestAttribute(value = "riderId", required = false) Long riderId,
         @Valid @RequestBody RiderReorderRequest request
     ) {
-        return ApiResponse.success(mobilePortalService.reorderRiderQueue(resolveCurrentRiderName(riderName, riderId), request.batchItemIds()));
+        return ApiResponse.success(mobilePortalService.reorderRiderQueue(riderId, request.batchItemIds()));
     }
 
     // ==================== 文件上传 ====================
@@ -253,7 +253,7 @@ public class RiderController {
         @RequestAttribute(value = "riderId", required = false) Long riderId,
         @RequestPart("file") MultipartFile file
     ) {
-        return ApiResponse.success(mobilePortalService.uploadRiderReceipt(resolveCurrentRiderName(riderName, riderId), file));
+        return ApiResponse.success(mobilePortalService.uploadRiderReceipt(riderId, file));
     }
 
     /**
@@ -271,7 +271,7 @@ public class RiderController {
     ) {
         return ApiResponse.success(mobilePortalService.updateRiderReceipt(
             orderId,
-            resolveCurrentRiderName(riderName, riderId),
+            riderId,
             request.receiptFileKey(),
             request.receiptNote(),
             request.deliveredAt()
@@ -290,7 +290,7 @@ public class RiderController {
         @RequestAttribute(value = "riderName", required = false) String riderName,
         @RequestAttribute(value = "riderId", required = false) Long riderId
     ) {
-        return ApiResponse.success(mobilePortalService.deleteRiderReceiptImage(orderId, resolveCurrentRiderName(riderName, riderId)));
+        return ApiResponse.success(mobilePortalService.deleteRiderReceiptImage(orderId, riderId));
     }
 
     // ==================== 其他功能 ====================
@@ -306,7 +306,7 @@ public class RiderController {
         @RequestAttribute(value = "riderName", required = false) String riderName,
         @RequestAttribute(value = "riderId", required = false) Long riderId
     ) {
-        return ApiResponse.success(mobilePortalService.riderSummary(resolveCurrentRiderName(riderName, riderId), serveDate));
+        return ApiResponse.success(mobilePortalService.riderSummary(riderId, serveDate));
     }
 
     /**
@@ -323,20 +323,10 @@ public class RiderController {
     ) {
         return ApiResponse.success(mobilePortalService.reportDeliveryException(
             orderId,
-            resolveCurrentRiderName(riderName, riderId),
+            riderId,
             request.exceptionType(),
             request.exceptionNote(),
             request.exceptionImages()
         ));
-    }
-
-    private String resolveCurrentRiderName(String riderName, Long riderId) {
-        if (riderName != null && !riderName.isBlank()) {
-            return riderName;
-        }
-        if (riderId == null) {
-            throw new IllegalArgumentException("缺少骑手认证信息");
-        }
-        return mobileAuthService.riderProfile(riderId).riderName();
     }
 }

@@ -229,7 +229,7 @@ public class CustomerMainSheetSyncServiceImpl implements CustomerMainSheetSyncSe
             jdbcTemplate.update(
                 """
                 INSERT INTO meal_wallets
-                    (customer_id, package_plan_id, total_meals, reserved_meals, consumed_meals, active, opened_at, expired_at, last_adjusted_at)
+                    (customer_id, package_plan_id, total_meals, consumed_meals, active, opened_at, expired_at, last_adjusted_at)
                 VALUES
                     (?, ?, ?, 0, 0, TRUE, ?, ?, CURRENT_TIMESTAMP)
                 """,

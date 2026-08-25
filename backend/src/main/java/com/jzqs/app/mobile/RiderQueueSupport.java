@@ -37,7 +37,7 @@ class RiderQueueSupport {
         this.realtimeAudienceModule = realtimeAudienceModule;
     }
 
-    PageResponse<RiderTaskItemResponse> riderTasks(String riderName) {
+    PageResponse<RiderTaskItemResponse> riderTasks(Long riderId) {
         LocalDate today = LocalDate.now();
         List<RiderTaskItemResponse> items = jdbcTemplate.query("""
             SELECT
@@ -63,7 +63,7 @@ class RiderQueueSupport {
                 AND ms.slot_status = 'ACTIVE'
                 AND EXISTS (SELECT 1 FROM menu_weeks mw2 WHERE mw2.id = ms.week_id AND mw2.status = 'PUBLISHED')
             LEFT JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
-            WHERE da.rider_name = ?
+            WHERE da.rider_profile_id = ?
               AND do.serve_date = ?
             ORDER BY CASE WHEN COALESCE(mso.delivery_meal_period, mso.meal_period) = 'LUNCH' THEN 1 ELSE 2 END,
                      COALESCE(da.sequence_number, 2147483647),
@@ -82,11 +82,11 @@ class RiderQueueSupport {
             rs.getString("delivery_status"),
             rs.getString("receipt_status"),
             rs.getString("receipt_url")
-        ), riderName, today);
+        ), riderId, today);
         return PageResponse.of(items, 1, 20, items.size());
     }
 
-    RiderBatchSummaryResponse riderSummary(String riderName, String serveDate) {
+    RiderBatchSummaryResponse riderSummary(Long riderId, String serveDate) {
         LocalDate targetDate = resolveServeDateOrToday(serveDate);
         List<RiderBatchSummaryResponse.BatchCardResponse> cards = jdbcTemplate.query("""
             SELECT
@@ -114,7 +114,7 @@ class RiderQueueSupport {
                 ) AS next_customer_name
             FROM dispatch_batches db
             JOIN rider_profiles rp ON rp.id = db.rider_profile_id
-            WHERE rp.rider_name = ?
+            WHERE db.rider_profile_id = ?
               AND db.serve_date = ?
             ORDER BY CASE WHEN db.meal_period = 'LUNCH' THEN 1 ELSE 2 END, db.id DESC
             """, (rs, rowNum) -> new RiderBatchSummaryResponse.BatchCardResponse(
@@ -127,13 +127,13 @@ class RiderQueueSupport {
             rs.getInt("current_sequence"),
             rs.getString("current_customer_name"),
             rs.getString("next_customer_name")
-        ), riderName, targetDate);
+        ), riderId, targetDate);
         RiderBatchSummaryResponse.BatchCardResponse lunch = cards.stream().filter(item -> "LUNCH".equals(item.mealPeriod())).findFirst().orElse(null);
         RiderBatchSummaryResponse.BatchCardResponse dinner = cards.stream().filter(item -> "DINNER".equals(item.mealPeriod())).findFirst().orElse(null);
         int totalCount = cards.stream().mapToInt(RiderBatchSummaryResponse.BatchCardResponse::totalCount).sum();
         int deliveredCount = cards.stream().mapToInt(RiderBatchSummaryResponse.BatchCardResponse::deliveredCount).sum();
         return new RiderBatchSummaryResponse(
-            riderName,
+            resolveRiderName(riderId),
             totalCount,
             deliveredCount,
             Math.max(totalCount - deliveredCount, 0),
@@ -142,7 +142,7 @@ class RiderQueueSupport {
         );
     }
 
-    PageResponse<RiderTaskItemResponse> riderCompletedToday(String riderName) {
+    PageResponse<RiderTaskItemResponse> riderCompletedToday(Long riderId) {
         LocalDate today = LocalDate.now();
         List<RiderTaskItemResponse> items = jdbcTemplate.query("""
             SELECT
@@ -168,7 +168,7 @@ class RiderQueueSupport {
                 AND ms.slot_status = 'ACTIVE'
                 AND EXISTS (SELECT 1 FROM menu_weeks mw2 WHERE mw2.id = ms.week_id AND mw2.status = 'PUBLISHED')
             JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
-            WHERE da.rider_name = ?
+            WHERE da.rider_profile_id = ?
               AND do.serve_date = ?
               AND DATE(dr.delivered_at) = ?
               AND da.status = 'DELIVERED'
@@ -187,13 +187,13 @@ class RiderQueueSupport {
             rs.getString("delivery_status"),
             rs.getString("receipt_status"),
             rs.getString("receipt_url")
-        ), riderName, today, today);
+        ), riderId, today, today);
         return PageResponse.of(items, 1, 20, items.size());
     }
 
     RiderDeliveryExceptionReportResponse reportDeliveryException(
         long mealSlotOrderId,
-        String riderName,
+        Long riderId,
         String exceptionType,
         String exceptionNote,
         List<String> exceptionImages
@@ -208,11 +208,11 @@ class RiderQueueSupport {
             JOIN customers c ON c.id = do.customer_id
             JOIN customer_addresses ca ON ca.id = mso.address_id
             CROSS JOIN rider_profiles rp
-            WHERE mso.id = ? AND rp.rider_name = ?
+            WHERE mso.id = ? AND rp.id = ?
             """,
             ps -> {
                 ps.setLong(1, mealSlotOrderId);
-                ps.setString(2, riderName);
+                ps.setLong(2, riderId);
             },
             rs -> {
                 if (!rs.next()) {
@@ -250,20 +250,20 @@ class RiderQueueSupport {
             """,
             mealSlotOrderId,
             orderInfo.riderProfileId(),
-            riderName,
+            resolveRiderName(riderId),
             exceptionType,
             exceptionNote,
             orderInfo.customerPhone(),
             orderInfo.deliveryAddress(),
             imagesJson
         );
-        publishRiderEvent("dispatch.exception.changed", riderName, mealSlotOrderId);
+        publishRiderEvent("dispatch.exception.changed", resolveRiderName(riderId), mealSlotOrderId);
         return new RiderDeliveryExceptionReportResponse(exceptionId, "REPORTED", "异常已上报，请等待处理");
     }
 
-    PageResponse<RiderQueueItemResponse> riderQueue(String riderName, String serveDate) {
+    PageResponse<RiderQueueItemResponse> riderQueue(Long riderId, String serveDate) {
         LocalDate targetDate = resolveServeDateOrToday(serveDate);
-        ensureRiderQueueMaterialized(riderName, targetDate);
+        ensureRiderQueueMaterialized(riderId, targetDate);
         List<RiderQueueRow> rows = jdbcTemplate.query("""
             SELECT
                 COALESCE(dbi.id, 0) AS batch_item_id,
@@ -305,7 +305,7 @@ class RiderQueueSupport {
                 AND ms.slot_status = 'ACTIVE'
                 AND EXISTS (SELECT 1 FROM menu_weeks mw2 WHERE mw2.id = ms.week_id AND mw2.status = 'PUBLISHED')
             LEFT JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
-            WHERE da.rider_name = ?
+            WHERE da.rider_profile_id = ?
               AND doo.serve_date = ?
             ORDER BY CASE WHEN COALESCE(mso.delivery_meal_period, mso.meal_period) = 'LUNCH' THEN 1 ELSE 2 END,
                      COALESCE(NULLIF(dbi.current_sequence, 0), NULLIF(da.sequence_number, 0), 2147483647) ASC,
@@ -330,7 +330,7 @@ class RiderQueueSupport {
             rs.getString("receipt_url"),
             rs.getString("receipt_note"),
             rs.getString("reference_image_url")
-        ), riderName, targetDate);
+        ), riderId, targetDate);
         Map<Long, OrderNoteProjection> projections = loadOrderNoteProjections(rows.stream().map(RiderQueueRow::mealSlotOrderId).toList());
         List<RiderQueueItemResponse> items = rows.stream()
             .map(row -> buildRiderQueueItemResponse(row, projections.get(row.mealSlotOrderId())))
@@ -338,9 +338,9 @@ class RiderQueueSupport {
         return PageResponse.of(items, 1, 50, items.size());
     }
 
-    RiderQueueItemResponse riderQueueItem(long queueItemId, String riderName, String serveDate, Long mealSlotOrderId) {
+    RiderQueueItemResponse riderQueueItem(long queueItemId, Long riderId, String serveDate, Long mealSlotOrderId) {
         LocalDate targetDate = resolveServeDateOrToday(serveDate);
-        ensureRiderQueueMaterialized(riderName, targetDate);
+        ensureRiderQueueMaterialized(riderId, targetDate);
         long resolvedMealSlotOrderId = mealSlotOrderId == null ? 0L : mealSlotOrderId.longValue();
         boolean shouldUseMealSlotOrderFallback = resolvedMealSlotOrderId > 0;
         String detailSql = shouldUseMealSlotOrderFallback
@@ -384,7 +384,7 @@ class RiderQueueSupport {
                 AND EXISTS (SELECT 1 FROM menu_weeks mw2 WHERE mw2.id = ms.week_id AND mw2.status = 'PUBLISHED')
             LEFT JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
             WHERE mso.id = ?
-              AND da.rider_name = ?
+              AND da.rider_profile_id = ?
               AND doo.serve_date = ?
             """
             : """
@@ -427,7 +427,7 @@ class RiderQueueSupport {
                 AND EXISTS (SELECT 1 FROM menu_weeks mw2 WHERE mw2.id = ms.week_id AND mw2.status = 'PUBLISHED')
             LEFT JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
             WHERE dbi.id = ?
-              AND da.rider_name = ?
+              AND da.rider_profile_id = ?
               AND doo.serve_date = ?
             """;
         List<RiderQueueRow> results = jdbcTemplate.query(detailSql, (rs, rowNum) -> new RiderQueueRow(
@@ -450,7 +450,7 @@ class RiderQueueSupport {
             rs.getString("receipt_url"),
             rs.getString("receipt_note"),
             ""
-        ), shouldUseMealSlotOrderFallback ? resolvedMealSlotOrderId : queueItemId, riderName, targetDate);
+        ), shouldUseMealSlotOrderFallback ? resolvedMealSlotOrderId : queueItemId, riderId, targetDate);
         if (results.isEmpty()) {
             return null;
         }
@@ -459,7 +459,7 @@ class RiderQueueSupport {
         return buildRiderQueueItemResponse(row, projection);
     }
 
-    RiderQueueReorderResponse reorderRiderQueue(String riderName, List<Long> batchItemIds) {
+    RiderQueueReorderResponse reorderRiderQueue(Long riderId, List<Long> batchItemIds) {
         if (batchItemIds == null || batchItemIds.isEmpty()) {
             return new RiderQueueReorderResponse(0, "UNCHANGED");
         }
@@ -523,15 +523,15 @@ class RiderQueueSupport {
                 UPDATE dispatch_batch_items
                 SET current_sequence = ?, manually_adjusted = TRUE, reordered_by = ?, reordered_at = CURRENT_TIMESTAMP
                 WHERE id = ?
-                """, sequence++, riderName, batchItemId);
+                """, sequence++, resolveRiderName(riderId), batchItemId);
         }
         syncDispatchAssignmentsFromBatch(batchId);
-        publishRiderEvent("dispatch.queue.changed", riderName, batchItemIds.get(0));
+        publishRiderEvent("dispatch.queue.changed", resolveRiderName(riderId), batchItemIds.get(0));
         return new RiderQueueReorderResponse(batchItemIds.size(), "REORDERED");
     }
 
-    RiderQueueItemActionResponse deferRiderQueueItem(String riderName, long batchItemId) {
-        RiderBatchItemContext context = requireRiderBatchItem(riderName, batchItemId);
+    RiderQueueItemActionResponse deferRiderQueueItem(Long riderId, long batchItemId) {
+        RiderBatchItemContext context = requireRiderBatchItem(riderId, batchItemId);
         if ("DELIVERED".equals(context.itemStatus())) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "已送达订单不能稍后送");
         }
@@ -552,7 +552,7 @@ class RiderQueueSupport {
                 reordered_at = CURRENT_TIMESTAMP
             WHERE batch_id = ? AND current_sequence > ?
             ORDER BY current_sequence ASC
-            """, riderName, context.batchId(), context.currentSequence());
+            """, resolveRiderName(riderId), context.batchId(), context.currentSequence());
         jdbcTemplate.update("""
             UPDATE dispatch_batch_items
             SET current_sequence = ?,
@@ -561,14 +561,14 @@ class RiderQueueSupport {
                 reordered_by = ?,
                 reordered_at = CURRENT_TIMESTAMP
             WHERE id = ?
-            """, lastSequence, riderName, batchItemId);
+            """, lastSequence, resolveRiderName(riderId), batchItemId);
         refreshRiderBatchState(context.batchId());
-        publishRiderEvent("dispatch.queue.changed", riderName, batchItemId);
+        publishRiderEvent("dispatch.queue.changed", resolveRiderName(riderId), batchItemId);
         return new RiderQueueItemActionResponse(batchItemId, "DEFERRED", "DEFERRED");
     }
 
-    RiderQueueItemActionResponse resumeRiderQueueItem(String riderName, long batchItemId) {
-        RiderBatchItemContext context = requireRiderBatchItem(riderName, batchItemId);
+    RiderQueueItemActionResponse resumeRiderQueueItem(Long riderId, long batchItemId) {
+        RiderBatchItemContext context = requireRiderBatchItem(riderId, batchItemId);
         if ("DELIVERED".equals(context.itemStatus())) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "已送达订单不能恢复队列");
         }
@@ -582,14 +582,14 @@ class RiderQueueSupport {
                 reordered_by = ?,
                 reordered_at = CURRENT_TIMESTAMP
             WHERE id = ?
-            """, riderName, batchItemId);
+            """, resolveRiderName(riderId), batchItemId);
         refreshRiderBatchState(context.batchId());
         String finalStatus = jdbcTemplate.queryForObject(
             "SELECT item_status FROM dispatch_batch_items WHERE id = ?",
             String.class,
             batchItemId
         );
-        publishRiderEvent("dispatch.queue.changed", riderName, batchItemId);
+        publishRiderEvent("dispatch.queue.changed", resolveRiderName(riderId), batchItemId);
         return new RiderQueueItemActionResponse(batchItemId, finalStatus != null ? finalStatus : "PENDING", "RESUMED");
     }
 
@@ -651,8 +651,8 @@ class RiderQueueSupport {
         return LocalDate.parse(normalized);
     }
 
-    private void ensureRiderQueueMaterialized(String riderName, LocalDate serveDate) {
-        if (riderName == null || riderName.isBlank() || serveDate == null) {
+    private void ensureRiderQueueMaterialized(Long riderId, LocalDate serveDate) {
+        if (riderId == null || serveDate == null) {
             return;
         }
         List<RiderAssignmentRow> assignments = jdbcTemplate.query("""
@@ -665,7 +665,7 @@ class RiderQueueSupport {
             FROM dispatch_assignments da
             JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
             JOIN daily_orders doo ON doo.id = mso.daily_order_id
-            WHERE da.rider_name = ?
+            WHERE da.rider_profile_id = ?
               AND doo.serve_date = ?
             """, (rs, rowNum) -> new RiderAssignmentRow(
             rs.getLong("meal_slot_order_id"),
@@ -673,7 +673,7 @@ class RiderQueueSupport {
             rs.getString("area_code"),
             rs.getString("status"),
             rs.getObject("sequence_number") == null ? null : rs.getInt("sequence_number")
-        ), riderName, serveDate);
+        ), riderId, serveDate);
         for (RiderAssignmentRow assignment : assignments) {
             if (assignment.riderProfileId() == null) {
                 continue;
@@ -811,19 +811,19 @@ class RiderQueueSupport {
         return "PENDING";
     }
 
-    private RiderBatchItemContext requireRiderBatchItem(String riderName, long batchItemId) {
+    private RiderBatchItemContext requireRiderBatchItem(Long riderId, long batchItemId) {
         List<RiderBatchItemContext> rows = jdbcTemplate.query("""
             SELECT dbi.id, dbi.batch_id, dbi.current_sequence, dbi.item_status
             FROM dispatch_batch_items dbi
             JOIN dispatch_batches db ON db.id = dbi.batch_id
             JOIN rider_profiles rp ON rp.id = db.rider_profile_id
-            WHERE rp.rider_name = ? AND dbi.id = ?
+            WHERE db.rider_profile_id = ? AND dbi.id = ?
             """, (rs, rowNum) -> new RiderBatchItemContext(
             rs.getLong("id"),
             rs.getLong("batch_id"),
             rs.getInt("current_sequence"),
             rs.getString("item_status")
-        ), riderName, batchItemId);
+        ), riderId, batchItemId);
         if (rows.isEmpty()) {
             throw new BusinessException(ErrorCode.RIDER_TASK_NOT_FOUND, "未找到对应配送队列项");
         }
@@ -929,6 +929,18 @@ class RiderQueueSupport {
 
     private void publishRiderEvent(String eventType, String riderName, Object orderId) {
         realtimeAudienceModule.publishRiderEvent(eventType, riderName, orderId);
+    }
+
+    private String resolveRiderName(Long riderId) {
+        if (riderId == null) {
+            return "";
+        }
+        List<String> names = jdbcTemplate.query(
+            "SELECT rider_name FROM rider_profiles WHERE id = ?",
+            (rs, rowNum) -> rs.getString("rider_name"),
+            riderId
+        );
+        return names.isEmpty() ? "" : names.get(0);
     }
 
     private String buildSpecialSummary(String userNote, String adminNote) {

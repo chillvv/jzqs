@@ -3,6 +3,7 @@ package com.jzqs.app.mobile;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.common.util.JwtClaims;
+import com.jzqs.app.common.util.TimeUtils;
 import com.jzqs.app.common.util.JwtUtils;
 import com.jzqs.app.common.util.PasswordUtils;
 import com.jzqs.app.common.wechat.WeChatService;
@@ -81,7 +82,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
     public MobileAuthStateResponse phoneLogin(String openid, String phone) {
         String finalOpenid = requireOpenid(openid);
         String finalPhone = requirePhone(phone);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = TimeUtils.now();
         Long customerId = findCustomerIdByPhone(finalPhone);
         if (customerId == null) {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "该手机号未注册，请先注册");
@@ -121,7 +122,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
     public MobileAuthStateResponse bindDevPhone(String openid, String phone) {
         String finalOpenid = requireOpenid(openid);
         String finalPhone = requirePhone(phone);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = TimeUtils.now();
         Long customerId = findCustomerIdByOpenid(finalOpenid);
         validateUniqueCustomerPhone(finalPhone, customerId);
         if (customerId == null) {
@@ -210,7 +211,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         String token = JwtUtils.generateToken(JwtClaims.rider(riderId, profile.riderName(), profile.phone(), openid));
         
         // 更新最后登录时间
-        LocalDateTime now = LocalDateTime.now().withNano(0);
+        LocalDateTime now = TimeUtils.now().withNano(0);
         jdbcTemplate.update(
             "UPDATE rider_profiles SET last_login_at = ? WHERE id = ?",
             Timestamp.valueOf(now),
@@ -225,7 +226,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
     public RiderAuthStateResponse bindRiderPhone(String openid, String phone, String nickname) {
         String finalOpenid = requireOpenid(openid);
         String finalPhone = requirePhone(phone);
-        LocalDateTime now = LocalDateTime.now().withNano(0);
+        LocalDateTime now = TimeUtils.now().withNano(0);
         Long riderId = findRiderIdByPhone(finalPhone);
         
         if (riderId == null) {
@@ -294,7 +295,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             }
             
             // 更新最后登录时间
-            LocalDateTime now = LocalDateTime.now().withNano(0);
+            LocalDateTime now = TimeUtils.now().withNano(0);
             jdbcTemplate.update(
                 "UPDATE rider_profiles SET last_login_at = ? WHERE id = ?",
                 Timestamp.valueOf(now),
@@ -357,7 +358,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         String finalCode = requirePhoneCode(code);
         String finalOpenid = stringClaim(openid);
         String finalPhone = weChatService.getPhoneNumber(finalCode);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = TimeUtils.now();
         Long customerId = finalOpenid.isEmpty() ? null : findCustomerIdByOpenid(finalOpenid);
         if (customerId == null) {
             customerId = findCustomerIdByPhone(finalPhone);
@@ -440,7 +441,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         String finalOpenid = requireOpenid(openid);
         String finalPhone = requirePhone(phone);
         String finalNickname = requireNickname(nickname);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = TimeUtils.now();
         Long customerId = findCustomerIdByOpenid(finalOpenid);
         validateUniqueCustomerPhone(finalPhone, customerId);
         if (customerId == null) {
@@ -597,11 +598,12 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             customerId
         );
         if (walletCount == null || walletCount == 0) {
+            // 幂等创建：依赖 meal_wallets.active_customer_id 唯一约束，并发下重复插入自动跳过
             jdbcTemplate.update(
                 """
-                    INSERT INTO meal_wallets (
-                        customer_id, total_meals, reserved_meals, consumed_meals, active, opened_at, last_adjusted_at
-                    ) VALUES (?, 0, 0, 0, TRUE, ?, ?)
+                    INSERT IGNORE INTO meal_wallets (
+                        customer_id, total_meals, consumed_meals, active, opened_at, last_adjusted_at
+                    ) VALUES (?, 0, 0, TRUE, ?, ?)
                     """,
                 customerId,
                 Timestamp.valueOf(now),
@@ -735,6 +737,8 @@ public class MobileAuthServiceImpl implements MobileAuthService {
                 null,
                 null,
                 null,
+                null,
+                null,
                 "UNAUTHORIZED",
                 false,
                 null,
@@ -752,6 +756,8 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             profile.displayName(),
             profile.phone(),
             profile.areaCode(),
+            profile.lunchAreaCode(),
+            profile.dinnerAreaCode(),
             profile.riderStatus(),
             profile.workbenchEnabled(),
             profile.firstLoginAt(),
@@ -840,6 +846,8 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             "未开通骑手",
             phone,
             "",
+            "",
+            "",
             "NOT_FOUND",
             false,
             "",
@@ -859,8 +867,22 @@ public class MobileAuthServiceImpl implements MobileAuthService {
                     default_area_code,
                     auth_status,
                     first_login_at,
-                    last_login_at
-                FROM rider_profiles
+                    last_login_at,
+                    (
+                        SELECT dab.area_code
+                        FROM dispatch_area_bindings dab
+                        JOIN rider_profiles lr ON lr.id = dab.default_rider_profile_id
+                        WHERE lr.rider_name = rp.rider_name AND dab.meal_period = 'LUNCH'
+                        LIMIT 1
+                    ) AS lunch_area_code,
+                    (
+                        SELECT dab.area_code
+                        FROM dispatch_area_bindings dab
+                        JOIN rider_profiles dr ON dr.id = dab.default_rider_profile_id
+                        WHERE dr.rider_name = rp.rider_name AND dab.meal_period = 'DINNER'
+                        LIMIT 1
+                    ) AS dinner_area_code
+                FROM rider_profiles rp
                 WHERE id = ?
                 """,
             ps -> ps.setLong(1, riderId),
@@ -875,6 +897,8 @@ public class MobileAuthServiceImpl implements MobileAuthService {
                     rs.getString("display_name"),
                     rs.getString("phone"),
                     rs.getString("default_area_code"),
+                    rs.getString("lunch_area_code"),
+                    rs.getString("dinner_area_code"),
                     riderStatus,
                     "ACTIVE".equalsIgnoreCase(riderStatus),
                     formatTimestamp(rs.getTimestamp("first_login_at")),
@@ -894,7 +918,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         String finalPhone = requirePhone(phone);
         String finalName = requireNickname(name);
         String finalOpenid = openid != null && !openid.trim().isEmpty() ? openid.trim() : null;
-        LocalDateTime now = LocalDateTime.now().withNano(0);
+        LocalDateTime now = TimeUtils.now().withNano(0);
         validateUniqueRiderName(finalName, "DINNER", null);
 
         // 检查手机号是否已注册
@@ -979,7 +1003,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
     public RiderLoginResponse riderPhoneLogin(String phone, String openid) {
         String finalPhone = requirePhone(phone);
         String finalOpenid = openid != null && !openid.trim().isEmpty() ? openid.trim() : null;
-        LocalDateTime now = LocalDateTime.now().withNano(0);
+        LocalDateTime now = TimeUtils.now().withNano(0);
 
         // 查询骑手
         RiderLoginCandidate rider = jdbcTemplate.query(
@@ -1070,7 +1094,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         String finalPhone = requirePhone(phone);
         String finalName = requireNickname(name);
         String finalOpenid = openid != null && !openid.trim().isEmpty() ? openid.trim() : null;
-        LocalDateTime now = LocalDateTime.now().withNano(0);
+        LocalDateTime now = TimeUtils.now().withNano(0);
 
         // 查询是否存在该手机号的骑手
         RiderLoginCandidate existingRider = jdbcTemplate.query(

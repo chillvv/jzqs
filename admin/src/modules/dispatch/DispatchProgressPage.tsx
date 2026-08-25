@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { MapPinned, PackageCheck, Truck, UserRound } from "lucide-react";
 import { AdminDialog } from "../../shared/components/AdminDialog";
 import { toast } from "../../shared/components/Toast";
+import { deleteDeliveryReceiptImage, recordDeliveryReceipt, uploadDeliveryReceiptImage } from "../../shared/api/http";
+import { RemarkField } from "../../shared/components/RemarkField";
 import type { DispatchAreaBindingResponse, DispatchRiderProgressResponse } from "../../shared/api/types";
 import { hasDisplayValue, hasOrderAttention } from "./dispatchCenterLayout.helpers";
 import { useDispatchContext } from "./DispatchContext";
@@ -60,7 +62,7 @@ type ProgressGroup = {
 
 export function DispatchProgressPage() {
   const { serveDate, mealPeriod } = useDispatchContext();
-  const { areaBindings, riderProgress, loadError } = useDispatchProgressLiveData({ serveDate, mealPeriod });
+  const { areaBindings, riderProgress, loadError, reload } = useDispatchProgressLiveData({ serveDate, mealPeriod });
   const [selectedGroupKey, setSelectedGroupKey] = useState<string>();
   const [selectedOrderId, setSelectedOrderId] = useState<number>();
 
@@ -165,6 +167,88 @@ export function DispatchProgressPage() {
       null
     );
   }, [activeGroup, selectedOrderId]);
+
+  const [receiptNote, setReceiptNote] = useState("");
+  const [editingReceiptUrl, setEditingReceiptUrl] = useState("");
+  const [uploadingReceipt, setUploadingReceipt] = useState(false);
+  const [submittingReceipt, setSubmittingReceipt] = useState(false);
+
+  useEffect(() => {
+    if (!activeOrder) {
+      return;
+    }
+    setReceiptNote(activeOrder.receiptNote === "-" ? "" : activeOrder.receiptNote || "");
+    setEditingReceiptUrl(activeOrder.receiptUrl || "");
+    setUploadingReceipt(false);
+    setSubmittingReceipt(false);
+  }, [activeOrder]);
+
+  async function handleReceiptFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      toast("请上传 JPG、PNG、WEBP 等图片文件", "error");
+      event.target.value = "";
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast("送达图不能超过 5MB", "error");
+      event.target.value = "";
+      return;
+    }
+    setUploadingReceipt(true);
+    try {
+      const uploaded = await uploadDeliveryReceiptImage(file);
+      setEditingReceiptUrl(uploaded.url);
+      toast("送达图已上传，请点击保存");
+    } catch (error: any) {
+      toast(error?.response?.data?.message || error?.message || "上传送达图失败", "error");
+    } finally {
+      setUploadingReceipt(false);
+      event.target.value = "";
+    }
+  }
+
+  async function handleReceiptSubmit() {
+    if (!activeOrder || submittingReceipt) {
+      return;
+    }
+    setSubmittingReceipt(true);
+    try {
+      await recordDeliveryReceipt({
+        mealSlotOrderId: activeOrder.orderId,
+        receiptUrl: editingReceiptUrl,
+        receiptNote,
+        deliveredAt: ""
+      });
+      toast("送达信息已保存");
+      setSelectedOrderId(undefined);
+      await reload().catch(() => undefined);
+    } catch (error: any) {
+      toast(error?.response?.data?.message || error?.message || "保存送达信息失败", "error");
+    } finally {
+      setSubmittingReceipt(false);
+    }
+  }
+
+  async function handleReceiptImageDelete() {
+    if (!activeOrder || submittingReceipt) {
+      return;
+    }
+    setSubmittingReceipt(true);
+    try {
+      await deleteDeliveryReceiptImage(activeOrder.orderId);
+      setEditingReceiptUrl("");
+      toast("送达图已删除");
+      await reload().catch(() => undefined);
+    } catch (error: any) {
+      toast(error?.response?.data?.message || error?.message || "删除送达图失败", "error");
+    } finally {
+      setSubmittingReceipt(false);
+    }
+  }
 
   const summary = useMemo(() => {
     const totalOrders = progressGroups.reduce((sum, item) => sum + item.totalCount, 0);
@@ -396,15 +480,21 @@ export function DispatchProgressPage() {
                 </div>
               </section>
 
-              <section className="dispatch-detail-panel">
-                <div className="dispatch-section__title" style={{ marginBottom: 0, fontSize: "15px" }}>送达信息</div>
-                <div className="dispatch-detail-row">
-                  <div className="admin-panel-note">回单说明</div>
-                  <div>{hasDisplayValue(activeOrder.receiptNote) ? activeOrder.receiptNote : "-"}</div>
-                </div>
+              <section className="dispatch-detail-panel" style={{ display: "grid", gap: "12px" }}>
+                <div className="dispatch-section__title" style={{ marginBottom: 0, fontSize: "15px" }}>送达信息（可编辑）</div>
+                <RemarkField
+                  label="回执说明"
+                  value={receiptNote}
+                  onChange={setReceiptNote}
+                  placeholder="例如：已放前台、已当面签收"
+                  scene="RECEIPT_NOTE"
+                  multiline
+                  rows={3}
+                  disabled={submittingReceipt || uploadingReceipt}
+                />
                 <div className="dispatch-detail-row">
                   <div className="admin-panel-note">送达时间</div>
-                  <div>{activeOrder.deliveredAt || "-"}</div>
+                  <div>{activeOrder.deliveredAt || "保存后自动记录当前时间"}</div>
                 </div>
               </section>
             </div>
@@ -423,18 +513,67 @@ export function DispatchProgressPage() {
                 )}
               </section>
 
-              <section className="dispatch-detail-panel">
+              <section className="dispatch-detail-panel" style={{ display: "grid", gap: "12px" }}>
                 <div className="admin-panel-note">本次送达图</div>
-                {hasDisplayValue(activeOrder.receiptUrl) ? (
+                {hasDisplayValue(editingReceiptUrl) ? (
                   <img
-                    src={activeOrder.receiptUrl}
+                    src={editingReceiptUrl}
                     alt="本次送达图"
                     style={{ width: "100%", borderRadius: "12px", border: "1px solid var(--border-color)", objectFit: "cover", aspectRatio: "3 / 4" }}
                   />
                 ) : (
                   <div className="dispatch-image-empty">暂无送达图</div>
                 )}
+                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                  <input
+                    id="dispatch-receipt-upload-input"
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    style={{ display: "none" }}
+                    onChange={(event) => handleReceiptFileChange(event).catch(() => undefined)}
+                    disabled={uploadingReceipt || submittingReceipt}
+                  />
+                  <label
+                    htmlFor="dispatch-receipt-upload-input"
+                    className={`btn ${hasDisplayValue(editingReceiptUrl) ? "btn-outline" : "btn-primary"}`}
+                    style={{ cursor: uploadingReceipt || submittingReceipt ? "not-allowed" : "pointer", margin: 0 }}
+                  >
+                    {uploadingReceipt ? "上传中..." : hasDisplayValue(editingReceiptUrl) ? "更换图片" : "上传送达图"}
+                  </label>
+                  {hasDisplayValue(editingReceiptUrl) ? (
+                    <button type="button" className="btn btn-outline" onClick={() => window.open(editingReceiptUrl, "_blank")}>
+                      查看大图
+                    </button>
+                  ) : null}
+                  {hasDisplayValue(editingReceiptUrl) ? (
+                    <button type="button" className="btn-delete" disabled={submittingReceipt} onClick={() => handleReceiptImageDelete().catch(() => undefined)}>
+                      删除图片
+                    </button>
+                  ) : null}
+                </div>
               </section>
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                gap: "8px",
+                borderTop: "1px solid var(--border-light)",
+                paddingTop: "16px"
+              }}
+            >
+              <button type="button" className="btn btn-outline" onClick={() => setSelectedOrderId(undefined)} disabled={submittingReceipt || uploadingReceipt}>
+                关闭
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => handleReceiptSubmit().catch(() => undefined)}
+                disabled={submittingReceipt || uploadingReceipt}
+              >
+                {submittingReceipt ? "保存中..." : "保存送达信息"}
+              </button>
             </div>
           </div>
         ) : null}

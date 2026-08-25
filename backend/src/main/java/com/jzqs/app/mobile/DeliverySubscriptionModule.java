@@ -178,18 +178,21 @@ class DeliverySubscriptionModule {
 
     private int sendScheduledMessagesInternal(String mealPeriod, LocalDate serveDate, LocalDateTime now) {
         String releaseTime = resolveConfiguredReleaseTime(mealPeriod).toString();
+        // 扫描"已送达、回执尚未对用户可见、且已到餐期释放时间"的订单。
+        // 不限定必须有订阅记录：无论有无订阅，到点都应把回执对用户可见（自动释放），
+        // 这样订单会从后台"待释放"列表消失；订阅消息仅在有授权时补发。
         List<Long> orderIds = jdbcTemplate.query(
             """
-            SELECT cds.meal_slot_order_id
-            FROM customer_delivery_subscriptions cds
-            JOIN meal_slot_orders mso ON mso.id = cds.meal_slot_order_id
+            SELECT mso.id
+            FROM meal_slot_orders mso
             JOIN daily_orders do ON do.id = mso.daily_order_id
-            WHERE cds.status IN ('AUTHORIZED', 'FAILED')
-              AND mso.status = 'DELIVERED'
+            JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
+            WHERE mso.status = 'DELIVERED'
               AND mso.meal_period = ?
               AND do.serve_date = ?
+              AND dr.visible_to_customer = FALSE
               AND TIMESTAMP(do.serve_date, ?) <= ?
-            ORDER BY cds.meal_slot_order_id
+            ORDER BY mso.id
             """,
             (rs, rowNum) -> rs.getLong(1),
             mealPeriod,
@@ -199,10 +202,24 @@ class DeliverySubscriptionModule {
         );
         int sentCount = 0;
         for (Long orderId : orderIds) {
+            // 先把回执对用户可见（与后台手动"立即释放"等价），保证订单即时从待释放列表消失
+            jdbcTemplate.update(
+                """
+                UPDATE delivery_receipts
+                SET visible_at = ?,
+                    visible_to_customer = TRUE
+                WHERE meal_slot_order_id = ? AND visible_to_customer = FALSE
+                """,
+                Timestamp.valueOf(now),
+                orderId
+            );
+            // 再尝试发送取餐提醒订阅消息（无授权记录时仅释放、不发送）
             if (trySendDeliverySubscription(orderId, now)) {
                 sentCount++;
             }
         }
+        // 所有订单处理完毕后，统一清理一次过期订阅记录（原先在循环内每个订单各清一次，浪费连接）
+        pruneOldDeliverySubscriptions();
         return sentCount;
     }
 
@@ -240,7 +257,6 @@ class DeliverySubscriptionModule {
                 Timestamp.valueOf(triggerTime),
                 context.id()
             );
-            pruneOldDeliverySubscriptions();
             return new DeliverySendResult(true, "SENT");
         } catch (Exception ex) {
             jdbcTemplate.update(
@@ -248,7 +264,6 @@ class DeliverySubscriptionModule {
                 ex.getMessage(),
                 context.id()
             );
-            pruneOldDeliverySubscriptions();
             return new DeliverySendResult(false, "SEND_FAILED");
         }
     }

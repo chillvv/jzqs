@@ -314,8 +314,8 @@ export function useDispatchAreasLiveData(scope: DispatchScope, options?: { autoR
   };
 }
 
-export function useDispatchProgressLiveData(scope: DispatchScope) {
-  const { data, loadError } = useDispatchLiveResource({
+export function useDispatchProgressLiveData(scope: DispatchScope, options?: { autoRefreshBlocked?: boolean }) {
+  const { data, loadError, reload } = useDispatchLiveResource({
     scope,
     loaders: progressLoaders,
     initialData: {
@@ -323,11 +323,13 @@ export function useDispatchProgressLiveData(scope: DispatchScope) {
       riderProgress: []
     },
     mergeData: mergeProgressData,
+    autoRefreshBlocked: options?.autoRefreshBlocked ?? false,
     pollingMs: PROGRESS_POLLING_MS
   });
   return {
     areaBindings: data.areaBindings,
     riderProgress: data.riderProgress,
-    loadError
+    loadError,
+    reload
   };
 }

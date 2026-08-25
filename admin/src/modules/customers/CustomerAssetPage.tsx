@@ -764,8 +764,8 @@ export function CustomerAssetPage() {
     if (type === "OPEN") return "开卡";
     if (type === "GRANT") return "后台发放";
     if (type === "EXTEND_VALIDITY") return "统一延期";
-    if (type === "RESERVE") return "下单占用";
-    if (type === "RELEASE") return "取消释放";
+    if (type === "CONSUME") return "加餐扣减";
+    if (type === "REFUND") return "退款退回";
     if (type === "MANUAL_DEDUCT") return "手工扣减";
     if (type === "AFTERSALE_ROLLBACK") return "售后回滚";
     return type || "餐次变动";

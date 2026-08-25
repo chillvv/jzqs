@@ -16,9 +16,11 @@ import org.springframework.stereotype.Component;
 @Component
 class DispatchAreaAdminModule {
     private final JdbcTemplate jdbcTemplate;
+    private final DispatchAssignmentModule dispatchAssignmentModule;
 
-    DispatchAreaAdminModule(JdbcTemplate jdbcTemplate) {
+    DispatchAreaAdminModule(JdbcTemplate jdbcTemplate, DispatchAssignmentModule dispatchAssignmentModule) {
         this.jdbcTemplate = jdbcTemplate;
+        this.dispatchAssignmentModule = dispatchAssignmentModule;
     }
 
     DispatchAreaBindingUpdateResultResponse updateAreaBinding(
@@ -31,26 +33,8 @@ class DispatchAreaAdminModule {
     ) {
         String normalizedAreaCode = areaCode == null ? null : areaCode.trim();
         String resolvedMealPeriod = (mealPeriod == null ? MealPeriod.DINNER : mealPeriod).name();
-        Long oldDefaultRiderId = null;
-        if (normalizedAreaCode != null) {
-            oldDefaultRiderId = jdbcTemplate.query(
-                "SELECT default_rider_profile_id FROM dispatch_area_bindings WHERE area_code = ? AND meal_period = ?",
-                ps -> {
-                    ps.setString(1, normalizedAreaCode);
-                    ps.setString(2, resolvedMealPeriod);
-                },
-                rs -> rs.next() ? rs.getLong("default_rider_profile_id") : null
-            );
-        }
-        releaseRiderFromOtherAreas(normalizedAreaCode, resolvedMealPeriod, defaultRiderId, backupRiderId);
-        if (oldDefaultRiderId != null && oldDefaultRiderId > 0 && !oldDefaultRiderId.equals(defaultRiderId)) {
-            jdbcTemplate.update(
-                "UPDATE rider_profiles SET default_area_code = NULL WHERE id = ? AND default_area_code = ? AND meal_period = ?",
-                oldDefaultRiderId,
-                normalizedAreaCode,
-                resolvedMealPeriod
-            );
-        }
+        // 区域配置只负责「归区域」的记忆（area_code + keywords），不绑定默认骑手自动派单。
+        // 骑手跨区互斥在手动分配骑手（assignRiderToArea）时处理。
         Integer existing = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM dispatch_area_bindings WHERE area_code = ? AND meal_period = ?",
             Integer.class,
@@ -63,15 +47,13 @@ class DispatchAreaAdminModule {
                 """
                     UPDATE dispatch_area_bindings
                     SET keywords = COALESCE(?, keywords),
-                        default_rider_profile_id = ?,
-                        backup_rider_profile_id = ?,
+                        default_rider_profile_id = NULL,
+                        backup_rider_profile_id = NULL,
                         updated_by = ?,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE area_code = ? AND meal_period = ?
                     """,
                 keywords,
-                defaultRiderId,
-                backupRiderId,
                 updatedBy,
                 normalizedAreaCode,
                 resolvedMealPeriod
@@ -88,31 +70,23 @@ class DispatchAreaAdminModule {
                         updated_by,
                         updated_at
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    VALUES (?, ?, ?, NULL, NULL, ?, CURRENT_TIMESTAMP)
                     """,
                 normalizedAreaCode,
                 resolvedMealPeriod,
                 keywords,
-                defaultRiderId,
-                backupRiderId,
                 updatedBy
             );
             status = "CREATED";
         }
-        if (defaultRiderId != null && defaultRiderId > 0) {
-            jdbcTemplate.update(
-                "UPDATE rider_profiles SET default_area_code = ?, assigned_by = ?, assigned_at = CURRENT_TIMESTAMP WHERE id = ? AND meal_period = ?",
-                normalizedAreaCode,
-                updatedBy,
-                defaultRiderId,
-                resolvedMealPeriod
-            );
-        }
+        // 注意：区域配置不再绑定「默认骑手」自动派单。
+        // 订单进入区域后必须由操作员手动分配给具体骑手（分配了才是他的，不分配就不归属任何人）。
+        // 这里仅做区域基础信息（area_code / keywords）的记忆与骑手跨区互斥校验。
         return new DispatchAreaBindingUpdateResultResponse(
             normalizedAreaCode,
             keywords,
-            defaultRiderId,
-            backupRiderId,
+            null,
+            null,
             status
         );
     }

@@ -98,7 +98,7 @@ public class DashboardServiceImpl implements DashboardService {
                 sr.customer_id,
                 c.name AS customer_name,
                 c.phone AS customer_phone,
-                COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) AS remaining_meals,
+                COALESCE(mw.total_meals - mw.consumed_meals, 0) AS remaining_meals,
                 mw.expired_at,
                 sr.lunch_enabled,
                 sr.dinner_enabled,
@@ -112,7 +112,7 @@ public class DashboardServiceImpl implements DashboardService {
               AND sr.end_date >= ?
               AND c.customer_status != 'DORMANT'
               AND (
-                COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) <= ?
+                COALESCE(mw.total_meals - mw.consumed_meals, 0) <= ?
                 OR (
                     mw.expired_at IS NOT NULL
                     AND DATEDIFF(CAST(mw.expired_at AS DATE), CURRENT_DATE) BETWEEN 0 AND ?
@@ -251,7 +251,7 @@ public class DashboardServiceImpl implements DashboardService {
             SELECT COUNT(*)
             FROM meal_wallets
             WHERE active = TRUE
-              AND (total_meals - reserved_meals - consumed_meals) <= ?
+              AND (total_meals - consumed_meals) <= ?
             """,
             Integer.class,
             threshold

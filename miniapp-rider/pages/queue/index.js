@@ -640,6 +640,8 @@ Page({
       await this.loadQueue();
     } catch (error) {
       wx.showToast({ title: error.message || '保存失败', icon: 'none' });
+      // 失败回滚本地乐观更新：重新拉取服务器真实顺序，避免界面顺序与数据库不一致
+      await this.loadQueue();
     }
   },
 

@@ -35,7 +35,9 @@ Page({
     loading: false,
     viewState: 'checking',
     displayName: '骑手游客',
-    maskedPhone: ''
+    maskedPhone: '',
+    lunchArea: '未分配',
+    dinnerArea: '未分配'
   },
 
   goLoginPage() {
@@ -92,7 +94,9 @@ Page({
         todayDeliveredCount: riderProfile.completedCount || 0
       },
       displayName: viewState === 'guest' ? '骑手游客' : (viewState === 'not_found' ? '未开通骑手' : profileName),
-      maskedPhone: viewState === 'guest' ? '' : maskPhone(riderProfile.phone)
+      maskedPhone: viewState === 'guest' ? '' : maskPhone(riderProfile.phone),
+      lunchArea: app.globalData.assignAreaLunch || '未分配',
+      dinnerArea: app.globalData.assignAreaDinner || '未分配'
     });
 
     wx.stopPullDownRefresh();

@@ -41,8 +41,8 @@ public class OrderQueryRepository {
                 ca.id AS address_id,
                 ca.address_line AS delivery_address,
                 COALESCE(sr.merchant_remark, '-') AS merchant_remark,
-                COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) AS remaining_meals,
-                CASE WHEN COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) > 0 THEN TRUE ELSE FALSE END AS has_balance
+                COALESCE(mw.total_meals - mw.consumed_meals, 0) AS remaining_meals,
+                CASE WHEN COALESCE(mw.total_meals - mw.consumed_meals, 0) > 0 THEN TRUE ELSE FALSE END AS has_balance
             FROM subscription_rules sr
             JOIN customers c ON c.id = sr.customer_id
             LEFT JOIN meal_wallets mw ON mw.customer_id = sr.customer_id AND mw.active = TRUE
@@ -88,8 +88,8 @@ public class OrderQueryRepository {
                 ca.id AS address_id,
                 ca.address_line AS delivery_address,
                 COALESCE(sr.merchant_remark, '-') AS merchant_remark,
-                COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) AS remaining_meals,
-                CASE WHEN COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) > 0 THEN TRUE ELSE FALSE END AS has_balance
+                COALESCE(mw.total_meals - mw.consumed_meals, 0) AS remaining_meals,
+                CASE WHEN COALESCE(mw.total_meals - mw.consumed_meals, 0) > 0 THEN TRUE ELSE FALSE END AS has_balance
             FROM subscription_rules sr
             JOIN customers c ON c.id = sr.customer_id
             LEFT JOIN meal_wallets mw ON mw.customer_id = sr.customer_id AND mw.active = TRUE
@@ -155,8 +155,8 @@ public class OrderQueryRepository {
                 COALESCE(sr.default_address_id, 0) AS address_id,
                 COALESCE(ca.address_line, '') AS delivery_address,
                 COALESCE(sr.merchant_remark, '-') AS merchant_remark,
-                COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) AS remaining_meals,
-                CASE WHEN COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0) > 0 THEN TRUE ELSE FALSE END AS has_balance
+                COALESCE(mw.total_meals - mw.consumed_meals, 0) AS remaining_meals,
+                CASE WHEN COALESCE(mw.total_meals - mw.consumed_meals, 0) > 0 THEN TRUE ELSE FALSE END AS has_balance
             FROM subscription_import_skips sk
             JOIN customers c ON c.id = sk.customer_id
             LEFT JOIN subscription_rules sr ON sr.id = (
@@ -446,7 +446,7 @@ public class OrderQueryRepository {
                 FROM customers c
                 LEFT JOIN (
                     SELECT customer_id,
-                           COALESCE(SUM(total_meals), 0) - COALESCE(SUM(reserved_meals), 0) - COALESCE(SUM(consumed_meals), 0) AS remaining_meals
+                           COALESCE(SUM(total_meals), 0) - COALESCE(SUM(consumed_meals), 0) AS remaining_meals
                     FROM meal_wallets
                     WHERE active = TRUE
                     GROUP BY customer_id

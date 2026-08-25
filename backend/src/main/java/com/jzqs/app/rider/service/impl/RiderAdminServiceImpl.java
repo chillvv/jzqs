@@ -16,6 +16,7 @@ import com.jzqs.app.rider.service.RiderAdminService;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,9 +24,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class RiderAdminServiceImpl implements RiderAdminService {
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private final RiderMapper riderMapper;
+    private final JdbcTemplate jdbcTemplate;
 
-    public RiderAdminServiceImpl(RiderMapper riderMapper) {
+    public RiderAdminServiceImpl(RiderMapper riderMapper, JdbcTemplate jdbcTemplate) {
         this.riderMapper = riderMapper;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
@@ -126,6 +129,15 @@ public class RiderAdminServiceImpl implements RiderAdminService {
         if (existing == null) {
             throw new BusinessException(ErrorCode.RIDER_NOT_FOUND, "骑手不存在");
         }
+        // 删除前先解绑所有外键引用，避免外键约束导致删除失败（原表现为"系统冲突/409"）。
+        // 1) 派单记录保留历史，仅把骑手关联置空（rider_name 文本保留以便展示）。
+        jdbcTemplate.update(
+            "UPDATE dispatch_assignments SET rider_profile_id = NULL WHERE rider_profile_id = ?", riderId);
+        // 2) 解除该骑手作为区域默认骑手的绑定。
+        jdbcTemplate.update(
+            "UPDATE dispatch_area_bindings SET default_rider_profile_id = NULL WHERE default_rider_profile_id = ?", riderId);
+        jdbcTemplate.update(
+            "UPDATE dispatch_area_bindings SET backup_rider_profile_id = NULL WHERE backup_rider_profile_id = ?", riderId);
         riderMapper.deleteById(riderId);
     }
 

@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Search, Trash2 } from "lucide-react";
+import { AlertTriangle, Search } from "lucide-react";
 import {
   batchAssignDispatchPendingOrders,
-  deleteOrder,
   extractAdminApiErrorMessage
 } from "../../shared/api/http";
 import type {
@@ -64,8 +63,6 @@ export function DispatchHomePage() {
   const [batchAreaCode, setBatchAreaCode] = useState("");
   const [batchAssigning, setBatchAssigning] = useState(false);
   const [batchResult, setBatchResult] = useState<BatchOperationResponse | null>(null);
-  const [deleteConfirmState, setDeleteConfirmState] = useState<{ orderId: number; customerName: string } | null>(null);
-  const [submittingDelete, setSubmittingDelete] = useState(false);
 
   const areaOptions = useMemo(
     () =>
@@ -137,27 +134,6 @@ export function DispatchHomePage() {
       toast(getErrorMessage(err, "批量归入区域失败"), "error");
     } finally {
       setBatchAssigning(false);
-    }
-  }
-
-  async function handleDeleteOrder(orderId: number, customerName: string) {
-    setDeleteConfirmState({ orderId, customerName });
-  }
-
-  async function confirmDelete() {
-    if (!deleteConfirmState) return;
-
-    if (submittingDelete) return;
-    setSubmittingDelete(true);
-    try {
-      await deleteOrder(deleteConfirmState.orderId);
-      setDeleteConfirmState(null);
-      await reloadAll();
-      toast("订单已删除");
-    } catch (err: any) {
-      toast(getErrorMessage(err, "删除订单失败"), "error");
-    } finally {
-      setSubmittingDelete(false);
     }
   }
 
@@ -285,13 +261,6 @@ export function DispatchHomePage() {
                       <td onClick={(e) => e.stopPropagation()}>
                         <div className="dispatch-pending-actions">
                           {selectedPendingSet.has(item.orderId) ? <span className="dispatch-pending-action-hint">已勾选，使用顶部批量归区</span> : null}
-                          <button
-                            className="btn-delete btn-compact"
-                            onClick={() => handleDeleteOrder(item.orderId, item.customerName)}
-                          >
-                            <Trash2 size={14} />
-                            删除
-                          </button>
                         </div>
                       </td>
                     </tr>
@@ -301,42 +270,6 @@ export function DispatchHomePage() {
             </div>
           </div>
         )}
-
-        {/* 删除确认对话框 */}
-        <AdminDialog
-          open={Boolean(deleteConfirmState)}
-          title="⚠️ 删除订单"
-          width={500}
-          onClose={submittingDelete ? () => undefined : () => setDeleteConfirmState(null)}
-          footer={
-            <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-              <button className="btn btn-outline" disabled={submittingDelete} onClick={() => setDeleteConfirmState(null)}>取消</button>
-              <button 
-                className="btn-delete"
-                disabled={submittingDelete}
-                onClick={() => confirmDelete().catch((err) => toast(getErrorMessage(err, "删除订单失败"), "error"))}
-              >
-                <Trash2 size={16} />
-                {submittingDelete ? "确认删除中..." : "确认删除"}
-              </button>
-            </div>
-          }
-        >
-          {deleteConfirmState && (
-            <div style={{ display: "grid", gap: "16px" }}>
-              <div className="delete-confirm-details">
-                <div className="delete-confirm-details__item">
-                  <span className="delete-confirm-details__label">客户：</span>
-                  <span className="delete-confirm-details__value">{deleteConfirmState.customerName}</span>
-                </div>
-                <div className="delete-confirm-details__item">
-                  <span className="delete-confirm-details__label">订单ID：</span>
-                  <span className="delete-confirm-details__value">{deleteConfirmState.orderId}</span>
-                </div>
-              </div>
-            </div>
-          )}
-        </AdminDialog>
       </div>
     </div>
   );

@@ -1,7 +1,6 @@
 package com.jzqs.app.wallet;
 public class MealWallet {
     private final int totalMeals;
-    private int reservedMeals;
     private int consumedMeals;
     private MealWallet(int totalMeals) {
         this.totalMeals = totalMeals;
@@ -9,30 +8,15 @@ public class MealWallet {
     public static MealWallet open(int totalMeals) {
         return new MealWallet(totalMeals);
     }
-    public void reserve(int meals) {
-        if (meals <= 0 || meals > availableMeals()) {
-            throw new IllegalStateException("wallet balance not enough");
-        }
-        reservedMeals += meals;
-    }
-    public void release(int meals) {
-        if (meals <= 0 || meals > reservedMeals) {
-            throw new IllegalStateException("reserved meals not enough");
-        }
-        reservedMeals -= meals;
-    }
-    public void consumeReserved(int meals) {
-        if (meals <= 0 || meals > reservedMeals) {
-            throw new IllegalStateException("reserved meals not enough");
-        }
-        reservedMeals -= meals;
+
+    /**
+     * 加餐/下单：直接消费餐次（立即扣）。取消/退款则反向 consume(-meals) 加回。
+     */
+    public void consume(int meals) {
         consumedMeals += meals;
     }
     public int availableMeals() {
-        return totalMeals - reservedMeals - consumedMeals;
-    }
-    public int reservedMeals() {
-        return reservedMeals;
+        return totalMeals - consumedMeals;
     }
     public int consumedMeals() {
         return consumedMeals;

@@ -2,7 +2,7 @@ package com.jzqs.app.common.aop.aspect;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jzqs.app.common.aop.annotation.Idempotent;
-import com.jzqs.app.common.aop.store.InMemoryIdempotencyStore;
+import com.jzqs.app.common.aop.store.DbIdempotencyStore;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
 import org.aspectj.lang.ProceedingJoinPoint;
@@ -13,10 +13,10 @@ import org.springframework.stereotype.Component;
 @Aspect
 @Component
 public class IdempotentAspect {
-    private final InMemoryIdempotencyStore idempotencyStore;
+    private final DbIdempotencyStore idempotencyStore;
     private final ObjectMapper objectMapper;
 
-    public IdempotentAspect(InMemoryIdempotencyStore idempotencyStore, ObjectMapper objectMapper) {
+    public IdempotentAspect(DbIdempotencyStore idempotencyStore, ObjectMapper objectMapper) {
         this.idempotencyStore = idempotencyStore;
         this.objectMapper = objectMapper;
     }
@@ -28,7 +28,9 @@ public class IdempotentAspect {
             throw new BusinessException(ErrorCode.REPEAT_SUBMISSION, "请勿重复提交相同操作");
         }
         try {
-            return joinPoint.proceed();
+            Object result = joinPoint.proceed();
+            idempotencyStore.markSucceeded(key, idempotent.ttlSeconds());
+            return result;
         } catch (Throwable throwable) {
             idempotencyStore.release(key);
             throw throwable;

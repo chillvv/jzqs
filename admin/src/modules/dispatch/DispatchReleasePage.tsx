@@ -100,7 +100,20 @@ export function DispatchReleasePage() {
 
   const filteredItems = useMemo(() => items.filter((item) => item.mealPeriod === mealPeriod), [items, mealPeriod]);
 
+  // 当前是否已过本餐期释放时间：未到点时无需手动操作，仅展示"等待自动释放"提示，避免商家误会
+  const releasePassed = useMemo(() => {
+    try {
+      const [h, m] = currentReleaseTime.split(":").map((v) => parseInt(v, 10));
+      const releaseAt = new Date();
+      releaseAt.setHours(h || 0, m || 0, 0, 0);
+      return Date.now() >= releaseAt.getTime();
+    } catch {
+      return true;
+    }
+  }, [currentReleaseTime]);
+
   function renderOrderCard(item: DeliveryReleasePendingItem) {
+    const showReleaseButton = releasePassed;
     return (
       <div
         key={item.orderId}
@@ -123,14 +136,20 @@ export function DispatchReleasePage() {
             送达时间 {item.deliveredAt ? item.deliveredAt.replace("T", " ") : "--"}
             <span style={{ marginLeft: 12 }}>订阅：{subscriptionLabel(item.subscriptionStatus)}</span>
           </span>
-          <button
-            className="btn btn-primary btn-compact"
-            disabled={releasingId !== null}
-            onClick={() => handleRelease(item).catch(() => undefined)}
-          >
-            <Send size={14} />
-            {releasingId === item.orderId ? "释放中..." : "立即释放"}
-          </button>
+          {showReleaseButton ? (
+            <button
+              className="btn btn-primary btn-compact"
+              disabled={releasingId !== null}
+              onClick={() => handleRelease(item).catch(() => undefined)}
+            >
+              <Send size={14} />
+              {releasingId === item.orderId ? "释放中..." : "立即释放"}
+            </button>
+          ) : (
+            <span className="tag tag-gray" style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              等待 {currentReleaseTime} 自动释放
+            </span>
+          )}
         </div>
       </div>
     );

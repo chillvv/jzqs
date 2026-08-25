@@ -37,13 +37,13 @@ public class PackageGrantServiceImpl implements PackageGrantService {
         Long existingWalletId = activeWalletIds.isEmpty() ? null : activeWalletIds.get(0);
         if (existingWalletId == null) {
             existingWalletId = insertAndReturnId(
-                "INSERT INTO meal_wallets (customer_id, package_plan_id, total_meals, reserved_meals, consumed_meals, active, opened_at) VALUES (?, ?, ?, 0, 0, TRUE, CURRENT_TIMESTAMP)",
+                "INSERT INTO meal_wallets (customer_id, package_plan_id, total_meals, consumed_meals, active, opened_at) VALUES (?, ?, ?, 0, TRUE, CURRENT_TIMESTAMP)",
                 customerId, packagePlanId, totalMeals
             );
         } else {
             jdbcTemplate.update("UPDATE meal_wallets SET active = FALSE WHERE customer_id = ? AND id <> ?", customerId, existingWalletId);
             jdbcTemplate.update(
-                "UPDATE meal_wallets SET package_plan_id = ?, total_meals = ?, reserved_meals = 0, consumed_meals = 0, active = TRUE, opened_at = COALESCE(opened_at, CURRENT_TIMESTAMP) WHERE id = ?",
+                "UPDATE meal_wallets SET package_plan_id = ?, total_meals = ?, consumed_meals = 0, active = TRUE, opened_at = COALESCE(opened_at, CURRENT_TIMESTAMP) WHERE id = ?",
                 packagePlanId,
                 totalMeals,
                 existingWalletId

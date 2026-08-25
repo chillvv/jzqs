@@ -954,6 +954,13 @@ export async function uploadDeliveryReceiptImage(file: File) {
   return response.data.data;
 }
 
+export async function deleteDeliveryReceiptImage(mealSlotOrderId: number) {
+  const response = await http.delete<ApiResponse<{ orderStatus: string; receiptUrl: string; deleted: boolean }>>(
+    `/api/admin/deliveries/receipt/${mealSlotOrderId}/image`
+  );
+  return response.data.data;
+}
+
 export async function grantWalletMeals(customerId: number, mealDelta: number, validityDays: number, remark: string, expiredAt?: string) {
   const response = await http.post<ApiResponse<{ remainingMeals: number }>>(`/api/admin/customers/${customerId}/wallet/grant`, {
     mealDelta,

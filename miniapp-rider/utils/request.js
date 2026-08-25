@@ -40,97 +40,116 @@ function handleUnauthorized(app) {
 
 function request({ url, method = 'GET', data, header, requireWorkbench = true, token: explicitToken, hideLoading = false, hideErrorToast = false }) {
   const app = getApp();
+  // 对后端瞬时抖动（连接池打满/超时/网络抖动）做最多 2 次退避重试，
+  // 避免偶发“系统繁忙”直接弹错给用户。401 与明确业务错误不重试。
+  const MAX_RETRIES = 2;
   return new Promise((resolve, reject) => {
-    const sendRequest = () => {
-      // 只有在需要工作台权限时才检查
-      if (requireWorkbench && !app.canUseWorkbench()) {
-        reject(new Error(app.getWorkbenchBlockMessage()));
-        return;
-      }
-      
-      // 自动添加 token 到请求头
-      const token = explicitToken || wx.getStorageSync(AUTH_TOKEN_KEY);
-      const requestHeader = {
-        ...header,
-        ...resolveServiceHeaders(app.globalData.serviceHeaders)
-      };
-      if (token) {
-        requestHeader.Authorization = `Bearer ${token}`;
-      }
-      
-      if (!hideLoading) {
-        showGlobalLoading();
-      }
+    const attempt = (retry) => {
+      const sendRequest = () => {
+        // 只有在需要工作台权限时才检查
+        if (requireWorkbench && !app.canUseWorkbench()) {
+          reject(new Error(app.getWorkbenchBlockMessage()));
+          return;
+        }
+        
+        // 自动添加 token 到请求头
+        const token = explicitToken || wx.getStorageSync(AUTH_TOKEN_KEY);
+        const requestHeader = {
+          ...header,
+          ...resolveServiceHeaders(app.globalData.serviceHeaders)
+        };
+        if (token) {
+          requestHeader.Authorization = `Bearer ${token}`;
+        }
+        
+        if (!hideLoading) {
+          showGlobalLoading();
+        }
 
-      // 直接使用常规 wx.request（开发模式下可以用 HTTP/IP，正式模式需要 HTTPS/域名）
-      wx.request({
-        url: `${app.globalData.apiBaseUrl}${url}`,
-        method,
-        data,
-        header: requestHeader,
-        timeout: 30000, // 30秒超时
-        success(res) {
-          const body = res.data || {};
-          
-          // token 失效处理
-          if (res.statusCode === 401) {
-            handleUnauthorized(app);
-            const errorMsg = '登录已过期，请重新登录';
+        // 直接使用常规 wx.request（开发模式下可以用 HTTP/IP，正式模式需要 HTTPS/域名）
+        wx.request({
+          url: `${app.globalData.apiBaseUrl}${url}`,
+          method,
+          data,
+          header: requestHeader,
+          timeout: 30000, // 30秒超时
+          success(res) {
+            const body = res.data || {};
+            
+            // token 失效处理
+            if (res.statusCode === 401) {
+              handleUnauthorized(app);
+              const errorMsg = '登录已过期，请重新登录';
+              if (!hideErrorToast && typeof wx.showToast === 'function') {
+                wx.showToast({ title: errorMsg, icon: 'none', duration: 2000 });
+              }
+              reject(new Error(errorMsg));
+              return;
+            }
+            
+            if (res.statusCode >= 200 && res.statusCode < 300 && body.code === 'OK') {
+              resolve(body.data);
+              return;
+            }
+            
+            const errorMsg = body.message || '请求失败';
+            // 后端兜底异常会返回“系统繁忙”，属于瞬时故障，可重试
+            const isRetryable = errorMsg.indexOf('系统繁忙') >= 0 || errorMsg.indexOf('请求失败') >= 0;
+            if (isRetryable && retry < MAX_RETRIES) {
+              console.warn('[请求] 瞬时错误，准备重试', url, errorMsg, 'retry=', retry + 1);
+              setTimeout(() => attempt(retry + 1), 500 * (retry + 1));
+              return;
+            }
             if (!hideErrorToast && typeof wx.showToast === 'function') {
               wx.showToast({ title: errorMsg, icon: 'none', duration: 2000 });
             }
             reject(new Error(errorMsg));
-            return;
+          },
+          fail(err) {
+            // 只打印错误信息，避免 err 对象可能携带请求头/token 等敏感信息
+            console.error('[请求失败]', url, err && err.errMsg ? err.errMsg : err);
+            
+            let errorMsg = '网络请求失败';
+            if (err.errMsg && err.errMsg.includes('timeout')) {
+              errorMsg = '请求超时，请检查网络或后端服务';
+            } else if (err.errMsg && err.errMsg.includes('fail')) {
+              errorMsg = '无法连接服务器，请检查后端是否启动';
+            }
+            if (retry < MAX_RETRIES) {
+              console.warn('[请求] 网络错误，准备重试', url, errorMsg, 'retry=', retry + 1);
+              setTimeout(() => attempt(retry + 1), 500 * (retry + 1));
+              return;
+            }
+            if (!hideErrorToast && typeof wx.showToast === 'function') {
+              wx.showToast({ title: errorMsg, icon: 'none', duration: 2000 });
+            }
+            reject(new Error(errorMsg));
+          },
+          complete() {
+            if (!hideLoading) {
+              hideGlobalLoading();
+            }
           }
-          
-          if (res.statusCode >= 200 && res.statusCode < 300 && body.code === 'OK') {
-            resolve(body.data);
-            return;
-          }
-          
-          const errorMsg = body.message || '请求失败';
-          if (!hideErrorToast && typeof wx.showToast === 'function') {
-            wx.showToast({ title: errorMsg, icon: 'none', duration: 2000 });
-          }
-          reject(new Error(errorMsg));
-        },
-        fail(err) {
-          // 只打印错误信息，避免 err 对象可能携带请求头/token 等敏感信息
-          console.error('[请求失败]', url, err && err.errMsg ? err.errMsg : err);
-          
-          let errorMsg = '网络请求失败';
-          if (err.errMsg && err.errMsg.includes('timeout')) {
-            errorMsg = '请求超时，请检查网络或后端服务';
-          } else if (err.errMsg && err.errMsg.includes('fail')) {
-            errorMsg = '无法连接服务器，请检查后端是否启动';
-          }
-          if (!hideErrorToast && typeof wx.showToast === 'function') {
-            wx.showToast({ title: errorMsg, icon: 'none', duration: 2000 });
-          }
-          reject(new Error(errorMsg));
-        },
-        complete() {
-          if (!hideLoading) {
-            hideGlobalLoading();
-          }
-        }
-      });
+        });
+      };
+
+      // 不需要工作台权限的请求（如登录接口），直接发送
+      if (!requireWorkbench) {
+        sendRequest();
+        return;
+      }
+
+      // 需要工作台权限的请求，等待认证完成
+      if (app.globalData.riderAuthReady) {
+        sendRequest();
+        return;
+      }
+      app.waitForRiderAuth()
+        .then(sendRequest)
+        .catch(() => reject(new Error('登录失败，请稍后重试')));
     };
 
-    // 不需要工作台权限的请求（如登录接口），直接发送
-    if (!requireWorkbench) {
-      sendRequest();
-      return;
-    }
-
-    // 需要工作台权限的请求，等待认证完成
-    if (app.globalData.riderAuthReady) {
-      sendRequest();
-      return;
-    }
-    app.waitForRiderAuth()
-      .then(sendRequest)
-      .catch(() => reject(new Error('登录失败，请稍后重试')));
+    attempt(0);
   });
 }
 

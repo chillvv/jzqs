@@ -31,7 +31,7 @@ public class OrderSubscriptionRepository {
     public Integer findRemainingMeals(long customerId) {
         List<Integer> rows = jdbcTemplate.query(
             """
-                SELECT COALESCE(mw.total_meals - mw.reserved_meals - mw.consumed_meals, 0)
+                SELECT COALESCE(mw.total_meals - mw.consumed_meals, 0)
                 FROM meal_wallets mw
                 WHERE mw.customer_id = ?
                   AND mw.active = TRUE
