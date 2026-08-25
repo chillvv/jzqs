@@ -878,17 +878,17 @@ public class MobileAuthServiceImpl implements MobileAuthService {
                     first_login_at,
                     last_login_at,
                     (
-                        SELECT dab.area_code
-                        FROM dispatch_area_bindings dab
-                        JOIN rider_profiles lr ON lr.id = dab.default_rider_profile_id
-                        WHERE lr.rider_name = rp.rider_name AND dab.meal_period = 'LUNCH'
+                        SELECT lr.default_area_code
+                        FROM rider_profiles lr
+                        WHERE lr.rider_name = rp.rider_name
+                          AND lr.meal_period = 'LUNCH'
                         LIMIT 1
                     ) AS lunch_area_code,
                     (
-                        SELECT dab.area_code
-                        FROM dispatch_area_bindings dab
-                        JOIN rider_profiles dr ON dr.id = dab.default_rider_profile_id
-                        WHERE dr.rider_name = rp.rider_name AND dab.meal_period = 'DINNER'
+                        SELECT dr.default_area_code
+                        FROM rider_profiles dr
+                        WHERE dr.rider_name = rp.rider_name
+                          AND dr.meal_period = 'DINNER'
                         LIMIT 1
                     ) AS dinner_area_code
                 FROM rider_profiles rp
