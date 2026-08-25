@@ -31,8 +31,7 @@ async function getQueue(serveDate) {
     url: appendServeDateQuery(
       '/api/mobile/rider/queue',
       serveDate
-    ),
-    hideLoading: true
+    )
   });
 }
 

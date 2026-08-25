@@ -38,7 +38,7 @@ function handleUnauthorized(app) {
   }
 }
 
-function request({ url, method = 'GET', data, header, requireWorkbench = true, token: explicitToken, hideLoading = false, hideErrorToast = false }) {
+function request({ url, method = 'GET', data, header, requireWorkbench = true, token: explicitToken, hideLoading = true, hideErrorToast = false }) {
   const app = getApp();
   // 对后端瞬时抖动（连接池打满/超时/网络抖动）做最多 2 次退避重试，
   // 避免偶发“系统繁忙”直接弹错给用户。401 与明确业务错误不重试。
@@ -153,7 +153,7 @@ function request({ url, method = 'GET', data, header, requireWorkbench = true, t
   });
 }
 
-function uploadFile({ url, filePath, name = 'file', formData, requireWorkbench = true, hideLoading = false, hideErrorToast = false }) {
+function uploadFile({ url, filePath, name = 'file', formData, requireWorkbench = true, hideLoading = true, hideErrorToast = false }) {
   const app = getApp();
   return new Promise((resolve, reject) => {
     const sendUpload = () => {
