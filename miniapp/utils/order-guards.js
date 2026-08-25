@@ -10,33 +10,65 @@ function getCheckoutMealLimitMessage({ totalQty, remainingMeals }) {
 
 // ============================================================
 // 夜间停止下单（后厨/系统结算休整）
-// 每天 23:30 起至次日 08:00 止，系统进入结算休整，不接受新订单。
+// 下单窗口由后台「系统设置 → 小程序下单窗口」配置：
+//   nightOrderCutoffTime 每晚截止时间（默认 23:00）
+//   nightOrderOpenTime   明早开放时间（默认 08:00）
+// 每晚截止后至明早开放前，系统进入结算休整，不接受新订单。
 // 即便次日菜单已发布、可下单，该时段内也只展示提示、不开放下单入口。
 // 时间按用户本地时间判定（前端友好拦截，后端下单接口仍需二次校验）。
 // ============================================================
-const NIGHT_ORDER_START_HOUR = 23;
-const NIGHT_ORDER_START_MINUTE = 30; // 23:30 起
-const NIGHT_ORDER_END_HOUR = 8; // 次日 08:00 恢复
+const DEFAULT_NIGHT_ORDER_CUTOFF = '23:00';
+const DEFAULT_NIGHT_ORDER_OPEN = '08:00';
 
-function isNightOrderClosed(now) {
-  const date = now instanceof Date ? now : new Date();
-  const minutes = date.getHours() * 60 + date.getMinutes();
-  const start = NIGHT_ORDER_START_HOUR * 60 + NIGHT_ORDER_START_MINUTE; // 1410
-  const end = NIGHT_ORDER_END_HOUR * 60; // 480
-  // 窗口跨越午夜：[start, 1440) ∪ [0, end)
-  return minutes >= start || minutes < end;
+function parseClock(value, fallback) {
+  const raw = String(value || '').trim();
+  const matched = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(raw);
+  if (matched) {
+    return {
+      hour: Number(matched[1]),
+      minute: Number(matched[2])
+    };
+  }
+  const parts = String(fallback || '').split(':');
+  return {
+    hour: Number(parts[0] || 0),
+    minute: Number(parts[1] || 0)
+  };
 }
 
-function getNightCloseNotice() {
+function isNightOrderClosed(now, config) {
+  const date = now instanceof Date ? now : new Date();
+  const minutes = date.getHours() * 60 + date.getMinutes();
+  const cutoff = parseClock(config && config.nightOrderCutoffTime, DEFAULT_NIGHT_ORDER_CUTOFF);
+  const open = parseClock(config && config.nightOrderOpenTime, DEFAULT_NIGHT_ORDER_OPEN);
+  const start = cutoff.hour * 60 + cutoff.minute;
+  const end = open.hour * 60 + open.minute;
+  // 窗口语义：每晚截止(start) 后关闭，至 明早开放(end) 恢复
+  if (start === end) {
+    // 截止与开放相同：整天开放（兜底，避免把全天误判为关闭）
+    return false;
+  }
+  if (start > end) {
+    // 关闭窗口跨越午夜：[start, 1440) ∪ [0, end)
+    return minutes >= start || minutes < end;
+  }
+  // 关闭窗口在同一天内：[start, end)
+  return minutes >= start && minutes < end;
+}
+
+function getNightCloseNotice(config) {
+  const cutoff = parseClock(config && config.nightOrderCutoffTime, DEFAULT_NIGHT_ORDER_CUTOFF);
+  const open = parseClock(config && config.nightOrderOpenTime, DEFAULT_NIGHT_ORDER_OPEN);
+  const cutoffText = `${String(cutoff.hour).padStart(2, '0')}:${String(cutoff.minute).padStart(2, '0')}`;
+  const openText = `${String(open.hour).padStart(2, '0')}:${String(open.minute).padStart(2, '0')}`;
+  const content =
+    `为了给您更准时的配送，系统每晚 ${cutoffText} 起进入结算休整，暂无法下单` +
+    `别急，明早 ${openText} 一切就绪，更多好菜等您～`;
   return {
     title: '系统夜间结算中',
-    content:
-      '为了给您更准时的配送，系统每晚 23:30 起进入结算休整，暂无法下单' +
-      '别急，明早 08:00 一切就绪，更多好菜等您～',
-    desc:
-      '为了给您更准时的配送，系统每晚 23:30 起进入结算休整，暂无法下单' +
-      '别急，明早 08:00 一切就绪，更多好菜等您～',
-    buttonText: '23:30 后暂停下单'
+    content,
+    desc: content,
+    buttonText: `${cutoffText} 后暂停下单`
   };
 }
 

@@ -44,7 +44,17 @@ cd admin && npm install && npm run dev
 # 4. 小程序：用微信开发者工具分别打开 miniapp/ 与 miniapp-rider/
 ```
 
-## 部署
+## 部署（重要，AI 必读）
+
+- **修改任何代码后必须重新构建对应容器，否则线上运行的是旧版本。**
+- 完整部署流程与坑位见 **`DEPLOYMENT.md`**，一键部署用 **`./build.sh`**：
+
+  ```bash
+  ./build.sh all        # 全量部署（后端 + 前端）
+  ./build.sh backend    # 只部署后端（含 Flyway 自动迁移）
+  ./build.sh admin      # 只部署管理后台前端
+  ./build.sh status     # 查看容器状态
+  ```
 
 - 各模块均有独立 `Dockerfile`；`docker-compose.yml` 统一编排。
 - `Caddyfile` 提供反向代理；`build.sh` 串联多模块构建。

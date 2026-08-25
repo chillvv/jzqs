@@ -991,6 +991,17 @@ export async function updatePackageReminderSettings(payload: {
   return response.data.data;
 }
 
+export async function updateNightOrderWindow(payload: {
+  nightOrderCutoffTime: string;
+  nightOrderOpenTime: string;
+}) {
+  const response = await http.post<ApiResponse<OperationSettingsResponse>>("/api/admin/settings/night-order-window", {
+    nightOrderCutoffTime: payload.nightOrderCutoffTime,
+    nightOrderOpenTime: payload.nightOrderOpenTime
+  });
+  return response.data.data;
+}
+
 export async function deductWalletMeals(customerId: number, mealDelta: number, remark: string) {
   const response = await http.post<ApiResponse<{ remainingMeals: number }>>(`/api/admin/customers/${customerId}/wallet/deduct`, {
     mealDelta,

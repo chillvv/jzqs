@@ -7,6 +7,8 @@ public record MobileTomorrowMenuResponse(
     MobileMenuItemResponse lunchItem,
     MobileMenuItemResponse dinnerItem,
     boolean canOrder,
-    String statusText
+    String statusText,
+    String nightOrderCutoffTime,
+    String nightOrderOpenTime
 ) {
 }

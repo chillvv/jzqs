@@ -30,22 +30,19 @@ class MiniappOrderModule {
     private final OrderNoteSnapshotService orderNoteSnapshotService;
     private final RealtimeAudienceModule realtimeAudienceModule;
     private final RiderQueueSupport riderQueueSupport;
-    private final LocalTime selfOrderCutoffTime;
 
     MiniappOrderModule(
         JdbcTemplate jdbcTemplate,
         DispatchService dispatchService,
         OrderNoteSnapshotService orderNoteSnapshotService,
         RealtimeAudienceModule realtimeAudienceModule,
-        RiderQueueSupport riderQueueSupport,
-        @org.springframework.beans.factory.annotation.Value("${app.mobile.self-order-cutoff:23:00}") String selfOrderCutoff
+        RiderQueueSupport riderQueueSupport
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.dispatchService = dispatchService;
         this.orderNoteSnapshotService = orderNoteSnapshotService;
         this.realtimeAudienceModule = realtimeAudienceModule;
         this.riderQueueSupport = riderQueueSupport;
-        this.selfOrderCutoffTime = LocalTime.parse(selfOrderCutoff);
     }
 
     MobileCreateOrderResponse createOrder(
@@ -292,7 +289,7 @@ class MiniappOrderModule {
         if (!orderDate.equals(tomorrow)) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "当前仅支持预订明日餐食");
         }
-        if (!LocalTime.now().isBefore(selfOrderCutoffTime)) {
+        if (!MiniappOrderWindow.isOpen(LocalTime.now(), MiniappOrderWindow.openTime(jdbcTemplate), MiniappOrderWindow.cutoffTime(jdbcTemplate))) {
             throw new BusinessException(ErrorCode.ORDERING_DISABLED, "当前自助下单已截止，如需加单请联系专属客服微信");
         }
     }

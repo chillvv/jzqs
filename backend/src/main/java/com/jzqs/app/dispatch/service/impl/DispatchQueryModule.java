@@ -266,7 +266,9 @@ class DispatchQueryModule {
             JOIN customers c ON c.id = doo.customer_id
             JOIN customer_addresses ca ON ca.id = mso.address_id
             LEFT JOIN rider_address_bindings rab ON rab.customer_id = doo.customer_id AND rab.address_id = mso.address_id AND rab.rider_profile_id IS NOT NULL
-            LEFT JOIN dispatch_area_bindings dab ON dab.area_code = rab.area_code
+            LEFT JOIN dispatch_area_bindings dab
+                ON dab.area_code = rab.area_code
+               AND dab.meal_period = COALESCE(mso.delivery_meal_period, mso.meal_period)
             LEFT JOIN rider_profiles rp_default
                 ON rp_default.id = dab.default_rider_profile_id
                AND rp_default.auth_status = 'ACTIVE'
@@ -338,6 +340,7 @@ class DispatchQueryModule {
                     dab.updated_at AS updated_at
                 FROM dispatch_area_bindings dab
                 LEFT JOIN rider_profiles rp_default ON rp_default.id = dab.default_rider_profile_id
+                WHERE (? IS NULL OR dab.meal_period = ?)
                 ORDER BY dab.area_code
                 """,
             (rs, rowNum) -> {
@@ -361,7 +364,9 @@ class DispatchQueryModule {
                     rs.getString("updated_by"),
                     formatTimestamp(rs.getTimestamp("updated_at"))
                 );
-            }
+            },
+            finalMealPeriod,
+            finalMealPeriod
         );
     }
 

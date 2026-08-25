@@ -657,16 +657,18 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         }
     }
 
-    private void validateUniqueRiderName(String riderName, Long currentRiderId) {
+    private void validateUniqueRiderName(String riderName, String mealPeriod, Long currentRiderId) {
         Integer count = jdbcTemplate.queryForObject(
             """
                 SELECT COUNT(*)
                 FROM rider_profiles
                 WHERE rider_name = ?
+                  AND meal_period = ?
                   AND (? IS NULL OR id <> ?)
                 """,
             Integer.class,
             riderName,
+            mealPeriod,
             currentRiderId,
             currentRiderId
         );
@@ -893,7 +895,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         String finalName = requireNickname(name);
         String finalOpenid = openid != null && !openid.trim().isEmpty() ? openid.trim() : null;
         LocalDateTime now = LocalDateTime.now().withNano(0);
-        validateUniqueRiderName(finalName, null);
+        validateUniqueRiderName(finalName, "DINNER", null);
 
         // 检查手机号是否已注册
         Long existingRiderId = jdbcTemplate.query(

@@ -3,6 +3,8 @@ package com.jzqs.app.common.filter;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.util.HashMap;
+import java.util.Map;
 import com.jzqs.app.common.aop.annotation.AuditAction;
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
@@ -42,10 +44,15 @@ public class AdminOperationLogFilter implements Filter {
     private static final Set<String> AUDITED_METHODS = Set.of("POST", "PUT", "DELETE", "PATCH");
     private static final int MAX_SUMMARY_LENGTH = 800;
     private static final List<String> SENSITIVE_FIELDS = List.of("password", "oldPassword", "newPassword");
-    /** 操作对象路径解析：客户/骑手/后台账号，用于把对象手机号快照进日志，删除重建后仍能反查 */
+    /** 操作对象路径解析：客户/骑手/后台账号/订单/售后单，用于在请求执行前快照对象信息，删除后仍能追溯 */
     private static final Pattern CUSTOMER_ID_PATH = Pattern.compile("/customers/(\\d+)");
     private static final Pattern RIDER_ID_PATH = Pattern.compile("/riders/(\\d+)");
     private static final Pattern ADMIN_USER_ID_PATH = Pattern.compile("/users/(\\d+)");
+    private static final Pattern ORDER_ID_PATH = Pattern.compile("/orders/(\\d+)");
+    private static final Pattern AFTERSALE_ID_PATH = Pattern.compile("/aftersales/(\\d+)");
+
+    /** 请求执行前捕获的对象快照（JSON 字符串），存入 request attribute 供日志写入时使用 */
+    private static final String TARGET_SNAPSHOT_ATTR = "auditTargetSnapshot";
 
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
@@ -71,6 +78,9 @@ public class AdminOperationLogFilter implements Filter {
 
         long startedAt = System.currentTimeMillis();
         ContentCachingRequestWrapper wrappedRequest = new ContentCachingRequestWrapper(httpRequest);
+        // 在业务代码执行前捕获操作对象快照（姓名/手机号等），
+        // 删除类操作执行后记录已消失，此时快照能保证日志仍可追溯"删了什么"
+        captureTargetSnapshot(wrappedRequest);
         try {
             chain.doFilter(wrappedRequest, httpResponse);
         } finally {
@@ -83,6 +93,12 @@ public class AdminOperationLogFilter implements Filter {
             String path = request.getRequestURI();
             boolean isAuthEndpoint = path.startsWith("/api/admin/auth/");
             String requestBody = extractAndSanitizeBody(request);
+            // 合并请求执行前捕获的对象快照（姓名/手机号/订单归属客户等），
+            // 删除类操作后对象已不存在，快照可保证日志仍显示"删了什么"
+            Object snapshotAttr = request.getAttribute(TARGET_SNAPSHOT_ATTR);
+            if (snapshotAttr instanceof String snapshotJson && snapshotJson != null && !snapshotJson.isBlank()) {
+                requestBody = mergeSnapshotIntoBody(requestBody, snapshotJson);
+            }
             // 把操作对象（客户/骑手/后台账号）当前手机号快照进日志参数，
             // 便于对象被删除后按手机号重建时，旧日志仍能通过手机号反查当前姓名
             requestBody = enrichTargetPhone(path, requestBody);
@@ -177,6 +193,109 @@ public class AdminOperationLogFilter implements Filter {
             return phone != null && !phone.isNull() ? phone.asText() : null;
         } catch (Exception ex) {
             return null;
+        }
+    }
+
+    /**
+     * 在业务代码执行前捕获操作对象信息快照，存入 request attribute。
+     * 覆盖：客户/骑手/后台账号/订单/售后单；订单与售后单额外带出所属客户姓名。
+     * 删除类操作执行后原记录消失，快照能让日志在对象删除后仍显示"删的是什么"。
+     */
+    private void captureTargetSnapshot(HttpServletRequest request) {
+        try {
+            String path = request.getRequestURI();
+            if (path == null || path.isBlank()) {
+                return;
+            }
+            String pathOnly = path.split("\\?", 2)[0];
+            ObjectNode snapshot = objectMapper.createObjectNode();
+            Matcher matcher;
+            if ((matcher = CUSTOMER_ID_PATH.matcher(pathOnly)).find()) {
+                snapshot.put("targetType", "CUSTOMER");
+                snapshot.put("targetId", Long.parseLong(matcher.group(1)));
+                querySingleRowInto(snapshot, "SELECT name, phone FROM customers WHERE id = ?", matcher.group(1), "name", "phone");
+            } else if ((matcher = RIDER_ID_PATH.matcher(pathOnly)).find()) {
+                snapshot.put("targetType", "RIDER");
+                snapshot.put("targetId", Long.parseLong(matcher.group(1)));
+                querySingleRowInto(snapshot, "SELECT rider_name, phone FROM rider_profiles WHERE id = ?", matcher.group(1), "rider_name", "phone");
+            } else if ((matcher = ADMIN_USER_ID_PATH.matcher(pathOnly)).find()) {
+                snapshot.put("targetType", "ADMIN_USER");
+                snapshot.put("targetId", Long.parseLong(matcher.group(1)));
+                querySingleRowInto(snapshot, "SELECT display_name, phone FROM users WHERE id = ?", matcher.group(1), "display_name", "phone");
+            } else if ((matcher = ORDER_ID_PATH.matcher(pathOnly)).find()) {
+                snapshot.put("targetType", "ORDER");
+                snapshot.put("targetId", Long.parseLong(matcher.group(1)));
+                // 订单关联客户：删除订单后仍能显示"删的谁的订单"（orderId 是 meal_slot_orders.id）
+                querySingleRowInto(
+                    snapshot,
+                    """
+                        SELECT c.name AS customer_name, c.phone AS customer_phone
+                        FROM meal_slot_orders mso
+                        JOIN daily_orders doo ON doo.id = mso.daily_order_id
+                        JOIN customers c ON c.id = doo.customer_id
+                        WHERE mso.id = ?
+                        """,
+                    matcher.group(1),
+                    "customer_name",
+                    "customer_phone"
+                );
+            } else if ((matcher = AFTERSALE_ID_PATH.matcher(pathOnly)).find()) {
+                snapshot.put("targetType", "AFTERSALE");
+                snapshot.put("targetId", Long.parseLong(matcher.group(1)));
+                // 售后单关联客户：删除售后单后仍能显示客户
+                querySingleRowInto(
+                    snapshot,
+                    """
+                        SELECT c.name AS customer_name, c.phone AS customer_phone
+                        FROM aftersale_cases a
+                        JOIN customers c ON c.id = a.customer_id
+                        WHERE a.id = ?
+                        """,
+                    matcher.group(1),
+                    "customer_name",
+                    "customer_phone"
+                );
+            }
+            if (snapshot.has("targetType")) {
+                request.setAttribute(TARGET_SNAPSHOT_ATTR, objectMapper.writeValueAsString(snapshot));
+            }
+        } catch (Exception ex) {
+            // 快照失败不影响主流程
+            log.debug("后台操作日志对象快照捕获失败 path={}", request.getRequestURI(), ex);
+        }
+    }
+
+    /** 查询一行并把指定列写入快照 JSON；查不到时只保留 targetType/targetId（对象已删除且无快照） */
+    private void querySingleRowInto(ObjectNode snapshot, String sql, String id, String nameColumn, String phoneColumn) {
+        try {
+            long parsedId = Long.parseLong(id);
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, parsedId);
+            if (!rows.isEmpty()) {
+                Map<String, Object> row = rows.get(0);
+                Object nameValue = row.get(nameColumn);
+                Object phoneValue = row.get(phoneColumn);
+                snapshot.put(nameColumn, nameValue == null ? "" : String.valueOf(nameValue));
+                snapshot.put(phoneColumn, phoneValue == null ? "" : String.valueOf(phoneValue));
+            }
+        } catch (Exception ex) {
+            log.debug("操作日志对象快照查询失败 sql={} id={}", sql, id, ex);
+        }
+    }
+
+    /** 把快照 JSON 合并进请求体 JSON：快照放到 _target 字段，展示端优先使用快照信息 */
+    private String mergeSnapshotIntoBody(String body, String snapshotJson) {
+        try {
+            ObjectNode bodyNode = objectMapper.createObjectNode();
+            if (body != null && body.trim().startsWith("{")) {
+                JsonNode parsed = objectMapper.readTree(body);
+                if (parsed instanceof ObjectNode existing) {
+                    bodyNode = existing;
+                }
+            }
+            bodyNode.set("_target", objectMapper.readTree(snapshotJson));
+            return objectMapper.writeValueAsString(bodyNode);
+        } catch (Exception ex) {
+            return body;
         }
     }
 

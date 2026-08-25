@@ -78,6 +78,8 @@ public interface SettingsService {
         String nightlyReminderTip
     );
 
+    OperationSettingsResponse updateNightOrderWindow(String nightOrderCutoffTime, String nightOrderOpenTime);
+
     BannerImageUploadResponse uploadBannerImage(MultipartFile file);
 
     OperationSettingsResponse pauseOrderingWithNotice(String title, String desc, boolean popupEnabled, String popupContent);

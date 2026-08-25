@@ -61,7 +61,6 @@ class DispatchAssignmentModule {
         String updatedBy
     ) {
         String normalizedAreaCode = requireAreaCode(areaCode);
-        String defaultRiderName = resolveDefaultRiderName(normalizedAreaCode);
         int successCount = 0;
         List<BatchOperationResponse.FailureItem> failures = new ArrayList<>();
         for (Long orderId : orderIds) {
@@ -69,10 +68,11 @@ class DispatchAssignmentModule {
                 if (orderId == null) {
                     throw new BusinessException(ErrorCode.VALIDATION_ERROR, "订单编号不能为空");
                 }
+                DispatchOrderContext orderContext = loadOrderContext(orderId);
+                String defaultRiderName = resolveDefaultRiderName(normalizedAreaCode, orderContext.mealPeriod());
                 if (defaultRiderName != null) {
                     dispatchOrder(orderId, defaultRiderName, normalizedAreaCode, true);
                 } else {
-                    DispatchOrderContext orderContext = loadOrderContext(orderId);
                     int sequenceNumber = nextAreaSequence(
                         normalizedAreaCode,
                         orderContext.serveDate(),
@@ -128,7 +128,7 @@ class DispatchAssignmentModule {
                 ));
             }
         }
-        publishDispatchEvent("dispatch.assignment.changed", normalizedAreaCode, defaultRiderName, successCount);
+        publishDispatchEvent("dispatch.assignment.changed", normalizedAreaCode, null, successCount);
         return new BatchOperationResponse(successCount, failures.size(), failures);
     }
 
@@ -181,7 +181,7 @@ class DispatchAssignmentModule {
 
         int successCount = 0;
         for (Long orderId : orderIds) {
-            dispatchOrder(orderId, resolveAssignmentRiderName(normalizedAreaCode, riderName), normalizedAreaCode, true);
+            dispatchOrder(orderId, resolveAssignmentRiderName(normalizedAreaCode, riderName, finalMealPeriod), normalizedAreaCode, true);
             successCount++;
         }
         publishDispatchEvent("dispatch.queue.changed", normalizedAreaCode, riderName, null);
@@ -194,7 +194,8 @@ class DispatchAssignmentModule {
 
     DispatchAreaOrderAssignResponse assignRiderToAreaOrder(String areaCode, long orderId, String riderName) {
         String normalizedAreaCode = requireAreaCode(areaCode);
-        dispatchOrder(orderId, resolveAssignmentRiderName(normalizedAreaCode, riderName), normalizedAreaCode, true);
+        String orderMealPeriod = loadOrderContext(orderId).mealPeriod();
+        dispatchOrder(orderId, resolveAssignmentRiderName(normalizedAreaCode, riderName, orderMealPeriod), normalizedAreaCode, true);
         publishDispatchEvent("dispatch.queue.changed", normalizedAreaCode, riderName, orderId);
         return new DispatchAreaOrderAssignResponse(normalizedAreaCode, orderId, "DISPATCHED");
     }
@@ -317,7 +318,7 @@ class DispatchAssignmentModule {
         );
         pruneOldDispatchReassignments();
         if (syncDefaultBinding && finalAreaCode != null && !finalAreaCode.isBlank()) {
-            Long riderId = findRiderProfileIdByName(toRiderName);
+            Long riderId = findRiderProfileIdByName(toRiderName, mealPeriod);
             if (riderId != null) {
                 areaBindingUpdater.update(finalAreaCode, null, riderId, null, createdBy);
             }
@@ -335,8 +336,8 @@ class DispatchAssignmentModule {
 
     private void dispatchOrder(long orderId, String riderName, String areaCode, boolean syncAddressBinding) {
         jdbcTemplate.update("UPDATE meal_slot_orders SET status = 'DISPATCHING' WHERE id = ?", orderId);
-        long riderProfileId = ensureRiderProfile(riderName, areaCode);
         DispatchOrderContext orderContext = loadOrderContext(orderId);
+        long riderProfileId = ensureRiderProfile(riderName, areaCode, orderContext.mealPeriod());
         int sequenceNumber = nextAreaSequence(
             areaCode,
             orderContext.serveDate(),
@@ -413,7 +414,9 @@ class DispatchAssignmentModule {
                 FROM meal_slot_orders mso
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
                 JOIN rider_address_bindings rab ON rab.customer_id = doo.customer_id AND rab.address_id = mso.address_id
-                JOIN dispatch_area_bindings dab ON dab.area_code = rab.area_code
+                JOIN dispatch_area_bindings dab
+                    ON dab.area_code = rab.area_code
+                   AND dab.meal_period = COALESCE(mso.delivery_meal_period, mso.meal_period)
                 LEFT JOIN dispatch_assignments da ON da.meal_slot_order_id = mso.id
                 WHERE mso.status = 'PENDING_DISPATCH'
                   AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
@@ -436,7 +439,7 @@ class DispatchAssignmentModule {
             if (areaCode == null || areaCode.isBlank()) {
                 continue;
             }
-            String defaultRiderName = resolveDefaultRiderName(areaCode);
+            String defaultRiderName = resolveDefaultRiderName(areaCode, order.mealPeriod());
             if (defaultRiderName != null) {
                 dispatchOrder(orderId, defaultRiderName, areaCode, true);
             } else {
@@ -519,7 +522,7 @@ class DispatchAssignmentModule {
         long addressId = orderContext.addressId();
         String addressLine = orderContext.addressLine();
         String fingerprint = normalizeAddressFingerprint(addressLine);
-        Long riderProfileId = resolveDefaultRiderProfileId(areaCode);
+        Long riderProfileId = resolveDefaultRiderProfileId(areaCode, orderContext.mealPeriod());
         int existing = queryCount(
             "SELECT COUNT(*) FROM rider_address_bindings WHERE customer_id = ? AND address_id = ?",
             customerId,
@@ -568,16 +571,19 @@ class DispatchAssignmentModule {
         );
     }
 
-    private Long resolveDefaultRiderProfileId(String areaCode) {
+    private Long resolveDefaultRiderProfileId(String areaCode, String mealPeriod) {
         List<Long> riderIds = jdbcTemplate.query(
             """
                 SELECT COALESCE(default_rider_profile_id, backup_rider_profile_id) AS rider_profile_id
                 FROM dispatch_area_bindings
                 WHERE area_code = ?
+                  AND (? IS NULL OR meal_period = ?)
                   AND COALESCE(default_rider_profile_id, backup_rider_profile_id) IS NOT NULL
                 """,
             (rs, rowNum) -> rs.getLong("rider_profile_id"),
-            areaCode
+            areaCode,
+            mealPeriod,
+            mealPeriod
         );
         return riderIds.isEmpty() ? null : riderIds.get(0);
     }
@@ -593,23 +599,26 @@ class DispatchAssignmentModule {
         return areaCode.trim();
     }
 
-    private String resolveDefaultRiderName(String areaCode) {
+    private String resolveDefaultRiderName(String areaCode, String mealPeriod) {
         List<String> riderNames = jdbcTemplate.query(
             """
                 SELECT rp.rider_name
                 FROM dispatch_area_bindings dab
                 JOIN rider_profiles rp ON rp.id = dab.default_rider_profile_id
                 WHERE dab.area_code = ?
+                  AND (? IS NULL OR dab.meal_period = ?)
                   AND rp.auth_status = 'ACTIVE'
                   AND rp.employment_status = 'ACTIVE'
                 """,
             (rs, rowNum) -> rs.getString("rider_name"),
-            areaCode
+            areaCode,
+            mealPeriod,
+            mealPeriod
         );
         return riderNames.isEmpty() ? null : riderNames.get(0);
     }
 
-    private String resolveAssignmentRiderName(String areaCode, String riderName) {
+    private String resolveAssignmentRiderName(String areaCode, String riderName, String mealPeriod) {
         if (riderName != null && !riderName.isBlank()) {
             return riderName.trim();
         }
@@ -619,11 +628,14 @@ class DispatchAssignmentModule {
                 FROM dispatch_area_bindings dab
                 JOIN rider_profiles rp ON rp.id = dab.default_rider_profile_id
                 WHERE dab.area_code = ?
+                  AND (? IS NULL OR dab.meal_period = ?)
                   AND rp.auth_status = 'ACTIVE'
                   AND rp.employment_status = 'ACTIVE'
                 """,
             (rs, rowNum) -> rs.getString("rider_name"),
-            areaCode
+            areaCode,
+            mealPeriod,
+            mealPeriod
         );
         if (!riderNames.isEmpty()) {
             return riderNames.get(0);
@@ -631,8 +643,8 @@ class DispatchAssignmentModule {
         throw new BusinessException(ErrorCode.VALIDATION_ERROR, "所选区域暂未绑定可派单骑手，请先指定骑手或只归区域");
     }
 
-    private long ensureRiderProfile(String riderName, String areaCode) {
-        Long profileId = findRiderProfileIdByName(riderName);
+    private long ensureRiderProfile(String riderName, String areaCode, String mealPeriod) {
+        Long profileId = findRiderProfileIdByName(riderName, mealPeriod);
         if (profileId != null) {
             jdbcTemplate.update(
                 "UPDATE rider_profiles SET default_area_code = COALESCE(?, default_area_code), employment_status = 'ACTIVE', auth_status = COALESCE(auth_status, 'ACTIVE') WHERE id = ?",
@@ -642,8 +654,12 @@ class DispatchAssignmentModule {
             return profileId;
         }
         return insertAndReturnId(
-            "INSERT INTO rider_profiles (rider_name, employment_status, default_area_code, auth_status) VALUES (?, ?, ?, ?)",
+            """
+                INSERT INTO rider_profiles (rider_name, meal_period, employment_status, default_area_code, auth_status)
+                VALUES (?, ?, ?, ?, ?)
+                """,
             riderName,
+            mealPeriod,
             "ACTIVE",
             areaCode,
             "ACTIVE"
@@ -747,11 +763,18 @@ class DispatchAssignmentModule {
         return null;
     }
 
-    private Long findRiderProfileIdByName(String riderName) {
+    private Long findRiderProfileIdByName(String riderName, String mealPeriod) {
         List<Long> ids = jdbcTemplate.query(
-            "SELECT id FROM rider_profiles WHERE rider_name = ?",
+            """
+                SELECT id FROM rider_profiles
+                WHERE rider_name = ?
+                  AND (? IS NULL OR meal_period = ?)
+                ORDER BY id
+                """,
             (rs, rowNum) -> rs.getLong("id"),
-            riderName
+            riderName,
+            mealPeriod,
+            mealPeriod
         );
         return ids.isEmpty() ? null : ids.get(0);
     }

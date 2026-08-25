@@ -19,6 +19,8 @@ public record OperationSettingsResponse(
     String nightlyReminderTip,
     boolean popupAnnouncementEnabled,
     String popupAnnouncementContent,
-    String restNoticeTemplate
+    String restNoticeTemplate,
+    String nightOrderCutoffTime,
+    String nightOrderOpenTime
 ) {
 }

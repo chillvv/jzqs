@@ -12,6 +12,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
@@ -21,9 +23,11 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class AdminOperationLogLabelService {
+    private static final Logger log = LoggerFactory.getLogger(AdminOperationLogLabelService.class);
 
     private static final Map<String, String> MODULE_LABELS = Map.ofEntries(
         Map.entry("CUSTOMER_ASSET", "客户管理"),
+        Map.entry("CUSTOMER", "客户管理"),
         Map.entry("CUSTOMERS", "客户管理"),
         Map.entry("ORDER", "订单管理"),
         Map.entry("ORDERS", "订单管理"),
@@ -245,15 +249,23 @@ public class AdminOperationLogLabelService {
         if (customer.find()) {
             return customerLabel(Long.parseLong(customer.group(1)), requestSummary, cache);
         }
-        // 订单类操作：定位到订单所属的客户
+        // 订单类操作：定位到订单所属的客户（优先用删除前快照，订单删除后仍可追溯）
         Matcher order = ORDER_PATH.matcher(pathOnly);
         if (order.find()) {
+            String snapName = snapshotField(requestSummary, "customer_name");
+            if (snapName != null) {
+                return "客户「" + snapName + "」的订单";
+            }
             Long customerId = cache.orderCustomerIds().get(Long.parseLong(order.group(1)));
             return customerId != null ? customerLabel(customerId, requestSummary, cache) : "已删除的订单";
         }
-        // 售后单处理：定位到售后单所属的客户
+        // 售后单处理：定位到售后单所属的客户（优先用删除前快照）
         Matcher aftersale = AFTERSALE_PATH.matcher(pathOnly);
         if (aftersale.find()) {
+            String snapName = snapshotField(requestSummary, "customer_name");
+            if (snapName != null) {
+                return "客户「" + snapName + "」的售后单";
+            }
             Long customerId = cache.aftersaleCustomerIds().get(Long.parseLong(aftersale.group(1)));
             return customerId != null ? customerLabel(customerId, requestSummary, cache) : "已删除的售后单";
         }
@@ -315,9 +327,14 @@ public class AdminOperationLogLabelService {
 
     /**
      * 单个客户：客户「张三」；客户已被删除时提示已删除而不是ID。
-     * 若客户已被删除后按手机号重新建档（新ID），则通过请求体中的手机号反查出当前客户姓名。
+     * 优先使用删除前快照中的姓名（删除后记录已消失，快照保证仍能追溯）；
+     * 其次若客户已被删除后按手机号重新建档（新ID），则通过请求体中的手机号反查出当前客户姓名。
      */
     private String customerLabel(long customerId, String requestSummary, NameCache cache) {
+        String snapName = snapshotField(requestSummary, "name");
+        if (snapName != null) {
+            return "客户「" + snapName + "」";
+        }
         String name = cache.customerNames().get(customerId);
         if (name != null && !name.isBlank()) {
             return "客户「" + name + "」";
@@ -332,8 +349,12 @@ public class AdminOperationLogLabelService {
         return "已删除的客户";
     }
 
-    /** 单个骑手：骑手「张三」；骑手被删除后按手机号重新添加时，通过请求体手机号反查当前骑手姓名 */
+    /** 单个骑手：骑手「张三」；优先用删除前快照，其次按手机号反查当前骑手姓名 */
     private String riderLabel(long riderId, String requestSummary, NameCache cache) {
+        String snapName = snapshotField(requestSummary, "rider_name");
+        if (snapName != null) {
+            return "骑手「" + snapName + "」";
+        }
         String name = cache.riderNames().get(riderId);
         if (name != null && !name.isBlank()) {
             return "骑手「" + name + "」";
@@ -348,8 +369,12 @@ public class AdminOperationLogLabelService {
         return "已删除的骑手";
     }
 
-    /** 单个后台账号：账号「张三」；账号被删除后按手机号重新添加时，通过请求体手机号反查当前账号姓名 */
+    /** 单个后台账号：账号「张三」；优先用删除前快照，其次按手机号反查当前账号姓名 */
     private String adminUserLabel(long userId, String requestSummary, NameCache cache) {
+        String snapName = snapshotField(requestSummary, "display_name");
+        if (snapName != null) {
+            return "账号「" + snapName + "」";
+        }
         String name = cache.adminUserNames().get(userId);
         if (name != null && !name.isBlank()) {
             return "账号「" + name + "」";
@@ -362,6 +387,20 @@ public class AdminOperationLogLabelService {
             }
         }
         return "已删除的账号";
+    }
+
+    /** 从请求体摘要中读取删除前快照字段（_target 下的字段），取不到返回 null */
+    private String snapshotField(String requestSummary, String field) {
+        JsonNode node = parseSummary(requestSummary);
+        if (node == null || !node.has("_target")) {
+            return null;
+        }
+        JsonNode target = node.get("_target");
+        if (target == null || !target.hasNonNull(field)) {
+            return null;
+        }
+        String value = target.get(field).asText();
+        return value == null || value.isBlank() ? null : value.trim();
     }
 
     /** 从请求体摘要中提取手机号（删除后重建的对象靠手机号反查当前姓名） */
@@ -486,6 +525,7 @@ public class AdminOperationLogLabelService {
     /** 批量加载一批日志涉及的对象名称，避免逐条查库；同时按手机号反查，兼容对象删除后重建（新ID）的日志 */
     public NameCache loadNameCache(Iterable<LogRef> logs) {
         Set<Long> customerIds = new HashSet<>();
+        log.info("[audit-debug] loadNameCache start, logs={}", java.util.stream.StreamSupport.stream(logs.spliterator(), false).map(LogRef::requestSummary).collect(java.util.stream.Collectors.toList()));
         Set<Long> riderIds = new HashSet<>();
         Set<Long> adminUserIds = new HashSet<>();
         Set<Long> orderIds = new HashSet<>();
@@ -516,6 +556,7 @@ public class AdminOperationLogLabelService {
                 }
             }
         }
+        log.info("[audit-debug] customerIds={} riderIds={} orderIds={}", customerIds, riderIds, orderIds);
         return new NameCache(
             queryNames("SELECT id, name FROM customers WHERE id IN ", customerIds),
             queryNames("SELECT id, rider_name FROM rider_profiles WHERE id IN ", riderIds),

@@ -1,5 +1,5 @@
 import React from "react";
-import { Bell, Image as ImageIcon, Megaphone } from "lucide-react";
+import { Bell, Clock3, Image as ImageIcon, Megaphone } from "lucide-react";
 import type { OperationSettingsResponse } from "../../../shared/api/types";
 import {
   countBannerImages,
@@ -24,6 +24,7 @@ interface SystemSettingsOverviewProps {
   nightlyReminderDescription?: string;
   nightlyReminderTip?: string;
   onOpenNightlyTemplate?: () => void;
+  onOpenNightOrderWindow?: () => void;
 }
 
 export function SystemSettingsOverview({
@@ -37,7 +38,8 @@ export function SystemSettingsOverview({
   onPreviewBanner,
   nightlyReminderDescription,
   nightlyReminderTip,
-  onOpenNightlyTemplate
+  onOpenNightlyTemplate,
+  onOpenNightOrderWindow
 }: SystemSettingsOverviewProps) {
   return (
     <>
@@ -173,6 +175,26 @@ export function SystemSettingsOverview({
           <div className="settings-card__actions">
             <button className="btn btn-outline" style={{ width: "100%" }} onClick={() => onOpenNightlyTemplate?.()}>
               编辑订阅模板
+            </button>
+          </div>
+        </div>
+
+        <div className="settings-card">
+          <div className="settings-card__title">
+            <Clock3 size={18} /> 小程序下单窗口
+          </div>
+          <div className="settings-card__body">
+            <div className="settings-card__detail">
+              每天 {settings.nightOrderOpenTime || "08:00"} 开放 · {settings.nightOrderCutoffTime || "23:00"} 截止自助下单
+            </div>
+            <div className="settings-card__detail settings-card__detail--sub">
+              每晚 {settings.nightOrderCutoffTime || "23:00"} 至次日 {settings.nightOrderOpenTime || "08:00"} 前，小程序暂停接新订单
+            </div>
+            <span className="settings-card__hint">顾客端夜间会展示对应时间的结算提示</span>
+          </div>
+          <div className="settings-card__actions">
+            <button className="btn btn-outline" style={{ width: "100%" }} onClick={() => onOpenNightOrderWindow?.()}>
+              配置下单窗口
             </button>
           </div>
         </div>

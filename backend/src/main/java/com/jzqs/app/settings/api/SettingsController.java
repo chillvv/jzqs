@@ -214,4 +214,15 @@ public class SettingsController {
             request.nightlyReminderTip()
         ));
     }
+
+    @PostMapping("/night-order-window")
+    @RateLimit(key = "admin:settings:night-order-window", maxRequests = 4, windowSeconds = 10)
+    @Idempotent(key = "admin:settings:night-order-window", ttlSeconds = 5, includeBody = true)
+    @AuditAction(module = "SETTINGS", action = "NIGHT_ORDER_WINDOW")
+    public ApiResponse<OperationSettingsResponse> updateNightOrderWindow(@Valid @RequestBody NightOrderWindowUpdateRequest request) {
+        return ApiResponse.success(settingsService.updateNightOrderWindow(
+            request.nightOrderCutoffTime(),
+            request.nightOrderOpenTime()
+        ));
+    }
 }

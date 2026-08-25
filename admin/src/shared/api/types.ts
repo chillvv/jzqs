@@ -645,6 +645,8 @@ export type OperationSettingsResponse = {
   popupAnnouncementEnabled: boolean;
   popupAnnouncementContent: string;
   restNoticeTemplate: string;
+  nightOrderCutoffTime: string;
+  nightOrderOpenTime: string;
 };
 
 export type DispatchAiSettingsResponse = {

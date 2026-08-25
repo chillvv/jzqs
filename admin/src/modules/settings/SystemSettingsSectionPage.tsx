@@ -17,6 +17,7 @@ import {
   updateDispatchAiWorkbench,
   updatePackageReminderSettings,
   updatePopupAnnouncement,
+  updateNightOrderWindow,
   updateRestNoticeTemplate,
   uploadBannerImage,
   simulateRouteLab,
@@ -87,6 +88,10 @@ const EMPTY_PACKAGE_REMINDER = {
   nightlyReminderTime: "20:00",
   nightlyReminderDescription: "再忙也要好好吃饭哟🍽",
   nightlyReminderTip: "需要明日餐食的宝子现在可以下单喽～"
+};
+const EMPTY_NIGHT_ORDER_WINDOW = {
+  nightOrderCutoffTime: "23:00",
+  nightOrderOpenTime: "08:00"
 };
 const EMPTY_ROUTE_WORKBENCH_FORM = {
   autoScheduleEnabled: false,
@@ -171,7 +176,9 @@ export function SystemSettingsSectionPage() {
     nightlyReminderTip: "需要明日餐食的宝子现在可以下单喽～",
     popupAnnouncementEnabled: false,
     popupAnnouncementContent: "",
-    restNoticeTemplate: ""
+    restNoticeTemplate: "",
+    nightOrderCutoffTime: "23:00",
+    nightOrderOpenTime: "08:00"
   });
 
   const [popupForm, setPopupForm] = useState(EMPTY_POPUP);
@@ -189,7 +196,7 @@ export function SystemSettingsSectionPage() {
   const [areaMemoryForm, setAreaMemoryForm] = useState(EMPTY_AREA_MEMORY_FORM);
   const [areaMemorySourceData, setAreaMemorySourceData] = useState<DispatchAreaMemorySourceListResponse | null>(null);
 
-  const [modal, setModal] = useState<"banner" | "popup" | "packageReminder" | "routeWorkbench" | "aiConfig" | "productionRun" | "routeLab" | "areaMemoryHub" | "areaMemory" | "areaMemorySources" | "restNotice" | "nightlyTemplate" | null>(null);
+  const [modal, setModal] = useState<"banner" | "popup" | "packageReminder" | "routeWorkbench" | "aiConfig" | "productionRun" | "routeLab" | "areaMemoryHub" | "areaMemory" | "areaMemorySources" | "restNotice" | "nightlyTemplate" | "nightOrderWindow" | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [bannerUploading, setBannerUploading] = useState(false);
   const [popupSubmitting, setPopupSubmitting] = useState(false);
@@ -207,6 +214,8 @@ export function SystemSettingsSectionPage() {
   const [areaMemorySourceLoading, setAreaMemorySourceLoading] = useState(false);
   const [restNoticeForm, setRestNoticeForm] = useState("");
   const [restNoticeSubmitting, setRestNoticeSubmitting] = useState(false);
+  const [nightOrderWindowForm, setNightOrderWindowForm] = useState(EMPTY_NIGHT_ORDER_WINDOW);
+  const [nightOrderWindowSubmitting, setNightOrderWindowSubmitting] = useState(false);
   const [nightlyTemplateForm, setNightlyTemplateForm] = useState({
     nightlyReminderEnabled: true,
     nightlyReminderTime: "20:00",
@@ -361,6 +370,37 @@ export function SystemSettingsSectionPage() {
       nightlyReminderTip: settings.nightlyReminderTip || "需要明日餐食的宝子现在可以下单喽～"
     });
     openModal("nightlyTemplate");
+  }
+
+  function openNightOrderWindow() {
+    setNightOrderWindowForm({
+      nightOrderCutoffTime: normalizeTriggerTime(settings.nightOrderCutoffTime || "23:00") || "23:00",
+      nightOrderOpenTime: normalizeTriggerTime(settings.nightOrderOpenTime || "08:00") || "08:00"
+    });
+    openModal("nightOrderWindow");
+  }
+
+  async function submitNightOrderWindow() {
+    const nightOrderCutoffTime = normalizeTriggerTime(nightOrderWindowForm.nightOrderCutoffTime);
+    const nightOrderOpenTime = normalizeTriggerTime(nightOrderWindowForm.nightOrderOpenTime);
+    if (!nightOrderCutoffTime || !nightOrderOpenTime) {
+      toast("请填写有效的每晚截止时间与明早开放时间", "error");
+      return;
+    }
+    if (nightOrderCutoffTime === nightOrderOpenTime) {
+      toast("每晚截止时间与明早开放时间不能相同", "error");
+      return;
+    }
+    setNightOrderWindowSubmitting(true);
+    try {
+      setSettings(await updateNightOrderWindow({ nightOrderCutoffTime, nightOrderOpenTime }));
+      closeModal();
+      toast("小程序下单窗口已更新");
+    } catch (err: any) {
+      showError(err);
+    } finally {
+      setNightOrderWindowSubmitting(false);
+    }
   }
 
   async function submitNightlyTemplate() {
@@ -920,6 +960,7 @@ export function SystemSettingsSectionPage() {
           nightlyReminderDescription={settings.nightlyReminderDescription || ""}
           nightlyReminderTip={settings.nightlyReminderTip || ""}
           onOpenNightlyTemplate={openNightlyTemplate}
+          onOpenNightOrderWindow={openNightOrderWindow}
         />
       </>
     );
@@ -1877,6 +1918,47 @@ export function SystemSettingsSectionPage() {
           />
           <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 6 }}>
             当前 {graphemeLength(nightlyTemplateForm.nightlyReminderTip || "")}/20 字
+          </div>
+        </div>
+      </SettingsModal>
+
+      <SettingsModal
+        open={modal === "nightOrderWindow"}
+        title="配置小程序下单窗口"
+        onClose={closeModal}
+        onSubmit={submitNightOrderWindow}
+        submitLabel="保存配置"
+        submitting={nightOrderWindowSubmitting}
+      >
+        <div className="settings-form-callout">
+          设置小程序自助下单的每日时段：每晚截止时间之后至明早开放时间之前暂停接单，顾客端展示夜间结算提示。
+        </div>
+        <div className="form-group">
+          <label className="form-label">
+            <span className="required">*</span>每晚截止时间
+          </label>
+          <SafeInput
+            className="form-control"
+            type="time"
+            value={nightOrderWindowForm.nightOrderCutoffTime}
+            onValueChange={(value) => setNightOrderWindowForm({ ...nightOrderWindowForm, nightOrderCutoffTime: value })}
+          />
+          <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 8 }}>
+            到达该时间后，小程序停止接收当日新订单。
+          </div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">
+            <span className="required">*</span>明早开放时间
+          </label>
+          <SafeInput
+            className="form-control"
+            type="time"
+            value={nightOrderWindowForm.nightOrderOpenTime}
+            onValueChange={(value) => setNightOrderWindowForm({ ...nightOrderWindowForm, nightOrderOpenTime: value })}
+          />
+          <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 8 }}>
+            到达该时间后，小程序恢复自助下单。
           </div>
         </div>
       </SettingsModal>

@@ -37,18 +37,15 @@ class MobileCustomerQueryModule {
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final DeliverySubscriptionModule deliverySubscriptionModule;
-    private final LocalTime selfOrderCutoffTime;
 
     MobileCustomerQueryModule(
         JdbcTemplate jdbcTemplate,
         ObjectMapper objectMapper,
-        DeliverySubscriptionModule deliverySubscriptionModule,
-        @org.springframework.beans.factory.annotation.Value("${app.mobile.self-order-cutoff:23:00}") String selfOrderCutoff
+        DeliverySubscriptionModule deliverySubscriptionModule
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.deliverySubscriptionModule = deliverySubscriptionModule;
-        this.selfOrderCutoffTime = LocalTime.parse(selfOrderCutoff);
     }
 
     MobileHomeResponse guestHome() {
@@ -255,7 +252,11 @@ class MobileCustomerQueryModule {
         boolean orderingEnabled = settings.orderingEnabled();
         String notice = settings.holidayNoticeDesc();
 
-        boolean selfOrderEnabled = LocalTime.now().isBefore(selfOrderCutoffTime);
+        boolean selfOrderEnabled = MiniappOrderWindow.isOpen(
+            LocalTime.now(),
+            MiniappOrderWindow.openTime(jdbcTemplate),
+            MiniappOrderWindow.cutoffTime(jdbcTemplate)
+        );
         String selfOrderNotice = selfOrderEnabled ? "" : "当前自助下单已截止，如需加单请联系专属客服微信";
 
         boolean canOrder = true;
@@ -278,7 +279,9 @@ class MobileCustomerQueryModule {
             lunchItem,
             dinnerItem,
             canOrder,
-            statusText
+            statusText,
+            MiniappOrderWindow.cutoffTime(jdbcTemplate).toString(),
+            MiniappOrderWindow.openTime(jdbcTemplate).toString()
         );
     }
 

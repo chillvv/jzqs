@@ -183,8 +183,15 @@ public class DashboardServiceImpl implements DashboardService {
 
     private int quantityByCreatedDateAndStatus(LocalDate businessDate, String status) {
         if (status == null) {
+            // 按“实际实施”统计：排除已取消/已退款的订单，避免折线图与今日总订单虚高
             return countByBusinessDate(
-                "SELECT COALESCE(SUM(mso.quantity), 0) FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE CAST(do.created_at AS DATE) = ?",
+                """
+                SELECT COALESCE(SUM(mso.quantity), 0)
+                FROM meal_slot_orders mso
+                JOIN daily_orders do ON do.id = mso.daily_order_id
+                WHERE CAST(do.created_at AS DATE) = ?
+                  AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
+                """,
                 businessDate
             );
         }
@@ -275,11 +282,13 @@ public class DashboardServiceImpl implements DashboardService {
         LocalDate startDate = businessDate.minusDays(6);
         for (int i = 0; i < 7; i++) {
             LocalDate statDate = startDate.plusDays(i);
+            // 以“实际实施”为准：按出餐日期(serve_date)统计，并排除已取消/已退款订单，
+            // 与备餐统计/明日订单口径一致，避免用户取消的订单虚增折线图数据
             points.add(new DashboardOverviewResponse.OrderTrendPoint(
                 SHORT_DATE.format(statDate),
-                quantityByCreatedDateAndStatus(statDate, null),
-                quantityByCreatedDateAndMealPeriod(statDate, "LUNCH"),
-                quantityByCreatedDateAndMealPeriod(statDate, "DINNER")
+                quantityByServeDate(statDate, null),
+                quantityByServeDate(statDate, "LUNCH"),
+                quantityByServeDate(statDate, "DINNER")
             ));
         }
         return points;
@@ -297,21 +306,6 @@ public class DashboardServiceImpl implements DashboardService {
             ));
         }
         return points;
-    }
-
-    private int quantityByCreatedDateAndMealPeriod(LocalDate businessDate, String mealPeriod) {
-        return nvl(jdbcTemplate.queryForObject(
-            """
-            SELECT COALESCE(SUM(mso.quantity), 0)
-            FROM meal_slot_orders mso
-            JOIN daily_orders do ON do.id = mso.daily_order_id
-            WHERE CAST(do.created_at AS DATE) = ?
-              AND mso.meal_period = ?
-            """,
-            Integer.class,
-            businessDate,
-            mealPeriod
-        ));
     }
 
     private LocalDate queryDate(String sql, Object... args) {

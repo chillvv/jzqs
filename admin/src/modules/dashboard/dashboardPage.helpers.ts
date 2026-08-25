@@ -75,7 +75,7 @@ export function buildDashboardHeroMetrics(data: DashboardOverviewResponse) {
 
 export function buildDashboardProgressItems(data: DashboardOverviewResponse) {
   return [
-    { label: "今日总订单", value: data.totalOrdersToday, tone: "blue", detail: "全部进入流程的订单" },
+    { label: "今日总订单", value: data.totalOrdersToday, tone: "blue", detail: "有效订单（不含取消/退款）" },
     { label: "待处理", value: data.pendingOrdersToday, tone: "amber", detail: "待人工继续流转" },
     { label: "待派单", value: data.pendingDispatchToday, tone: "violet", detail: "已确认但未指派骑手" },
     { label: "配送中", value: data.dispatchingOrdersToday, tone: "blue", detail: "骑手已接单履约中" },

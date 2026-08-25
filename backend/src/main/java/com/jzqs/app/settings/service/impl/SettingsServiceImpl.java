@@ -68,6 +68,8 @@ public class SettingsServiceImpl implements SettingsService {
     private static final String DEFAULT_NIGHTLY_REMINDER_TIME = "20:00";
     private static final String DEFAULT_NIGHTLY_REMINDER_DESCRIPTION = "再忙也要好好吃饭哟🍽";
     private static final String DEFAULT_NIGHTLY_REMINDER_TIP = "需要明日餐食的宝子现在可以下单喽～";
+    private static final String DEFAULT_NIGHT_ORDER_CUTOFF_TIME = "23:00";
+    private static final String DEFAULT_NIGHT_ORDER_OPEN_TIME = "08:00";
     private static final ZoneId APP_ZONE = ZoneId.of("Asia/Shanghai");
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private final JdbcTemplate jdbcTemplate;
@@ -123,7 +125,9 @@ public class SettingsServiceImpl implements SettingsService {
                 nightly_reminder_tip,
                 popup_announcement_enabled,
                 popup_announcement_content,
-                COALESCE(rest_notice_template, '') AS rest_notice_template
+                COALESCE(rest_notice_template, '') AS rest_notice_template,
+                COALESCE(night_order_cutoff_time, '23:00') AS night_order_cutoff_time,
+                COALESCE(night_order_open_time, '08:00') AS night_order_open_time
                 FROM admin_settings
                 WHERE id = 1
                 """,
@@ -145,7 +149,9 @@ public class SettingsServiceImpl implements SettingsService {
                 rs.getObject("nightly_reminder_tip"),
                 rs.getBoolean("popup_announcement_enabled"),
                 rs.getString("popup_announcement_content"),
-                rs.getString("rest_notice_template")
+                rs.getString("rest_notice_template"),
+                rs.getString("night_order_cutoff_time"),
+                rs.getString("night_order_open_time")
             )
         );
         boolean orderingEnabled = settings != null && settings.orderingEnabled();
@@ -169,7 +175,9 @@ public class SettingsServiceImpl implements SettingsService {
             safeString(settings == null ? null : settings.nightlyReminderTip()),
             settings != null && settings.popupAnnouncementEnabled(),
             safeString(settings == null ? null : settings.popupAnnouncementContent()),
-            safeString(settings == null ? null : settings.restNoticeTemplate())
+            safeString(settings == null ? null : settings.restNoticeTemplate()),
+            normalizeTimeSetting(settings == null ? null : settings.nightOrderCutoffTime(), DEFAULT_NIGHT_ORDER_CUTOFF_TIME),
+            normalizeTimeSetting(settings == null ? null : settings.nightOrderOpenTime(), DEFAULT_NIGHT_ORDER_OPEN_TIME)
         );
     }
 
@@ -685,6 +693,30 @@ public class SettingsServiceImpl implements SettingsService {
                 mobilePortalService.sendAllDeliveredPendingSubscriptions();
             }
         }
+        publishHomeEvent("system.home.changed");
+        return operationSettings();
+    }
+
+    @Override
+    @Transactional
+    public OperationSettingsResponse updateNightOrderWindow(String nightOrderCutoffTime, String nightOrderOpenTime) {
+        String normalizedCutoff = normalizeTimeSetting(nightOrderCutoffTime, DEFAULT_NIGHT_ORDER_CUTOFF_TIME);
+        String normalizedOpen = normalizeTimeSetting(nightOrderOpenTime, DEFAULT_NIGHT_ORDER_OPEN_TIME);
+        if (normalizedCutoff.equals(normalizedOpen)) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "每晚截止时间与明早开放时间不能相同");
+        }
+        jdbcTemplate.update(
+            """
+                UPDATE admin_settings
+                SET night_order_cutoff_time = ?,
+                    night_order_open_time = ?,
+                    updated_at = ?
+                WHERE id = 1
+                """,
+            normalizedCutoff,
+            normalizedOpen,
+            Timestamp.valueOf(LocalDateTime.now())
+        );
         publishHomeEvent("system.home.changed");
         return operationSettings();
     }
@@ -1330,7 +1362,9 @@ public class SettingsServiceImpl implements SettingsService {
         Object nightlyReminderTip,
         boolean popupAnnouncementEnabled,
         String popupAnnouncementContent,
-        String restNoticeTemplate
+        String restNoticeTemplate,
+        String nightOrderCutoffTime,
+        String nightOrderOpenTime
     ) {
     }
 

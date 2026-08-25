@@ -6,6 +6,7 @@ import {
   runDispatchAiNow,
   updateBannerImages,
   updateDispatchAiWorkbench,
+  updateNightOrderWindow,
   updatePackageReminderSettings,
   updatePopupAnnouncement,
   updateRestNoticeTemplate,
@@ -69,6 +70,10 @@ const EMPTY_RUN_NOW_FORM = {
   mealPeriod: "",
   areaCode: ""
 };
+const EMPTY_NIGHT_ORDER_WINDOW = {
+  nightOrderCutoffTime: "23:00",
+  nightOrderOpenTime: "08:00"
+};
 
 function normalizeTriggerTime(value: string) {
   const normalized = String(value || "").trim();
@@ -100,7 +105,9 @@ export function SystemSettingsPage() {
     nightlyReminderTip: "需要明日餐食的宝子现在可以下单喽～",
     popupAnnouncementEnabled: false,
     popupAnnouncementContent: "",
-    restNoticeTemplate: "今日休息，不提供餐食"
+    restNoticeTemplate: "今日休息，不提供餐食",
+    nightOrderCutoffTime: "23:00",
+    nightOrderOpenTime: "08:00"
   });
 
   const [popupForm, setPopupForm] = useState(EMPTY_POPUP);
@@ -110,8 +117,9 @@ export function SystemSettingsPage() {
   const [dispatchAiWorkbench, setDispatchAiWorkbench] = useState<DispatchAiWorkbenchResponse | null>(null);
   const [dispatchAiForm, setDispatchAiForm] = useState(EMPTY_DISPATCH_AI_FORM);
   const [runNowForm, setRunNowForm] = useState(EMPTY_RUN_NOW_FORM);
+  const [nightOrderWindowForm, setNightOrderWindowForm] = useState(EMPTY_NIGHT_ORDER_WINDOW);
 
-  const [modal, setModal] = useState<"banner" | "popup" | "packageReminder" | "dispatchAi" | "restNotice" | null>(null);
+  const [modal, setModal] = useState<"banner" | "popup" | "packageReminder" | "dispatchAi" | "restNotice" | "nightOrderWindow" | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [bannerUploading, setBannerUploading] = useState(false);
   const [popupSubmitting, setPopupSubmitting] = useState(false);
@@ -122,6 +130,7 @@ export function SystemSettingsPage() {
   const [dispatchAiBalanceRefreshing, setDispatchAiBalanceRefreshing] = useState(false);
   const [dispatchAiRunSubmitting, setDispatchAiRunSubmitting] = useState(false);
   const [restNoticeSubmitting, setRestNoticeSubmitting] = useState(false);
+  const [nightOrderWindowSubmitting, setNightOrderWindowSubmitting] = useState(false);
   const [restNoticeForm, setRestNoticeForm] = useState("");
   const [previewBannerImage, setPreviewBannerImage] = useState("");
   const bannerInputRef = useRef<HTMLInputElement | null>(null);
@@ -315,6 +324,14 @@ export function SystemSettingsPage() {
     openModal("restNotice");
   }
 
+  function openNightOrderWindow() {
+    setNightOrderWindowForm({
+      nightOrderCutoffTime: normalizeTriggerTime(settings.nightOrderCutoffTime || "23:00") || "23:00",
+      nightOrderOpenTime: normalizeTriggerTime(settings.nightOrderOpenTime || "08:00") || "08:00"
+    });
+    openModal("nightOrderWindow");
+  }
+
   async function submitRestNotice() {
     const template = restNoticeForm.trim();
     if (!template) {
@@ -330,6 +347,32 @@ export function SystemSettingsPage() {
       showError(err);
     } finally {
       setRestNoticeSubmitting(false);
+    }
+  }
+
+  async function submitNightOrderWindow() {
+    const nightOrderCutoffTime = normalizeTriggerTime(nightOrderWindowForm.nightOrderCutoffTime);
+    const nightOrderOpenTime = normalizeTriggerTime(nightOrderWindowForm.nightOrderOpenTime);
+    if (!nightOrderCutoffTime || !nightOrderOpenTime) {
+      toast("请填写有效的每晚截止时间与明早开放时间", "error");
+      return;
+    }
+    if (nightOrderCutoffTime === nightOrderOpenTime) {
+      toast("每晚截止时间与明早开放时间不能相同", "error");
+      return;
+    }
+    setNightOrderWindowSubmitting(true);
+    try {
+      setSettings(await updateNightOrderWindow({
+        nightOrderCutoffTime,
+        nightOrderOpenTime
+      }));
+      closeModal();
+      toast("小程序下单窗口已更新");
+    } catch (err: any) {
+      showError(err);
+    } finally {
+      setNightOrderWindowSubmitting(false);
     }
   }
 
@@ -568,6 +611,28 @@ export function SystemSettingsPage() {
         <div className="settings-card__actions">
           <button className="btn btn-outline" style={{ width: "100%" }} onClick={openRestNotice}>
             编辑休息提示模板
+          </button>
+        </div>
+      </div>
+
+      <div className="settings-card">
+        <div className="settings-card__title">
+          <Clock3 size={18} /> 小程序下单窗口
+        </div>
+        <div className="settings-card__body">
+          <div className="settings-card__detail">
+            每天 {settings.nightOrderOpenTime || "08:00"} 开放，{settings.nightOrderCutoffTime || "23:00"} 截止自助下单
+          </div>
+          <div className="settings-card__detail settings-card__detail--sub">
+            截止后至明早开放前，小程序暂停接新订单，顾客端展示夜间结算提示。
+          </div>
+          <div className="settings-card__detail settings-card__detail--sub">
+            当前：每晚 {settings.nightOrderCutoffTime || "23:00"} 截止 · 明早 {settings.nightOrderOpenTime || "08:00"} 开放
+          </div>
+        </div>
+        <div className="settings-card__actions">
+          <button className="btn btn-outline" style={{ width: "100%" }} onClick={openNightOrderWindow}>
+            配置下单窗口
           </button>
         </div>
       </div>
@@ -989,6 +1054,47 @@ export function SystemSettingsPage() {
           />
           <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 8 }}>
             用户端展示上限 255 字；超出会自动截断。
+          </div>
+        </div>
+      </SettingsModal>
+
+      <SettingsModal
+        open={modal === "nightOrderWindow"}
+        title="配置小程序下单窗口"
+        onClose={closeModal}
+        onSubmit={submitNightOrderWindow}
+        submitLabel="保存配置"
+        submitting={nightOrderWindowSubmitting}
+      >
+        <div className="settings-form-callout">
+          设置小程序自助下单的每日时段：每晚截止时间之后至明早开放时间之前暂停接单，顾客端展示夜间结算提示。
+        </div>
+        <div className="form-group">
+          <label className="form-label">
+            <span className="required">*</span>每晚截止时间
+          </label>
+          <SafeInput
+            className="form-control"
+            type="time"
+            value={nightOrderWindowForm.nightOrderCutoffTime}
+            onValueChange={(value) => setNightOrderWindowForm({ ...nightOrderWindowForm, nightOrderCutoffTime: value })}
+          />
+          <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 8 }}>
+            到达该时间后，小程序停止接收当日新订单。
+          </div>
+        </div>
+        <div className="form-group">
+          <label className="form-label">
+            <span className="required">*</span>明早开放时间
+          </label>
+          <SafeInput
+            className="form-control"
+            type="time"
+            value={nightOrderWindowForm.nightOrderOpenTime}
+            onValueChange={(value) => setNightOrderWindowForm({ ...nightOrderWindowForm, nightOrderOpenTime: value })}
+          />
+          <div className="settings-card__detail settings-card__detail--sub" style={{ marginTop: 8 }}>
+            到达该时间后，小程序恢复自助下单。
           </div>
         </div>
       </SettingsModal>
