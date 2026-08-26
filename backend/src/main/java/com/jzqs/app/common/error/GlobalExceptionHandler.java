@@ -49,7 +49,8 @@ public class GlobalExceptionHandler {
                  ALREADY_ORDERED,
                  USERNAME_ALREADY_EXISTS,
                  SUBSCRIPTION_RULE_ALREADY_EXISTS,
-                 REPEAT_SUBMISSION -> HttpStatus.CONFLICT;
+                 REPEAT_SUBMISSION,
+                 SUBSCRIPTION_REVOKED_BY_USER -> HttpStatus.CONFLICT;
             case WALLET_BALANCE_NOT_ENOUGH,
                  ORDERING_DISABLED,
                  ORDER_LOCKED,
