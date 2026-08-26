@@ -26,6 +26,7 @@ App({
     riderOpenid: '',
     riderStatus: 'UNAUTHORIZED',
     riderName: '',
+    assignArea: '',
     riderProfile: null,
     riderWorkbenchDate: '',
     authRedirecting: false
@@ -224,7 +225,10 @@ App({
     this.globalData.riderOpenid = auth.globalData.openid || '';
     this.globalData.riderStatus = state.riderStatus;
     this.globalData.riderName = state.riderName;
-    
+    // 负责区域：由 auth.loadRiderProfile 从后端 /me 的 areaCode 拉取，
+    // 这里必须同步到 App.globalData，否则「我的」页永远显示「未分配」。
+    this.globalData.assignArea = auth.globalData.assignArea || '';
+
     if (!state.loggedIn) {
       this.globalData.riderProfile = null;
     } else {
@@ -232,7 +236,8 @@ App({
         ...(this.globalData.riderProfile || {}),
         riderName: state.riderName,
         phone: state.phone,
-        riderStatus: state.riderStatus
+        riderStatus: state.riderStatus,
+        areaCode: auth.globalData.assignArea || ''
       };
     }
   },

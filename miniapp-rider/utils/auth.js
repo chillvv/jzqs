@@ -369,7 +369,8 @@ class Auth {
       workbenchEnabled: this.globalData.workbenchEnabled,
       riderName: this.globalData.riderName,
       phone: this.globalData.phone,
-      openid: this.globalData.openid
+      openid: this.globalData.openid,
+      assignArea: this.globalData.assignArea
     };
   }
 
