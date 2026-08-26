@@ -839,20 +839,6 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         return value.startsWith("微信用户-") || value.startsWith("待完善-");
     }
 
-    private RiderAuthProfileResponse riderNotFoundProfile(String phone) {
-        return new RiderAuthProfileResponse(
-            0L,
-            "",
-            "未开通骑手",
-            phone,
-            "",
-            "NOT_FOUND",
-            false,
-            "",
-            ""
-        );
-    }
-
     @Override
     public RiderAuthProfileResponse riderProfile(long riderId) {
         return jdbcTemplate.query(
