@@ -69,7 +69,7 @@ class DispatchAssignmentModule {
                     throw new BusinessException(ErrorCode.VALIDATION_ERROR, "订单编号不能为空");
                 }
                 DispatchOrderContext orderContext = loadOrderContext(orderId);
-                String defaultRiderName = resolveDefaultRiderName(normalizedAreaCode, orderContext.mealPeriod());
+                String defaultRiderName = resolveDefaultRiderName(normalizedAreaCode);
                 if (defaultRiderName != null) {
                     dispatchOrder(orderId, defaultRiderName, normalizedAreaCode, true);
                 } else {
@@ -165,7 +165,7 @@ class DispatchAssignmentModule {
 
         // 跨区互斥：骑手通过 rider_profiles.default_area_code 归属唯一区域，
         // 已属于其他区域则不允许跨区把该区域订单全部分配给它。
-        Long riderProfileId = findRiderProfileIdByName(riderName, finalMealPeriod);
+        Long riderProfileId = findRiderProfileIdByName(riderName);
         if (riderProfileId != null) {
             Integer occupiedElsewhere = jdbcTemplate.queryForObject(
                 """
@@ -186,36 +186,31 @@ class DispatchAssignmentModule {
             }
         }
 
+        // 更换骑手：把该区域所有「未完成」订单（不分午餐/晚餐）统一分配给新骑手，
+        // 已送达（DELIVERED）的历史单保持原骑手不动。
         List<Long> orderIds = jdbcTemplate.query(
             """
                 SELECT da.meal_slot_order_id
                 FROM dispatch_assignments da
-                JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
                 WHERE da.area_code = ?
                   AND da.status IN ('PENDING', 'AREA_ASSIGNED', 'DISPATCHING')
-                  AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
                 ORDER BY da.sequence_number, da.id
                 """,
             (rs, rowNum) -> rs.getLong("meal_slot_order_id"),
-            normalizedAreaCode,
-            finalMealPeriod,
-            finalMealPeriod
+            normalizedAreaCode
         );
 
         int successCount = 0;
         for (Long orderId : orderIds) {
-            dispatchOrder(orderId, resolveAssignmentRiderName(normalizedAreaCode, riderName, finalMealPeriod), normalizedAreaCode, true);
+            dispatchOrder(orderId, resolveAssignmentRiderName(normalizedAreaCode, riderName), normalizedAreaCode, true);
             successCount++;
         }
-        // 同步：将区域回写到骑手档案，使骑手小程序「我的」页能展示归属区域。
-        // 与「骑手管理→编辑骑手→选区域」入口保持一致的数据来源（rider_profiles.default_area_code）。
-        if (riderProfileId != null) {
-            jdbcTemplate.update(
-                "UPDATE rider_profiles SET default_area_code = ? WHERE id = ? AND meal_period = ?",
-                normalizedAreaCode,
-                riderProfileId,
-                finalMealPeriod
-            );
+        // 派单后重新解析骑手档案（若骑手此前未建档，dispatchOrder 内部已创建）。
+        Long resolvedRiderProfileId = findRiderProfileIdByName(riderName);
+        if (resolvedRiderProfileId != null) {
+            // 双向同步：释放本区域原默认骑手 + 将新骑手绑定为本区域当前骑手，
+            // 保证「区域 ↔ 骑手」唯一对应，且之后进入该区域的订单自动归此骑手。
+            bindRiderToArea(normalizedAreaCode, resolvedRiderProfileId);
         }
         publishDispatchEvent("dispatch.queue.changed", normalizedAreaCode, riderName, null);
         return new DispatchAreaRiderAssignResponse(
@@ -225,11 +220,80 @@ class DispatchAssignmentModule {
         );
     }
 
+    /**
+     * 将骑手绑定为某区域的当前骑手（双向同步）：
+     * 1) 释放本区域原默认骑手的归属区域；
+     * 2) 释放新骑手在其他区域的默认绑定；
+     * 3) 写入本区域的 default_rider_profile_id；
+     * 4) 回写新骑手的 default_area_code。
+     */
+    private void bindRiderToArea(String areaCode, long riderProfileId) {
+        jdbcTemplate.update(
+            """
+                UPDATE rider_profiles
+                SET default_area_code = NULL
+                WHERE default_area_code = ?
+                  AND id <> ?
+                """,
+            areaCode,
+            riderProfileId
+        );
+        jdbcTemplate.update(
+            """
+                UPDATE dispatch_area_bindings
+                SET default_rider_profile_id = NULL,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE default_rider_profile_id = ?
+                  AND area_code <> ?
+                """,
+            riderProfileId,
+            areaCode
+        );
+        Integer existing = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM dispatch_area_bindings WHERE area_code = ?",
+            Integer.class,
+            areaCode
+        );
+        if (existing != null && existing > 0) {
+            jdbcTemplate.update(
+                """
+                    UPDATE dispatch_area_bindings
+                    SET default_rider_profile_id = ?,
+                        backup_rider_profile_id = NULL,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE area_code = ?
+                    """,
+                riderProfileId,
+                areaCode
+            );
+        } else {
+            jdbcTemplate.update(
+                """
+                    INSERT INTO dispatch_area_bindings (
+                        area_code,
+                        keywords,
+                        default_rider_profile_id,
+                        backup_rider_profile_id,
+                        updated_by,
+                        updated_at
+                    ) VALUES (?, NULL, ?, NULL, ?, CURRENT_TIMESTAMP)
+                    """,
+                areaCode,
+                riderProfileId,
+                DEFAULT_OPERATOR
+            );
+        }
+        jdbcTemplate.update(
+            "UPDATE rider_profiles SET default_area_code = ? WHERE id = ?",
+            areaCode,
+            riderProfileId
+        );
+    }
+
     DispatchAreaOrderAssignResponse assignRiderToAreaOrder(String areaCode, long orderId, String riderName) {
         String normalizedAreaCode = requireAreaCode(areaCode);
-        String orderMealPeriod = loadOrderContext(orderId).mealPeriod();
         // 收敛：订单只能在本区域骑手之间切换，禁止把已属于其他区域的骑手跨区拉入。
-        Long riderProfileId = findRiderProfileIdByName(riderName, orderMealPeriod);
+        Long riderProfileId = findRiderProfileIdByName(riderName);
         if (riderProfileId != null) {
             // 跨区互斥：骑手通过 rider_profiles.default_area_code 归属唯一区域，
             // 已属于其他区域则不允许把本区域订单跨区分配给该骑手。
@@ -251,7 +315,7 @@ class DispatchAssignmentModule {
                 );
             }
         }
-        dispatchOrder(orderId, resolveAssignmentRiderName(normalizedAreaCode, riderName, orderMealPeriod), normalizedAreaCode, true);
+        dispatchOrder(orderId, resolveAssignmentRiderName(normalizedAreaCode, riderName), normalizedAreaCode, true);
         publishDispatchEvent("dispatch.queue.changed", normalizedAreaCode, riderName, orderId);
         return new DispatchAreaOrderAssignResponse(normalizedAreaCode, orderId, "DISPATCHED");
     }
@@ -300,6 +364,16 @@ class DispatchAssignmentModule {
         String normalizedTargetAreaCode = requireAreaCode(targetAreaCode);
         DispatchOrderContext orderContext = loadOrderContext(orderId);
 
+        // 防御：已结束（已送达/已取消）的订单不允许移区，避免把完成订单重置回待派单。
+        String currentStatus = jdbcTemplate.queryForObject(
+            "SELECT status FROM meal_slot_orders WHERE id = ?",
+            String.class,
+            orderId
+        );
+        if ("DELIVERED".equals(currentStatus) || "CANCELLED".equals(currentStatus)) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "订单已结束（已送达/已取消），无法移区");
+        }
+
         dispatchBatchModule.removeBatchItem(orderId);
         jdbcTemplate.update("UPDATE meal_slot_orders SET status = 'PENDING_DISPATCH' WHERE id = ?", orderId);
         jdbcTemplate.update(
@@ -323,7 +397,7 @@ class DispatchAssignmentModule {
         );
         // 区域一旦绑定了骑手，移入的订单必须立即归属于该区域骑手，
         // 不允许出现「仅归区、未派单」(rider_name 为空) 的中间态。
-        String targetDefaultRider = resolveDefaultRiderName(normalizedTargetAreaCode, orderContext.mealPeriod());
+        String targetDefaultRider = resolveDefaultRiderName(normalizedTargetAreaCode);
         if (targetDefaultRider != null) {
             dispatchOrder(orderId, targetDefaultRider, normalizedTargetAreaCode, true);
             publishDispatchEvent("dispatch.queue.changed", normalizedTargetAreaCode, targetDefaultRider, orderId);
@@ -381,7 +455,7 @@ class DispatchAssignmentModule {
         );
         pruneOldDispatchReassignments();
         if (syncDefaultBinding && finalAreaCode != null && !finalAreaCode.isBlank()) {
-            Long riderId = findRiderProfileIdByName(toRiderName, mealPeriod);
+            Long riderId = findRiderProfileIdByName(toRiderName);
             if (riderId != null) {
                 areaBindingUpdater.update(finalAreaCode, null, riderId, null, createdBy);
             }
@@ -407,7 +481,7 @@ class DispatchAssignmentModule {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "订单状态已变更，无法派单，请刷新后重试");
         }
         DispatchOrderContext orderContext = loadOrderContext(orderId);
-        long riderProfileId = ensureRiderProfile(riderName, areaCode, orderContext.mealPeriod());
+        long riderProfileId = ensureRiderProfile(riderName, areaCode);
         int sequenceNumber = nextAreaSequence(
             areaCode,
             orderContext.serveDate(),
@@ -483,10 +557,24 @@ class DispatchAssignmentModule {
                     rab.area_code
                 FROM meal_slot_orders mso
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
-                JOIN rider_address_bindings rab ON rab.customer_id = doo.customer_id AND rab.address_id = mso.address_id
+                JOIN (
+                    SELECT
+                        customer_id,
+                        address_id,
+                        area_code,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY customer_id, address_id
+                            ORDER BY
+                                CASE WHEN meal_period <=> ? THEN 0 ELSE 1 END,
+                                id DESC
+                        ) AS rn
+                    FROM rider_address_bindings
+                ) rab
+                    ON rab.customer_id = doo.customer_id
+                   AND rab.address_id = mso.address_id
+                   AND rab.rn = 1
                 JOIN dispatch_area_bindings dab
                     ON dab.area_code = rab.area_code
-                   AND dab.meal_period = COALESCE(mso.delivery_meal_period, mso.meal_period)
                 LEFT JOIN dispatch_assignments da ON da.meal_slot_order_id = mso.id
                 WHERE mso.status = 'PENDING_DISPATCH'
                   AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
@@ -500,6 +588,7 @@ class DispatchAssignmentModule {
                 rs.getString("area_code")
             ),
             finalMealPeriod,
+            finalMealPeriod,
             finalMealPeriod
         );
         int assignedCount = 0;
@@ -509,7 +598,7 @@ class DispatchAssignmentModule {
             if (areaCode == null || areaCode.isBlank()) {
                 continue;
             }
-            String defaultRiderName = resolveDefaultRiderName(areaCode, order.mealPeriod());
+            String defaultRiderName = resolveDefaultRiderName(areaCode);
             String targetRiderName = defaultRiderName;
             // 区域没有配置默认骑手时，跟随该区域「当前已有骑手」：
             // 一旦区域分配过骑手，后续进入的订单（含记忆归区）全部归属到同一骑手，
@@ -596,15 +685,28 @@ class DispatchAssignmentModule {
 
     private void syncAddressBindingForArea(long orderId, String areaCode, String updatedBy, String updatedReason) {
         DispatchOrderContext orderContext = loadOrderContext(orderId);
+        String mealPeriod = normalizedMealPeriod(orderContext.mealPeriod());
+        syncAddressBindingForArea(orderId, areaCode, mealPeriod, updatedBy, updatedReason);
+    }
+
+    private void syncAddressBindingForArea(
+        long orderId,
+        String areaCode,
+        String mealPeriod,
+        String updatedBy,
+        String updatedReason
+    ) {
+        DispatchOrderContext orderContext = loadOrderContext(orderId);
         long customerId = orderContext.customerId();
         long addressId = orderContext.addressId();
         String addressLine = orderContext.addressLine();
         String fingerprint = normalizeAddressFingerprint(addressLine);
-        Long riderProfileId = resolveDefaultRiderProfileId(areaCode, orderContext.mealPeriod());
+        Long riderProfileId = resolveDefaultRiderProfileId(areaCode);
         int existing = queryCount(
-            "SELECT COUNT(*) FROM rider_address_bindings WHERE customer_id = ? AND address_id = ?",
+            "SELECT COUNT(*) FROM rider_address_bindings WHERE customer_id = ? AND address_id = ? AND (meal_period <=> ?)",
             customerId,
-            addressId
+            addressId,
+            mealPeriod
         );
         if (existing > 0) {
             jdbcTemplate.update(
@@ -616,14 +718,15 @@ class DispatchAssignmentModule {
                         manually_confirmed = TRUE,
                         updated_reason = ?,
                         updated_at = CURRENT_TIMESTAMP
-                    WHERE customer_id = ? AND address_id = ?
+                    WHERE customer_id = ? AND address_id = ? AND (meal_period <=> ?)
                     """,
                 fingerprint,
                 areaCode,
                 riderProfileId,
                 updatedReason,
                 customerId,
-                addressId
+                addressId,
+                mealPeriod
             );
             return;
         }
@@ -632,16 +735,18 @@ class DispatchAssignmentModule {
                 INSERT INTO rider_address_bindings (
                     customer_id,
                     address_id,
+                    meal_period,
                     address_fingerprint,
                     area_code,
                     rider_profile_id,
                     manually_confirmed,
                     updated_reason,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, TRUE, ?, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, ?, ?, ?, ?, TRUE, ?, CURRENT_TIMESTAMP)
                 """,
             customerId,
             addressId,
+            mealPeriod,
             fingerprint,
             areaCode,
             riderProfileId,
@@ -649,19 +754,16 @@ class DispatchAssignmentModule {
         );
     }
 
-    private Long resolveDefaultRiderProfileId(String areaCode, String mealPeriod) {
+    private Long resolveDefaultRiderProfileId(String areaCode) {
         List<Long> riderIds = jdbcTemplate.query(
             """
                 SELECT COALESCE(default_rider_profile_id, backup_rider_profile_id) AS rider_profile_id
                 FROM dispatch_area_bindings
                 WHERE area_code = ?
-                  AND (? IS NULL OR meal_period = ?)
                   AND COALESCE(default_rider_profile_id, backup_rider_profile_id) IS NOT NULL
                 """,
             (rs, rowNum) -> rs.getLong("rider_profile_id"),
-            areaCode,
-            mealPeriod,
-            mealPeriod
+            areaCode
         );
         return riderIds.isEmpty() ? null : riderIds.get(0);
     }
@@ -677,21 +779,18 @@ class DispatchAssignmentModule {
         return areaCode.trim();
     }
 
-    private String resolveDefaultRiderName(String areaCode, String mealPeriod) {
+    private String resolveDefaultRiderName(String areaCode) {
         List<String> riderNames = jdbcTemplate.query(
             """
                 SELECT rp.rider_name
                 FROM dispatch_area_bindings dab
                 JOIN rider_profiles rp ON rp.id = dab.default_rider_profile_id
                 WHERE dab.area_code = ?
-                  AND (? IS NULL OR dab.meal_period = ?)
                   AND rp.auth_status = 'ACTIVE'
                   AND rp.employment_status = 'ACTIVE'
                 """,
             (rs, rowNum) -> rs.getString("rider_name"),
-            areaCode,
-            mealPeriod,
-            mealPeriod
+            areaCode
         );
         return riderNames.isEmpty() ? null : riderNames.get(0);
     }
@@ -723,7 +822,7 @@ class DispatchAssignmentModule {
         return riderNames.isEmpty() ? null : riderNames.get(0);
     }
 
-    private String resolveAssignmentRiderName(String areaCode, String riderName, String mealPeriod) {
+    private String resolveAssignmentRiderName(String areaCode, String riderName) {
         if (riderName != null && !riderName.isBlank()) {
             return riderName.trim();
         }
@@ -733,14 +832,11 @@ class DispatchAssignmentModule {
                 FROM dispatch_area_bindings dab
                 JOIN rider_profiles rp ON rp.id = dab.default_rider_profile_id
                 WHERE dab.area_code = ?
-                  AND (? IS NULL OR dab.meal_period = ?)
                   AND rp.auth_status = 'ACTIVE'
                   AND rp.employment_status = 'ACTIVE'
                 """,
             (rs, rowNum) -> rs.getString("rider_name"),
-            areaCode,
-            mealPeriod,
-            mealPeriod
+            areaCode
         );
         if (!riderNames.isEmpty()) {
             return riderNames.get(0);
@@ -748,8 +844,8 @@ class DispatchAssignmentModule {
         throw new BusinessException(ErrorCode.VALIDATION_ERROR, "所选区域暂未绑定可派单骑手，请先指定骑手或只归区域");
     }
 
-    private long ensureRiderProfile(String riderName, String areaCode, String mealPeriod) {
-        Long profileId = findRiderProfileIdByName(riderName, mealPeriod);
+    private long ensureRiderProfile(String riderName, String areaCode) {
+        Long profileId = findRiderProfileIdByName(riderName);
         if (profileId != null) {
             jdbcTemplate.update(
                 "UPDATE rider_profiles SET default_area_code = COALESCE(?, default_area_code), employment_status = 'ACTIVE', auth_status = COALESCE(auth_status, 'ACTIVE') WHERE id = ?",
@@ -760,11 +856,10 @@ class DispatchAssignmentModule {
         }
         return insertAndReturnId(
             """
-                INSERT INTO rider_profiles (rider_name, meal_period, employment_status, default_area_code, auth_status)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO rider_profiles (rider_name, employment_status, default_area_code, auth_status)
+                VALUES (?, ?, ?, ?)
                 """,
             riderName,
-            mealPeriod,
             "ACTIVE",
             areaCode,
             "ACTIVE"
@@ -773,29 +868,35 @@ class DispatchAssignmentModule {
 
     private void syncAddressBinding(long orderId, long riderProfileId, String areaCode) {
         DispatchOrderContext orderRow = loadOrderContext(orderId);
+        String mealPeriod = normalizedMealPeriod(orderRow.mealPeriod());
         long customerId = orderRow.customerId();
         long addressId = orderRow.addressId();
         String addressLine = orderRow.addressLine();
         String fingerprint = normalizeAddressFingerprint(addressLine);
         int existing = queryCount(
-            "SELECT COUNT(*) FROM rider_address_bindings WHERE customer_id = " + customerId + " AND address_id = " + addressId
+            "SELECT COUNT(*) FROM rider_address_bindings WHERE customer_id = ? AND address_id = ? AND (meal_period <=> ?)",
+            customerId,
+            addressId,
+            mealPeriod
         );
         if (existing > 0) {
             jdbcTemplate.update(
-                "UPDATE rider_address_bindings SET address_fingerprint = ?, area_code = ?, rider_profile_id = ?, manually_confirmed = TRUE, updated_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE customer_id = ? AND address_id = ?",
+                "UPDATE rider_address_bindings SET address_fingerprint = ?, area_code = ?, rider_profile_id = ?, manually_confirmed = TRUE, updated_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE customer_id = ? AND address_id = ? AND (meal_period <=> ?)",
                 fingerprint,
                 areaCode,
                 riderProfileId,
                 "AREA_CONFIRMED",
                 customerId,
-                addressId
+                addressId,
+                mealPeriod
             );
             return;
         }
         jdbcTemplate.update(
-            "INSERT INTO rider_address_bindings (customer_id, address_id, address_fingerprint, area_code, rider_profile_id, manually_confirmed, updated_reason, updated_at) VALUES (?, ?, ?, ?, ?, TRUE, ?, CURRENT_TIMESTAMP)",
+            "INSERT INTO rider_address_bindings (customer_id, address_id, meal_period, address_fingerprint, area_code, rider_profile_id, manually_confirmed, updated_reason, updated_at) VALUES (?, ?, ?, ?, ?, ?, TRUE, ?, CURRENT_TIMESTAMP)",
             customerId,
             addressId,
+            mealPeriod,
             fingerprint,
             areaCode,
             riderProfileId,
@@ -868,38 +969,19 @@ class DispatchAssignmentModule {
         return null;
     }
 
-    private Long findRiderProfileIdByName(String riderName, String mealPeriod) {
-        // 1) 优先按 (rider_name, meal_period) 精确匹配，保证午餐/晚餐分中心隔离
+    private Long findRiderProfileIdByName(String riderName) {
+        // 骑手唯一：一个姓名对应唯一档案（已去除 meal_period 拆分）。
         List<Long> ids = jdbcTemplate.query(
             """
                 SELECT id FROM rider_profiles
                 WHERE rider_name = ?
-                  AND (? IS NULL OR meal_period = ?)
                 ORDER BY id
-                """,
-            (rs, rowNum) -> rs.getLong("id"),
-            riderName,
-            mealPeriod,
-            mealPeriod
-        );
-        if (!ids.isEmpty()) {
-            return ids.get(0);
-        }
-        // 2) 回退：无明确餐期时，优先返回已绑定微信(current_openid 非空)的同名主档案，
-        //    避免午餐单被派到晚餐档案（或反之），确保与小程序登录档案一致。
-        List<Long> fallback = jdbcTemplate.query(
-            """
-                SELECT id FROM rider_profiles
-                WHERE rider_name = ?
-                ORDER BY
-                    CASE WHEN current_openid IS NOT NULL AND current_openid <> '' THEN 0 ELSE 1 END,
-                    id
                 LIMIT 1
                 """,
             (rs, rowNum) -> rs.getLong("id"),
             riderName
         );
-        return fallback.isEmpty() ? null : fallback.get(0);
+        return ids.isEmpty() ? null : ids.get(0);
     }
 
     private void markDispatchExceptionResolved(long mealSlotOrderId, String resolvedBy) {

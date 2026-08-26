@@ -67,7 +67,9 @@ Page({
   /**
    * 页面显示
    */
-  onShow() {
+  async onShow() {
+    const app = getApp();
+    await app.waitForRiderAuth();
     this.startAutoRefresh();
     this.startRealtimeSync();
   },

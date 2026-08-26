@@ -13,15 +13,11 @@
     <view class="profile-meta">
       <view class="profile-name">{{displayName}}</view>
       <view class="profile-sub" wx:if="{{viewState === 'active' || viewState === 'pending' || viewState === 'blocked'}}">{{maskedPhone}}</view>
-      <!-- 归属区域：手机号下方，按餐期展示后台分配的配送区域 -->
+      <!-- 归属区域：手机号下方，展示后台分配的配送区域 -->
       <view class="profile-area" wx:if="{{viewState === 'active' || viewState === 'pending' || viewState === 'blocked'}}">
         <view class="area-chip">
-          <text class="area-chip-label">午餐</text>
-          <text class="area-chip-value">{{lunchArea}}</text>
-        </view>
-        <view class="area-chip">
-          <text class="area-chip-label">晚餐</text>
-          <text class="area-chip-value">{{dinnerArea}}</text>
+          <text class="area-chip-label">负责区域</text>
+          <text class="area-chip-value">{{assignArea}}</text>
         </view>
       </view>
       <view class="profile-guest-action" wx:if="{{viewState === 'guest' || viewState === 'checking' || viewState === 'loading' || viewState === 'not_found' || viewState === 'unknown'}}" bindtap="goLoginPage">

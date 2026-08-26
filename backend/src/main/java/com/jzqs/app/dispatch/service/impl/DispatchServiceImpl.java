@@ -8,7 +8,6 @@ import com.jzqs.app.dispatch.api.DispatchAreaAiCorrectionConfirmRequest;
 import com.jzqs.app.dispatch.api.DispatchAreaAiCorrectionPreviewRequest;
 import com.jzqs.app.dispatch.api.DispatchAreaAiCorrectionPreviewResponse;
 import com.jzqs.app.dispatch.api.DispatchAreaBindingRemoveResponse;
-import com.jzqs.app.order.MealPeriod;
 import com.jzqs.app.dispatch.api.DispatchAreaBindingUpdateResultResponse;
 import com.jzqs.app.dispatch.api.DispatchAreaDeleteResponse;
 import com.jzqs.app.dispatch.api.DispatchAreaOrderAssignResponse;
@@ -148,8 +147,8 @@ public class DispatchServiceImpl implements DispatchService {
     }
 
     @Override
-    public List<DispatchExceptionItemResponse> exceptions() {
-        return dispatchQueryModule.exceptions();
+    public List<DispatchExceptionItemResponse> exceptions(String mealPeriod) {
+        return dispatchQueryModule.exceptions(mealPeriod);
     }
 
     @Override
@@ -209,14 +208,13 @@ public class DispatchServiceImpl implements DispatchService {
     }
 
     @Override
-    public List<DispatchManagedRiderResponse> managedRiders(String authStatus, String keyword, String areaCode, MealPeriod mealPeriod) {
-        return dispatchRiderAdminModule.managedRiders(authStatus, keyword, areaCode, mealPeriod);
+    public List<DispatchManagedRiderResponse> managedRiders(String authStatus, String keyword, String areaCode) {
+        return dispatchRiderAdminModule.managedRiders(authStatus, keyword, areaCode);
     }
 
     @Override
     @Transactional
     public DispatchRiderProfileUpsertResponse createRider(
-        MealPeriod mealPeriod,
         String riderName,
         String displayName,
         String phone,
@@ -225,15 +223,14 @@ public class DispatchServiceImpl implements DispatchService {
         String updatedBy
     ) {
         return dispatchRiderAdminModule.createRider(
-            mealPeriod,
             riderName,
             displayName,
             phone,
             areaCode,
             employmentStatus,
             updatedBy,
-            (bindingAreaCode, bindingMealPeriod, keywords, defaultRiderId, backupRiderId, operator) ->
-                updateAreaBinding(bindingMealPeriod, bindingAreaCode, keywords, defaultRiderId, backupRiderId, operator)
+            (bindingAreaCode, keywords, defaultRiderId, backupRiderId, operator) ->
+                updateAreaBinding(bindingAreaCode, keywords, defaultRiderId, backupRiderId, operator)
         );
     }
 
@@ -241,7 +238,6 @@ public class DispatchServiceImpl implements DispatchService {
     @Transactional
     public DispatchRiderProfileUpsertResponse updateRiderProfile(
         long riderId,
-        MealPeriod mealPeriod,
         String riderName,
         String displayName,
         String phone,
@@ -250,14 +246,13 @@ public class DispatchServiceImpl implements DispatchService {
     ) {
         return dispatchRiderAdminModule.updateRiderProfile(
             riderId,
-            mealPeriod,
             riderName,
             displayName,
             phone,
             areaCode,
             updatedBy,
-            (bindingAreaCode, bindingMealPeriod, keywords, defaultRiderId, backupRiderId, operator) ->
-                updateAreaBinding(bindingMealPeriod, bindingAreaCode, keywords, defaultRiderId, backupRiderId, operator)
+            (bindingAreaCode, keywords, defaultRiderId, backupRiderId, operator) ->
+                updateAreaBinding(bindingAreaCode, keywords, defaultRiderId, backupRiderId, operator)
         );
     }
 
@@ -285,13 +280,13 @@ public class DispatchServiceImpl implements DispatchService {
 
     @Override
     @Transactional
-    public DispatchAreaBindingUpdateResultResponse updateAreaBinding(MealPeriod mealPeriod, String areaCode, String keywords, Long defaultRiderId, Long backupRiderId, String updatedBy) {
-        return dispatchAreaAdminModule.updateAreaBinding(mealPeriod, areaCode, keywords, defaultRiderId, backupRiderId, updatedBy);
+    public DispatchAreaBindingUpdateResultResponse updateAreaBinding(String areaCode, String keywords, Long defaultRiderId, Long backupRiderId, String updatedBy) {
+        return dispatchAreaAdminModule.updateAreaBinding(areaCode, keywords, defaultRiderId, backupRiderId, updatedBy);
     }
 
     @Override
-    public DispatchAreaBindingRemoveResponse removeAreaBinding(MealPeriod mealPeriod, String areaCode, long riderId) {
-        return dispatchAreaAdminModule.removeAreaBinding(mealPeriod, areaCode, riderId);
+    public DispatchAreaBindingRemoveResponse removeAreaBinding(String areaCode, long riderId) {
+        return dispatchAreaAdminModule.removeAreaBinding(areaCode, riderId);
     }
 
     @Override
@@ -362,7 +357,6 @@ public class DispatchServiceImpl implements DispatchService {
             createdBy,
             (areaCode, keywords, defaultRiderId, backupRiderId, updatedBy) ->
                 updateAreaBinding(
-                    mealPeriod == null ? null : MealPeriod.valueOf(mealPeriod),
                     areaCode,
                     keywords,
                     defaultRiderId,
@@ -380,8 +374,8 @@ public class DispatchServiceImpl implements DispatchService {
             riderName,
             areaCode,
             assignedBy,
-            (bindingAreaCode, bindingMealPeriod, keywords, defaultRiderId, backupRiderId, operator) ->
-                updateAreaBinding(bindingMealPeriod, bindingAreaCode, keywords, defaultRiderId, backupRiderId, operator)
+            (bindingAreaCode, keywords, defaultRiderId, backupRiderId, operator) ->
+                updateAreaBinding(bindingAreaCode, keywords, defaultRiderId, backupRiderId, operator)
         );
     }
 

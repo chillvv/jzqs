@@ -242,7 +242,8 @@ class DispatchQueryModule {
         return responses;
     }
 
-    List<DispatchExceptionItemResponse> exceptions() {
+    List<DispatchExceptionItemResponse> exceptions(String mealPeriod) {
+        String finalMealPeriod = normalizedMealPeriod(mealPeriod);
         String sql = """
             SELECT
                 mso.id AS meal_slot_order_id,
@@ -268,10 +269,27 @@ class DispatchQueryModule {
             JOIN daily_orders doo ON doo.id = mso.daily_order_id
             JOIN customers c ON c.id = doo.customer_id
             JOIN customer_addresses ca ON ca.id = mso.address_id
-            LEFT JOIN rider_address_bindings rab ON rab.customer_id = doo.customer_id AND rab.address_id = mso.address_id AND rab.rider_profile_id IS NOT NULL
+            LEFT JOIN (
+                SELECT
+                    customer_id,
+                    address_id,
+                    area_code,
+                    rider_profile_id,
+                    id,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY customer_id, address_id
+                        ORDER BY
+                            CASE WHEN meal_period <=> ? THEN 0 ELSE 1 END,
+                            id DESC
+                    ) AS rn
+                FROM rider_address_bindings
+                WHERE rider_profile_id IS NOT NULL
+            ) rab
+                ON rab.customer_id = doo.customer_id
+               AND rab.address_id = mso.address_id
+               AND rab.rn = 1
             LEFT JOIN dispatch_area_bindings dab
                 ON dab.area_code = rab.area_code
-               AND dab.meal_period = COALESCE(mso.delivery_meal_period, mso.meal_period)
             LEFT JOIN rider_profiles rp_default
                 ON rp_default.id = dab.default_rider_profile_id
                AND rp_default.auth_status = 'ACTIVE'
@@ -290,7 +308,7 @@ class DispatchQueryModule {
             rs.getString("suggested_area_code"),
             rs.getString("suggested_rider_name"),
             rs.getBoolean("remembered_address")
-        ));
+        ), finalMealPeriod);
     }
 
     List<DispatchPendingItemResponse> pendingItems(String mealPeriod, String serveDate) {
@@ -309,7 +327,23 @@ class DispatchQueryModule {
             JOIN daily_orders doo ON doo.id = mso.daily_order_id
             JOIN customers c ON c.id = doo.customer_id
             JOIN customer_addresses ca ON ca.id = mso.address_id
-            LEFT JOIN rider_address_bindings rab ON rab.customer_id = doo.customer_id AND rab.address_id = mso.address_id AND rab.rider_profile_id IS NOT NULL
+            LEFT JOIN (
+                SELECT
+                    customer_id,
+                    address_id,
+                    id,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY customer_id, address_id
+                        ORDER BY
+                            CASE WHEN meal_period <=> ? THEN 0 ELSE 1 END,
+                            id DESC
+                    ) AS rn
+                FROM rider_address_bindings
+                WHERE rider_profile_id IS NOT NULL
+            ) rab
+                ON rab.customer_id = doo.customer_id
+               AND rab.address_id = mso.address_id
+               AND rab.rn = 1
             LEFT JOIN dispatch_assignments da ON da.meal_slot_order_id = mso.id
             WHERE mso.status = 'PENDING_DISPATCH'
               AND doo.serve_date = ?
@@ -323,7 +357,7 @@ class DispatchQueryModule {
             rs.getLong("order_id"),
             rs.getString("customer_name"),
             rs.getString("delivery_address")
-        ), targetDate, finalMealPeriod, finalMealPeriod);
+        ), finalMealPeriod, targetDate, finalMealPeriod, finalMealPeriod);
     }
 
     List<DispatchAreaBindingResponse> areaBindings(String mealPeriod, String serveDate) {
@@ -343,7 +377,6 @@ class DispatchQueryModule {
                     dab.updated_at AS updated_at
                 FROM dispatch_area_bindings dab
                 LEFT JOIN rider_profiles rp_default ON rp_default.id = dab.default_rider_profile_id
-                WHERE (? IS NULL OR dab.meal_period = ?)
                 ORDER BY dab.area_code
                 """,
             (rs, rowNum) -> {
@@ -369,9 +402,7 @@ class DispatchQueryModule {
                     formatTimestamp(rs.getTimestamp("updated_at")),
                     assignableRiderIds
                 );
-            },
-            finalMealPeriod,
-            finalMealPeriod
+            }
         );
     }
 

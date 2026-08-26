@@ -1,5 +1,7 @@
 package com.jzqs.app.dispatch.service.impl;
 
+import com.jzqs.app.common.error.BusinessException;
+import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.dispatch.api.DispatchManagedRiderResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderActivateResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderAuthBindingResponse;
@@ -8,7 +10,6 @@ import com.jzqs.app.dispatch.api.DispatchRiderAuthUnbindResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderProfileUpsertResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderStatusResponse;
 import com.jzqs.app.dispatch.api.PendingRiderResponse;
-import com.jzqs.app.order.MealPeriod;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
@@ -58,12 +59,11 @@ class DispatchRiderAdminModule {
         );
     }
 
-    List<DispatchManagedRiderResponse> managedRiders(String authStatus, String keyword, String areaCode, MealPeriod mealPeriod) {
+    List<DispatchManagedRiderResponse> managedRiders(String authStatus, String keyword, String areaCode) {
         StringBuilder sql = new StringBuilder(
             """
                 SELECT
                     rp.id,
-                    rp.meal_period,
                     rp.rider_name,
                     COALESCE(rp.display_name, rp.rider_name) AS display_name,
                     rp.phone,
@@ -91,10 +91,6 @@ class DispatchRiderAdminModule {
                 """
         );
         List<Object> args = new ArrayList<>();
-        if (mealPeriod != null) {
-            sql.append(" AND rp.meal_period = ?");
-            args.add(mealPeriod.name());
-        }
         if (authStatus != null && !authStatus.isBlank()) {
             sql.append(" AND rp.auth_status = ?");
             args.add(authStatus);
@@ -113,7 +109,6 @@ class DispatchRiderAdminModule {
         sql.append(" ORDER BY CASE rp.auth_status WHEN 'ACTIVE' THEN 0 WHEN 'UNASSIGNED' THEN 1 ELSE 2 END, rp.id DESC");
         return jdbcTemplate.query(sql.toString(), (rs, rowNum) -> new DispatchManagedRiderResponse(
             rs.getLong("id"),
-            MealPeriod.valueOf(rs.getString("meal_period")),
             rs.getString("rider_name"),
             rs.getString("display_name"),
             rs.getString("phone"),
@@ -130,7 +125,6 @@ class DispatchRiderAdminModule {
     }
 
     DispatchRiderProfileUpsertResponse createRider(
-        MealPeriod mealPeriod,
         String riderName,
         String displayName,
         String phone,
@@ -140,14 +134,14 @@ class DispatchRiderAdminModule {
         AreaBindingUpdater areaBindingUpdater
     ) {
         String normalizedAreaCode = areaCode == null || areaCode.isBlank() ? null : areaCode.trim();
-        MealPeriod resolvedMealPeriod = mealPeriod == null ? MealPeriod.DINNER : mealPeriod;
+        assertRiderNameAvailable(riderName, null);
+        assertPhoneAvailable(phone, riderName, null);
         boolean active = "ACTIVE".equalsIgnoreCase(employmentStatus);
         LocalDateTime now = LocalDateTime.now().withNano(0);
         long riderId = insertAndReturnId(
             """
                 INSERT INTO rider_profiles (
                     rider_name,
-                    meal_period,
                     display_name,
                     phone,
                     employment_status,
@@ -158,10 +152,9 @@ class DispatchRiderAdminModule {
                     assigned_at,
                     assigned_by,
                     created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
             riderName,
-            resolvedMealPeriod.name(),
             displayName,
             phone,
             employmentStatus,
@@ -174,11 +167,10 @@ class DispatchRiderAdminModule {
             Timestamp.valueOf(now)
         );
         if (normalizedAreaCode != null && active) {
-            areaBindingUpdater.update(normalizedAreaCode, resolvedMealPeriod, null, riderId, null, updatedBy);
+            areaBindingUpdater.update(normalizedAreaCode, null, riderId, null, updatedBy);
         }
         return new DispatchRiderProfileUpsertResponse(
             riderId,
-            resolvedMealPeriod,
             riderName,
             displayName,
             phone,
@@ -189,7 +181,6 @@ class DispatchRiderAdminModule {
 
     DispatchRiderProfileUpsertResponse updateRiderProfile(
         long riderId,
-        MealPeriod mealPeriod,
         String riderName,
         String displayName,
         String phone,
@@ -198,17 +189,22 @@ class DispatchRiderAdminModule {
         AreaBindingUpdater areaBindingUpdater
     ) {
         String normalizedAreaCode = areaCode == null || areaCode.isBlank() ? null : areaCode.trim();
-        MealPeriod resolvedMealPeriod = mealPeriod == null ? MealPeriod.DINNER : mealPeriod;
+        assertRiderNameAvailable(riderName, riderId);
+        assertPhoneAvailable(phone, riderName, riderId);
         String oldAreaCode = jdbcTemplate.query(
             "SELECT default_area_code FROM rider_profiles WHERE id = ?",
             ps -> ps.setLong(1, riderId),
             rs -> rs.next() ? rs.getString("default_area_code") : null
         );
+        String oldRiderName = jdbcTemplate.query(
+            "SELECT rider_name FROM rider_profiles WHERE id = ?",
+            ps -> ps.setLong(1, riderId),
+            rs -> rs.next() ? rs.getString("rider_name") : null
+        );
         jdbcTemplate.update(
             """
                 UPDATE rider_profiles
                 SET rider_name = ?,
-                    meal_period = ?,
                     display_name = ?,
                     phone = ?,
                     default_area_code = ?,
@@ -217,18 +213,27 @@ class DispatchRiderAdminModule {
                 WHERE id = ?
                 """,
             riderName,
-            resolvedMealPeriod.name(),
             displayName,
             phone,
             normalizedAreaCode,
             updatedBy,
             riderId
         );
+        // 骑手改名时同步「文字形式的骑手姓名」到所有关联表：
+        // 1) 派单记录（骑手进度页读的就是这里的 rider_name）；
+        // 2) 历史异常记录。
+        // 派单记录同时按 rider_profile_id 和「旧姓名 + 空档案」双匹配，覆盖历史遗留的
+        // 只存了文字姓名、没有档案 ID 的老订单，保证改名后任何查询拿到的都是最新名字。
         jdbcTemplate.update(
-            "UPDATE dispatch_assignments SET rider_name = ? WHERE rider_profile_id = ?",
+            "UPDATE dispatch_assignments SET rider_name = ? WHERE rider_profile_id = ? OR (rider_profile_id IS NULL AND rider_name = ?)",
+            riderName, riderId, oldRiderName
+        );
+        jdbcTemplate.update(
+            "UPDATE delivery_exceptions SET rider_name = ? WHERE rider_profile_id = ?",
             riderName, riderId
         );
         if (!java.util.Objects.equals(oldAreaCode, normalizedAreaCode)) {
+            // 双向同步：先把该骑手从旧区域的默认骑手中释放。
             jdbcTemplate.update(
                 """
                     UPDATE dispatch_area_bindings
@@ -239,7 +244,18 @@ class DispatchRiderAdminModule {
                 riderId
             );
             if (normalizedAreaCode != null) {
-                areaBindingUpdater.update(normalizedAreaCode, resolvedMealPeriod, null, riderId, null, updatedBy);
+                // 订单中心同步：把该骑手名下未完成的配送单迁移到新区域（已完成的历史单保持不变）。
+                jdbcTemplate.update(
+                    """
+                        UPDATE dispatch_assignments
+                        SET area_code = ?
+                        WHERE rider_profile_id = ?
+                          AND status IN ('PENDING', 'AREA_ASSIGNED', 'DISPATCHING')
+                        """,
+                    normalizedAreaCode,
+                    riderId
+                );
+                areaBindingUpdater.update(normalizedAreaCode, null, riderId, null, updatedBy);
             }
         }
         String riderStatus = jdbcTemplate.queryForObject(
@@ -249,7 +265,6 @@ class DispatchRiderAdminModule {
         );
         return new DispatchRiderProfileUpsertResponse(
             riderId,
-            resolvedMealPeriod,
             riderName,
             displayName,
             phone,
@@ -363,14 +378,6 @@ class DispatchRiderAdminModule {
         AreaBindingUpdater areaBindingUpdater
     ) {
         String normalizedAreaCode = areaCode == null || areaCode.isBlank() ? null : areaCode.trim();
-        String riderMealPeriod = jdbcTemplate.query(
-            "SELECT meal_period FROM rider_profiles WHERE id = ?",
-            ps -> ps.setLong(1, riderId),
-            rs -> rs.next() ? rs.getString("meal_period") : null
-        );
-        MealPeriod resolvedMealPeriod = MealPeriod.valueOf(
-            riderMealPeriod == null ? "DINNER" : riderMealPeriod
-        );
         LocalDateTime now = LocalDateTime.now().withNano(0);
         jdbcTemplate.update(
             """
@@ -391,7 +398,7 @@ class DispatchRiderAdminModule {
             riderId
         );
         if (normalizedAreaCode != null) {
-            areaBindingUpdater.update(normalizedAreaCode, resolvedMealPeriod, null, riderId, null, assignedBy);
+            areaBindingUpdater.update(normalizedAreaCode, null, riderId, null, assignedBy);
         }
         return new DispatchRiderActivateResponse(riderId, "ACTIVE", normalizedAreaCode);
     }
@@ -410,10 +417,60 @@ class DispatchRiderAdminModule {
             assignedBy,
             riderId
         );
+        // 禁用骑手后必须把它从区域的默认/备用骑手中释放，并清空其归属区域，
+        // 避免区域还挂着已禁用的骑手（否则区域管理与骑手管理将不再一致）。
+        jdbcTemplate.update(
+            "UPDATE dispatch_area_bindings SET default_rider_profile_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE default_rider_profile_id = ?",
+            riderId
+        );
+        jdbcTemplate.update(
+            "UPDATE dispatch_area_bindings SET backup_rider_profile_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE backup_rider_profile_id = ?",
+            riderId
+        );
+        jdbcTemplate.update(
+            "UPDATE rider_profiles SET default_area_code = NULL WHERE id = ?",
+            riderId
+        );
         return new DispatchRiderStatusResponse(
             riderId,
             "DISABLED"
         );
+    }
+
+    /**
+     * 校验骑手名称全局唯一（骑手唯一：一个姓名对应一条档案）。
+     */
+    private void assertRiderNameAvailable(String riderName, Long excludeRiderId) {
+        Integer count = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM rider_profiles WHERE rider_name = ? AND (? IS NULL OR id <> ?)",
+            Integer.class,
+            riderName == null ? null : riderName.trim(),
+            excludeRiderId,
+            excludeRiderId
+        );
+        if (count != null && count > 0) {
+            throw new BusinessException(ErrorCode.USERNAME_ALREADY_EXISTS, "骑手名称已存在");
+        }
+    }
+
+    /**
+     * 校验手机号不能绑定到「不同姓名」的骑手（手机号唯一；同一骑手跨餐期可共用同一手机号）。
+     */
+    private void assertPhoneAvailable(String phone, String riderName, Long excludeRiderId) {
+        if (phone == null || phone.isBlank()) {
+            return;
+        }
+        Integer count = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM rider_profiles WHERE phone = ? AND COALESCE(rider_name, '') <> ? AND (? IS NULL OR id <> ?)",
+            Integer.class,
+            phone.trim(),
+            riderName == null ? "" : riderName.trim(),
+            excludeRiderId,
+            excludeRiderId
+        );
+        if (count != null && count > 0) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "手机号已存在");
+        }
     }
 
     private long insertAndReturnId(String sql, Object... args) {
@@ -478,7 +535,7 @@ class DispatchRiderAdminModule {
 
     @FunctionalInterface
     interface AreaBindingUpdater {
-        void update(String areaCode, MealPeriod mealPeriod, String keywords, Long defaultRiderId, Long backupRiderId, String updatedBy);
+        void update(String areaCode, String keywords, Long defaultRiderId, Long backupRiderId, String updatedBy);
     }
 
     private record DispatchRiderAuthSource(

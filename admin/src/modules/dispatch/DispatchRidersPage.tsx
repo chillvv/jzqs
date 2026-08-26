@@ -5,26 +5,20 @@ import {
   createDispatchRider,
   deleteDispatchRider,
   disableDispatchRider,
-  fetchDispatchAreaBindings,
   fetchDispatchManagedRiders,
   updateDispatchRiderProfile
 } from "../../shared/api/http";
-import type {
-  DispatchAreaBindingResponse,
-  DispatchManagedRiderResponse
-} from "../../shared/api/types";
+import type { DispatchManagedRiderResponse } from "../../shared/api/types";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { AdminDialog } from "../../shared/components/AdminDialog";
 import { SafeInput } from "../../shared/components/SafeInput";
 import { toast } from "../../shared/components/Toast";
 import {
+  buildCreateRiderPayload,
   createEmptyNewRiderDraft,
   riderStatusLabel,
   riderStatusTagClass,
   validateCreateRiderDraft,
-  mergeRidersByMealPeriod,
-  type DispatchMealPeriod,
-  type MergedRider,
   type NewRiderDraft
 } from "./dispatchCenterLayout.helpers";
 import { usePersistedState, PAGE_MEMORY_KEYS } from "../../shared/hooks/usePersistedState";
@@ -37,26 +31,21 @@ function getErrorMessage(error: any, fallback: string) {
 
 const STATUS_FILTER_OPTIONS = [
   { label: "全部人员", value: "全部" },
-  { label: "午餐启用中", value: "LUNCH_ACTIVE" },
-  { label: "午餐已停用", value: "LUNCH_DISABLED" },
-  { label: "晚餐启用中", value: "DINNER_ACTIVE" },
-  { label: "晚餐已停用", value: "DINNER_DISABLED" }
+  { label: "启用中", value: "ACTIVE" },
+  { label: "已停用", value: "DISABLED" }
 ];
 
 export function DispatchRidersPage() {
   const nameInputRef = useRef<HTMLInputElement | null>(null);
-  const [lunchRiders, setLunchRiders] = useState<DispatchManagedRiderResponse[]>([]);
-  const [dinnerRiders, setDinnerRiders] = useState<DispatchManagedRiderResponse[]>([]);
-  const [lunchBindings, setLunchBindings] = useState<DispatchAreaBindingResponse[]>([]);
-  const [dinnerBindings, setDinnerBindings] = useState<DispatchAreaBindingResponse[]>([]);
+  const [riders, setRiders] = useState<DispatchManagedRiderResponse[]>([]);
   const [search, setSearch] = usePersistedState<string>(PAGE_MEMORY_KEYS.dispatchRidersSearch, "");
   const [statusFilter, setStatusFilter] = usePersistedState<string>(PAGE_MEMORY_KEYS.dispatchRidersStatus, "全部");
   const [showAddModal, setShowAddModal] = useState(false);
-  const [editRider, setEditRider] = useState<MergedRider | null>(null);
+  const [editRider, setEditRider] = useState<DispatchManagedRiderResponse | null>(null);
   const [draft, setDraft] = useState<NewRiderDraft>(createEmptyNewRiderDraft());
   const [saving, setSaving] = useState(false);
-  const [togglingKey, setTogglingKey] = useState<string | null>(null);
-  const [deleteConfirmRider, setDeleteConfirmRider] = useState<MergedRider | null>(null);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
+  const [deleteConfirmRider, setDeleteConfirmRider] = useState<DispatchManagedRiderResponse | null>(null);
   const [deleting, setDeleting] = useState(false);
   const fieldErrors = validateCreateRiderDraft(draft);
   const canSubmit = !fieldErrors.riderName && !fieldErrors.phone;
@@ -76,73 +65,26 @@ export function DispatchRidersPage() {
     return () => window.cancelAnimationFrame(frameId);
   }, [showAddModal, editRider]);
 
-  // 合并午餐/晚餐骑手为人员维度列表
-  const mergedRiders = useMemo(
-    () => mergeRidersByMealPeriod(lunchRiders, dinnerRiders),
-    [lunchRiders, dinnerRiders]
-  );
-
-  const lunchAreaOptions = useMemo(
-    () => [
-      { label: "暂不指定区域", value: "" },
-      ...lunchBindings.map((b) => ({ label: b.areaCode, value: b.areaCode }))
-    ],
-    [lunchBindings]
-  );
-
-  const dinnerAreaOptions = useMemo(
-    () => [
-      { label: "暂不指定区域", value: "" },
-      ...dinnerBindings.map((b) => ({ label: b.areaCode, value: b.areaCode }))
-    ],
-    [dinnerBindings]
-  );
-
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return mergedRiders.filter((m) => {
-      if (q && !m.riderName.toLowerCase().includes(q) && !(m.phone || "").includes(q)) return false;
-      switch (statusFilter) {
-        case "LUNCH_ACTIVE":
-          return m.lunch?.authStatus === "ACTIVE";
-        case "LUNCH_DISABLED":
-          return m.lunch != null && m.lunch.authStatus !== "ACTIVE";
-        case "DINNER_ACTIVE":
-          return m.dinner?.authStatus === "ACTIVE";
-        case "DINNER_DISABLED":
-          return m.dinner != null && m.dinner.authStatus !== "ACTIVE";
-        default:
-          return true;
-      }
+    return riders.filter((r) => {
+      if (q && !r.riderName.toLowerCase().includes(q) && !(r.phone || "").includes(q)) return false;
+      if (statusFilter === "ACTIVE") return r.authStatus === "ACTIVE";
+      if (statusFilter === "DISABLED") return r.authStatus !== "ACTIVE";
+      return true;
     });
-  }, [mergedRiders, search, statusFilter]);
+  }, [riders, search, statusFilter]);
 
   const riderStats = useMemo(() => {
-    const lunchActive = mergedRiders.filter((m) => m.lunch?.authStatus === "ACTIVE").length;
-    const dinnerActive = mergedRiders.filter((m) => m.dinner?.authStatus === "ACTIVE").length;
-    const totalTasks = mergedRiders.reduce(
-      (sum, m) => sum + (m.lunch?.todayTaskCount ?? 0) + (m.dinner?.todayTaskCount ?? 0),
-      0
-    );
-    return {
-      totalCount: mergedRiders.length,
-      lunchActive,
-      dinnerActive,
-      totalTasks
-    };
-  }, [mergedRiders]);
+    const active = riders.filter((r) => r.authStatus === "ACTIVE").length;
+    const totalTasks = riders.reduce((sum, r) => sum + (r.todayTaskCount ?? 0), 0);
+    const totalDelivered = riders.reduce((sum, r) => sum + (r.todayDeliveredCount ?? 0), 0);
+    return { totalCount: riders.length, active, totalTasks, totalDelivered };
+  }, [riders]);
 
   async function reload() {
-    const [lunchR, dinnerR, lunchB, dinnerB] = await Promise.all([
-      fetchDispatchManagedRiders({ mealPeriod: "LUNCH" }),
-      fetchDispatchManagedRiders({ mealPeriod: "DINNER" }),
-      fetchDispatchAreaBindings("LUNCH"),
-      fetchDispatchAreaBindings("DINNER")
-    ]);
-    setLunchRiders(lunchR);
-    setDinnerRiders(dinnerR);
-    setLunchBindings(lunchB);
-    setDinnerBindings(dinnerB);
+    const data = await fetchDispatchManagedRiders();
+    setRiders(data);
   }
 
   function openAdd() {
@@ -151,52 +93,14 @@ export function DispatchRidersPage() {
     setShowAddModal(true);
   }
 
-  function openEdit(rider: MergedRider) {
+  function openEdit(rider: DispatchManagedRiderResponse) {
     setDraft({
       riderName: rider.riderName,
       phone: rider.phone || "",
-      lunchEnabled: rider.lunch?.authStatus === "ACTIVE",
-      lunchAreaCode: rider.lunch?.areaCode || "",
-      dinnerEnabled: rider.dinner?.authStatus === "ACTIVE",
-      dinnerAreaCode: rider.dinner?.areaCode || ""
+      enabled: rider.authStatus === "ACTIVE"
     });
     setEditRider(rider);
     setShowAddModal(true);
-  }
-
-  async function saveMeal(
-    meal: DispatchMealPeriod,
-    existing: DispatchManagedRiderResponse | null,
-    enabled: boolean,
-    areaCode: string,
-    riderName: string,
-    phone: string
-  ) {
-    const base = {
-      mealPeriod: meal,
-      riderName,
-      displayName: riderName,
-      phone,
-      areaCode: areaCode.trim()
-    };
-    if (existing) {
-      // 已建档：先同步基础信息，再按需启用/停用
-      await updateDispatchRiderProfile(existing.riderId, base);
-      if (enabled && existing.authStatus !== "ACTIVE") {
-        await activateDispatchRider(existing.riderId, { riderName, areaCode: areaCode.trim() });
-      } else if (!enabled && existing.authStatus === "ACTIVE") {
-        await disableDispatchRider(existing.riderId);
-      }
-    } else if (enabled) {
-      await createDispatchRider({
-        mealPeriod: meal,
-        riderName,
-        displayName: riderName,
-        phone,
-        areaCode: areaCode.trim() || undefined,
-        employmentStatus: "ACTIVE"
-      });
-    }
   }
 
   async function handleSave() {
@@ -206,32 +110,24 @@ export function DispatchRidersPage() {
     }
     setSaving(true);
     try {
-      const riderName = draft.riderName.trim();
-      const phone = draft.phone.trim();
+      const payload = buildCreateRiderPayload(draft);
       if (editRider) {
-        await saveMeal("LUNCH", editRider.lunch, draft.lunchEnabled, draft.lunchAreaCode, riderName, phone);
-        await saveMeal("DINNER", editRider.dinner, draft.dinnerEnabled, draft.dinnerAreaCode, riderName, phone);
+        await updateDispatchRiderProfile(editRider.riderId, {
+          riderName: payload.riderName,
+          displayName: payload.displayName,
+          phone: payload.phone,
+          areaCode: editRider.areaCode || ""
+        });
+        if (draft.enabled && editRider.authStatus !== "ACTIVE") {
+          await activateDispatchRider(editRider.riderId, {
+            riderName: payload.riderName,
+            areaCode: editRider.areaCode || ""
+          });
+        } else if (!draft.enabled && editRider.authStatus === "ACTIVE") {
+          await disableDispatchRider(editRider.riderId);
+        }
       } else {
-        if (draft.lunchEnabled) {
-          await createDispatchRider({
-            mealPeriod: "LUNCH",
-            riderName,
-            displayName: riderName,
-            phone,
-            areaCode: draft.lunchAreaCode.trim() || undefined,
-            employmentStatus: "ACTIVE"
-          });
-        }
-        if (draft.dinnerEnabled) {
-          await createDispatchRider({
-            mealPeriod: "DINNER",
-            riderName,
-            displayName: riderName,
-            phone,
-            areaCode: draft.dinnerAreaCode.trim() || undefined,
-            employmentStatus: "ACTIVE"
-          });
-        }
+        await createDispatchRider(payload);
       }
       setShowAddModal(false);
       await reload();
@@ -243,35 +139,30 @@ export function DispatchRidersPage() {
     }
   }
 
-  async function handleToggleMeal(rider: MergedRider, meal: DispatchMealPeriod) {
-    const target = meal === "LUNCH" ? rider.lunch : rider.dinner;
-    if (!target) return;
-    const key = `${meal}:${rider.riderName}`;
-    setTogglingKey(key);
+  async function handleToggle(rider: DispatchManagedRiderResponse) {
+    setTogglingId(rider.riderId);
     try {
-      if (target.authStatus === "ACTIVE") {
-        await disableDispatchRider(target.riderId);
+      if (rider.authStatus === "ACTIVE") {
+        await disableDispatchRider(rider.riderId);
       } else {
-        await activateDispatchRider(target.riderId, {
-          riderName: target.riderName,
-          areaCode: target.areaCode || ""
+        await activateDispatchRider(rider.riderId, {
+          riderName: rider.riderName,
+          areaCode: rider.areaCode || ""
         });
       }
       await reload();
     } catch (err: any) {
       toast(getErrorMessage(err, "操作失败"), "error");
     } finally {
-      setTogglingKey(null);
+      setTogglingId(null);
     }
   }
 
   async function handleDelete() {
     if (!deleteConfirmRider) return;
-    const target = deleteConfirmRider.lunch ?? deleteConfirmRider.dinner;
-    if (!target) return;
     setDeleting(true);
     try {
-      await deleteDispatchRider(target.riderId);
+      await deleteDispatchRider(deleteConfirmRider.riderId);
       setDeleteConfirmRider(null);
       await reload();
       toast("骑手已删除");
@@ -280,35 +171,6 @@ export function DispatchRidersPage() {
     } finally {
       setDeleting(false);
     }
-  }
-
-  function renderMealCell(rider: MergedRider, meal: DispatchMealPeriod) {
-    const record = meal === "LUNCH" ? rider.lunch : rider.dinner;
-    const key = `${meal}:${rider.riderName}`;
-    const busy = togglingKey === key;
-    if (!record) {
-      return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
-          <span className="tag tag-gray" style={{ fontSize: 11 }}>未建档</span>
-        </div>
-      );
-    }
-    const active = record.authStatus === "ACTIVE";
-    return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
-        <span className={`tag ${riderStatusTagClass(record.authStatus)}`} style={{ fontSize: 11 }}>
-          {riderStatusLabel(record.authStatus)}
-        </span>
-        <button
-          className={`btn btn-compact ${active ? "btn btn-outline" : "btn btn-primary"}`}
-          disabled={busy}
-          onClick={() => handleToggleMeal(rider, meal)}
-          style={{ fontSize: 12, padding: "3px 10px" }}
-        >
-          {busy ? "处理中..." : active ? "停用" : "启用"}
-        </button>
-      </div>
-    );
   }
 
   return (
@@ -320,14 +182,14 @@ export function DispatchRidersPage() {
           <div className="stat-footer">统一人员档案</div>
         </div>
         <div className="stat-card">
-          <div className="stat-title">午餐启用</div>
-          <div className="stat-val">{riderStats.lunchActive}<span>人</span></div>
-          <div className="stat-footer">午餐可接单骑手</div>
+          <div className="stat-title">启用中</div>
+          <div className="stat-val">{riderStats.active}<span>人</span></div>
+          <div className="stat-footer">可接单骑手</div>
         </div>
         <div className="stat-card">
-          <div className="stat-title">晚餐启用</div>
-          <div className="stat-val">{riderStats.dinnerActive}<span>人</span></div>
-          <div className="stat-footer">晚餐可接单骑手</div>
+          <div className="stat-title">今日已送达</div>
+          <div className="stat-val">{riderStats.totalDelivered}<span>单</span></div>
+          <div className="stat-footer">全部骑手合计</div>
         </div>
         <div className="stat-card">
           <div className="stat-title">今日任务量</div>
@@ -369,45 +231,54 @@ export function DispatchRidersPage() {
             <div>
               <div className="dispatch-section__title">骑手列表</div>
               <div className="dispatch-section__note">
-                同一骑手统一为一条人员档案，午餐、晚餐的启用状态与负责区域分别维护。
+                每个骑手唯一建档，负责区域请在「区域管理」中分配。
               </div>
             </div>
             <span className="dispatch-table-toolbar__count">共 {filtered.length} 条结果</span>
           </div>
           <div className="table-responsive table-responsive--fixed-height" style={{ overflowX: "auto" }}>
-            <table style={{ minWidth: "1000px", width: "100%" }}>
+            <table style={{ minWidth: "860px", width: "100%" }}>
               <thead>
                 <tr>
                   <th style={{ width: "120px" }}>姓名</th>
-                  <th style={{ width: "140px" }}>手机号</th>
-                  <th style={{ width: "140px" }}>午餐</th>
-                  <th style={{ width: "140px" }}>晚餐</th>
-                  <th style={{ width: "120px" }}>今日任务</th>
+                  <th style={{ width: "150px" }}>手机号</th>
+                  <th style={{ width: "120px" }}>状态</th>
+                  <th style={{ width: "120px" }}>今日送达/任务</th>
                   <th style={{ width: "180px" }}>最近登录</th>
-                  <th style={{ width: "160px" }}>操作</th>
+                  <th style={{ width: "220px" }}>操作</th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((m) => {
-                  const totalDelivered = (m.lunch?.todayDeliveredCount ?? 0) + (m.dinner?.todayDeliveredCount ?? 0);
-                  const totalTask = (m.lunch?.todayTaskCount ?? 0) + (m.dinner?.todayTaskCount ?? 0);
-                  const lastLogin = m.lunch?.lastLoginAt || m.dinner?.lastLoginAt || m.lunch?.firstLoginAt || m.dinner?.firstLoginAt || "--";
+                {filtered.map((r) => {
+                  const busy = togglingId === r.riderId;
+                  const active = r.authStatus === "ACTIVE";
                   return (
-                    <tr key={m.riderName}>
-                      <td><strong>{m.riderName}</strong></td>
-                      <td>{m.phone || "--"}</td>
-                      <td>{renderMealCell(m, "LUNCH")}</td>
-                      <td>{renderMealCell(m, "DINNER")}</td>
-                      <td>{totalDelivered} / {totalTask}</td>
-                      <td>{lastLogin}</td>
+                    <tr key={r.riderId}>
+                      <td><strong>{r.riderName}</strong></td>
+                      <td>{r.phone || "--"}</td>
+                      <td>
+                        <span className={`tag ${riderStatusTagClass(r.authStatus)}`} style={{ fontSize: 11 }}>
+                          {riderStatusLabel(r.authStatus)}
+                        </span>
+                      </td>
+                      <td>{r.todayDeliveredCount} / {r.todayTaskCount}</td>
+                      <td>{r.lastLoginAt || r.firstLoginAt || "--"}</td>
                       <td style={{ whiteSpace: "nowrap" }}>
                         <div style={{ display: "flex", gap: "6px", flexWrap: "nowrap" }}>
-                          <button className="btn btn-outline btn-compact" onClick={() => openEdit(m)}>
+                          <button
+                            className={`btn btn-compact ${active ? "btn btn-outline" : "btn btn-primary"}`}
+                            disabled={busy}
+                            onClick={() => handleToggle(r)}
+                            style={{ fontSize: 12, padding: "3px 10px" }}
+                          >
+                            {busy ? "处理中..." : active ? "停用" : "启用"}
+                          </button>
+                          <button className="btn btn-outline btn-compact" onClick={() => openEdit(r)}>
                             <UserCog size={14} /> 编辑
                           </button>
                           <button
                             className="btn-delete btn-compact"
-                            onClick={() => setDeleteConfirmRider(m)}
+                            onClick={() => setDeleteConfirmRider(r)}
                           >
                             <Trash2 size={14} /> 删除
                           </button>
@@ -425,8 +296,8 @@ export function DispatchRidersPage() {
       <AdminDialog
         open={showAddModal}
         title={editRider ? "编辑骑手" : "新增骑手"}
-        description={editRider ? "修改骑手基础信息，并分别维护午餐/晚餐的启用状态与负责区域。" : "一次建档，自动可用于午餐和晚餐；如某餐不使用可取消勾选。"}
-        width={640}
+        description={editRider ? "修改骑手姓名、手机号与启用状态。负责区域请在「区域管理」中分配。" : "建档后骑手即可登录接单；负责区域请在「区域管理」中分配。"}
+        width={520}
         onClose={saving ? () => undefined : () => setShowAddModal(false)}
         footer={
           <>
@@ -460,51 +331,14 @@ export function DispatchRidersPage() {
           {fieldErrors.phone && <div className="form-error">{fieldErrors.phone}</div>}
         </label>
 
-        <div style={{ display: "grid", gap: "12px", marginTop: 4 }}>
-          <div style={{ border: "1px solid #e3e6ee", borderRadius: 8, padding: "10px 12px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-              <strong>午餐</strong>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13 }}>
-                <input
-                  type="checkbox"
-                  checked={draft.lunchEnabled}
-                  onChange={(e) => setDraft((d) => ({ ...d, lunchEnabled: e.target.checked }))}
-                />
-                启用
-              </label>
-            </div>
-            <AppSelect
-              value={draft.lunchAreaCode}
-              options={lunchAreaOptions}
-              placeholder="午餐负责区域"
-              disabled={!draft.lunchEnabled}
-              onChange={(value) => setDraft((d) => ({ ...d, lunchAreaCode: value }))}
-              style={selectStyle}
-            />
-          </div>
-
-          <div style={{ border: "1px solid #e3e6ee", borderRadius: 8, padding: "10px 12px" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-              <strong>晚餐</strong>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: 13 }}>
-                <input
-                  type="checkbox"
-                  checked={draft.dinnerEnabled}
-                  onChange={(e) => setDraft((d) => ({ ...d, dinnerEnabled: e.target.checked }))}
-                />
-                启用
-              </label>
-            </div>
-            <AppSelect
-              value={draft.dinnerAreaCode}
-              options={dinnerAreaOptions}
-              placeholder="晚餐负责区域"
-              disabled={!draft.dinnerEnabled}
-              onChange={(value) => setDraft((d) => ({ ...d, dinnerAreaCode: value }))}
-              style={selectStyle}
-            />
-          </div>
-        </div>
+        <label className="admin-field" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
+          <input
+            type="checkbox"
+            checked={draft.enabled}
+            onChange={(e) => setDraft((d) => ({ ...d, enabled: e.target.checked }))}
+          />
+          <span className="admin-field-label" style={{ margin: 0 }}>启用该骑手</span>
+        </label>
       </AdminDialog>
 
       <AdminDialog
@@ -528,7 +362,7 @@ export function DispatchRidersPage() {
         }
       >
         <div style={{ padding: "12px 0", color: "var(--text-sub)" }}>
-          删除后，该骑手（含午餐、晚餐档案）的所有信息将被永久移除，包括：
+          删除后，该骑手的所有信息将被永久移除，包括：
           <ul style={{ marginTop: "8px", paddingLeft: "20px" }}>
             <li>账号信息</li>
             <li>区域绑定</li>

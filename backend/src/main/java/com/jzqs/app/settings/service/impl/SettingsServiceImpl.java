@@ -974,7 +974,22 @@ public class SettingsServiceImpl implements SettingsService {
                 FROM meal_slot_orders mso
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
                 LEFT JOIN dispatch_assignments da ON da.meal_slot_order_id = mso.id
-                LEFT JOIN rider_address_bindings rab ON rab.customer_id = doo.customer_id AND rab.address_id = mso.address_id
+                LEFT JOIN (
+                    SELECT
+                        customer_id,
+                        address_id,
+                        area_code,
+                        ROW_NUMBER() OVER (
+                            PARTITION BY customer_id, address_id
+                            ORDER BY
+                                CASE WHEN meal_period <=> ? THEN 0 ELSE 1 END,
+                                id DESC
+                        ) AS rn
+                    FROM rider_address_bindings
+                ) rab
+                    ON rab.customer_id = doo.customer_id
+                   AND rab.address_id = mso.address_id
+                   AND rab.rn = 1
                 WHERE doo.serve_date = ?
                   AND COALESCE(mso.delivery_meal_period, mso.meal_period) = ?
                   AND COALESCE(da.area_code, rab.area_code) IS NOT NULL
@@ -983,6 +998,7 @@ public class SettingsServiceImpl implements SettingsService {
                 ORDER BY area_code
                 """,
             (rs, rowNum) -> rs.getString("area_code"),
+            mealPeriod,
             java.sql.Date.valueOf(serveDate),
             mealPeriod
         );

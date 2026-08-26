@@ -569,15 +569,12 @@ public class MobileAuthServiceImpl implements MobileAuthService {
     }
 
     private Long findRiderIdByPhone(String phone) {
-        // 同名骑手可能有多条档案（按餐期分裂）。优先返回已绑定微信(current_openid 非空)的
-        // 那条主档案，保证登录骑手 ID 与派单写入 dispatch_assignments.rider_profile_id 的 ID 一致。
+        // 骑手唯一：手机号全局唯一，直接匹配唯一档案。
         return jdbcTemplate.query(
             """
                 SELECT id FROM rider_profiles
                 WHERE phone = ?
-                ORDER BY
-                    CASE WHEN current_openid IS NOT NULL AND current_openid <> '' THEN 0 ELSE 1 END,
-                    id
+                ORDER BY id
                 LIMIT 1
                 """,
             ps -> ps.setString(1, phone),
@@ -668,18 +665,16 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         }
     }
 
-    private void validateUniqueRiderName(String riderName, String mealPeriod, Long currentRiderId) {
+    private void validateUniqueRiderName(String riderName, Long currentRiderId) {
         Integer count = jdbcTemplate.queryForObject(
             """
                 SELECT COUNT(*)
                 FROM rider_profiles
                 WHERE rider_name = ?
-                  AND meal_period = ?
                   AND (? IS NULL OR id <> ?)
                 """,
             Integer.class,
             riderName,
-            mealPeriod,
             currentRiderId,
             currentRiderId
         );
@@ -746,8 +741,6 @@ public class MobileAuthServiceImpl implements MobileAuthService {
                 null,
                 null,
                 null,
-                null,
-                null,
                 "UNAUTHORIZED",
                 false,
                 null,
@@ -765,8 +758,6 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             profile.displayName(),
             profile.phone(),
             profile.areaCode(),
-            profile.lunchAreaCode(),
-            profile.dinnerAreaCode(),
             profile.riderStatus(),
             profile.workbenchEnabled(),
             profile.firstLoginAt(),
@@ -855,8 +846,6 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             "未开通骑手",
             phone,
             "",
-            "",
-            "",
             "NOT_FOUND",
             false,
             "",
@@ -876,21 +865,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
                     default_area_code,
                     auth_status,
                     first_login_at,
-                    last_login_at,
-                    (
-                        SELECT lr.default_area_code
-                        FROM rider_profiles lr
-                        WHERE lr.rider_name = rp.rider_name
-                          AND lr.meal_period = 'LUNCH'
-                        LIMIT 1
-                    ) AS lunch_area_code,
-                    (
-                        SELECT dr.default_area_code
-                        FROM rider_profiles dr
-                        WHERE dr.rider_name = rp.rider_name
-                          AND dr.meal_period = 'DINNER'
-                        LIMIT 1
-                    ) AS dinner_area_code
+                    last_login_at
                 FROM rider_profiles rp
                 WHERE id = ?
                 """,
@@ -906,8 +881,6 @@ public class MobileAuthServiceImpl implements MobileAuthService {
                     rs.getString("display_name"),
                     rs.getString("phone"),
                     rs.getString("default_area_code"),
-                    rs.getString("lunch_area_code"),
-                    rs.getString("dinner_area_code"),
                     riderStatus,
                     "ACTIVE".equalsIgnoreCase(riderStatus),
                     formatTimestamp(rs.getTimestamp("first_login_at")),
@@ -928,7 +901,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         String finalName = requireNickname(name);
         String finalOpenid = openid != null && !openid.trim().isEmpty() ? openid.trim() : null;
         LocalDateTime now = TimeUtils.now().withNano(0);
-        validateUniqueRiderName(finalName, "DINNER", null);
+        validateUniqueRiderName(finalName, null);
 
         // 检查手机号是否已注册
         Long existingRiderId = jdbcTemplate.query(

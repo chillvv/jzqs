@@ -92,9 +92,30 @@ App({
   },
 
   waitForRiderAuth() {
-    return auth.waitForAuth().then(() => {
+    return auth.waitForAuth().then(async () => {
       this.syncRiderGlobals();
+      // 进入任意页面时主动刷新骑手资料（姓名/区域），保证后台改完信息后
+      // “我的”“订单中心”“订单详情”等所有子页面看到的骑手信息保持一致。
+      // 带去重：同一时刻只发一个请求，避免 onShow 多次 await 重复拉取。
+      await this._refreshRiderProfileOnce();
     });
+  },
+
+  _refreshRiderProfileOnce() {
+    if (this._profileRefreshing) {
+      return this._profileRefreshing;
+    }
+    this._profileRefreshing = auth.loadRiderProfile()
+      .then(() => {
+        this.syncRiderGlobals();
+      })
+      .catch(() => {
+        // 网络抖动时保留缓存资料，不影响页面渲染。
+      })
+      .finally(() => {
+        this._profileRefreshing = null;
+      });
+    return this._profileRefreshing;
   },
 
   async loginWithPhone(phone) {

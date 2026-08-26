@@ -4,7 +4,6 @@ import com.jzqs.app.common.api.BatchOperationResponse;
 import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.dispatch.api.DispatchAreaBindingRemoveResponse;
 import com.jzqs.app.dispatch.api.DispatchBatchResponse;
-import com.jzqs.app.order.MealPeriod;
 import com.jzqs.app.dispatch.api.DispatchBoardItemResponse;
 import com.jzqs.app.dispatch.api.DispatchAreaAiCorrectionConfirmRequest;
 import com.jzqs.app.dispatch.api.DispatchAreaAiCorrectionPreviewRequest;
@@ -74,7 +73,7 @@ public interface DispatchService {
 
     List<DispatchBatchResponse> batches(String serveDate, String mealPeriod);
 
-    List<DispatchExceptionItemResponse> exceptions();
+    List<DispatchExceptionItemResponse> exceptions(String mealPeriod);
 
     List<DispatchPendingItemResponse> pendingItems(String mealPeriod, String serveDate);
 
@@ -98,13 +97,13 @@ public interface DispatchService {
 
     List<PendingRiderResponse> pendingRiders();
 
-    List<DispatchManagedRiderResponse> managedRiders(String authStatus, String keyword, String areaCode, MealPeriod mealPeriod);
+    List<DispatchManagedRiderResponse> managedRiders(String authStatus, String keyword, String areaCode);
 
     List<DispatchRiderProgressResponse> riderProgress(String mealPeriod, String serveDate);
 
-    DispatchRiderProfileUpsertResponse createRider(MealPeriod mealPeriod, String riderName, String displayName, String phone, String areaCode, String employmentStatus, String updatedBy);
+    DispatchRiderProfileUpsertResponse createRider(String riderName, String displayName, String phone, String areaCode, String employmentStatus, String updatedBy);
 
-    DispatchRiderProfileUpsertResponse updateRiderProfile(long riderId, MealPeriod mealPeriod, String riderName, String displayName, String phone, String areaCode, String updatedBy);
+    DispatchRiderProfileUpsertResponse updateRiderProfile(long riderId, String riderName, String displayName, String phone, String areaCode, String updatedBy);
 
     DispatchRiderAuthBindingResponse riderAuthBinding(long riderId);
 
@@ -114,9 +113,9 @@ public interface DispatchService {
 
     List<DispatchAreaBindingResponse> areaBindings(String mealPeriod, String serveDate);
 
-    DispatchAreaBindingUpdateResultResponse updateAreaBinding(MealPeriod mealPeriod, String areaCode, String keywords, Long defaultRiderId, Long backupRiderId, String updatedBy);
+    DispatchAreaBindingUpdateResultResponse updateAreaBinding(String areaCode, String keywords, Long defaultRiderId, Long backupRiderId, String updatedBy);
 
-    DispatchAreaBindingRemoveResponse removeAreaBinding(MealPeriod mealPeriod, String areaCode, long riderId);
+    DispatchAreaBindingRemoveResponse removeAreaBinding(String areaCode, long riderId);
 
     DispatchAreaRenameResponse renameArea(String areaCode, String newAreaCode);
 

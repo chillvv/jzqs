@@ -72,7 +72,7 @@ public class RiderAdminServiceImpl implements RiderAdminService {
     @Override
     @Transactional
     public RiderDetailResponse create(RiderCreateRequest request) {
-        assertRiderNameUnique(request.riderName(), request.mealPeriod(), null);
+        assertRiderNameUnique(request.riderName(), null);
         assertRiderPhoneUnique(request.phone(), null);
         LocalDateTime now = LocalDateTime.now();
 
@@ -80,7 +80,6 @@ public class RiderAdminServiceImpl implements RiderAdminService {
         entity.setRiderName(request.riderName().trim());
         entity.setDisplayName(request.displayName().trim());
         entity.setPhone(request.phone().trim());
-        entity.setMealPeriod(request.mealPeriod() != null ? request.mealPeriod().trim().toUpperCase() : null);
         entity.setEmploymentStatus(request.employmentStatus() != null ? request.employmentStatus().trim() : "ACTIVE");
         entity.setAuthStatus("ACTIVE");
         entity.setDefaultAreaCode(request.areaCode() != null ? request.areaCode().trim() : null);
@@ -103,7 +102,7 @@ public class RiderAdminServiceImpl implements RiderAdminService {
 
         String newRiderName = request.riderName().trim();
         if (!newRiderName.equals(existing.getRiderName())) {
-            assertRiderNameUnique(newRiderName, existing.getMealPeriod(), riderId);
+            assertRiderNameUnique(newRiderName, riderId);
         }
         String newPhone = request.phone().trim();
         if (!newPhone.equals(existing.getPhone())) {
@@ -140,11 +139,13 @@ public class RiderAdminServiceImpl implements RiderAdminService {
         // 删除前先解绑所有外键引用，避免外键约束导致删除失败（原表现为"系统冲突/409"）。
         String riderName = existing.getRiderName();
         for (Long id : sameNameIds) {
-            // 1) 该骑手名下的派单退回待分配：清空骑手关联与姓名，状态置回 PENDING，
+            // 1) 该骑手名下的未完成派单退回待分配：清空骑手关联与姓名，状态置回 PENDING，
             //    让订单回到起手池可重新分配。骑手已删除，进度/区域管理不再显示归属于他。
             //    用 (rider_profile_id = ? OR rider_name = ?) 同时覆盖"按ID关联"和"仅留姓名"的历史派单。
+            //    注意：必须排除已送达(DELIVERED)的派单，否则会把已完成订单打回 PENDING，
+            //    制造"订单已送达但派单仍待分配"的僵尸数据，后续绑骑手时会报 409。
             jdbcTemplate.update(
-                "UPDATE dispatch_assignments SET rider_profile_id = NULL, rider_name = NULL, status = 'PENDING' WHERE rider_profile_id = ? OR rider_name = ?",
+                "UPDATE dispatch_assignments SET rider_profile_id = NULL, rider_name = NULL, status = 'PENDING' WHERE (rider_profile_id = ? OR rider_name = ?) AND status IN ('PENDING', 'AREA_ASSIGNED', 'DISPATCHING')",
                 id, riderName);
             // 2) 解除该骑手作为区域默认/备用骑手的绑定。
             jdbcTemplate.update(
@@ -158,22 +159,16 @@ public class RiderAdminServiceImpl implements RiderAdminService {
         }
     }
 
-    private void assertRiderNameUnique(String riderName, String mealPeriod, Long excludeId) {
-        // 按 (骑手姓名 + 餐期) 查重：允许同名骑手存在于不同餐期（午餐/晚餐分中心运营），
-        // 但同一餐期内不允许重名。配合 delete() 按同名一并清理，杜绝"删一条留一条"的残留。
+    private void assertRiderNameUnique(String riderName, Long excludeId) {
+        // 骑手唯一：姓名全局唯一（已去除餐期拆分）。
         LambdaQueryWrapper<RiderEntity> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(RiderEntity::getRiderName, riderName.trim());
-        if (mealPeriod != null) {
-            // 新档案带明确餐期：同餐期同名才算冲突；空餐期(全餐期)与任何餐期同名都冲突
-            wrapper.and(w -> w.isNull(RiderEntity::getMealPeriod)
-                .or().eq(RiderEntity::getMealPeriod, mealPeriod));
-        }
         if (excludeId != null) {
             wrapper.ne(RiderEntity::getId, excludeId);
         }
         Long count = riderMapper.selectCount(wrapper);
         if (count != null && count > 0) {
-            throw new BusinessException(ErrorCode.USERNAME_ALREADY_EXISTS, "该餐期内骑手名称已存在");
+            throw new BusinessException(ErrorCode.USERNAME_ALREADY_EXISTS, "骑手名称已存在");
         }
     }
 

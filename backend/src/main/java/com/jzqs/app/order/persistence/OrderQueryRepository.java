@@ -249,7 +249,15 @@ public class OrderQueryRepository {
                 COALESCE(mso.merchant_remark, '') AS merchant_remark,
                 ca.address_line AS delivery_address,
                 do.source,
-                CASE WHEN COALESCE(da.area_code, '') = 'PENDING' THEN '' ELSE COALESCE(da.area_code, rab.area_code, ca.area_code, '') END AS area_code,
+                CASE WHEN COALESCE(da.area_code, '') = 'PENDING' THEN '' ELSE COALESCE(da.area_code, (
+                    SELECT r.area_code
+                    FROM rider_address_bindings r
+                    WHERE r.customer_id = do.customer_id
+                      AND r.address_id = mso.address_id
+                      AND r.rider_profile_id IS NOT NULL
+                    ORDER BY CASE WHEN r.meal_period <=> mso.meal_period THEN 0 ELSE 1 END, r.id DESC
+                    LIMIT 1
+                ), ca.area_code, '') END AS area_code,
                 do.customer_id AS customer_id,
                 do.serve_date AS serve_date,
                 CASE WHEN c.is_priority_customer = TRUE OR mso.is_priority = TRUE THEN TRUE ELSE FALSE END AS priority_customer,
@@ -311,7 +319,6 @@ public class OrderQueryRepository {
                 )
             ) dr ON dr.meal_slot_order_id = mso.id
             LEFT JOIN dispatch_assignments da ON da.meal_slot_order_id = mso.id
-            LEFT JOIN rider_address_bindings rab ON rab.customer_id = do.customer_id AND rab.address_id = mso.address_id
             WHERE do.serve_date = ?
               AND mso.status <> 'REFUNDED'
               AND NOT EXISTS (

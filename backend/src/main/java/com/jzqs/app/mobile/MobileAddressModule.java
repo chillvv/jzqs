@@ -20,6 +20,19 @@ class MobileAddressModule {
         this.jdbcTemplate = jdbcTemplate;
     }
 
+    private record CustomerMealPeriodRow(long customerId, String mealPeriod) {}
+
+    private static String normalizeMealPeriod(String mealPeriod) {
+        if (mealPeriod == null) {
+            return null;
+        }
+        String upper = mealPeriod.trim().toUpperCase();
+        if (upper.equals("LUNCH") || upper.equals("DINNER")) {
+            return upper;
+        }
+        return mealPeriod;
+    }
+
     List<MobileAddressResponse> customerAddresses(long customerId) {
         return jdbcTemplate.query(
             """
@@ -224,33 +237,49 @@ class MobileAddressModule {
     private static final String AREA_PENDING = "PENDING";
 
     private void reconcileDispatchArea(long orderId, long newAddressId) {
-        long customerId = jdbcTemplate.query(
-            "SELECT do.customer_id FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE mso.id = ?",
+        CustomerMealPeriodRow row = jdbcTemplate.query(
+            "SELECT do.customer_id, mso.meal_period FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE mso.id = ?",
             ps -> ps.setLong(1, orderId),
-            rs -> rs.next() ? rs.getLong("customer_id") : 0L
+            rs -> {
+                if (!rs.next()) {
+                    return null;
+                }
+                return new CustomerMealPeriodRow(rs.getLong("customer_id"), rs.getString("meal_period"));
+            }
         );
+        if (row == null) {
+            return;
+        }
+        long customerId = row.customerId();
+        String mealPeriod = normalizeMealPeriod(row.mealPeriod());
         // 新地址是否有「已确认」的区域记忆（rider_profile_id 非空才算真实记忆，
         // 空壳待确认记录 area_code='' 不代表已分配，必须走重新分配流程）。
+        // 记忆按餐期区分：优先取同餐期记忆，无同餐期时回退到通用(NULL)记忆。
         String newArea = jdbcTemplate.query(
             """
                 SELECT area_code
                 FROM rider_address_bindings
                 WHERE customer_id = ? AND address_id = ? AND rider_profile_id IS NOT NULL
-                ORDER BY id DESC LIMIT 1
+                  AND (meal_period <=> ? OR meal_period IS NULL)
+                ORDER BY CASE WHEN meal_period <=> ? THEN 0 ELSE 1 END, id DESC
+                LIMIT 1
                 """,
             (rs, rn) -> rs.getString("area_code"),
             customerId,
-            newAddressId
+            newAddressId,
+            mealPeriod,
+            mealPeriod
         ).stream().findFirst().orElse(null);
         if (newArea == null || newArea.isBlank()) {
             // 新地址无已确认记忆：不沿用旧地址区域，留空待商家手动分配，
             // 并同步写入/刷新「地址变更待确认」绑定，供分单工作台与异常单展示。
             jdbcTemplate.update(
-                "INSERT INTO rider_address_bindings (customer_id, address_id, address_fingerprint, area_code, rider_profile_id, manually_confirmed, updated_reason, updated_at) "
-                    + "SELECT do.customer_id, ?, '', NULL, FALSE, 'ADDRESS_CHANGED_PENDING_CONFIRM', CURRENT_TIMESTAMP "
+                "INSERT INTO rider_address_bindings (customer_id, address_id, meal_period, address_fingerprint, area_code, rider_profile_id, manually_confirmed, updated_reason, updated_at) "
+                    + "SELECT do.customer_id, ?, ?, '', NULL, FALSE, 'ADDRESS_CHANGED_PENDING_CONFIRM', CURRENT_TIMESTAMP "
                     + "FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE mso.id = ? "
                     + "ON DUPLICATE KEY UPDATE area_code = '', rider_profile_id = NULL, updated_reason = VALUES(updated_reason), updated_at = CURRENT_TIMESTAMP",
                 newAddressId,
+                mealPeriod,
                 orderId
             );
             newArea = AREA_PENDING;

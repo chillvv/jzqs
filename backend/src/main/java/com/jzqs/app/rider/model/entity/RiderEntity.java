@@ -18,9 +18,6 @@ public class RiderEntity {
     @TableField("display_name")
     private String displayName;
 
-    @TableField("meal_period")
-    private String mealPeriod;
-
     private String phone;
 
     @TableField("employment_status")
@@ -63,9 +60,6 @@ public class RiderEntity {
 
     public String getDisplayName() { return displayName; }
     public void setDisplayName(String displayName) { this.displayName = displayName; }
-
-    public String getMealPeriod() { return mealPeriod; }
-    public void setMealPeriod(String mealPeriod) { this.mealPeriod = mealPeriod; }
 
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }

@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>正在唤起地图导航</title>
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #f5f5f7; font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif; }
+    .wrap { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; text-align: center; color: #333; }
+    .spinner { width: 36px; height: 36px; border: 3px solid #e2e2e7; border-top-color: #2563eb; border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 18px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+    .desc { font-size: 13px; color: #888; line-height: 1.6; }
+    .tip { margin-top: 18px; font-size: 12px; color: #aaa; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="spinner"></div>
+    <div class="title">地址已复制，正在为您打开地图 App…</div>
+    <div class="desc">地图会自动搜索该地址；若没有自动跳转，请点击下方按钮手动打开</div>
+    <div class="tip" id="tip"></div>
+  </div>
+
+  <script>
+    function getQuery(name) {
+      var match = new RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+      return match ? decodeURIComponent(match[1].replace(/\+/g, ' ')) : '';
+    }
+
+    var platform = getQuery('platform'); // amap / tencent / baidu
+    var name = getQuery('name') || '';
+    var addr = getQuery('addr') || '';
+    var keyword = name || addr;
+
+    document.getElementById('tip').textContent = '目标：' + keyword;
+
+    // 各家地图 App 的 URL Scheme（拉起手机里已安装的原生 App，按地址名称搜索）
+    function buildScheme() {
+      var q = encodeURIComponent(keyword);
+      switch (platform) {
+        case 'amap':
+          // 高德：直接搜索关键字
+          return 'androidamap://keywordNavi?sourceApplication=jzqs&keyword=' + q + '&style=2';
+        case 'tencent':
+          // 腾讯：地点搜索
+          return 'qqmap://map/search?keyword=' + q + '&referer=jzqs';
+        case 'baidu':
+          // 百度：地点搜索
+          return 'baidumap://map/place/search?query=' + q + '&src=jzqs';
+        default:
+          return '';
+      }
+    }
+
+    // 各家地图的网页兜底链接（未安装 App 时在浏览器打开）
+    function buildWebFallback() {
+      var q = encodeURIComponent(keyword);
+      switch (platform) {
+        case 'amap':
+          return 'https://uri.amap.com/search?keyword=' + q + '&src=jzqs&callnative=1';
+        case 'tencent':
+          return 'https://apis.map.qq.com/uri/v1/search?keyword=' + q + '&referer=jzqs';
+        case 'baidu':
+          return 'https://api.map.baidu.com/place/search?query=' + q + '&region=全国&output=html&src=jzqs';
+        default:
+          return '';
+      }
+    }
+
+    function openMap() {
+      var scheme = buildScheme();
+      var web = buildWebFallback();
+      if (!scheme) {
+        if (web) window.location.href = web;
+        return;
+      }
+      var invoked = false;
+      document.addEventListener('visibilitychange', function () {
+        if (document.hidden) invoked = true;
+      });
+      var start = Date.now();
+      window.location.href = scheme;
+      // 约 2 秒后若页面仍可见（说明没装 App），回退到网页版
+      setTimeout(function () {
+        if (!invoked && Date.now() - start < 2500 && web) {
+          window.location.href = web;
+        }
+      }, 2000);
+    }
+
+    openMap();
+  </script>
+</body>
+</html>

@@ -9,7 +9,6 @@ import com.jzqs.app.common.aop.annotation.RateLimit;
 import com.jzqs.app.common.security.AdminRequestContextSupport;
 import com.jzqs.app.settings.api.DispatchAiJobLogResponse;
 import com.jzqs.app.dispatch.service.DispatchService;
-import com.jzqs.app.order.MealPeriod;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -52,8 +51,10 @@ public class DispatchController {
     }
 
     @GetMapping("/exceptions")
-    public ApiResponse<List<DispatchExceptionItemResponse>> exceptions() {
-        return ApiResponse.success(dispatchService.exceptions());
+    public ApiResponse<List<DispatchExceptionItemResponse>> exceptions(
+        @RequestParam(value = "mealPeriod", required = false) String mealPeriod
+    ) {
+        return ApiResponse.success(dispatchService.exceptions(mealPeriod));
     }
 
     @GetMapping("/pending-items")
@@ -87,10 +88,9 @@ public class DispatchController {
     public ApiResponse<List<DispatchManagedRiderResponse>> managedRiders(
         @RequestParam(required = false) String authStatus,
         @RequestParam(required = false) String keyword,
-        @RequestParam(required = false) String areaCode,
-        @RequestParam(required = false) String mealPeriod
+        @RequestParam(required = false) String areaCode
     ) {
-        return ApiResponse.success(dispatchService.managedRiders(authStatus, keyword, areaCode, toMealPeriod(mealPeriod)));
+        return ApiResponse.success(dispatchService.managedRiders(authStatus, keyword, areaCode));
     }
 
     @GetMapping("/riders/progress")
@@ -108,7 +108,6 @@ public class DispatchController {
     public ApiResponse<DispatchRiderProfileUpsertResponse> createRider(@Valid @RequestBody DispatchCreateRiderRequest request) {
         String operatorName = AdminRequestContextSupport.requireOperatorName();
         return ApiResponse.success(dispatchService.createRider(
-            request.mealPeriod(),
             request.riderName(),
             request.displayName(),
             request.phone(),
@@ -129,7 +128,6 @@ public class DispatchController {
         String operatorName = AdminRequestContextSupport.requireOperatorName();
         return ApiResponse.success(dispatchService.updateRiderProfile(
             riderId,
-            request.mealPeriod(),
             request.riderName(),
             request.displayName(),
             request.phone(),
@@ -184,7 +182,6 @@ public class DispatchController {
     ) {
         String operatorName = AdminRequestContextSupport.requireOperatorName();
         return ApiResponse.success(dispatchService.updateAreaBinding(
-            request.mealPeriod(),
             areaCode,
             request.keywords(),
             request.defaultRiderId(),
@@ -197,7 +194,7 @@ public class DispatchController {
     public ApiResponse<DispatchAreaBindingRemoveResponse> removeAreaBinding(
         @Valid @RequestBody DispatchAreaBindingRemoveRequest request
     ) {
-        return ApiResponse.success(dispatchService.removeAreaBinding(request.mealPeriod(), request.areaCode(), request.riderId()));
+        return ApiResponse.success(dispatchService.removeAreaBinding(request.areaCode(), request.riderId()));
     }
 
     @PutMapping("/area-bindings/{areaCode}/rename")
@@ -454,12 +451,5 @@ public class DispatchController {
     ) {
         String operatorName = AdminRequestContextSupport.requireOperatorName();
         return ApiResponse.success(dispatchService.saveRouteSuggestionFeedback(areaCode, request, operatorName));
-    }
-
-    private static MealPeriod toMealPeriod(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        return MealPeriod.valueOf(value.trim().toUpperCase());
     }
 }

@@ -5,6 +5,7 @@
     "pages/login/index",
     "pages/queue/index",
     "pages/order-detail/index",
+    "pages/map-nav/index",
     "pages/register/index",
     "pages/pending/index",
     "pages/blocked/index"

@@ -1,10 +1,7 @@
 package com.jzqs.app.dispatch.api;
 
-import com.jzqs.app.order.MealPeriod;
-
 public record DispatchManagedRiderResponse(
     long riderId,
-    MealPeriod mealPeriod,
     String riderName,
     String displayName,
     String phone,

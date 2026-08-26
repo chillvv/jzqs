@@ -92,7 +92,7 @@ export function DispatchAreasPage() {
     toast(getErrorMessage(loadError, "加载区域与骑手失败"), "error");
   }, [loadError]);
 
-  // 已绑定为某区域默认骑手的骑手及其所属区域（含当前区域），用于展示"已被XX区域使用"
+  // 已绑定为某区域负责骑手的骑手及其所属区域（含当前区域），用于展示"已被XX区域使用"
   const boundRiderMap = useMemo(() => {
     const map = new Map<string, string>();
     bindings.forEach((b) => {
@@ -111,7 +111,6 @@ export function DispatchAreasPage() {
     const currentRiderId = currentArea?.defaultRiderId ? String(currentArea.defaultRiderId) : null;
 
     return riders
-      .filter((rider) => rider.mealPeriod === mealPeriod)
       .map((rider) => {
         const riderId = String(rider.riderId);
         const disabled = rider.authStatus !== "ACTIVE";
@@ -135,7 +134,7 @@ export function DispatchAreasPage() {
           isCurrent: riderId === currentRiderId
         };
       });
-  }, [riders, mealPeriod, boundRiderMap, assignRiderAreaCode, bindings]);
+  }, [riders, boundRiderMap, assignRiderAreaCode, bindings]);
 
   const filteredRiderReplaceList = useMemo(() => {
     const kw = riderSearch.trim().toLowerCase();
@@ -149,9 +148,9 @@ export function DispatchAreasPage() {
   const creatableRiderOptions = useMemo(
     () =>
       riders
-        .filter((rider) => rider.mealPeriod === mealPeriod && rider.authStatus === "ACTIVE" && !boundRiderMap.has(String(rider.riderId)))
+        .filter((rider) => rider.authStatus === "ACTIVE" && !boundRiderMap.has(String(rider.riderId)))
         .map((rider) => ({ label: `${rider.riderName} (${rider.phone || "--"})`, value: String(rider.riderId) })),
-    [riders, mealPeriod, boundRiderMap]
+    [riders, boundRiderMap]
   );
 
   const activeArea = useMemo(
@@ -203,7 +202,6 @@ export function DispatchAreasPage() {
     setSavingArea(assignRiderAreaCode);
     try {
       await updateDispatchAreaBinding(assignRiderAreaCode, {
-        mealPeriod,
         keywords: area.keywords,
         defaultRiderId: rider.riderId
       });
@@ -212,7 +210,7 @@ export function DispatchAreasPage() {
       setSelectedRiderId("");
       await reload();
       if (result.assignedCount === 0) {
-        toast(`已将 ${rider.riderName} 绑定为「${assignRiderAreaCode}」的默认骑手，但当前${mealPeriodLabel(mealPeriod)}该区域暂无待分配订单，新订单归入后会自动指派。`);
+        toast(`已将 ${rider.riderName} 绑定为「${assignRiderAreaCode}」的负责骑手，该区域暂无待配送订单，新订单归入后会自动指派。`);
       } else {
         toast(`已将 ${rider.riderName} 绑定到 ${assignRiderAreaCode}`);
       }
@@ -233,7 +231,6 @@ export function DispatchAreasPage() {
     setSavingArea("__new__");
     try {
       await updateDispatchAreaBinding(newArea.name.trim(), {
-        mealPeriod,
         keywords: newArea.name.trim(),
         defaultRiderId: newArea.riderId ? Number(newArea.riderId) : null
       });
@@ -440,14 +437,13 @@ export function DispatchAreasPage() {
     setSavingArea(areaCode);
     try {
       await updateDispatchAreaBinding(areaCode, {
-        mealPeriod,
         keywords: area.keywords,
         defaultRiderId: Number(selectedRiderId)
       });
       setAssignRiderAreaCode(null);
       setSelectedRiderId("");
       await reload();
-      toast("区域默认骑手已刷新");
+      toast("区域负责骑手已刷新");
     } catch (err: any) {
       toast(getErrorMessage(err, "刷新区域骑手失败"), "error");
     } finally {
@@ -541,7 +537,7 @@ export function DispatchAreasPage() {
       <AdminDialog
         open={showCreateModal}
         title="新增区域"
-        description="创建一个新区域后，可以立即绑定默认骑手。"
+        description="创建一个新区域后，可以立即绑定负责骑手。"
         onClose={() => {
           setShowCreateAreaErrors(false);
           setShowCreateModal(false);
@@ -580,7 +576,7 @@ export function DispatchAreasPage() {
             {createAreaNameError ? <div className="form-error">{createAreaNameError}</div> : null}
           </label>
         <label className="admin-field">
-          <span className="admin-field-label">默认骑手</span>
+          <span className="admin-field-label">负责骑手</span>
           <AppSelect
             value={newArea.riderId}
             placeholder="可选：立即添加骑手"
@@ -744,7 +740,7 @@ export function DispatchAreasPage() {
       <AdminDialog
         open={Boolean(assignRiderAreaCode)}
         title="更换骑手"
-        description={assignRiderAreaCode ? `将 ${assignRiderAreaCode} 当前${mealPeriodLabel(mealPeriod)}订单统一分配给骑手` : undefined}
+        description={assignRiderAreaCode ? `将 ${assignRiderAreaCode} 所有未配送订单（含午餐和晚餐）统一分配给骑手` : undefined}
         zOffset={10}
         onClose={() => {
           setAssignRiderAreaCode(null);

@@ -567,7 +567,6 @@ export type PendingRiderResponse = {
 };
 export type DispatchManagedRiderResponse = {
   riderId: number;
-  mealPeriod?: "LUNCH" | "DINNER";
   riderName: string;
   displayName: string;
   phone: string;
@@ -582,16 +581,13 @@ export type DispatchManagedRiderResponse = {
   currentOpenid: string | null;
 };
 export type DispatchCreateRiderPayload = {
-  mealPeriod: "LUNCH" | "DINNER";
   riderName: string;
   displayName: string;
   phone: string;
-  areaCode?: string;
   employmentStatus?: string;
 };
 export type DispatchCreateRiderResponse = {
   riderId: number;
-  mealPeriod?: "LUNCH" | "DINNER";
   riderName: string;
   displayName: string;
   phone: string;
