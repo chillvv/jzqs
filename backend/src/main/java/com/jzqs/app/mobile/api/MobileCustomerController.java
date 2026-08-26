@@ -150,6 +150,19 @@ public class MobileCustomerController {
         return ApiResponse.success(null);
     }
 
+    @PutMapping("/nightly-subscription/sync")
+    public ApiResponse<Void> syncNightlySubscription(
+        @RequestHeader("Authorization") String authorization,
+        @RequestBody NightlySubscriptionSyncRequest request
+    ) {
+        mobilePortalService.syncNightlySubscription(
+            extractCustomerId(authorization),
+            request.enabled(),
+            request.templateId()
+        );
+        return ApiResponse.success(null);
+    }
+
     @PostMapping("/subscribe-message/test-send")
     public ApiResponse<MobileSubscribeMessageTestResponse> sendSubscribeMessageTest(
         @RequestHeader("Authorization") String authorization,

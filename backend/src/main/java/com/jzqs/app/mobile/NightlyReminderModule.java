@@ -101,7 +101,13 @@ public class NightlyReminderModule {
                 success++;
             } catch (BusinessException e) {
                 log.warn("每晚提醒发送失败 customerId={}, err={}", target.customerId(), e.getMessage());
-                markSent(target.customerId(), e.getMessage());
+                if (e.getErrorCode() == ErrorCode.SUBSCRIPTION_REVOKED_BY_USER) {
+                    // 用户在微信侧已关闭订阅，库里的 AUTHORIZED 是失效快照（假成功），纠正为已取消，
+                    // 下次用户重新勾选「总是保持」时会再写回 AUTHORIZED。
+                    cancelNightlySubscription(target.customerId());
+                } else {
+                    markSent(target.customerId(), e.getMessage());
+                }
             } catch (Exception e) {
                 log.warn("每晚提醒发送异常 customerId={}", target.customerId(), e);
                 markSent(target.customerId(), e.getMessage());
@@ -250,6 +256,22 @@ public class NightlyReminderModule {
             Timestamp.valueOf(LocalDateTime.now()),
             customerId
         );
+    }
+
+    /**
+     * 同步微信侧真实订阅状态到后端（前端每次进入下单页时用 wx.getSetting 回传）。
+     * enabled=true 时置为 AUTHORIZED（用户在微信设置里重新开启后恢复），否则置为 CANCELLED。
+     * 用于纠正「用户在微信设置里关闭/重新开启订阅，后端快照却未同步」的不一致。
+     */
+    public void syncNightlySubscription(long customerId, boolean enabled, String templateId) {
+        if (enabled) {
+            String resolvedTemplateId = (templateId == null || templateId.isBlank())
+                ? weChatService.getNightlyTemplateId()
+                : templateId;
+            authorizeNightlySubscription(customerId, resolvedTemplateId);
+        } else {
+            cancelNightlySubscription(customerId);
+        }
     }
 
     private record NightlySendTarget(

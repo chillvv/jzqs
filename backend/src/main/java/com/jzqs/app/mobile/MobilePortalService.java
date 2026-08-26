@@ -72,6 +72,9 @@ public interface MobilePortalService {
     /** 取消「每晚用餐提醒」订阅。 */
     void cancelNightlySubscription(long customerId);
 
+    /** 同步微信侧真实订阅状态到后端（enabled=true 恢复 AUTHORIZED，否则置 CANCELLED）。 */
+    void syncNightlySubscription(long customerId, boolean enabled, String templateId);
+
     MobileSubscribeMessageTestResponse sendSubscribeMessageTest(long customerId, String templateId, String acceptResult, String type);
 
     int sendScheduledDeliverySubscribeMessages(String mealPeriod);

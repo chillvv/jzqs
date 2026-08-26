@@ -217,6 +217,12 @@ public class MobilePortalServiceImpl implements MobilePortalService {
 
     @Override
     @Transactional
+    public void syncNightlySubscription(long customerId, boolean enabled, String templateId) {
+        nightlyReminderModule.syncNightlySubscription(customerId, enabled, templateId);
+    }
+
+    @Override
+    @Transactional
     public MobileSubscribeMessageTestResponse sendSubscribeMessageTest(long customerId, String templateId, String acceptResult, String type) {
         if (!isAcceptedSubscribeResult(acceptResult)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "仅支持发送已同意的订阅测试消息");

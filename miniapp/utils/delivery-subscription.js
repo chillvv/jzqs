@@ -122,6 +122,26 @@ async function cancelNightlySubscription() {
 }
 
 /**
+ * 把微信侧真实订阅状态回传后端同步，用于纠正后端快照与微信侧真实状态的不一致。
+ * enabled=true 恢复 AUTHORIZED（用户在微信设置里重新开启后），false 置为 CANCELLED（用户已关闭）。
+ * 前端每次进入下单页时调用，静默同步，失败不阻断流程。
+ */
+async function syncNightlySubscription(enabled) {
+  return request({
+    url: '/api/mobile/customer/nightly-subscription/sync',
+    method: 'PUT',
+    header: { 'content-type': 'application/json' },
+    data: {
+      enabled: !!enabled,
+      templateId: NIGHTLY_TEMPLATE_ID
+    },
+    // 静默同步：不弹全局 loading，失败也不弹错误提示，避免进入页面时闪烁/打扰
+    hideLoading: true,
+    hideErrorToast: true
+  }).catch(() => null);
+}
+
+/**
  * 调试/自测入口：把已同意的模板授权结果提交给后端，由后端真正下发一条订阅测试消息。
  * 后端按 templateId 路由：送达走送达模板、每晚提醒走每晚提醒模板（内容取后台运营设置）。
  * @param {string} templateId 模板 ID
@@ -139,6 +159,71 @@ async function sendSubscribeMessageTest(templateId, acceptResult, type) {
   });
 }
 
+/**
+ * 实时查询微信侧订阅消息的真实授权状态（wx.getSetting withSubscriptions）。
+ * 这是唯一能反映「用户当前是否真的还开着订阅」的依据：后端落库状态只是历史快照，
+ * 用户可随时在微信设置里关闭订阅，微信不会回调后端，因此下单前必须用本函数实时校验，
+ * 否则会出现「库里还是已授权、实际已被用户关闭」的假成功。
+ * 返回 { supported, mainSwitch, itemSettings }。
+ */
+async function querySubscribeAuthorization() {
+  if (typeof wx.getSetting !== 'function') {
+    return { supported: false, mainSwitch: false, itemSettings: {} };
+  }
+  return new Promise((resolve) => {
+    wx.getSetting({
+      withSubscriptions: true,
+      success(res) {
+        const setting = (res && res.subscriptionsSetting) || {};
+        resolve({
+          supported: true,
+          mainSwitch: setting.mainSwitch === true,
+          itemSettings: setting.itemSettings || {}
+        });
+      },
+      fail() {
+        resolve({ supported: false, mainSwitch: false, itemSettings: {} });
+      }
+    });
+  });
+}
+
+/**
+ * 判断某个订阅模板是否处于「总是保持」的长期有效状态。
+ * 需同时满足：订阅消息总开关打开 + 该模板 itemSettings 值为 'accept'。
+ * 用户勾选了「总是保持」后 itemSettings 才会为 'accept'；关闭总开关或单独拒绝该模板都会失效。
+ */
+function isTemplateLongTermAccepted(setting, templateId) {
+  if (!setting || !setting.supported || !setting.mainSwitch) {
+    return false;
+  }
+  const items = setting.itemSettings || {};
+  return items[templateId] === 'accept';
+}
+
+/**
+ * 实时查询某个模板的「总是保持」授权状态，返回详情：
+ * - supported=false：微信侧无法查询（极老基础库或调用失败），调用方应降级处理，避免误判；
+ * - supported=true 且 accepted=true：确认为「总是保持」长期有效；
+ * - supported=true 且 rejected=true：该模板被用户「总是拒绝」或被后台封禁，requestSubscribeMessage 不会再弹出，需引导去设置；
+ * - 其余（supported=true、accepted=false、rejected=false、mainSwitch=true）：该模板尚未被设置过，可正常 requestSubscribeMessage 弹窗。
+ */
+async function queryTemplateSubscribeStatus(templateId) {
+  const setting = await querySubscribeAuthorization();
+  const itemValue = (setting.itemSettings || {})[templateId];
+  return {
+    supported: setting.supported,
+    mainSwitch: setting.mainSwitch,
+    accepted: isTemplateLongTermAccepted(setting, templateId),
+    rejected: setting.supported && (itemValue === 'reject' || itemValue === 'ban')
+  };
+}
+
+/** 实时查询「每晚用餐提醒」模板的「总是保持」授权状态（三态，见 queryTemplateSubscribeStatus）。 */
+async function queryNightlySubscribeStatus() {
+  return queryTemplateSubscribeStatus(NIGHTLY_TEMPLATE_ID);
+}
+
 module.exports = {
   DELIVERY_TEMPLATE_ID,
   NIGHTLY_TEMPLATE_ID,
@@ -150,8 +235,12 @@ module.exports = {
   saveOrderDeliverySubscription,
   saveNightlySubscription,
   cancelNightlySubscription,
+  syncNightlySubscription,
   sendSubscribeMessageTest,
   cacheDeliveryAcceptResult,
-  getCachedDeliveryAcceptResult
+  getCachedDeliveryAcceptResult,
+  querySubscribeAuthorization,
+  isTemplateLongTermAccepted,
+  queryNightlySubscribeStatus
 };
 

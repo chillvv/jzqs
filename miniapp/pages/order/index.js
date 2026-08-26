@@ -8,7 +8,9 @@ const {
   requestCombinedSubscribeAuthorization,
   saveOrderDeliverySubscription,
   saveNightlySubscription,
-  cacheDeliveryAcceptResult
+  syncNightlySubscription,
+  cacheDeliveryAcceptResult,
+  queryNightlySubscribeStatus
 } = require('../../utils/delivery-subscription');
 const {
   normalizeHistoryRemarkSuggestions,
@@ -45,6 +47,19 @@ function openInlineAuth(page, source) {
     showInlineAuth: true,
     pendingAction: source
   });
+}
+
+/**
+ * 判断「每晚用餐提醒」是否真的开启了「总是保持」：
+ * - 微信侧能查到状态（supported=true）→ 以微信侧为准：后端快照 + 微信实时都成立才放行，
+ *   避免用户在微信设置里关闭订阅后，库里的 AUTHORIZED 快照造成「假成功」；
+ * - 微信侧查不到（supported=false，极老基础库 / 调用失败）→ 降级信任后端快照，避免误拦老用户。
+ */
+function resolveNightlySubscribed(backendSubscribed, realStatus) {
+  if (!realStatus || !realStatus.supported) {
+    return backendSubscribed;
+  }
+  return backendSubscribed && realStatus.accepted;
 }
 
 Page({
@@ -183,12 +198,23 @@ Page({
           : Promise.resolve([]),
         app.globalData.token
           ? request({ url: '/api/mobile/customer/nightly-subscription/status' }).catch(() => null)
-          : Promise.resolve(null)
+          : Promise.resolve(null),
+        app.globalData.token
+          ? queryNightlySubscribeStatus().catch(() => ({ supported: false, accepted: false }))
+          : Promise.resolve({ supported: false, accepted: false })
       ];
-      const [home, tomorrowMenu, addresses, nightlyStatus] = await Promise.all(tasks);
-      const nightlySubscribed = !!(nightlyStatus && nightlyStatus.subscribed);
+      const [home, tomorrowMenu, addresses, nightlyStatus, nightlyRealStatus] = await Promise.all(tasks);
       // 是否已开启「总是保持」的每晚用餐提醒，是下单的唯一放行条件（见 submitOrder）。
-      // 未授权或仅单次授权的用户均视为未开启，需点击勾选框并完成「总是保持」授权后才能下单。
+      // 关键：不能只信后端落库状态（用户在微信设置里关闭订阅后，后端不会感知，库里的
+      // AUTHORIZED 是历史快照），必须与微信侧实时查询结果同时成立，避免「假成功」。
+      // 未授权、仅单次授权或已被用户关闭的均视为未开启，需点击勾选框并完成「总是保持」授权后才能下单。
+      const backendSubscribed = !!(nightlyStatus && nightlyStatus.subscribed);
+      // 微信侧能查到真实状态且与后端快照不一致时，静默回传同步后端：
+      // 用户重新打开 → 恢复 AUTHORIZED（避免「重新打开后失效」）；用户关闭 → 置 CANCELLED（纠正假成功）。
+      if (nightlyRealStatus.supported && backendSubscribed !== nightlyRealStatus.accepted) {
+        syncNightlySubscription(nightlyRealStatus.accepted);
+      }
+      const nightlySubscribed = resolveNightlySubscribed(backendSubscribed, nightlyRealStatus);
       this.setData({ nightlySubscribed, subscribeConsent: nightlySubscribed });
       const defaultAddress = addresses.find((item) => item.isDefault) || addresses[0] || null;
       const menuItems = [tomorrowMenu.lunchItem, tomorrowMenu.dinnerItem].filter(Boolean);
@@ -426,17 +452,12 @@ Page({
   },
 
   /**
-   * 点击「同意接收订单通知」勾选框：立即请求微信订阅授权。
-   * 只有授权成功，勾选框才真正变为勾选；授权失败/取消则保持未勾选。
-   * 之后下单时校验：未勾选（即未真正授权）则下单失败。
+   * 核心订阅授权流程：弹出微信授权框申请「送达 + 每晚提醒」，确认真实「总是保持」后返回结果。
+   * 返回 true 表示已开启「总是保持」，false 表示未开启 / 被拒绝 / 授权失败（内部已给出提示）。
    */
-  async toggleSubscribeConsent() {
-    // 已开启「总是保持」每晚提醒的用户，视为已开启，不可再取消
-    if (this.data.nightlySubscribed) {
-      return;
-    }
+  async requestSubscribeConsent() {
     if (this.data.consentingSubscribe) {
-      return;
+      return this.data.nightlySubscribed;
     }
     this.setData({ consentingSubscribe: true });
     try {
@@ -446,15 +467,15 @@ Page({
       if (delivery) {
         cacheDeliveryAcceptResult(delivery);
       }
-      // 只有「每晚提醒」授权成功，才写入后端并重新拉取订阅状态，
-      // 由后端返回是否真正开启了「总是保持」（微信单次/总是在前端结果值相同，
-      // 是否「总是」以后端落库状态为准）。
+      // 只有「每晚提醒」授权成功，才写入后端，并用微信侧实时状态确认真实开启了「总是保持」。
+      // requestSubscribeMessage 的返回值对「单次授权」和「总是保持」都是 'accept'，无法区分，
+      // 必须用 wx.getSetting 实时校验 itemSettings 是否为 'accept'，以微信侧真实状态为准。
       if (nightly) {
         await saveNightlySubscription(nightly);
-        const refreshed = await request({
-          url: '/api/mobile/customer/nightly-subscription/status'
-        }).catch(() => null);
-        const nowSubscribed = !!(refreshed && refreshed.subscribed);
+        // 刚授权成功，后端已落库 AUTHORIZED；微信侧能查到则以「总是保持」实时状态为准，
+        // 查不到则信任刚落库的成功结果。
+        const realStatus = await queryNightlySubscribeStatus().catch(() => ({ supported: false, accepted: false }));
+        const nowSubscribed = resolveNightlySubscribed(true, realStatus);
         this.setData({
           nightlySubscribed: nowSubscribed,
           subscribeConsent: nowSubscribed
@@ -462,21 +483,107 @@ Page({
         if (nowSubscribed) {
           wx.showToast({ title: '已开启总是用餐提醒', icon: 'success' });
         } else {
-          // 后端未落库为「总是保持」：前端结果不计入放行，提示用户需保持开启
+          // 微信侧未确认为「总是保持」：不计入放行，提示用户需勾选「总是保持」保持开启
           this.setData({ subscribeConsent: false });
           wx.showToast({ title: '需开启「总是保持」提醒才能下单', icon: 'none' });
         }
-      } else {
-        // 未授权每晚提醒：不视为已开启
-        this.setData({ subscribeConsent: false });
-        wx.showToast({ title: '未开启提醒，无法下单', icon: 'none' });
+        return nowSubscribed;
       }
+      // 未授权每晚提醒：不视为已开启
+      this.setData({ subscribeConsent: false });
+      wx.showToast({ title: '未开启提醒，无法下单', icon: 'none' });
+      return false;
     } catch (error) {
       this.setData({ subscribeConsent: false, nightlySubscribed: false });
       wx.showToast({ title: error.message || '订阅授权失败', icon: 'none' });
+      return false;
     } finally {
       this.setData({ consentingSubscribe: false });
     }
+  },
+
+  /**
+   * 点击「同意接收订单通知」勾选框：立即请求微信订阅授权。
+   * 只有授权成功，勾选框才真正变为勾选；授权失败/取消则保持未勾选。
+   * 若用户之前「总是拒绝」或关闭了总开关（微信不会再弹授权框），则引导去设置页手动开启。
+   */
+  async toggleSubscribeConsent() {
+    // 已开启「总是保持」每晚提醒的用户，视为已开启，不可再取消
+    if (this.data.nightlySubscribed) {
+      return;
+    }
+    await this.attemptEnableSubscribe();
+  },
+
+  /**
+   * 尝试开启订阅（复用给勾选框点击与下单前自动校验）。
+   * 先查微信侧真实状态，按状态分流：
+   * - 已 accept：直接标记成功并同步后端；
+   * - 已「总是拒绝」或总开关关闭：requestSubscribeMessage 不会再弹出，引导去设置页开启；
+   * - 其余（未设置/查不到）：正常弹出微信授权框。
+   * 返回 true 表示已开启，false 表示未开启（内部已提示）。
+   */
+  async attemptEnableSubscribe(preStatus) {
+    const status = preStatus || await queryNightlySubscribeStatus().catch(() => ({ supported: false, accepted: false, mainSwitch: false, rejected: false }));
+    if (status.supported && status.accepted) {
+      this.setData({ nightlySubscribed: true, subscribeConsent: true });
+      syncNightlySubscription(true);
+      wx.showToast({ title: '已开启总是用餐提醒', icon: 'success' });
+      return true;
+    }
+    if (status.supported && (status.rejected || !status.mainSwitch)) {
+      this.promptOpenSubscribeSetting();
+      return false;
+    }
+    return this.requestSubscribeConsent();
+  },
+
+  /**
+   * 引导用户去微信「设置 → 订阅消息」里重新开启。
+   * 触发条件：用户「总是拒绝」或关闭了订阅消息总开关，此时 requestSubscribeMessage 不会再弹窗。
+   */
+  promptOpenSubscribeSetting() {
+    wx.showModal({
+      title: '开启用餐提醒',
+      content: '你之前关闭了订阅消息，需要到「设置 → 订阅消息」里重新开启「总是保持」后才能下单。现在前往设置？',
+      confirmText: '去设置',
+      cancelText: '取消',
+      confirmColor: '#B8D060',
+      success: (res) => {
+        if (res.confirm) {
+          wx.openSetting({
+            success: () => {
+              this.refreshNightlySubscribeFromWx();
+            }
+          });
+        }
+      }
+    });
+  },
+
+  /** 从微信设置页返回后，重新校验真实状态并更新 UI（用户可能已手动开启）。 */
+  async refreshNightlySubscribeFromWx() {
+    const status = await queryNightlySubscribeStatus().catch(() => ({ supported: false, accepted: false, mainSwitch: false, rejected: false }));
+    if (status.supported && status.accepted) {
+      this.setData({ nightlySubscribed: true, subscribeConsent: true });
+      syncNightlySubscription(true);
+      wx.showToast({ title: '已开启总是用餐提醒', icon: 'success' });
+    }
+  },
+
+  /**
+   * 下单前确保「每晚提醒」已开启「总是保持」。
+   * 实时查询微信侧真实状态；若出现异常（页面加载后用户关闭、后端假成功、或从未开启），
+   * 自动弹窗重新授权或引导去设置。返回 true 表示已开启，false 表示未开启（内部已提示）。
+   */
+  async ensureNightlySubscriptionForCheckout() {
+    const realStatus = await queryNightlySubscribeStatus().catch(() => ({ supported: false, accepted: false }));
+    if (resolveNightlySubscribed(this.data.nightlySubscribed, realStatus)) {
+      return true;
+    }
+    // 检测到异常：清状态，然后按真实状态决定弹窗还是引导去设置
+    this.setData({ nightlySubscribed: false, subscribeConsent: false });
+    return this.attemptEnableSubscribe(realStatus);
   },
 
   async submitOrder() {
@@ -490,10 +597,10 @@ Page({
       });
       return;
     }
-    // 强制要求：必须已开启「总是保持」的每晚用餐提醒（由后端订阅状态判定）才能下单。
-    // 仅单次授权、未开启提醒均不允许下单。
-    if (!this.data.nightlySubscribed) {
-      wx.showToast({ title: '请先开启「总是保持」用餐提醒再下单', icon: 'none' });
+    // 订阅放行校验：实时查询微信侧真实状态；未开启或出现异常（页面加载后用户关闭、
+    // 后端假成功等）时自动弹出微信授权框让用户重新授权。授权成功才继续下单。
+    const subscribed = await this.ensureNightlySubscriptionForCheckout();
+    if (!subscribed) {
       return;
     }
     if (this.data.nightClosed) {

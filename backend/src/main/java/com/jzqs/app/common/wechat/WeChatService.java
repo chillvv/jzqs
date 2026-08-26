@@ -198,9 +198,10 @@ public class WeChatService {
             String response = restTemplate.postForObject(url, requestEntity, String.class);
             JsonNode json = objectMapper.readTree(response);
             if (json.has("errcode") && json.get("errcode").asInt() != 0) {
+                int errcode = json.get("errcode").asInt();
                 String errmsg = json.path("errmsg").asText();
                 log.error("微信订阅消息发送失败：{}", errmsg);
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, translateWechatSendError("送达提醒：" + errmsg));
+                throw wechatSendBusinessException(errcode, "送达提醒：" + errmsg);
             }
         } catch (HttpStatusCodeException e) {
             log.error(
@@ -264,9 +265,10 @@ public class WeChatService {
             String response = restTemplate.postForObject(url, new HttpEntity<>(requestBody, headers), String.class);
             JsonNode json = objectMapper.readTree(response);
             if (json.has("errcode") && json.get("errcode").asInt() != 0) {
+                int errcode = json.get("errcode").asInt();
                 String errmsg = json.get("errmsg").asText();
                 log.error("微信每晚提醒发送失败：{}", errmsg);
-                throw new BusinessException(ErrorCode.VALIDATION_ERROR, translateWechatSendError("每晚提醒：" + errmsg));
+                throw wechatSendBusinessException(errcode, "每晚提醒：" + errmsg);
             }
         } catch (HttpStatusCodeException e) {
             log.error(
@@ -367,6 +369,18 @@ public class WeChatService {
 
     private int normalizeNumberValue(int value) {
         return Math.max(0, value);
+    }
+
+    /**
+     * 根据微信订阅消息发送接口返回的 errcode 构造业务异常。
+     * 43101 表示「用户拒绝接收该消息」——通常是用户已在微信设置里关闭了订阅，
+     * 此时抛出专用的 SUBSCRIPTION_REVOKED_BY_USER，供调用方把库里的订阅状态纠正为已取消（避免假成功）。
+     */
+    private BusinessException wechatSendBusinessException(int errcode, String translatedMessage) {
+        if (errcode == 43101) {
+            return new BusinessException(ErrorCode.SUBSCRIPTION_REVOKED_BY_USER, translateWechatSendError(translatedMessage));
+        }
+        return new BusinessException(ErrorCode.VALIDATION_ERROR, translateWechatSendError(translatedMessage));
     }
 
     /**
