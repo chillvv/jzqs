@@ -196,27 +196,18 @@
         <text class="checkout-row-value">按餐量提供</text>
       </view>
 
-      <!-- 订阅授权引导：默认未勾选。只有点击勾选框并成功授权（微信弹窗，可勾「总是保持」）后，
-           才能收到送达提醒与每晚菜单推送；未授权则下单会被拦截并提示。
-           已授权过「总是」的用户显示为「已开启」，不可再取消。 -->
-      <view
-        class="subscribe-consent {{nightlySubscribed ? 'opened' : (subscribeConsent ? 'checked' : '')}} {{consentingSubscribe ? 'loading' : ''}}"
-        bindtap="toggleSubscribeConsent"
-      >
+      <!-- 订阅通知说明：下单时强制请求微信授权「取餐提醒」和「优惠券过期提醒」，
+           用户点击允许后即可收到当天通知；不要求勾选「总是保持」。 -->
+      <view class="subscribe-consent opened">
         <view class="subscribe-consent-check">
-          <text wx:if="{{consentingSubscribe}}" class="subscribe-consent-spinner"></text>
-          <text wx:elif="{{nightlySubscribed || subscribeConsent}}">✓</text>
+          <text>✓</text>
         </view>
         <view class="subscribe-consent-copy">
-          <view class="subscribe-consent-title">
-            {{nightlySubscribed ? '已开启用餐提醒' : '开启用餐提醒'}}
-          </view>
+          <view class="subscribe-consent-title">下单时需授权订阅通知</view>
           <view class="subscribe-consent-desc">
-            <block wx:if="{{nightlySubscribed}}">已授权「总是保持」，将收到送达通知与每日菜单推送</block>
-            <block wx:else>勾选后在微信弹窗选「总是保持」，可接收送达通知与每日菜单（未开启无法下单）</block>
+            点击「立即下单」后将弹出微信授权，请允许接收「取餐提醒」和「优惠券过期提醒」，当天即可收到通知
           </view>
         </view>
-        <view class="subscribe-consent-tag" wx:if="{{nightlySubscribed}}">长期有效</view>
       </view>
     </view>
   </view>

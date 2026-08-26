@@ -189,9 +189,11 @@ async function querySubscribeAuthorization() {
 }
 
 /**
- * 判断某个订阅模板是否处于「总是保持」的长期有效状态。
- * 需同时满足：订阅消息总开关打开 + 该模板 itemSettings 值为 'accept'。
- * 用户勾选了「总是保持」后 itemSettings 才会为 'accept'；关闭总开关或单独拒绝该模板都会失效。
+ * 判断某个订阅模板是否处于「总是保持」的长期有效状态，且订阅消息总开关已打开。
+ * 需同时满足：订阅消息总开关 mainSwitch 打开 + 该模板 itemSettings 值为 'accept'。
+ * 总开关是每晚菜单推送能否真正送达用户的前提：总开关关闭时，即使模板是 accept，微信也不会
+ * 把消息推给用户，菜单推送会静默失效。因此这里必须校验总开关——总开关关闭时由调用方引导用户
+ * 去微信设置里打开总开关，而不是放宽放行（放宽会让菜单推送静默失效）。
  */
 function isTemplateLongTermAccepted(setting, templateId) {
   if (!setting || !setting.supported || !setting.mainSwitch) {
