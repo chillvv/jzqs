@@ -149,6 +149,22 @@ public class OrderOperationRepository {
         jdbcTemplate.update("DELETE FROM dispatch_assignments WHERE meal_slot_order_id = ?", orderId);
     }
 
+    /**
+     * 编辑订单时，若把订单状态改为终态（DELIVERED/CANCELLED/REFUNDED），
+     * 同步派单分配记录，保证 meal_slot_orders.status 与 dispatch_assignments.status 始终一致，
+     * 避免后续派单/换骑手操作把已结束订单误纳入派单。
+     */
+    public void syncDispatchAssignmentForTerminalStatus(long orderId, String status) {
+        if ("DELIVERED".equals(status)) {
+            jdbcTemplate.update(
+                "UPDATE dispatch_assignments SET status = 'DELIVERED' WHERE meal_slot_order_id = ?",
+                orderId
+            );
+        } else if ("CANCELLED".equals(status) || "REFUNDED".equals(status)) {
+            jdbcTemplate.update("DELETE FROM dispatch_assignments WHERE meal_slot_order_id = ?", orderId);
+        }
+    }
+
     public WalletReserveContext findWalletReserveContext(long orderId) {
         return jdbcTemplate.query(
             """

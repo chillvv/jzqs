@@ -88,6 +88,8 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
         if (updated == 0) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "订单不存在");
         }
+        // 状态同步：编辑订单若把状态改为终态，同步派单分配记录，避免数据不一致。
+        orderOperationRepository.syncDispatchAssignmentForTerminalStatus(orderId, status);
         return new OrderProfileUpdateResponse(orderId, "UPDATED", addressId);
     }
 

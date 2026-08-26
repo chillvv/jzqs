@@ -186,14 +186,20 @@ class DispatchAssignmentModule {
             }
         }
 
-        // 更换骑手：把该区域所有「未完成」订单（不分午餐/晚餐）统一分配给新骑手，
-        // 已送达（DELIVERED）的历史单保持原骑手不动。
+        // 更换骑手：只转移该区域「今天及以后」且「未完成」的订单（不分午餐/晚餐），
+        // 之前日期（已送达/已取消）的历史单保持原骑手不动。
+        // 关键：按送餐日期 serve_date >= 今天过滤，避免把前几天的单子也捞进来；
+        // 同时校验 meal_slot_orders.status（订单真实状态），防止「已送达但分配记录未同步」的脏单触发派单报错。
         List<Long> orderIds = jdbcTemplate.query(
             """
                 SELECT da.meal_slot_order_id
                 FROM dispatch_assignments da
+                JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
+                JOIN daily_orders doo ON doo.id = mso.daily_order_id
                 WHERE da.area_code = ?
                   AND da.status IN ('PENDING', 'AREA_ASSIGNED', 'DISPATCHING')
+                  AND mso.status IN ('PENDING_DISPATCH', 'DISPATCHING')
+                  AND doo.serve_date >= CURRENT_DATE
                 ORDER BY da.sequence_number, da.id
                 """,
             (rs, rowNum) -> rs.getLong("meal_slot_order_id"),
