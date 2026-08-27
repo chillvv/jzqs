@@ -3,3 +3,4 @@ uploads
 *.log
 *.txt
 tmp_*
+target

@@ -1,8 +1,15 @@
 # syntax=docker/dockerfile:1
-# 注意：本镜像只负责运行 jar，构建由本地 maven 完成（见 build.sh）。
-# 本地编译命令示例：
-#   docker run --rm -v "$PWD":/app -v "$HOME/.m2":/root/.m2 -w /app maven:3.9.9-eclipse-temurin-17 mvn -B clean package -DskipTests
-# 编译产物：target/backend-0.0.1-SNAPSHOT.jar
+# 多阶段构建：Maven 编译 → JRE 运行
+# 每次 docker compose build backend 都会基于最新源码重新编译打包，
+# 彻底解决"容器里跑的是旧 jar"的问题。
+FROM maven:3.9.9-eclipse-temurin-17 AS build
+WORKDIR /build
+COPY pom.xml .
+# 先拉依赖并走缓存，未改动 pom 时后续构建复用
+RUN --mount=type=cache,target=/root/.m2 mvn -B dependency:go-offline
+COPY src ./src
+RUN --mount=type=cache,target=/root/.m2 mvn -B package -DskipTests
+
 FROM eclipse-temurin:17-jre
 WORKDIR /app
 
@@ -10,7 +17,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY target/backend-0.0.1-SNAPSHOT.jar app.jar
+COPY --from=build /build/target/backend-0.0.1-SNAPSHOT.jar app.jar
 
 EXPOSE 8080
 

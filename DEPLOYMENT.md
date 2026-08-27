@@ -1,6 +1,6 @@
 # jzqs 部署指南（必读）
 
-> **给所有 AI 助手/开发者的提醒**：修改任何代码后，**必须按本文档重新构建对应容器**，否则线上服务器运行的是旧版本。最常见的"我改了代码但页面没变"就是这个原因。
+> **核心原则**：线上代码永远跟随 `git main` 分支。改完代码 → `git push` → 部署。**手动部署**用 `./build.sh`，**自动部署**由 GitHub Actions 在 push 后自动完成。任何一步漏了都可能导致线上旧代码。
 
 ## 一、整体架构
 
@@ -12,9 +12,34 @@
 
 - 容器编排：根目录 `docker-compose.yml`
 - 反向代理：`Caddyfile`
-- 环境变量：根目录 `.env`
+- 环境变量：根目录 `.env`（不入库，服务器上保留一份）
 
-## 二、快速部署（推荐）
+## 二、部署方式（二选一）
+
+### 方式一：自动部署（推荐，已配置 GitHub Actions）
+
+```bash
+git add -A && git commit -m "..." && git push origin main
+```
+
+推送后 GitHub Actions 会自动 SSH 到服务器：
+`git pull` → `./build.sh backend` → `./build.sh admin`，约 5~10 分钟完成（后端多阶段构建含 mvn 编译）。
+
+> 首次需在 GitHub 仓库 Settings → Secrets and variables → Actions 配置：
+> - `SERVER_HOST`：服务器公网 IP
+> - `SERVER_USER`：`root`
+> - `SERVER_SSH_KEY`：服务器 `/root/.ssh/deploy_key` 的内容（生成命令见下）
+> - `SERVER_PORT`（可选，默认 22）
+
+生成 deploy key（服务器上执行一次）：
+
+```bash
+ssh-keygen -t ed25519 -f /root/.ssh/deploy_key -N "" -C "github-actions-deploy"
+cat /root/.ssh/deploy_key.pub >> ~/.ssh/authorized_keys
+cat /root/.ssh/deploy_key   # 复制内容到 GitHub Secrets 的 SERVER_SSH_KEY
+```
+
+### 方式二：手动部署
 
 ```bash
 cd /root/jzqs
@@ -26,38 +51,19 @@ cd /root/jzqs
 
 部署完成后浏览器**硬刷新**（`Ctrl+Shift+R` / `Cmd+Shift+R`）清除缓存。
 
-## 三、分模块部署细节
+## 三、分模块说明
 
-### 1. 前端 admin（管理后台）
+### 1. 后端 backend（Spring Boot）
 
-修改了 `admin/src/**` 下的任何文件后：
+- `backend/Dockerfile` 为**多阶段构建**：Maven 在镜像内编译最新源码 → JRE 运行。
+- 每次 `docker compose build backend` 都基于最新源码重新打包，**不存在"旧 jar"问题**。
+- **不要再手动挂载 jar、不要再单独 mvn 打包**（旧的 bind-mount 方案已废弃）。
+- 每次后端重启会**自动执行 Flyway 迁移**（`backend/src/main/resources/db/migration/V*.sql`），新增迁移脚本无需手动跑 SQL。
 
-```bash
-docker compose build admin   # 重新打包（内含 npm build）
-docker compose up -d admin   # 重启容器
-```
+### 2. 前端 admin（管理后台）
 
-**坑（本次已踩）**：
-- `admin/` 的 Dockerfile 内部执行 `npm run build`，`dist/` 是构建产物（gitignore 忽略），**修改源码后不 build，容器里永远是旧包**。
-- 部署后浏览器必须硬刷新，否则可能命中 nginx 缓存的旧 JS。
-
-### 2. 后端 backend（Spring Boot）
-
-修改了 `backend/src/**` 下任何文件后：
-
-```bash
-# 第一步：Maven 容器内打包 jar（本机无需安装 Maven）
-docker run --rm -v "$PWD":/app -v "$HOME/.m2":/root/.m2 -w /app \
-  maven:3.9.9-eclipse-temurin-17 mvn -B clean package -DskipTests
-
-# 第二步：重新构建并重启
-docker compose build backend
-docker compose up -d backend
-```
-
-**坑**：
-- 后端 Dockerfile 只是 `COPY target/backend-0.0.1-SNAPSHOT.jar`，**不编译源码**。必须先 mvn 打包生成 jar，再 build 容器。
-- 每次后端重启会**自动执行 Flyway 迁移**（`backend/src/main/resources/db/migration/V*.sql`），新增迁移脚本（如 `V18__xxx.sql`）无需手动跑 SQL。
+- `admin/Dockerfile` 内部含 `npm run build`，`docker compose build admin` 即重新打包。
+- 部署后浏览器必须硬刷新，否则可能命中浏览器缓存（与服务器无关）。
 
 ### 3. 数据库迁移
 
@@ -89,24 +95,26 @@ docker compose restart caddy
 
 ```bash
 docker compose ps                    # 所有容器应为 Up + healthy
-curl -s http://localhost/api/health  # 后端存活（或 /actuator/health）
+curl -s http://localhost/api/health  # 后端存活
 ```
 
 ## 五、常见问题排查
 
 | 症状 | 原因 | 解决 |
 |------|------|------|
-| 改完前端代码，刷新页面没变化 | 未重新 build admin 容器，或浏览器缓存 | `./build.sh admin` + 硬刷新 |
-| 后端接口返回旧逻辑 | 未重新打包 jar / 未重启 backend | `./build.sh backend` |
+| 改完前端代码，刷新页面没变化 | 浏览器缓存 | 硬刷新 `Ctrl+Shift+R` |
+| 后端接口返回旧逻辑 | 后端容器没重新构建/重启 | `./build.sh backend`（多阶段构建会重新编译） |
 | 新迁移脚本没生效 | 后端未重启 | 重启 backend，Flyway 自动执行 |
-| 容器起不来/健康检查失败 | 端口占用、jar 缺失、SQL 错误 | `docker compose logs backend` 查看日志 |
+| 容器起不来/健康检查失败 | 端口占用、编译失败、SQL 错误 | `docker compose logs backend` 查看日志 |
 | 域名无法访问 | Caddy 未重启 / 证书问题 | `docker compose restart caddy` |
+| GitHub Actions 部署失败 | Secrets 未配 / key 无效 | 检查 Settings→Secrets，重新 `cat /root/.ssh/deploy_key` 配置 |
 
 ## 六、回滚
 
 ```bash
-# 后端：切到旧代码重新打包即可
-cd /root/jzqs && ./build.sh backend
+# 后端：切到旧 commit 重新构建即可
+git checkout <旧commit> && ./build.sh backend
+git checkout main   # 回滚后切回主分支
 
 # 数据库：Flyway 不支持自动降级，需要手动写补偿 SQL
 ```
@@ -116,3 +124,22 @@ cd /root/jzqs && ./build.sh backend
 - `.env` 不入库，服务器上需保留一份。
 - `backend/uploads`（volume `backend_uploads`）存用户上传图片，**不要删除 volume**，否则图片丢失。
 - 所有容器 `restart: unless-stopped`，服务器重启后会自动拉起。
+- **安全**：MySQL 的 `3306` 端口当前映射到宿主机，若不需要公网直连数据库，建议改成只监听本机（`127.0.0.1:3306:3306`），外部访问走 SSH 隧道（见下节）。
+
+## 八、本地访问服务器数据库 / 日志（企业常见做法）
+
+### 数据库：SSH 隧道（不用把 3306 暴露公网）
+
+```bash
+# 本地终端执行：把服务器的 MySQL 映射到本机 3306
+ssh -N -L 3306:127.0.0.1:3306 root@你的服务器IP
+# 然后本地 Navicat / DataGrip / mysql 客户端连 127.0.0.1:3306 即可
+```
+
+### 日志：三种选择（从简到繁）
+
+1. **最简**：`docker logs -f jzqs-backend`（在服务器上实时看）
+2. **推荐**：VS Code 安装「Remote - SSH」扩展，本地 IDE 直接打开服务器 `/root/jzqs`，在集成终端里看日志、改代码、跑命令，体验与本地开发一致。
+3. **进阶**：部署 Dozzle（轻量 Docker 日志 Web UI）或 Loki + Grafana 集中日志，浏览器看全部容器日志。
+
+企业通常：数据库禁止暴露公网（SSH 隧道/跳板机访问），日志走集中采集（ELK/Loki/云厂商日志服务），并在本地 IDE 远程开发。
