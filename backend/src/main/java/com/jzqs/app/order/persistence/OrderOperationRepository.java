@@ -240,6 +240,18 @@ public class OrderOperationRepository {
         jdbcTemplate.update("DELETE FROM order_notes WHERE meal_slot_order_id = ?", orderId);
     }
 
+    /**
+     * 删除订单关联的售后工单。
+     *
+     * <p>aftersale_cases.meal_slot_order_id 上没有外键约束，删除订单时若不一并清理，
+     * 售后单就会变成"孤儿"：它仍是 PENDING，会被看板"待处理售后"计数统计到，
+     * 但售后列表因 INNER JOIN 订单查不出来 —— 表现为"看板显示 1 条、点进去却是空的"。
+     * 因此订单删除链路必须级联清理售后工单。
+     */
+    public int deleteAftersaleCases(long orderId) {
+        return jdbcTemplate.update("DELETE FROM aftersale_cases WHERE meal_slot_order_id = ?", orderId);
+    }
+
     public void deleteMealSlotOrder(long orderId) {
         jdbcTemplate.update("DELETE FROM meal_slot_orders WHERE id = ?", orderId);
     }

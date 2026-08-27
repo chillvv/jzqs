@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { directRefund, createOrderAftersale } from "../../../shared/api/http";
+import { createOrderAftersale } from "../../../shared/api/http";
 import { SafeTextarea } from "../../../shared/components/SafeInput";
 import { toast } from "../../../shared/components/Toast";
 import type { OrderPrepItemResponse } from "../../../shared/api/types";
@@ -17,7 +17,7 @@ interface Props {
 export function OrderPrepAftersaleModal({ isOpen, onClose, onSuccess, activeItem }: Props) {
   const [submittingOrderAftersale, setSubmittingOrderAftersale] = useState(false);
   const [orderAftersaleForm, setOrderAftersaleForm] = useState({
-    intent: "DIRECT_REFUND",
+    intent: "COMPENSATION",
     reasonText: "",
     remark: ""
   });
@@ -25,7 +25,7 @@ export function OrderPrepAftersaleModal({ isOpen, onClose, onSuccess, activeItem
   useEffect(() => {
     if (isOpen && activeItem) {
       setOrderAftersaleForm({
-        intent: "DIRECT_REFUND",
+        intent: "COMPENSATION",
         reasonText: `订单 #${activeItem.id} 售后处理`,
         remark: ""
       });
@@ -43,21 +43,13 @@ export function OrderPrepAftersaleModal({ isOpen, onClose, onSuccess, activeItem
 
     setSubmittingOrderAftersale(true);
     try {
-      if (orderAftersaleForm.intent === "DIRECT_REFUND") {
-        await directRefund(activeItem.id, {
-          reasonCode: "ADMIN_DIRECT_REFUND",
-          reasonText
-        });
-        toast("订单已直接退款");
-      } else {
-        await createOrderAftersale(activeItem.id, {
-          type: "COMPENSATION",
-          reasonCode: orderAftersaleForm.intent === "COMPENSATION" ? "ADMIN_COMPENSATION" : "ADMIN_EXCEPTION",
-          reasonText,
-          remark: remark || (orderAftersaleForm.intent === "REGISTER_ONLY" ? "已登记异常，等待后续处理" : "请前往售后台账继续处理")
-        });
-        toast(orderAftersaleForm.intent === "REGISTER_ONLY" ? "异常已登记到售后台账" : "补偿售后已创建");
-      }
+      await createOrderAftersale(activeItem.id, {
+        type: "COMPENSATION",
+        reasonCode: orderAftersaleForm.intent === "COMPENSATION" ? "ADMIN_COMPENSATION" : "ADMIN_EXCEPTION",
+        reasonText,
+        remark: remark || (orderAftersaleForm.intent === "REGISTER_ONLY" ? "已登记异常，等待后续处理" : "请前往售后台账继续处理")
+      });
+      toast(orderAftersaleForm.intent === "REGISTER_ONLY" ? "异常已登记到售后台账" : "补偿售后已创建");
       onClose();
       onSuccess();
     } catch (err: any) {
@@ -105,7 +97,6 @@ export function OrderPrepAftersaleModal({ isOpen, onClose, onSuccess, activeItem
           <label className="form-label">处理意图</label>
           <div className="action-chip-row">
             {[
-              { key: "DIRECT_REFUND", label: "直接退款" },
               { key: "COMPENSATION", label: "登记补偿" },
               { key: "REGISTER_ONLY", label: "登记异常" }
             ].map((option) => (

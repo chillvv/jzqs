@@ -303,7 +303,9 @@ public class MobileCustomerController {
         return ApiResponse.success(subscriptionRuleService.getRuleByCustomerId(customerId));
     }
 
-    @Idempotent(key = "subscription:update", ttlSeconds = 10)
+    // 修复：幂等键需包含请求体（includeBody=true）。否则暂停(enabled=false)后立即恢复(enabled=true)
+    //       会命中相同 key_hash 被误判为"重复提交"，恢复订阅被 REPEAT_SUBMISSION 拦截。
+    @Idempotent(key = "subscription:update", ttlSeconds = 10, includeBody = true)
     @PostMapping("/subscription-rule")
     public ApiResponse<MobileSubscriptionRuleResponse> updateSubscriptionRule(
         @RequestAttribute("customerId") Long customerId,

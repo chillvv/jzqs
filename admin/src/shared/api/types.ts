@@ -292,6 +292,7 @@ export type AdminAftersaleItemResponse = {
   customerPhone: string;
   serveDate: string;
   mealPeriod: string;
+  quantity: number;
   orderStatus: string;
   type: string;
   status: string;

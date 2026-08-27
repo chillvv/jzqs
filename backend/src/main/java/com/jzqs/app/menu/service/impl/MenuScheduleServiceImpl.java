@@ -51,13 +51,26 @@ public class MenuScheduleServiceImpl implements MenuScheduleService {
         int calories,
         String merchantNote
     ) {
+        // 修复：排期必须落在「包含 serveDate 的周」，否则菜单挂在旧周，
+        //       下单校验（mw.week_start_date = 当前周周一）永远匹配不上 → "未配置可售菜品"。
+        //       原实现 ORDER BY week_start_date ASC 取最旧的 DRAFT/PUBLISHED 周，属误用。
+        LocalDate parsedServeDate = LocalDate.parse(serveDate);
         Long weekId = jdbcTemplate.query(
-            "SELECT id FROM menu_weeks WHERE status = 'DRAFT' ORDER BY week_start_date ASC LIMIT 1",
-            rs -> rs.next() ? rs.getLong(1) : null
+            "SELECT id FROM menu_weeks WHERE week_start_date <= ? AND week_end_date >= ? ORDER BY week_start_date DESC LIMIT 1",
+            rs -> rs.next() ? rs.getLong(1) : null,
+            parsedServeDate,
+            parsedServeDate
         );
         if (weekId == null) {
+            // 目标周不存在时回退最近一周（DRAFT 优先）
             weekId = jdbcTemplate.query(
-                "SELECT id FROM menu_weeks WHERE status = 'PUBLISHED' ORDER BY week_start_date ASC LIMIT 1",
+                "SELECT id FROM menu_weeks WHERE status = 'DRAFT' ORDER BY week_start_date DESC LIMIT 1",
+                rs -> rs.next() ? rs.getLong(1) : null
+            );
+        }
+        if (weekId == null) {
+            weekId = jdbcTemplate.query(
+                "SELECT id FROM menu_weeks WHERE status = 'PUBLISHED' ORDER BY week_start_date DESC LIMIT 1",
                 rs -> rs.next() ? rs.getLong(1) : null
             );
         }

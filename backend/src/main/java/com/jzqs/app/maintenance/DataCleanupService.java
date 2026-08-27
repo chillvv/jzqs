@@ -39,6 +39,22 @@ public class DataCleanupService {
     private static final DateTimeFormatter RANGE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private static final DateTimeFormatter DISPLAY_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final String NEXT_AUTO_RUN_LABEL = "每日 03:00";
+
+    /**
+     * 通过 meal_slot_order_id 关联订单的子表清单，清理订单历史前必须先级联删除。
+     *
+     * <p>这些表在库上没有外键约束，一旦订单先被删除就会留下永久孤儿记录，
+     * 污染看板统计（如"待处理售后"出现点不开的幻数、"今日送达"多算）。
+     * 新增此类关联表时务必同步登记到这里。
+     */
+    private static final List<String> ORDER_CHILD_TABLES = List.of(
+        "aftersale_cases",
+        "delivery_receipts",
+        "dispatch_assignments",
+        "dispatch_batch_items",
+        "order_notes",
+        "customer_delivery_subscriptions"
+    );
     static final int MAINTENANCE_LOG_KEEP_COUNT = 10;
     private static final Set<String> BUSINESS_MODULE_KEYS = Set.of(
         "ORDER_HISTORY",
@@ -561,6 +577,23 @@ public class DataCleanupService {
 
     private MaintenanceCleanupModuleSummaryResponse cleanupOldOrders(CleanupRule rule) {
         LocalDate cutoffDate = cutoffDate(rule);
+        // 先清理即将被删除订单所关联的子表数据。
+        // 这些子表的 meal_slot_order_id 均无外键约束，若直接删订单会残留孤儿记录：
+        // 例如孤儿售后单会让看板"待处理售后"统计到列表里点不开的幻数；
+        // 孤儿配送回执会让"今日送达"和趋势图多算。因此必须先级联清理再删订单。
+        for (String childTable : ORDER_CHILD_TABLES) {
+            jdbcTemplate.update(
+                """
+                DELETE child
+                FROM %s child
+                JOIN meal_slot_orders mso ON mso.id = child.meal_slot_order_id
+                JOIN daily_orders do ON do.id = mso.daily_order_id
+                WHERE do.serve_date < ?
+                  AND mso.status IN ('DELIVERED', 'CANCELLED')
+                """.formatted(childTable),
+                cutoffDate
+            );
+        }
         int mealSlotCount = jdbcTemplate.update(
             """
             DELETE mso

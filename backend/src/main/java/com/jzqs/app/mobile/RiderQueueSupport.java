@@ -691,9 +691,6 @@ class RiderQueueSupport {
     private void ensureQueueBatchItem(long orderId, long riderProfileId, String areaCode, String assignmentStatus, Number assignmentSequenceNumber) {
         MealSlotContext orderContext = loadMealSlotContext(orderId);
         long batchId = ensureQueueBatch(orderId, riderProfileId, areaCode, orderContext.serveDate(), orderContext.mealPeriod());
-        int desiredSequence = assignmentSequenceNumber != null && assignmentSequenceNumber.intValue() > 0
-            ? assignmentSequenceNumber.intValue()
-            : nextBatchSequence(batchId);
         String desiredItemStatus = mapBatchItemStatus(assignmentStatus);
         List<BatchItemSnapshot> existingItems = jdbcTemplate.query("""
             SELECT id, batch_id, current_sequence, item_status
@@ -709,6 +706,10 @@ class RiderQueueSupport {
         ), orderId);
         Long previousBatchId = null;
         if (existingItems.isEmpty()) {
+            // 幂等插入：并发下若该订单已有批次项，则改为更新，避免撞 uk_dispatch_batch_items_order 唯一键。
+            // 序号统一用 batch 内 MAX+1（nextBatchSequence），不直接复用 dispatch_assignments.sequence_number，
+            // 防止区域序号与批次序号不一致时撞 uk_dispatch_batch_items_batch_sequence 唯一键，引发"数据冲突"。
+            int sequence = nextBatchSequence(batchId);
             jdbcTemplate.update("""
                 INSERT INTO dispatch_batch_items (
                     batch_id,
@@ -718,19 +719,23 @@ class RiderQueueSupport {
                     item_status,
                     manually_adjusted
                 ) VALUES (?, ?, ?, ?, ?, FALSE)
-                """, batchId, orderId, desiredSequence, desiredSequence, desiredItemStatus);
+                ON DUPLICATE KEY UPDATE
+                    batch_id = VALUES(batch_id),
+                    current_sequence = VALUES(current_sequence),
+                    suggested_sequence = VALUES(suggested_sequence),
+                    item_status = VALUES(item_status)
+                """, batchId, orderId, sequence, sequence, desiredItemStatus);
         } else {
             BatchItemSnapshot existing = existingItems.get(0);
             long existingBatchId = existing.batchId();
-            int finalSequence = assignmentSequenceNumber != null && assignmentSequenceNumber.intValue() > 0
-                ? assignmentSequenceNumber.intValue()
-                : existing.currentSequence();
-            if (existingBatchId != batchId) {
+            boolean movingBatch = existingBatchId != batchId;
+            if (movingBatch) {
                 previousBatchId = existingBatchId;
             }
-            if (existingBatchId != batchId
-                || existing.currentSequence() != finalSequence
-                || !desiredItemStatus.equals(existing.itemStatus())) {
+            // 跨批次迁移时用目标批次的 MAX+1，避免与目标批次已有序号冲突；
+            // 已在正确批次内时保持原序号不动，只同步状态。
+            int finalSequence = movingBatch ? nextBatchSequence(batchId) : existing.currentSequence();
+            if (movingBatch || !desiredItemStatus.equals(existing.itemStatus())) {
                 jdbcTemplate.update("""
                     UPDATE dispatch_batch_items
                     SET batch_id = ?,
@@ -761,9 +766,10 @@ class RiderQueueSupport {
         if (!batchIds.isEmpty()) {
             return batchIds.get(0);
         }
-        long batchId = insertAndReturnId(
+        // 幂等创建批次：并发物化时可能同时插入同一批次，INSERT IGNORE 避免撞 uk_dispatch_batches_scope 唯一键。
+        jdbcTemplate.update(
             """
-                INSERT INTO dispatch_batches (
+                INSERT IGNORE INTO dispatch_batches (
                     serve_date,
                     meal_period,
                     rider_profile_id,
@@ -783,13 +789,27 @@ class RiderQueueSupport {
             0,
             1
         );
-        jdbcTemplate.update(
-            "UPDATE dispatch_assignments SET rider_profile_id = ?, area_code = ? WHERE meal_slot_order_id = ?",
-            riderProfileId,
-            areaCode,
-            orderId
-        );
-        return batchId;
+        // 重新查询已存在的批次（并发下可能由其他线程刚创建），避免返回空 id。
+        List<Long> refreshedIds = jdbcTemplate.query("""
+            SELECT id
+            FROM dispatch_batches
+            WHERE serve_date = ?
+              AND meal_period = ?
+              AND rider_profile_id = ?
+              AND area_code <=> ?
+            ORDER BY id ASC
+            LIMIT 1
+            """, (rs, rowNum) -> rs.getLong("id"), serveDate, mealPeriod, riderProfileId, areaCode);
+        if (!refreshedIds.isEmpty()) {
+            jdbcTemplate.update(
+                "UPDATE dispatch_assignments SET rider_profile_id = ?, area_code = ? WHERE meal_slot_order_id = ?",
+                riderProfileId,
+                areaCode,
+                orderId
+            );
+            return refreshedIds.get(0);
+        }
+        return 0L;
     }
 
     private int nextBatchSequence(long batchId) {

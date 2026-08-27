@@ -21,6 +21,8 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -28,6 +30,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 class DispatchAssignmentModule {
+    private static final Logger log = LoggerFactory.getLogger(DispatchAssignmentModule.class);
     private static final int DISPATCH_EXCEPTION_RETENTION_DAYS = 30;
     private static final int DISPATCH_REASSIGNMENT_RETENTION_DAYS = 30;
     private static final String DEFAULT_OPERATOR = "SYSTEM";
@@ -68,6 +71,7 @@ class DispatchAssignmentModule {
                 if (orderId == null) {
                     throw new BusinessException(ErrorCode.VALIDATION_ERROR, "订单编号不能为空");
                 }
+                log.info("批量派单处理订单: orderId={} area={} operator={}", orderId, normalizedAreaCode, updatedBy);
                 DispatchOrderContext orderContext = loadOrderContext(orderId);
                 String defaultRiderName = resolveDefaultRiderName(normalizedAreaCode);
                 if (defaultRiderName != null) {
@@ -121,6 +125,7 @@ class DispatchAssignmentModule {
                 }
                 successCount++;
             } catch (RuntimeException ex) {
+                log.warn("批量派单单个订单失败: orderId={} area={} 原因={}", orderId, normalizedAreaCode, ex.getMessage());
                 failures.add(new BatchOperationResponse.FailureItem(
                     orderId,
                     "BATCH_ASSIGN_FAILED",
@@ -128,6 +133,7 @@ class DispatchAssignmentModule {
                 ));
             }
         }
+        log.info("批量派单完成: area={} 成功={} 失败={}", normalizedAreaCode, successCount, failures.size());
         publishDispatchEvent("dispatch.assignment.changed", normalizedAreaCode, null, successCount);
         return new BatchOperationResponse(successCount, failures.size(), failures);
     }
@@ -179,6 +185,7 @@ class DispatchAssignmentModule {
                 normalizedAreaCode
             );
             if (occupiedElsewhere != null && occupiedElsewhere > 0) {
+                log.warn("拦截跨区指派: rider={} 已归属其他区域，目标区域={}, 请求餐段={}", riderName, normalizedAreaCode, finalMealPeriod);
                 throw new BusinessException(
                     ErrorCode.VALIDATION_ERROR,
                     "骑手「" + riderName + "」已归属其他区域，不能跨区分配。请在本区域骑手范围内选择。"
@@ -294,6 +301,8 @@ class DispatchAssignmentModule {
             areaCode,
             riderProfileId
         );
+        log.info("区域-骑手绑定双向同步完成: area={} riderProfileId={}（已释放其他区域绑定并回写 default_area_code）",
+            areaCode, riderProfileId);
     }
 
     DispatchAreaOrderAssignResponse assignRiderToAreaOrder(String areaCode, long orderId, String riderName) {
@@ -315,6 +324,7 @@ class DispatchAssignmentModule {
                 normalizedAreaCode
             );
             if (occupiedElsewhere != null && occupiedElsewhere > 0) {
+                log.warn("拦截跨区指派(单订单): rider={} 已归属其他区域，目标区域={}, orderId={}", riderName, normalizedAreaCode, orderId);
                 throw new BusinessException(
                     ErrorCode.VALIDATION_ERROR,
                     "骑手「" + riderName + "」已归属其他区域，不能跨区分配。请在本区域骑手范围内选择。"
@@ -484,6 +494,13 @@ class DispatchAssignmentModule {
             orderId
         );
         if (statusUpdated == 0) {
+            String currentStatus = jdbcTemplate.queryForObject(
+                "SELECT status FROM meal_slot_orders WHERE id = ?",
+                String.class,
+                orderId
+            );
+            log.warn("派单被拒绝: orderId={} rider={} area={} 订单状态={} 非 PENDING_DISPATCH/DISPATCHING",
+                orderId, riderName, areaCode, currentStatus);
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "订单状态已变更，无法派单，请刷新后重试");
         }
         DispatchOrderContext orderContext = loadOrderContext(orderId);
@@ -550,6 +567,8 @@ class DispatchAssignmentModule {
             finalSequenceNumber,
             orderId
         );
+        log.info("订单派单成功: orderId={} rider={} riderProfileId={} area={} seq={}",
+            orderId, riderName, riderProfileId, areaCode, finalSequenceNumber);
     }
 
     private int autoAssignRememberedPendingOrders(String mealPeriod) {
@@ -637,6 +656,7 @@ class DispatchAssignmentModule {
             }
             assignedCount++;
         }
+        log.info("自动派单(记忆归区)完成: mealPeriod={} 处理订单数={}", finalMealPeriod, assignedCount);
         return assignedCount;
     }
 
@@ -734,6 +754,8 @@ class DispatchAssignmentModule {
                 addressId,
                 mealPeriod
             );
+            log.info("地址绑定刷新: customer={} address={} mealPeriod={} area={} riderProfileId={} reason={}",
+                customerId, addressId, mealPeriod, areaCode, riderProfileId, updatedReason);
             return;
         }
         jdbcTemplate.update(
@@ -758,6 +780,8 @@ class DispatchAssignmentModule {
             riderProfileId,
             updatedReason
         );
+        log.info("地址绑定新建: customer={} address={} mealPeriod={} area={} riderProfileId={} reason={}",
+            customerId, addressId, mealPeriod, areaCode, riderProfileId, updatedReason);
     }
 
     private Long resolveDefaultRiderProfileId(String areaCode) {
@@ -896,6 +920,8 @@ class DispatchAssignmentModule {
                 addressId,
                 mealPeriod
             );
+            log.info("派单同步地址绑定(UPDATE): customer={} address={} area={} riderProfileId={}",
+                customerId, addressId, areaCode, riderProfileId);
             return;
         }
         jdbcTemplate.update(
@@ -908,6 +934,8 @@ class DispatchAssignmentModule {
             riderProfileId,
             "AREA_CONFIRMED"
         );
+        log.info("派单同步地址绑定(INSERT): customer={} address={} area={} riderProfileId={}",
+            customerId, addressId, areaCode, riderProfileId);
     }
 
     private void publishDispatchEvent(String eventType, String areaCode, String riderName, Object orderId) {

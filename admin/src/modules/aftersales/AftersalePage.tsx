@@ -162,7 +162,12 @@ export function AftersalePage() {
 
   function openResolveModal(item: AdminAftersaleItemResponse) {
     setSelectedCase(item);
-    setResolveForm(buildAftersaleResolveFormState(item.type));
+    const form = buildAftersaleResolveFormState(item.type);
+    // 退款统一退回该订单的餐数，数量固定为该单餐数，不允许手动修改。
+    if (item.type === "REFUND") {
+      form.walletDelta = Math.max(item.quantity || 1, 1);
+    }
+    setResolveForm(form);
   }
 
   function closeResolveModal() {
@@ -189,7 +194,11 @@ export function AftersalePage() {
     setResolveForm((current) => ({
       ...current,
       action,
-      walletDelta: action === "REJECT" || action === "REGISTER_ONLY" ? 0 : Math.max(current.walletDelta, 1)
+      walletDelta: action === "REJECT" || action === "REGISTER_ONLY"
+        ? 0
+        : action === "REFUND_TO_WALLET"
+          ? Math.max(selectedCase?.quantity || 1, 1)
+          : Math.max(current.walletDelta, 1)
     }));
   }
 
@@ -758,12 +767,13 @@ export function AftersalePage() {
                   <label className="form-label">结算信息</label>
                   <div style={{ display: "grid", gap: "12px", gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
                     <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">餐次数量</label>
+                      <label className="form-label">{resolveForm.action === "REFUND_TO_WALLET" ? "退回餐数" : "餐次数量"}</label>
                       <SafeInput
                         className="form-control"
                         type="number"
                         min={resolveForm.action === "REGISTER_ONLY" ? "0" : "1"}
-                        value={resolveForm.walletDelta}
+                        disabled={resolveForm.action === "REFUND_TO_WALLET"}
+                        value={resolveForm.action === "REFUND_TO_WALLET" ? (selectedCase.quantity || 1) : resolveForm.walletDelta}
                         onValueChange={(value) => setResolveForm((current) => ({
                           ...current,
                           walletDelta: resolveForm.action === "REGISTER_ONLY"
@@ -771,46 +781,55 @@ export function AftersalePage() {
                             : Math.max(1, Number(value) || 1)
                         }))}
                       />
+                      {resolveForm.action === "REFUND_TO_WALLET" && (
+                        <div style={{ marginTop: "6px", color: "var(--text-sub)", fontSize: "12px" }}>
+                          退款固定退回该订单 {selectedCase.quantity || 1} 餐次，不可修改。
+                        </div>
+                      )}
                     </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">结算损耗餐数</label>
-                      <SafeInput
-                        className="form-control"
-                        type="number"
-                        min="0"
-                        value={resolveForm.settledLossMeals}
-                        onValueChange={(value) => setResolveForm((current) => ({
-                          ...current,
-                          settledLossMeals: Math.max(0, Number(value) || 0)
-                        }))}
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">补零餐</label>
-                      <SafeInput
-                        className="form-control"
-                        type="number"
-                        min="0"
-                        value={resolveForm.giftZeroMealCount}
-                        onValueChange={(value) => setResolveForm((current) => ({
-                          ...current,
-                          giftZeroMealCount: Math.max(0, Number(value) || 0)
-                        }))}
-                      />
-                    </div>
-                    <div className="form-group" style={{ marginBottom: 0 }}>
-                      <label className="form-label">果蔬汁</label>
-                      <SafeInput
-                        className="form-control"
-                        type="number"
-                        min="0"
-                        value={resolveForm.giftVeggieJuiceCount}
-                        onValueChange={(value) => setResolveForm((current) => ({
-                          ...current,
-                          giftVeggieJuiceCount: Math.max(0, Number(value) || 0)
-                        }))}
-                      />
-                    </div>
+                    {resolveForm.action !== "REFUND_TO_WALLET" && (
+                      <>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">结算损耗餐数</label>
+                          <SafeInput
+                            className="form-control"
+                            type="number"
+                            min="0"
+                            value={resolveForm.settledLossMeals}
+                            onValueChange={(value) => setResolveForm((current) => ({
+                              ...current,
+                              settledLossMeals: Math.max(0, Number(value) || 0)
+                            }))}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">补零餐</label>
+                          <SafeInput
+                            className="form-control"
+                            type="number"
+                            min="0"
+                            value={resolveForm.giftZeroMealCount}
+                            onValueChange={(value) => setResolveForm((current) => ({
+                              ...current,
+                              giftZeroMealCount: Math.max(0, Number(value) || 0)
+                            }))}
+                          />
+                        </div>
+                        <div className="form-group" style={{ marginBottom: 0 }}>
+                          <label className="form-label">果蔬汁</label>
+                          <SafeInput
+                            className="form-control"
+                            type="number"
+                            min="0"
+                            value={resolveForm.giftVeggieJuiceCount}
+                            onValueChange={(value) => setResolveForm((current) => ({
+                              ...current,
+                              giftVeggieJuiceCount: Math.max(0, Number(value) || 0)
+                            }))}
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               )}

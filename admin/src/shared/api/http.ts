@@ -66,8 +66,18 @@ import { ADMIN_AUTH_STORAGE_KEY, parseAdminAuthSession } from "../../modules/aut
 
 export function extractAdminApiErrorMessage(error: unknown, fallback = "请求失败") {
   if (typeof error === "object" && error !== null) {
-    const errorLike = error as { response?: { data?: { message?: string } }; message?: string };
-    return errorLike.response?.data?.message || errorLike.message || fallback;
+    const errorLike = error as { response?: { data?: { message?: string } }; message?: string; code?: string };
+    if (errorLike.response?.data?.message) {
+      return errorLike.response.data.message;
+    }
+    // 网络层错误（axios 超时 / 连接失败）：统一转成中文，避免直接展示英文
+    if (errorLike.code === "ECONNABORTED" || /^timeout of \d+ms exceeded$/i.test(String(errorLike.message))) {
+      return "请求超时，请稍后重试";
+    }
+    if (String(errorLike.message).toLowerCase() === "network error") {
+      return "网络连接失败，请检查网络";
+    }
+    return errorLike.message || fallback;
   }
   return typeof error === "string" ? error : fallback;
 }
@@ -282,14 +292,6 @@ export async function createOrderAftersale(orderId: number, payload: {
   remark?: string;
 }) {
   const response = await http.post<ApiResponse<{ afterSaleId: number; status: string }>>(`/api/admin/orders/${orderId}/after-sales`, payload);
-  return response.data.data;
-}
-
-export async function directRefund(orderId: number, payload: {
-  reasonCode: string;
-  reasonText: string;
-}) {
-  const response = await http.post<ApiResponse<{ afterSaleId: number; status: string }>>(`/api/admin/orders/${orderId}/direct-refund`, payload);
   return response.data.data;
 }
 

@@ -17,6 +17,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -24,6 +26,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 class DispatchRiderAdminModule {
+    private static final Logger log = LoggerFactory.getLogger(DispatchRiderAdminModule.class);
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final JdbcTemplate jdbcTemplate;
@@ -169,6 +172,8 @@ class DispatchRiderAdminModule {
         if (normalizedAreaCode != null && active) {
             areaBindingUpdater.update(normalizedAreaCode, null, riderId, null, updatedBy);
         }
+        log.info("创建骑手: riderId={} name={} phone={} area={} employment={} operator={}",
+            riderId, riderName, phone, normalizedAreaCode, employmentStatus, updatedBy);
         return new DispatchRiderProfileUpsertResponse(
             riderId,
             riderName,
@@ -233,6 +238,8 @@ class DispatchRiderAdminModule {
             riderName, riderId
         );
         if (!java.util.Objects.equals(oldAreaCode, normalizedAreaCode)) {
+            log.info("骑手改区域(双写同步): riderId={} 旧区域={} 新区域={} operator={}",
+                riderId, oldAreaCode, normalizedAreaCode, updatedBy);
             // 双向同步：先把该骑手从旧区域的默认骑手中释放。
             jdbcTemplate.update(
                 """
@@ -431,6 +438,7 @@ class DispatchRiderAdminModule {
             "UPDATE rider_profiles SET default_area_code = NULL WHERE id = ?",
             riderId
         );
+        log.info("禁用骑手并释放区域绑定: riderId={} operator={}", riderId, assignedBy);
         return new DispatchRiderStatusResponse(
             riderId,
             "DISABLED"

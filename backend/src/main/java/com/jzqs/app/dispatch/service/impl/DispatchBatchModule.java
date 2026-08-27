@@ -19,7 +19,7 @@ class DispatchBatchModule {
 
     int ensureBatchItem(long orderId, long riderProfileId, String areaCode, LocalDate serveDate, String mealPeriod) {
         List<Long> batchIds = jdbcTemplate.query(
-            "SELECT id FROM dispatch_batches WHERE serve_date = ? AND meal_period = ? AND rider_profile_id = ? AND area_code = ?",
+            "SELECT id FROM dispatch_batches WHERE serve_date = ? AND meal_period = ? AND rider_profile_id = ? AND area_code = ? ORDER BY id ASC LIMIT 1",
             (rs, rowNum) -> rs.getLong("id"),
             serveDate,
             mealPeriod,
@@ -29,7 +29,7 @@ class DispatchBatchModule {
         long batchId;
         if (batchIds.isEmpty()) {
             batchId = insertAndReturnId(
-                "INSERT INTO dispatch_batches (serve_date, meal_period, rider_profile_id, area_code, batch_status, total_count, delivered_count, current_sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT IGNORE INTO dispatch_batches (serve_date, meal_period, rider_profile_id, area_code, batch_status, total_count, delivered_count, current_sequence) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 serveDate,
                 mealPeriod,
                 riderProfileId,
@@ -39,6 +39,20 @@ class DispatchBatchModule {
                 0,
                 1
             );
+            // INSERT IGNORE 撞唯一键时返回 0，重新查询已有批次，保证拿到确定且唯一的 batch id。
+            if (batchId == 0) {
+                List<Long> refreshed = jdbcTemplate.query(
+                    "SELECT id FROM dispatch_batches WHERE serve_date = ? AND meal_period = ? AND rider_profile_id = ? AND area_code = ? ORDER BY id ASC LIMIT 1",
+                    (rs, rowNum) -> rs.getLong("id"),
+                    serveDate,
+                    mealPeriod,
+                    riderProfileId,
+                    areaCode
+                );
+                if (!refreshed.isEmpty()) {
+                    batchId = refreshed.get(0);
+                }
+            }
         } else {
             batchId = batchIds.get(0);
         }
@@ -51,8 +65,9 @@ class DispatchBatchModule {
         );
         if (existingBatchIds.isEmpty()) {
             int nextSequence = nextBatchSequence(batchId);
+            // 幂等插入：并发下若该订单已有批次项则更新，避免静默丢失导致骑手端物化时缺项。
             jdbcTemplate.update(
-                "INSERT IGNORE INTO dispatch_batch_items (batch_id, meal_slot_order_id, current_sequence, suggested_sequence, item_status, manually_adjusted) VALUES (?, ?, ?, ?, ?, FALSE)",
+                "INSERT INTO dispatch_batch_items (batch_id, meal_slot_order_id, current_sequence, suggested_sequence, item_status, manually_adjusted) VALUES (?, ?, ?, ?, ?, FALSE) ON DUPLICATE KEY UPDATE batch_id = VALUES(batch_id), current_sequence = VALUES(current_sequence), suggested_sequence = VALUES(suggested_sequence)",
                 batchId,
                 orderId,
                 nextSequence,

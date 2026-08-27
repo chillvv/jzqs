@@ -34,12 +34,37 @@ fail()  { printf "\033[1;31m[FAIL]\033[0m %s\n" "$*" >&2; exit 1; }
 
 build_backend_jar() {
   info "用 Maven 容器打包后端 jar ..."
-  docker run --rm \
-    -v "$PWD":/app \
-    -v "$HOME/.m2":/root/.m2 \
-    -w /app/backend \
-    "$MAVEN_IMAGE" \
-    mvn -B clean package -DskipTests
+  # 测试默认跳过（兼容旧流程）；RUN_BACKEND_TESTS=1 时真实执行测试，失败即终止构建。
+  # 集成测试连宿主 MySQL 的 jzqs_test 库（由 backend/scripts/init-test-db.sh 初始化），
+  # maven 容器通过 host.docker.internal 访问宿主，可用 TEST_DB_URL 覆盖。
+  if [ "${RUN_BACKEND_TESTS:-0}" = "1" ]; then
+    info "RUN_BACKEND_TESTS=1：执行后端全部测试（JUnit + 真实 MySQL 集成测试）..."
+    docker run --rm \
+      -v "$PWD":/app \
+      -v "$HOME/.m2":/root/.m2 \
+      --add-host=host.docker.internal:host-gateway \
+      -e TEST_DB_URL="${TEST_DB_URL:-jdbc:mysql://host.docker.internal:3306/jzqs_test?useUnicode=true\&characterEncoding=utf8\&serverTimezone=Asia/Shanghai}" \
+      -e TEST_DB_USER="${TEST_DB_USER:-jzqs}" \
+      -e TEST_DB_PASSWORD="${TEST_DB_PASSWORD:-jzqs_password_123}" \
+      -w /app/backend \
+      "$MAVEN_IMAGE" \
+      mvn -B clean test || fail "后端测试失败，构建终止（请先运行 backend/scripts/init-test-db.sh 初始化测试库）"
+    info "后端测试全部通过，继续打包 jar ..."
+    docker run --rm \
+      -v "$PWD":/app \
+      -v "$HOME/.m2":/root/.m2 \
+      -w /app/backend \
+      "$MAVEN_IMAGE" \
+      mvn -B package -DskipTests
+  else
+    docker run --rm \
+      -v "$PWD":/app \
+      -v "$HOME/.m2":/root/.m2 \
+      -w /app/backend \
+      "$MAVEN_IMAGE" \
+      mvn -B clean package -DskipTests
+    warn "测试未执行（RUN_BACKEND_TESTS=1 可开启；生产部署建议开启并在 CI 中提供测试库）"
+  fi
   [ -f "$JAR_PATH" ] || fail "打包失败：未生成 $JAR_PATH"
   ok "后端 jar 已生成：$JAR_PATH"
 }

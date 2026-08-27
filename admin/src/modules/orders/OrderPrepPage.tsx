@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import useSWR from "swr";
 import {
   swrFetcher,
   assignDispatch,
   deleteDeliveryReceipt,
-  deleteOrder,
+  cancelOrder,
   cancelSubscriptionConfirmation,
   confirmSubscription,
   createManualOrder,
@@ -21,8 +21,6 @@ import {
   applyOrderSpecialDispatch,
   clearOrderSpecialDispatch,
   checkSubscriptionPreview,
-  createOrderAftersale,
-  directRefund,
   searchManualCreateCustomers
 } from "../../shared/api/http";
 import type { AdminMenuWeekResponse, DispatchAreaBindingResponse, DispatchManagedRiderResponse, ManualCreateCustomerSearchResponse, OrderPrepItemResponse, OrderPrepStatsResponse, SubscriptionConfirmationItem, SubscriptionPreviewItem, SubscriptionPreviewCheckResponse } from "../../shared/api/types";
@@ -58,7 +56,7 @@ import {
   resolveManualCreateMenuOptions,
   shouldShowManualCustomerEmptyState
 } from "./manualCreateOrder.helpers";
-import { Printer, CheckCircle, Search, RotateCcw, UserPlus, X, Bot, MapPin, ChevronLeft, ChevronRight, Trash2, AlertTriangle, Copy, CalendarDays } from "lucide-react";
+import { Printer, CheckCircle, Search, RotateCcw, UserPlus, X, Bot, MapPin, ChevronLeft, ChevronRight, AlertTriangle, Copy, CalendarDays } from "lucide-react";
 import { OrderPrepAssignModal } from "./components/OrderPrepAssignModal";
 import { OrderPrepChangeAddressModal } from "./components/OrderPrepChangeAddressModal";
 import { OrderPrepEditModal } from "./components/OrderPrepEditModal";
@@ -120,18 +118,11 @@ export function OrderPrepPage() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isSpecialProcessOpen, setIsSpecialProcessOpen] = useState(false);
   const [isSubscriptionPreviewOpen, setIsSubscriptionPreviewOpen] = useState(false);
-  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [isOrderDetailOpen, setIsOrderDetailOpen] = useState(false);
   const [isRemarkLabelOpen, setIsRemarkLabelOpen] = useState(false);
   const [isChangeAddressOpen, setIsChangeAddressOpen] = useState(false);
   const [activeItem, setActiveItem] = useState<OrderPrepItemResponse | null>(null);
   const [orderAftersaleItem, setOrderAftersaleItem] = useState<OrderPrepItemResponse | null>(null);
-  const [orderAftersaleForm, setOrderAftersaleForm] = useState({
-    intent: "DIRECT_REFUND",
-    reasonText: "商家后台售后处理",
-    remark: ""
-  });
-  const [submittingOrderAftersale, setSubmittingOrderAftersale] = useState(false);
 
   // Subscription Bulk Import state
   const [previewItems, setPreviewItems] = useState<SubscriptionPreviewItem[]>([]);
@@ -198,7 +189,9 @@ export function OrderPrepPage() {
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [submittingEdit, setSubmittingEdit] = useState(false);
   const [submittingSpecialProcess, setSubmittingSpecialProcess] = useState(false);
-  const [submittingDelete, setSubmittingDelete] = useState(false);
+  const [submittingRefund, setSubmittingRefund] = useState(false);
+  const [isRefundConfirmOpen, setIsRefundConfirmOpen] = useState(false);
+  const [refundTargetItem, setRefundTargetItem] = useState<OrderPrepItemResponse | null>(null);
   const [processingConfirmationId, setProcessingConfirmationId] = useState<number | null>(null);
   const [processingConfirmationAction, setProcessingConfirmationAction] = useState<"confirm" | "cancel" | null>(null);
   const [assignForm, setAssignForm] = useState({ riderName: "", areaCode: "" });
@@ -252,11 +245,6 @@ export function OrderPrepPage() {
       deliveryMealPeriod: item.deliveryMealPeriod === "DINNER" ? "DINNER" : "LUNCH"
     });
     setIsSpecialProcessOpen(true);
-  }
-
-  function openDeleteConfirm(item: OrderPrepItemResponse) {
-    setActiveItem(item);
-    setIsDeleteConfirmOpen(true);
   }
 
   function openChangeAddressModal(item: OrderPrepItemResponse) {
@@ -430,6 +418,22 @@ export function OrderPrepPage() {
   useEffect(() => {
     setCurrentPage(1);
   }, [items, keywordFilter, mealPeriodFilter, sourceFilter, statusFilter, remarkFilter]);
+
+  // 切换营业日期时重置订单列表筛选条件，避免旧筛选（如搜索关键字/状态/餐次）残留到新日期的数据上，
+  // 造成"列表只显示部分订单"的假象。组件挂载时 ref 与 filterDate 相同，不会误清已有记忆。
+  const lastServeDateRef = useRef(filterDate);
+  useEffect(() => {
+    if (lastServeDateRef.current === filterDate) {
+      return;
+    }
+    lastServeDateRef.current = filterDate;
+    setKeywordFilter("");
+    setSourceFilter("ALL");
+    setStatusFilter("ALL");
+    setRemarkFilter("ALL");
+    setMealPeriodFilter("LUNCH");
+    setCurrentPage(1);
+  }, [filterDate]);
 
   useEffect(() => {
     setActiveTab((currentTab) => {
@@ -605,73 +609,33 @@ export function OrderPrepPage() {
 
   function openOrderAftersaleModal(item: OrderPrepItemResponse) {
     setOrderAftersaleItem(item);
-    setOrderAftersaleForm({
-      intent: "DIRECT_REFUND",
-      reasonText: `订单 #${item.id} 售后处理`,
-      remark: ""
-    });
   }
 
   function closeOrderAftersaleModal() {
     setOrderAftersaleItem(null);
-    setOrderAftersaleForm({
-      intent: "DIRECT_REFUND",
-      reasonText: "商家后台售后处理",
-      remark: ""
-    });
   }
 
-  async function handleOrderAftersaleSubmit() {
-    if (!orderAftersaleItem) {
-      return;
-    }
-    const reasonText = orderAftersaleForm.reasonText.trim();
-    const remark = orderAftersaleForm.remark.trim();
-    if (!reasonText) {
-      toast("请填写售后原因", "error");
-      return;
-    }
-
-    setSubmittingOrderAftersale(true);
-    try {
-      if (orderAftersaleForm.intent === "DIRECT_REFUND") {
-        await directRefund(orderAftersaleItem.id, {
-          reasonCode: "ADMIN_DIRECT_REFUND",
-          reasonText
-        });
-        toast("订单已直接退款");
-      } else {
-        await createOrderAftersale(orderAftersaleItem.id, {
-          type: "COMPENSATION",
-          reasonCode: orderAftersaleForm.intent === "COMPENSATION" ? "ADMIN_COMPENSATION" : "ADMIN_EXCEPTION",
-          reasonText,
-          remark: remark || (orderAftersaleForm.intent === "REGISTER_ONLY" ? "已登记异常，等待后续处理" : "请前往售后台账继续处理")
-        });
-        toast(orderAftersaleForm.intent === "REGISTER_ONLY" ? "异常已登记到售后台账" : "补偿售后已创建");
-      }
-      closeOrderAftersaleModal();
-      await reloadOrders();
-    } catch (err: any) {
-      toast(err?.response?.data?.message || err?.message || "售后处理失败", "error");
-    } finally {
-      setSubmittingOrderAftersale(false);
-    }
+  function openRefundConfirm(item: OrderPrepItemResponse) {
+    setRefundTargetItem(item);
+    setIsRefundConfirmOpen(true);
   }
 
-  async function handleDelete(item: OrderPrepItemResponse) {
-    if (submittingDelete) return;
-    setSubmittingDelete(true);
+  async function handleRefundOrder(item: OrderPrepItemResponse) {
+    if (submittingRefund) return;
+    setSubmittingRefund(true);
     try {
-      await deleteOrder(item.id);
-      setIsDeleteConfirmOpen(false);
+      await cancelOrder(item.id);
+      setIsRefundConfirmOpen(false);
+      setRefundTargetItem(null);
+      setIsOrderDetailOpen(false);
       setActiveItem(null);
       await reloadOrders();
-      toast("订单已删除");
+      toast("退款成功，已退回餐次");
     } catch (err: any) {
-      toast(getErrorMessage(err, "删除订单失败"), "error");
+      toast(getErrorMessage(err, "退款失败"), "error");
       throw err;
     } finally {
-      setSubmittingDelete(false);
+      setSubmittingRefund(false);
     }
   }
 
@@ -1717,63 +1681,58 @@ export function OrderPrepPage() {
                   删除回执
                 </button>
               ) : null}
-              <button
-                className="btn-delete"
-                onClick={() => {
-                  setIsOrderDetailOpen(false);
-                  openDeleteConfirm(activeItem);
-                }}
-              >
-                删除订单
-              </button>
+              {activeItem.canCancel ? (
+                <button
+                  className="btn btn-outline"
+                  onClick={() => openRefundConfirm(activeItem)}
+                >
+                  退款
+                </button>
+              ) : null}
             </div>
           </div>
         ) : null}
       </AdminDialog>
 
       <AdminDialog
-        open={isDeleteConfirmOpen}
-        title="⚠️ 删除订单"
-        width={500}
-        onClose={submittingDelete ? () => undefined : () => { setIsDeleteConfirmOpen(false); setActiveItem(null); }}
+        open={isRefundConfirmOpen}
+        title="确认退款"
+        width={480}
+        onClose={submittingRefund ? () => undefined : () => { setIsRefundConfirmOpen(false); setRefundTargetItem(null); }}
         footer={
           <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-            <button className="btn btn-outline" onClick={() => { setIsDeleteConfirmOpen(false); setActiveItem(null); }} disabled={submittingDelete}>取消</button>
-            <button 
-              className="btn-delete"
-              disabled={submittingDelete}
-              onClick={() => activeItem && handleDelete(activeItem).catch(() => undefined)}
+            <button className="btn btn-outline" onClick={() => { setIsRefundConfirmOpen(false); setRefundTargetItem(null); }} disabled={submittingRefund}>取消</button>
+            <button
+              className="btn btn-primary"
+              disabled={submittingRefund}
+              onClick={() => refundTargetItem && handleRefundOrder(refundTargetItem).catch(() => undefined)}
             >
-              <Trash2 size={16} />
-              {submittingDelete ? "提交中..." : "确认删除"}
+              {submittingRefund ? "退款中..." : "确认退款"}
             </button>
           </div>
         }
       >
-        {activeItem && (
-          <div style={{ display: "grid", gap: "16px" }}>
+        {refundTargetItem && (
+          <div style={{ display: "grid", gap: "14px", fontSize: "14px" }}>
+            <p style={{ margin: 0, color: "var(--text-main)" }}>
+              退款后该订单将取消，并退回该单消耗的餐券到客户余额，明细记为「退款退回餐次」。
+            </p>
             <div className="delete-confirm-details">
               <div className="delete-confirm-details__item">
                 <span className="delete-confirm-details__label">客户：</span>
-                <span className="delete-confirm-details__value">{activeItem.customerName}</span>
+                <span className="delete-confirm-details__value">{refundTargetItem.customerName}</span>
               </div>
               <div className="delete-confirm-details__item">
                 <span className="delete-confirm-details__label">电话：</span>
-                <span className="delete-confirm-details__value">{activeItem.customerPhone}</span>
+                <span className="delete-confirm-details__value">{refundTargetItem.customerPhone}</span>
               </div>
               <div className="delete-confirm-details__item">
                 <span className="delete-confirm-details__label">餐次：</span>
-                <span className="delete-confirm-details__value">{mealPeriodLabel(activeItem.mealPeriod)} / {mealPeriodLabel(activeItem.deliveryMealPeriod)}</span>
+                <span className="delete-confirm-details__value">{mealPeriodLabel(refundTargetItem.mealPeriod)} / {mealPeriodLabel(refundTargetItem.deliveryMealPeriod)}</span>
               </div>
               <div className="delete-confirm-details__item">
-                <span className="delete-confirm-details__label">地址：</span>
-                <span className="delete-confirm-details__value">{activeItem.deliveryAddress}</span>
-              </div>
-              <div className="delete-confirm-details__item">
-                <span className="delete-confirm-details__label">状态：</span>
-                <span className="delete-confirm-details__value">
-                  {activeItem.displayStatusLabel || resolveOrderDisplayStatusLabel(resolveOrderDisplayStatus(activeItem))}
-                </span>
+                <span className="delete-confirm-details__label">退回餐数：</span>
+                <span className="delete-confirm-details__value">{refundTargetItem.quantity || 1} 餐次</span>
               </div>
             </div>
           </div>

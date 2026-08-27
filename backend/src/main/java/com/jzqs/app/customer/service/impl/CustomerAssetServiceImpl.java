@@ -46,6 +46,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -55,6 +57,7 @@ import org.springframework.jdbc.support.KeyHolder;
 
 @Service
 public class CustomerAssetServiceImpl implements CustomerAssetService {
+    private static final Logger log = LoggerFactory.getLogger(CustomerAssetServiceImpl.class);
     private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     /** 统一使用北京时间作为加餐/有效期计算的基准时区 */
@@ -299,6 +302,8 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
                 throw new BusinessException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH, "钱包更新失败，请重试");
             }
             insertWalletTransaction(wallet.getId(), "GRANT", initialMealDelta, currentOperator(), initialMealRemark, grantExpiredAt);
+            log.info("客户建档授权初始餐次: customer={} walletId={} 餐次={} 有效期至={}",
+                customer.getId(), wallet.getId(), initialMealDelta, grantExpiredAt);
         }
 
         return new CustomerProfileCreateResponse(customer.getId(), "CREATED");
@@ -529,10 +534,14 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             request.mealDelta()
         );
         if (updated == 0) {
+            log.warn("手动扣餐失败(余额不足): customer={} walletId={} 请求扣餐={} 操作人={}",
+                customerId, wallet.getId(), request.mealDelta(), request.operatorName());
             throw new BusinessException(ErrorCode.WALLET_BALANCE_NOT_ENOUGH, "客户余额不足，无法继续扣餐");
         }
         insertWalletTransaction(wallet.getId(), "MANUAL_DEDUCT", -request.mealDelta(), request.operatorName(), request.operatorId(), request.remark(), null);
         int remainingMeals = querySnapshotBalance(wallet.getId());
+        log.info("手动扣餐成功: customer={} walletId={} 扣餐={} 剩余={} 操作人={}",
+            customerId, wallet.getId(), request.mealDelta(), remainingMeals, request.operatorName());
         return buildAdjustResult(customerId, remainingMeals);
     }
 

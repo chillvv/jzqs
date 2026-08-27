@@ -8,6 +8,7 @@ public record AdminAftersaleListItemResponse(
     String customerPhone,
     String serveDate,
     String mealPeriod,
+    int quantity,
     String orderStatus,
     String type,
     String status,

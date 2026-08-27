@@ -21,11 +21,14 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implements OrderOperationService {
+    private static final Logger log = LoggerFactory.getLogger(OrderOperationServiceImpl.class);
     private final OrderOperationRepository orderOperationRepository;
     private final OrderNoteSnapshotService orderNoteSnapshotService;
     private final RealtimeAudienceModule realtimeAudienceModule;
@@ -90,6 +93,8 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
         }
         // 状态同步：编辑订单若把状态改为终态，同步派单分配记录，避免数据不一致。
         orderOperationRepository.syncDispatchAssignmentForTerminalStatus(orderId, status);
+        log.info("编辑订单档案: orderId={} 新状态={} mealPeriod={} quantity={} addressId={}",
+            orderId, status, mealPeriod, quantity, addressId);
         return new OrderProfileUpdateResponse(orderId, "UPDATED", addressId);
     }
 
@@ -155,10 +160,12 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
                 Long walletId = findActiveWalletIdByCustomerId(customerId);
                 if (walletId != null) {
                     orderOperationRepository.decreaseConsumedMeals(walletId, quantity);
-                    insertWalletTransactionByAdmin(walletId, "REFUND", quantity, "取消订单退回餐次", orderId);
+                    insertWalletTransactionByAdmin(walletId, "REFUND", quantity, "退款退回餐次", orderId);
                 }
             }
         }
+        log.info("取消订单: orderId={} 已删除派单分配/批次项，退回餐次={}",
+            orderId, orderInfo != null ? orderInfo.quantity() : 0);
         return new OrderActionResponse(orderId, "CANCELLED");
     }
 
@@ -210,6 +217,9 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
         orderOperationRepository.deleteDeliveryReceipts(orderId);
         orderOperationRepository.deleteCustomerDeliverySubscriptions(orderId);
         orderOperationRepository.deleteOrderNotes(orderId);
+        // 必须在删除订单前级联清理售后工单，否则会残留孤儿售后单，
+        // 导致看板"待处理售后"出现点不开的幻数。
+        orderOperationRepository.deleteAftersaleCases(orderId);
         orderOperationRepository.deleteMealSlotOrder(orderId);
 
         Integer remainingSlots = orderOperationRepository.countRemainingSlots(dailyOrderId);
@@ -217,6 +227,8 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
             orderOperationRepository.deleteDailyOrder(dailyOrderId);
         }
 
+        log.info("删除订单: orderId={} dailyOrderId={} customer={} 剩余餐槽={}（级联清理派单/批次/回执/备注/售后）",
+            orderId, dailyOrderId, customerId, remainingSlots);
         return new OrderActionResponse(orderId, "DELETED");
     }
 
@@ -321,6 +333,8 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
             snapshotTime
         );
         refreshBatchAndPublishEvents(customerId, mealSlotOrderId);
+        log.info("手动创建订单成功: orderId={} customer={} serveDate={} mealPeriod={} quantity={} source={}",
+            mealSlotOrderId, customerId, serveDate, normalizedMealPeriod, quantity, source);
         return new ManualCreateOrderResponse(mealSlotOrderId, "PENDING_DISPATCH");
     }
 
@@ -334,6 +348,7 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
             realtimeAudienceModule.publishCustomerEvent("customer.order.changed", customerId, mealSlotOrderId);
         } catch (RuntimeException ex) {
             // Keep manual create successful even if batch refresh or realtime publish fails.
+            log.warn("订单创建后批次刷新/实时推送失败(不影响主流程): orderId={} 原因={}", mealSlotOrderId, ex.getMessage());
         }
     }
 }

@@ -1,5 +1,6 @@
 const { shareAppMessage, shareTimeline } = require('../../utils/share');
 const onboarding = require('../../utils/onboarding');
+const realtime = require('../../utils/realtime');
 
 function maskPhone(phone) {
   const value = String(phone || '').trim();
@@ -45,6 +46,7 @@ Page({
 
   onShow() {
     this.refreshPage();
+    this.startRealtimeSync();
 
     if (typeof this.getTabBar === 'function' && this.getTabBar()) {
       this.getTabBar().setData({
@@ -53,7 +55,30 @@ Page({
     }
   },
 
-  async refreshPage() {
+  onHide() {
+    this.stopRealtimeSync();
+  },
+
+  // 订阅实时派单事件：后台换区域/换骑手后，个人中心的「负责区域」等信息秒更新
+  startRealtimeSync() {
+    this.stopRealtimeSync();
+    this._unsubscribeRealtime = realtime.subscribe((message) => {
+      if (!message || !message.eventType || !String(message.eventType).startsWith('dispatch.')) {
+        return;
+      }
+      this.refreshPage({ silent: true });
+    });
+  },
+
+  stopRealtimeSync() {
+    if (this._unsubscribeRealtime) {
+      this._unsubscribeRealtime();
+      this._unsubscribeRealtime = null;
+    }
+  },
+
+  async refreshPage(options = {}) {
+    const { silent = false } = options;
     const app = getApp();
     this.setData({
       statusBarHeight: app.globalData.statusBarHeight,
@@ -62,13 +87,17 @@ Page({
 
     await app.waitForRiderAuth();
     if (app.globalData.riderRegistered) {
-      this.setData({ loading: true });
+      if (!silent) {
+        this.setData({ loading: true });
+      }
       try {
         await app.refreshRiderProfile();
       } catch (_) {
         // Keep cached state when the network briefly fails.
       } finally {
-        this.setData({ loading: false });
+        if (!silent) {
+          this.setData({ loading: false });
+        }
       }
     }
 

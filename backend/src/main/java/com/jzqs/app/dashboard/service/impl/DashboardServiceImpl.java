@@ -1,6 +1,7 @@
 package com.jzqs.app.dashboard.service.impl;
 
 import com.jzqs.app.common.util.BusinessDateResolver;
+import com.jzqs.app.common.util.TimeUtils;
 import com.jzqs.app.dashboard.api.DashboardOverviewResponse;
 import com.jzqs.app.dashboard.service.DashboardService;
 import com.jzqs.app.subscription.api.LowBalanceSubscriptionItem;
@@ -93,7 +94,7 @@ public class DashboardServiceImpl implements DashboardService {
 
     @Override
     public List<LowBalanceSubscriptionItem> lowBalanceSubscriptions() {
-        LocalDate today = LocalDate.now();
+        LocalDate today = TimeUtils.today();
         PackageReminderSettings settings = loadPackageReminderSettings();
         String sql = """
             SELECT
@@ -296,9 +297,24 @@ public class DashboardServiceImpl implements DashboardService {
         ));
     }
 
+    /**
+     * 待处理售后数量。
+     *
+     * <p>必须与售后列表页的可见口径保持一致：列表通过 INNER JOIN 客户/餐次订单/日订单 展示，
+     * 若售后单关联的餐次订单已被清理（脏数据），列表查不出来但计数却 +1，
+     * 就会出现“待处理售后显示 1、点进去却没有任何记录”的对不上账问题。
+     * 这里补齐同样的 JOIN，保证“看板上的数字 = 列表里能点开处理的条数”。
+     */
     private int countOpenAftersales() {
         return nvl(jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM aftersale_cases WHERE status IN ('PENDING', 'PROCESSING', 'APPROVED')",
+            """
+            SELECT COUNT(*)
+            FROM aftersale_cases ac
+            JOIN customers c ON c.id = ac.customer_id
+            JOIN meal_slot_orders mso ON mso.id = ac.meal_slot_order_id
+            JOIN daily_orders ord ON ord.id = mso.daily_order_id
+            WHERE ac.status IN ('PENDING', 'PROCESSING', 'APPROVED')
+            """,
             Integer.class
         ));
     }
@@ -427,7 +443,7 @@ public class DashboardServiceImpl implements DashboardService {
         if (expiredAt == null) {
             return 0;
         }
-        return (int) java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(), expiredAt);
+        return (int) java.time.temporal.ChronoUnit.DAYS.between(TimeUtils.today(), expiredAt);
     }
 
     private PackageReminderSettings loadPackageReminderSettings() {

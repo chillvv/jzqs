@@ -1,8 +1,6 @@
 package com.jzqs.app.order.api;
 import com.jzqs.app.aftersale.api.AdminAftersaleCreateRequest;
 import com.jzqs.app.aftersale.api.AdminAftersaleCreateResponse;
-import com.jzqs.app.aftersale.api.AdminAftersaleResolveRequest;
-import com.jzqs.app.aftersale.api.AdminAftersaleResolveResponse;
 import com.jzqs.app.aftersale.service.AftersaleService;
 import com.jzqs.app.common.aop.annotation.AuditAction;
 import com.jzqs.app.common.aop.annotation.Idempotent;
@@ -268,35 +266,6 @@ public class OrderPrepController {
             0,
             "NORMAL",
             body.remarkOrDefault(),
-            operatorName
-        )));
-    }
-
-    @PostMapping("/{orderId}/direct-refund")
-    @RateLimit(key = "admin:orders:direct-refund", maxRequests = 2, windowSeconds = 15)
-    @Idempotent(key = "admin:orders:direct-refund", ttlSeconds = 10, includeBody = true)
-    @AuditAction(module = "AFTERSALE", action = "DIRECT_REFUND")
-    public ApiResponse<AdminAftersaleResolveResponse> directRefund(@PathVariable long orderId, @RequestBody OrderDirectRefundRequest body) {
-        String operatorName = AdminRequestContextSupport.requireOperatorName();
-        AdminAftersaleCreateResponse created = aftersaleService.createCase(new AdminAftersaleCreateRequest(
-            orderId,
-            "REFUND",
-            body.reasonCodeOrDefault(),
-            body.reasonTextOrDefault(),
-            body.reasonTextOrDefault(),
-            0,
-            "NORMAL",
-            body.reasonTextOrDefault(),
-            operatorName
-        ));
-        return ApiResponse.success(aftersaleService.resolveCase(created.afterSaleId(), new AdminAftersaleResolveRequest(
-            "REFUND_TO_WALLET",
-            true,
-            1,
-            1,
-            0,
-            0,
-            body.reasonTextOrDefault(),
             operatorName
         )));
     }

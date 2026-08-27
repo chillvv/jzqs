@@ -24,6 +24,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     public ResponseEntity<ApiResponse<Object>> handleBusiness(BusinessException ex) {
+        // 业务异常统一记录：REPEAT_SUBMISSION/ORDER_STATUS_INVALID 等高频分支也能在日志中溯源
+        log.warn("业务异常拒绝请求: code={} msg={} data={}", ex.getErrorCode(), ex.getMessage(), ex.getData());
         return ResponseEntity.status(resolveBusinessStatus(ex.getErrorCode()))
             .body(ApiResponse.failure(ex.getErrorCode().name(), ex.getMessage(), ex.getData()));
     }
@@ -74,6 +76,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<String>> handleValidation(MethodArgumentNotValidException ex) {
         FieldError fieldError = ex.getBindingResult().getFieldErrors().stream().findFirst().orElse(null);
         String message = fieldError == null ? "请求参数校验失败" : fieldError.getField() + " " + fieldError.getDefaultMessage();
+        log.warn("请求参数校验失败: {}", message);
         return ResponseEntity.badRequest()
             .body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR.name(), message));
     }
@@ -82,6 +85,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<String>> handleBind(BindException ex) {
         FieldError fieldError = ex.getBindingResult().getFieldErrors().stream().findFirst().orElse(null);
         String message = fieldError == null ? "请求参数校验失败" : fieldError.getField() + " " + fieldError.getDefaultMessage();
+        log.warn("请求参数绑定失败: {}", message);
         return ResponseEntity.badRequest()
             .body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR.name(), message));
     }
@@ -92,42 +96,50 @@ public class GlobalExceptionHandler {
             .findFirst()
             .map(ConstraintViolation::getMessage)
             .orElse("请求参数校验失败");
+        log.warn("参数约束校验失败: {}", message);
         return ResponseEntity.badRequest()
             .body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR.name(), message));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
     public ResponseEntity<ApiResponse<String>> handleUnreadableJson(HttpMessageNotReadableException ex) {
+        log.warn("请求体解析失败: {}", ex.getMessage());
         return ResponseEntity.badRequest()
             .body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR.name(), "请求内容格式不正确，请检查后重试"));
     }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ApiResponse<String>> handleMissingRequestParameter(MissingServletRequestParameterException ex) {
+        log.warn("缺少必填请求参数: {}", ex.getParameterName());
         return ResponseEntity.badRequest()
             .body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR.name(), ex.getParameterName() + "不能为空"));
     }
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<ApiResponse<String>> handleMaxUploadSizeExceeded(MaxUploadSizeExceededException ex) {
+        log.warn("上传文件超过大小限制: {}", ex.getMessage());
         return ResponseEntity.status(413)
             .body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR.name(), "上传文件过大，请上传 5MB 以内的图片"));
     }
 
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<ApiResponse<String>> handleMultipart(MultipartException ex) {
+        log.warn("上传文件处理失败: {}", ex.getMessage());
         return ResponseEntity.badRequest()
             .body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR.name(), "上传文件失败，请重新选择图片后重试"));
     }
 
     @ExceptionHandler({DuplicateKeyException.class, DataIntegrityViolationException.class})
     public ResponseEntity<ApiResponse<String>> handleConflict(Exception ex) {
+        // 唯一键冲突/数据完整性冲突：记录具体冲突内容，便于定位并发重复插入问题
+        log.warn("数据冲突（唯一键/完整性约束）: {}", ex.getMessage());
         return ResponseEntity.status(409)
             .body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR.name(), "数据冲突，请刷新后重试"));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiResponse<String>> handleIllegalArgument(IllegalArgumentException ex) {
+        log.warn("非法参数: {}", ex.getMessage());
         return ResponseEntity.badRequest()
             .body(ApiResponse.failure(ErrorCode.VALIDATION_ERROR.name(), ex.getMessage()));
     }

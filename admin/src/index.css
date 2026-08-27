@@ -4321,6 +4321,7 @@ tbody tr:last-child td {
 .customer-transaction-table--embedded {
   margin: 0;
   border: none;
+  white-space: nowrap;
 }
 
 .customer-transaction-delta {
@@ -4339,6 +4340,7 @@ tbody tr:last-child td {
 .customer-transaction-time {
   color: var(--text-sub);
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .customer-transaction-modal {
@@ -4422,6 +4424,7 @@ tbody tr:last-child td {
   /* 流水列表固定高度，超出滚动，避免弹窗被无限拉长 */
   max-height: 420px;
   overflow-y: auto;
+  overflow-x: auto;
 }
 
 .customer-transaction-count {

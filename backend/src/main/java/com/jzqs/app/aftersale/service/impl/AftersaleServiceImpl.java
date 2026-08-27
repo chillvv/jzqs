@@ -57,6 +57,7 @@ public class AftersaleServiceImpl implements AftersaleService {
                     c.phone AS customer_phone,
                     ord.serve_date AS serve_date,
                     mso.meal_period,
+                    mso.quantity,
                     mso.status AS order_status,
                     ac.issue_type,
                     ac.status,
@@ -98,6 +99,7 @@ public class AftersaleServiceImpl implements AftersaleService {
                 rs.getString("customer_phone"),
                 String.valueOf(rs.getObject("serve_date")),
                 rs.getString("meal_period"),
+                rs.getInt("quantity"),
                 rs.getString("order_status"),
                 rs.getString("issue_type"),
                 rs.getString("status"),
@@ -568,6 +570,15 @@ public class AftersaleServiceImpl implements AftersaleService {
         return walletId;
     }
 
+    private int resolveOrderMealQuantity(long orderId) {
+        Integer quantity = jdbcTemplate.query(
+            "SELECT quantity FROM meal_slot_orders WHERE id = ?",
+            ps -> ps.setLong(1, orderId),
+            rs -> rs.next() ? rs.getInt(1) : null
+        );
+        return quantity == null ? 0 : quantity;
+    }
+
     private void rollbackMeal(long walletId, String orderStatus, int quantity) {
         // 退款加回：扣餐统一发生在下单/加餐时（直接扣 consumed_meals），
         // 无论是否已送达，退款都只将 consumed_meals 加回，不再有预留层。
@@ -612,18 +623,12 @@ public class AftersaleServiceImpl implements AftersaleService {
         if (!walletTransactionExists(caseId, "REFUND_RETURN")) {
             long walletId = findActiveWalletId(customerId);
             Long originalTransactionId = findOriginalTransactionId(walletId, orderId, orderStatus);
-            
-            // 自动计算退回数量：如果找到原扣餐记录，则按原扣餐额度退回（取绝对值），忽略前端传入的数量
-            int effectiveDelta = walletDelta;
-            if (originalTransactionId != null) {
-                Integer originalDelta = jdbcTemplate.queryForObject(
-                    "SELECT meal_delta FROM wallet_transactions WHERE id = ?",
-                    Integer.class,
-                    originalTransactionId
-                );
-                if (originalDelta != null) {
-                    effectiveDelta = Math.abs(originalDelta);
-                }
+
+            // 退款统一退回该订单的餐数（meal_slot_orders.quantity），只能退该单的餐数，
+            // 不允许手动指定或按其他额度退回。
+            int effectiveDelta = resolveOrderMealQuantity(orderId);
+            if (effectiveDelta <= 0) {
+                effectiveDelta = Math.max(walletDelta, 1);
             }
             rollbackMeal(walletId, orderStatus, effectiveDelta);
 

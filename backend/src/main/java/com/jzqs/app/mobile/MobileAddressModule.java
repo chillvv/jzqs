@@ -7,11 +7,14 @@ import com.jzqs.app.mobile.api.MobileDefaultAddressResponse;
 import com.jzqs.app.mobile.api.MobileOrderAddressChangeResponse;
 import java.time.LocalDate;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 @Component
 class MobileAddressModule {
+    private static final Logger log = LoggerFactory.getLogger(MobileAddressModule.class);
     private static final int MAX_ADDRESSES_PER_CUSTOMER = 5;
 
     private final JdbcTemplate jdbcTemplate;
@@ -91,6 +94,7 @@ class MobileAddressModule {
             finalAreaCode,
             isDefault
         );
+        log.info("客户新增地址: customer={} addressId={} area_code={} isDefault={}", customerId, addressId, finalAreaCode, isDefault);
         return new MobileAddressResponse(addressId, contact.name(), contact.phone(), finalAddressLine, finalAreaCode, isDefault);
     }
 
@@ -223,6 +227,8 @@ class MobileAddressModule {
         // 换地址后让派单区域与新地址接轨：自动派单本身是实时 JOIN 新 address_id 的，
         // 这里主要修正「已派单订单」的 dispatch_assignments 区域快照，避免改址后派单区域错乱。
         reconcileDispatchArea(orderId, addressId);
+        log.info("订单换地址: orderId={} customer={} 新addressId={} 旧addressId={} enforceWindow={}",
+            orderId, customerId, addressId, order.addressId(), enforceWindow);
         return new MobileOrderAddressChangeResponse(orderId, addressId, "ADDRESS_UPDATED");
     }
 
@@ -274,8 +280,12 @@ class MobileAddressModule {
             // 新地址无已确认记忆：不沿用旧地址区域，留空待商家手动分配，
             // 并同步写入/刷新「地址变更待确认」绑定，供分单工作台与异常单展示。
             jdbcTemplate.update(
+                // 列序：customer_id, address_id, meal_period, address_fingerprint,
+                //       area_code, rider_profile_id, manually_confirmed, updated_reason, updated_at
+                // 修复：此前 SELECT 只给了 8 个值导致列错位，且 area_code 列 NOT NULL 不允许 NULL。
+                //       正确值：address_fingerprint=''、area_code=''（空壳）、rider_profile_id=NULL。
                 "INSERT INTO rider_address_bindings (customer_id, address_id, meal_period, address_fingerprint, area_code, rider_profile_id, manually_confirmed, updated_reason, updated_at) "
-                    + "SELECT do.customer_id, ?, ?, '', NULL, FALSE, 'ADDRESS_CHANGED_PENDING_CONFIRM', CURRENT_TIMESTAMP "
+                    + "SELECT do.customer_id, ?, ?, '', '', NULL, FALSE, 'ADDRESS_CHANGED_PENDING_CONFIRM', CURRENT_TIMESTAMP "
                     + "FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE mso.id = ? "
                     + "ON DUPLICATE KEY UPDATE area_code = '', rider_profile_id = NULL, updated_reason = VALUES(updated_reason), updated_at = CURRENT_TIMESTAMP",
                 newAddressId,
@@ -283,14 +293,20 @@ class MobileAddressModule {
                 orderId
             );
             newArea = AREA_PENDING;
+            log.info("换地址后新地址无已确认记忆，写入空壳绑定(area_code='')待商家分配: orderId={} customer={} address={} mealPeriod={}",
+                orderId, customerId, newAddressId, mealPeriod);
         }
         // 仅当订单已派单（存在 dispatch_assignments 行）时才刷新区域快照；
         // 未派单订单由自动派单环节基于新 address_id 实时 JOIN，无需处理。
-        jdbcTemplate.update(
+        int updatedSnapshots = jdbcTemplate.update(
             "UPDATE dispatch_assignments SET area_code = ? WHERE meal_slot_order_id = ?",
             newArea,
             orderId
         );
+        if (updatedSnapshots > 0) {
+            log.info("换地址后派单区域快照已刷新: orderId={} 新区域={} 快照行数={}",
+                orderId, newArea, updatedSnapshots);
+        }
     }
 
     private ContactSnapshot resolveCustomerAddressContact(long customerId) {

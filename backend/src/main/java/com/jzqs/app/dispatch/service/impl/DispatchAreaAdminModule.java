@@ -184,7 +184,7 @@ class DispatchAreaAdminModule {
     DispatchAreaRenameResponse renameArea(String areaCode, String newAreaCode) {
         String trimmed = newAreaCode.trim();
         if (trimmed.isEmpty() || trimmed.equals(areaCode)) {
-            throw new IllegalArgumentException("invalid area name");
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "区域名称不能为空，且不能与原名称相同");
         }
         jdbcTemplate.update(
             "UPDATE dispatch_area_bindings SET area_code = ? WHERE area_code = ?",

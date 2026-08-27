@@ -766,6 +766,8 @@ export function CustomerAssetPage() {
     if (type === "EXTEND_VALIDITY") return "统一延期";
     if (type === "CONSUME") return "加餐扣减";
     if (type === "REFUND") return "退款退回";
+    if (type === "REFUND_RETURN") return "退款退回";
+    if (type === "COMPENSATION_RETURN") return "售后补餐";
     if (type === "MANUAL_DEDUCT") return "手工扣减";
     if (type === "AFTERSALE_ROLLBACK") return "售后回滚";
     return type || "餐次变动";
@@ -1472,7 +1474,7 @@ export function CustomerAssetPage() {
                           <TableHead>操作人</TableHead>
                           <TableHead>本次到期</TableHead>
                           <TableHead>备注（加餐原因）</TableHead>
-                          <TableHead>时间</TableHead>
+                          <TableHead style={{ minWidth: 140, whiteSpace: "nowrap" }}>时间</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -1487,7 +1489,7 @@ export function CustomerAssetPage() {
                             <TableCell>{tx.operatorName || "系统"}</TableCell>
                             <TableCell>{tx.expiredAtSnapshot ? <span className="customer-transaction-expiry">{tx.expiredAtSnapshot}</span> : "-"}</TableCell>
                             <TableCell>{tx.remark || "-"}</TableCell>
-                            <TableCell><span className="customer-transaction-time">{formatDateTimeLabel(tx.createdAt)}</span></TableCell>
+                            <TableCell style={{ whiteSpace: "nowrap" }}><span className="customer-transaction-time">{formatDateTimeLabel(tx.createdAt)}</span></TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
