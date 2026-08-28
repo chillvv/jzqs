@@ -84,7 +84,13 @@ public class MobileCustomerController {
         return ApiResponse.success(mobilePortalService.customerOrders(extractCustomerId(authorization), status));
     }
 
-    @Idempotent(key = "order:create", ttlSeconds = 10)
+    // 下单幂等窗口 300s：覆盖"前端报错/超时后用户重试"的真实间隔(原10s过短，
+    // 用户第一轮已成功但提示繁忙,重试间隔>10s即绕过幂等造成同餐次数量叠加翻倍)。
+    // includeBody=true：同一用户会同时并发下"午餐+晚餐"两个 POST /orders(Promise.all)，
+    // 若不区分请求体，两者幂等 key 完全相同，后到的请求被误判"重复提交"报错，导致
+    // 前端提示系统繁忙、只成功 1 个餐次且不显示"预订成功"。含 body 后两餐次 key 不同
+    // 互不拦截；相同餐次相同参数的重复提交仍会被拦截，防重复扣餐能力不变。
+    @Idempotent(key = "order:create", ttlSeconds = 300, includeBody = true)
     @PostMapping("/orders")
     public ApiResponse<MobileCreateOrderResponse> createOrder(
         @RequestHeader("Authorization") String authorization,
@@ -178,7 +184,7 @@ public class MobileCustomerController {
         );
     }
 
-    @Idempotent(key = "order:cancel", ttlSeconds = 10)
+    @Idempotent(key = "order:cancel", ttlSeconds = 300)
     @PostMapping("/orders/{orderId}/cancel")
     public ApiResponse<OrderActionResponse> cancelOrder(
         @PathVariable long orderId,
@@ -214,7 +220,7 @@ public class MobileCustomerController {
         return ApiResponse.success(response);
     }
 
-    @Idempotent(key = "aftersale:create", ttlSeconds = 10)
+    @Idempotent(key = "aftersale:create", ttlSeconds = 300)
     @PostMapping("/orders/{orderId}/after-sales")
     public ApiResponse<MobileCreateAfterSaleResponse> createAfterSale(
         @PathVariable long orderId,

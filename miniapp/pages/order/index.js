@@ -603,19 +603,26 @@ Page({
       wx.showToast({ title: '请先选择餐食', icon: 'none' });
       return;
     }
+    // 防重复提交：进入本方法即锁定提交按钮（含微信授权弹窗期间，避免授权中二次点击触发重复下单）。
+    this.setData({ submitting: true });
     // 下单前强制请求「取餐 + 每晚」两个模板授权，各获得 1 条当天额度（不要求「总是保持」）。
     // 必须在任何 await 之前同步触发 requestSubscribeMessage，否则会脱离用户点击栈被微信拦截
     // （报 "can only be invoked by user TAP gesture"）。
     const subscribed = await this.requestSubscribeConsent();
     if (!subscribed) {
+      this.setData({ submitting: false });
       return;
     }
-    this.setData({ submitting: true });
     try {
       // 送达授权结果已在 requestSubscribeConsent 时写入缓存，此处随订单保存送达订阅；
       // 每晚提醒授权也已在 requestSubscribeConsent 时保存后端（AUTHORIZED），无需重复处理。
       const orderResults = await Promise.all(requests);
       const mergedCount = orderResults.filter((item) => item && item.status === 'MERGED').length;
+      // 后端短时间重复下单拦截：ALREADY_RESERVED 表示该餐次已有订单且刚下过单，
+      // 本次未重复扣餐，仅返回已有订单，避免"繁忙重试"导致数量翻倍。
+      const alreadyReservedCount = orderResults.filter(
+        (item) => item && item.walletAction === 'ALREADY_RESERVED'
+      ).length;
       const orderIds = [...new Set(orderResults
         .map((item) => item && item.orderId)
         .filter(Boolean))];
@@ -628,9 +635,14 @@ Page({
         });
       }
 
-      const successMsg = mergedCount > 0
-        ? `同地址餐次已自动合并到原订单，共扣减 ${this.data.totalQty} 餐`
-        : `已成功预订明天的餐食，共扣减 ${this.data.totalQty} 餐`;
+      let successMsg;
+      if (alreadyReservedCount > 0) {
+        successMsg = '检测到刚提交过相同餐次的订单，为避免重复扣餐，本次未再扣减，请勿重复点击下单';
+      } else if (mergedCount > 0) {
+        successMsg = `同地址餐次已自动合并到原订单，共扣减 ${this.data.totalQty} 餐`;
+      } else {
+        successMsg = `已成功预订明天的餐食，共扣减 ${this.data.totalQty} 餐`;
+      }
       this.setData({
         showOrderSuccess: true,
         orderSuccessMsg: successMsg,
@@ -651,7 +663,20 @@ Page({
           }
         });
       } else {
-        wx.showToast({ title: error.message || '下单失败', icon: 'none' });
+        // 网络/系统繁忙类失败：订单可能已提交成功但响应丢失，若直接重试会导致同餐次数量叠加。
+        // 明确引导先到订单列表确认，避免重复提交多扣餐次。
+        wx.showModal({
+          title: '提交结果未确认',
+          content: '网络或系统繁忙，订单可能已提交成功。请先到「我的订单」确认是否已下单，若未下单再点击重试，切勿连续点击。',
+          confirmText: '去订单列表',
+          confirmColor: '#B8D060',
+          cancelText: '稍后再试',
+          success: (res) => {
+            if (res.confirm) {
+              wx.navigateTo({ url: '/pages/orders/index' });
+            }
+          }
+        });
       }
     } finally {
       this.setData({ submitting: false });

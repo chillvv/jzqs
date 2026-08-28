@@ -69,29 +69,33 @@ class MiniappOrderModule {
         ensureSelfOrderAllowed(orderDate);
         requireActiveMenu(orderDate, normalizedMealPeriod);
         int units = Math.max(1, quantity);
-        MobileCreateOrderResponse response = null;
-        for (int i = 0; i < units; i++) {
-            response = createOrder(
-                customerId,
-                orderDate,
-                normalizedMealPeriod,
-                deliveryAddress,
-                normalizeNote(note)
-            );
-        }
-        return response;
+        return createOrder(
+            customerId,
+            orderDate,
+            normalizedMealPeriod,
+            deliveryAddress,
+            normalizeNote(note),
+            units
+        );
     }
 
+    /**
+     * 批量下单：一次请求 quantity=N 直接创建/合并 N 份，扣 N 餐并写一条聚合流水，
+     * 不再循环逐份下单（旧逻辑会导致 N 条 -1 流水、且重复提交时数量逐份翻倍）。
+     * 防重复：若同客户同日同餐次已有订单且最近 2 分钟内有扣餐流水，判定为重复提交，
+     * 直接返回已有订单、不再累加数量，从机制上杜绝"繁忙重试"导致的多扣餐。
+     */
     MobileCreateOrderResponse createOrder(
         long customerId,
         LocalDate orderDate,
         String mealPeriod,
         String deliveryAddress,
-        String finalUserNote
+        String finalUserNote,
+        int units
     ) {
         long walletId = activeWalletId(customerId);
         int remainingMeals = remainingMealsForUpdate(walletId);
-        if (remainingMeals <= 0) {
+        if (remainingMeals < units) {
             throw new BusinessException(ErrorCode.INSUFFICIENT_MEALS, "剩余餐次不足，无法下单");
         }
 
@@ -99,6 +103,13 @@ class MiniappOrderModule {
         String merchantRemark = normalizeCustomerMerchantRemark(customerId);
         Long mergeTargetOrderId = findMergeTargetOrderId(customerId, orderDate, mealPeriod, addressId);
         if (mergeTargetOrderId != null) {
+            // 短时间重复下单拦截：目标订单最近 2 分钟内有扣餐流水，说明是用户
+            // "繁忙提示后重试"或重复点击，直接返回已有订单，不再累加数量、不再扣餐。
+            if (hasRecentConsumeWithin(mergeTargetOrderId, 120)) {
+                log.warn("拦截短时间重复下单: customerId={} serveDate={} mealPeriod={} targetOrderId={} units={}",
+                    customerId, orderDate, mealPeriod, mergeTargetOrderId, units);
+                return new MobileCreateOrderResponse(mergeTargetOrderId, "MERGED", "ALREADY_RESERVED");
+            }
             ExistingOrderNoteRow existingOrder = loadExistingOrderNoteRow(mergeTargetOrderId);
             String mergedUserNote = mergeOrderNote(
                 preferredOrderNote(existingOrder.userNote(), existingOrder.note()),
@@ -108,7 +119,7 @@ class MiniappOrderModule {
             jdbcTemplate.update(
                 """
                     UPDATE meal_slot_orders
-                    SET quantity = quantity + 1,
+                    SET quantity = quantity + ?,
                         note = ?,
                         user_note = ?,
                         merchant_remark = CASE
@@ -117,6 +128,7 @@ class MiniappOrderModule {
                         END
                     WHERE id = ?
                     """,
+                units,
                 mergedUserNote,
                 mergedUserNote,
                 merchantRemark,
@@ -128,8 +140,8 @@ class MiniappOrderModule {
                 Timestamp.valueOf(mergeTime),
                 customerId
             );
-            jdbcTemplate.update("UPDATE meal_wallets SET consumed_meals = consumed_meals + 1 WHERE id = ?", walletId);
-            insertWalletTransaction(walletId, "CONSUME", -1, "小程序", "用户自主下单加餐", mergeTime, mergeTargetOrderId);
+            jdbcTemplate.update("UPDATE meal_wallets SET consumed_meals = consumed_meals + ? WHERE id = ?", units, walletId);
+            insertWalletTransaction(walletId, "CONSUME", -units, "小程序", "用户自主下单加餐", mergeTime, mergeTargetOrderId);
             attemptWriteOrderSnapshot(
                 mergeTargetOrderId,
                 customerId,
@@ -154,7 +166,7 @@ class MiniappOrderModule {
                     daily_order_id, meal_period, delivery_meal_period, quantity, address_id, note, user_note, merchant_remark, status, source_type
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-            dailyOrderId, mealPeriod, mealPeriod, 1, addressId, finalUserNote, finalUserNote, merchantRemark, "PENDING_DISPATCH", "MINIAPP"
+            dailyOrderId, mealPeriod, mealPeriod, units, addressId, finalUserNote, finalUserNote, merchantRemark, "PENDING_DISPATCH", "MINIAPP"
         );
         if (mealSlotOrderId <= 0) {
             mealSlotOrderId = resolveLatestMiniappOrderId(dailyOrderId, mealPeriod, mealPeriod, addressId);
@@ -168,8 +180,8 @@ class MiniappOrderModule {
             Timestamp.valueOf(now),
             customerId
         );
-        jdbcTemplate.update("UPDATE meal_wallets SET consumed_meals = consumed_meals + 1 WHERE id = ?", walletId);
-        insertWalletTransaction(walletId, "CONSUME", -1, "小程序", "用户自主下单加餐", now, mealSlotOrderId);
+        jdbcTemplate.update("UPDATE meal_wallets SET consumed_meals = consumed_meals + ? WHERE id = ?", units, walletId);
+        insertWalletTransaction(walletId, "CONSUME", -units, "小程序", "用户自主下单", now, mealSlotOrderId);
         attemptWriteOrderSnapshot(mealSlotOrderId, customerId, finalUserNote, snapshotTime);
 
         jdbcTemplate.execute("/* force flush */ SELECT 1");
@@ -188,6 +200,23 @@ class MiniappOrderModule {
             currentStatus != null ? currentStatus : "PENDING_DISPATCH",
             "RESERVED"
         );
+    }
+
+    /** 目标订单最近 N 秒内是否存在扣餐流水（用于识别短时间重复提交） */
+    private boolean hasRecentConsumeWithin(long mealSlotOrderId, int withinSeconds) {
+        Integer count = jdbcTemplate.queryForObject(
+            """
+                SELECT COUNT(*)
+                FROM wallet_transactions
+                WHERE related_order_id = ?
+                  AND transaction_type = 'CONSUME'
+                  AND created_at >= DATE_SUB(NOW(3), INTERVAL ? SECOND)
+                """,
+            Integer.class,
+            mealSlotOrderId,
+            withinSeconds
+        );
+        return count != null && count > 0;
     }
 
     private void attemptRefreshQueueState(long mealSlotOrderId) {
