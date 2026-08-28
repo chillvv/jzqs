@@ -67,6 +67,7 @@ deploy_backend() {
     status=$(docker inspect -f '{{.State.Health.Status}}' jzqs-backend 2>/dev/null || echo "starting")
     if [ "$status" = "healthy" ]; then
       ok "后端已健康启动（Flyway 迁移已自动执行）"
+      prune_old_images
       return 0
     fi
     sleep 2
@@ -78,7 +79,21 @@ deploy_admin() {
   info "构建并重启 admin 前端容器 ..."
   docker compose build admin
   docker compose up -d admin
+  prune_old_images
   ok "前端已部署，请浏览器硬刷新（Ctrl+Shift+R / Cmd+Shift+R）清除缓存"
+}
+
+# 清理构建残留的旧 jzqs 镜像与缓存（只删无人引用的，不影响运行中容器和数据库 volume）
+prune_old_images() {
+  info "清理构建残留的旧镜像与缓存 ..."
+  docker image prune -f >/dev/null 2>&1 || true
+  docker images --format '{{.Repository}}:{{.Tag}}' | grep '^jzqs-' | while read -r img; do
+    if ! docker ps --format '{{.Image}}' | grep -qx "$img"; then
+      docker rmi "$img" >/dev/null 2>&1 && info "已删除旧镜像: $img" || true
+    fi
+  done
+  docker builder prune -f >/dev/null 2>&1 || true
+  ok "旧镜像/构建缓存清理完成"
 }
 
 show_status() {
