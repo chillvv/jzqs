@@ -374,7 +374,7 @@ Page({
     wx.navigateTo({ url: '/pages/addresses/index' });
   },
 
-  goToCheckout() {
+  async goToCheckout() {
     if (this.data.nightClosed) {
       const notice = getNightCloseNotice();
       wx.showModal({
@@ -398,25 +398,34 @@ Page({
       wx.showToast({ title: '请先选择餐食', icon: 'none' });
       return;
     }
-    const remainingMeals = (this.data.home && this.data.home.remainingMeals) || 0;
-    const mealLimitMessage = getCheckoutMealLimitMessage({
-      totalQty: this.data.totalQty,
-      remainingMeals
-    });
-    if (mealLimitMessage) {
-      wx.showModal({
-        title: '餐次余额不足',
-        content: mealLimitMessage,
-        confirmText: '联系商家',
-        confirmColor: '#B8D060',
-        cancelText: '稍后处理',
-        success: (res) => {
-          if (res.confirm) {
-            wx.switchTab({ url: '/pages/profile/index' });
-          }
-        }
+    // 进入确认页前实时校验钱包总额：午餐+晚餐合计 vs 当前钱包剩余，不足直接拦截并提示，
+    // 杜绝「午餐成功、晚餐失败」的部分成功。此处不涉及微信订阅授权点击栈，可安全 await。
+    // 只有拿到真实余额才拦截；查询失败（网络/后端抖动）时放行，交由后端事务+行锁权威校验。
+    const balance = await request({
+      url: '/api/mobile/customer/wallet/balance',
+      hideErrorToast: true
+    }).catch(() => null);
+    if (balance) {
+      const remainingMeals = balance.remainingMeals || 0;
+      const mealLimitMessage = getCheckoutMealLimitMessage({
+        totalQty: this.data.totalQty,
+        remainingMeals
       });
-      return;
+      if (mealLimitMessage) {
+        wx.showModal({
+          title: '餐次余额不足',
+          content: mealLimitMessage,
+          confirmText: '联系商家',
+          confirmColor: '#B8D060',
+          cancelText: '稍后处理',
+          success: (res) => {
+            if (res.confirm) {
+              wx.switchTab({ url: '/pages/profile/index' });
+            }
+          }
+        });
+        return;
+      }
     }
     // 不在此处强制选择地址，进入确认页后再选择
     this.setData({ showCheckout: true });
@@ -570,7 +579,25 @@ Page({
       wx.showToast({ title: '请先选择配送地址', icon: 'none' });
       return;
     }
+    // 锁定提交按钮：必须在任何 await 之前，防止授权期间连点触发并发下单
+    this.setData({ submitting: true });
+
+    // 同步触发微信订阅授权（必须紧贴点击、无前置 await，否则脱离用户点击栈被微信拦截，
+    // 报 "can only be invoked by user TAP gesture"）。
+    // 余额校验已前置到「确认预定」入口（goToCheckout），这里不再 await 额外请求，
+    // 避免与微信订阅授权冲突导致弹窗弹不出来。
+    const subscribed = await this.requestSubscribeConsent();
+    if (!subscribed) {
+      this.setData({ submitting: false });
+      return;
+    }
+
     const requests = [];
+    // 本次下单批次的唯一请求 ID：区分「有意加餐」与「真正的重复提交」。
+    // 后端幂等 key 以 (客户+请求体+clientRequestId) 为准——相同业务参数但不同批次
+    // 生成新 ID，不会被误判「请勿重复提交相同操作」；同一次操作的重试则复用同一 ID，
+    // 仍会被幂等拦截，防重复扣餐能力不变。
+    const clientRequestId = `${Date.now()}_${Math.floor(Math.random() * 1000000)}`;
     if (this.data.qty1 > 0 && this.data.lunchItem) {
       requests.push(request({
         url: '/api/mobile/customer/orders',
@@ -581,7 +608,8 @@ Page({
           mealPeriod: 'LUNCH',
           deliveryAddress: selectedAddress.addressLine,
           note: this.data.remark,
-          quantity: this.data.qty1
+          quantity: this.data.qty1,
+          clientRequestId
         }
       }));
     }
@@ -595,22 +623,14 @@ Page({
           mealPeriod: 'DINNER',
           deliveryAddress: selectedAddress.addressLine,
           note: this.data.remark,
-          quantity: this.data.qty2
+          quantity: this.data.qty2,
+          clientRequestId
         }
       }));
     }
     if (!requests.length) {
-      wx.showToast({ title: '请先选择餐食', icon: 'none' });
-      return;
-    }
-    // 防重复提交：进入本方法即锁定提交按钮（含微信授权弹窗期间，避免授权中二次点击触发重复下单）。
-    this.setData({ submitting: true });
-    // 下单前强制请求「取餐 + 每晚」两个模板授权，各获得 1 条当天额度（不要求「总是保持」）。
-    // 必须在任何 await 之前同步触发 requestSubscribeMessage，否则会脱离用户点击栈被微信拦截
-    // （报 "can only be invoked by user TAP gesture"）。
-    const subscribed = await this.requestSubscribeConsent();
-    if (!subscribed) {
       this.setData({ submitting: false });
+      wx.showToast({ title: '请先选择餐食', icon: 'none' });
       return;
     }
     try {
@@ -635,9 +655,32 @@ Page({
         });
       }
 
+      // 全部请求都被后端判定为「刚提交过相同餐次」：本次纯属重复，无任何新扣减。
+      // 独立弹窗明确告知"稍等两分钟再来"，不展示「预订成功」卡片避免误导用户。
+      const allAlreadyReserved = orderResults.length > 0 && alreadyReservedCount === orderResults.length;
+      if (allAlreadyReserved) {
+        wx.showModal({
+          title: '温馨提示',
+          content: '您刚才已成功下单相同餐次的订单，为避免重复扣餐，本次未再扣减。如需加餐，建议稍后再试，感谢您的理解与支持～',
+          showCancel: false,
+          confirmText: '好的',
+          confirmColor: '#B8D060',
+          success: () => {
+            this.setData({
+              showCheckout: false,
+              qty1: 0,
+              qty2: 0
+            });
+            this.syncCheckoutState();
+            this.loadOrderData();
+          }
+        });
+        return;
+      }
+
       let successMsg;
       if (alreadyReservedCount > 0) {
-        successMsg = '检测到刚提交过相同餐次的订单，为避免重复扣餐，本次未再扣减，请勿重复点击下单';
+        successMsg = '部分餐次刚才已成功下单，为避免重复扣餐本次未重复扣减；其余餐次已为您预订成功';
       } else if (mergedCount > 0) {
         successMsg = `同地址餐次已自动合并到原订单，共扣减 ${this.data.totalQty} 餐`;
       } else {
@@ -717,7 +760,7 @@ Page({
     this.loadOrderData();
     wx.navigateTo({
       url: orderIds.length
-        ? `/pages/orders/index?orderId=${orderIds[0]}`
+        ? `/pages/orders/index?orderIds=${orderIds.join(',')}`
         : '/pages/orders/index'
     });
   },

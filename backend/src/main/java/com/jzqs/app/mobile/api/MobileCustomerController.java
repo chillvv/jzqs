@@ -89,7 +89,10 @@ public class MobileCustomerController {
     // includeBody=true：同一用户会同时并发下"午餐+晚餐"两个 POST /orders(Promise.all)，
     // 若不区分请求体，两者幂等 key 完全相同，后到的请求被误判"重复提交"报错，导致
     // 前端提示系统繁忙、只成功 1 个餐次且不显示"预订成功"。含 body 后两餐次 key 不同
-    // 互不拦截；相同餐次相同参数的重复提交仍会被拦截，防重复扣餐能力不变。
+    // 互不拦截。
+    // clientRequestId（前端每次下单生成的唯一 ID）进 body：区分「有意加餐」与「同一
+    // 操作的重试」——相同业务参数的有意加餐因新 ID 不命中幂等，正常走合并加餐；同一次
+    // 操作重试复用同一 ID 仍被拦截，防重复扣餐能力不变。
     @Idempotent(key = "order:create", ttlSeconds = 300, includeBody = true)
     @PostMapping("/orders")
     public ApiResponse<MobileCreateOrderResponse> createOrder(
@@ -325,6 +328,13 @@ public class MobileCustomerController {
         @RequestHeader("Authorization") String authorization
     ) {
         return ApiResponse.success(mobilePortalService.walletTransactions(extractCustomerId(authorization)));
+    }
+
+    @GetMapping("/wallet/balance")
+    public ApiResponse<MobileWalletBalanceResponse> walletBalance(
+        @RequestHeader("Authorization") String authorization
+    ) {
+        return ApiResponse.success(mobilePortalService.walletBalance(extractCustomerId(authorization)));
     }
 
     @Idempotent(key = "profile:update", ttlSeconds = 10)

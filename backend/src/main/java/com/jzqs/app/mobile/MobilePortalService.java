@@ -18,6 +18,7 @@ import com.jzqs.app.mobile.api.MobileOrderAddressChangeResponse;
 import com.jzqs.app.mobile.api.MobileOrderItemResponse;
 import com.jzqs.app.mobile.api.MobileSubscribeMessageTestResponse;
 import com.jzqs.app.mobile.api.MobileTomorrowMenuResponse;
+import com.jzqs.app.mobile.api.MobileWalletBalanceResponse;
 import com.jzqs.app.mobile.api.MobileWeekMenuDayResponse;
 import com.jzqs.app.mobile.api.RiderBatchSummaryResponse;
 import com.jzqs.app.mobile.api.RiderBatchAddressReferenceRequest;
@@ -114,6 +115,8 @@ public interface MobilePortalService {
     PageResponse<WalletTransactionResponse> walletTransactions(String phone);
 
     PageResponse<WalletTransactionResponse> walletTransactions(long customerId);
+
+    MobileWalletBalanceResponse walletBalance(long customerId);
 
     PageResponse<RiderTaskItemResponse> riderTasks(Long riderId);
 

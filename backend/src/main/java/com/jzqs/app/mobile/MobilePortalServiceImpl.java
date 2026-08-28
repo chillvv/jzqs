@@ -24,6 +24,7 @@ import com.jzqs.app.mobile.api.MobileOrderAddressChangeResponse;
 import com.jzqs.app.mobile.api.MobileOrderItemResponse;
 import com.jzqs.app.mobile.api.MobileSubscribeMessageTestResponse;
 import com.jzqs.app.mobile.api.MobileTomorrowMenuResponse;
+import com.jzqs.app.mobile.api.MobileWalletBalanceResponse;
 import com.jzqs.app.mobile.api.MobileWeekMenuDayResponse;
 import com.jzqs.app.mobile.api.RiderAddressReferenceBatchSaveResponse;
 import com.jzqs.app.mobile.api.RiderAddressReferenceReplaceResponse;
@@ -429,6 +430,11 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     @Override
     public PageResponse<WalletTransactionResponse> walletTransactions(long customerId) {
         return mobileCustomerQueryModule.walletTransactions(customerId);
+    }
+
+    @Override
+    public MobileWalletBalanceResponse walletBalance(long customerId) {
+        return mobileCustomerQueryModule.walletBalance(customerId);
     }
 
     @Override

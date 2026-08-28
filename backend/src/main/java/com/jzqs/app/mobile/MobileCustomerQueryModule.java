@@ -15,6 +15,7 @@ import com.jzqs.app.mobile.api.MobileHomeResponse;
 import com.jzqs.app.mobile.api.MobileMenuItemResponse;
 import com.jzqs.app.mobile.api.MobileOrderItemResponse;
 import com.jzqs.app.mobile.api.MobileTomorrowMenuResponse;
+import com.jzqs.app.mobile.api.MobileWalletBalanceResponse;
 import com.jzqs.app.mobile.api.MobileWeekMenuDayResponse;
 import java.sql.Timestamp;
 import java.time.DayOfWeek;
@@ -110,7 +111,9 @@ class MobileCustomerQueryModule {
                         LIMIT 1
                     ) AS default_user_remark
                 FROM customers c
-                LEFT JOIN meal_wallets mw ON mw.customer_id = c.id AND mw.active = TRUE
+                LEFT JOIN meal_wallets mw ON mw.customer_id = c.id
+                    AND mw.active = TRUE
+                    AND (mw.expired_at IS NULL OR mw.expired_at >= CURRENT_TIMESTAMP)
                 LEFT JOIN package_plans pp ON pp.id = mw.package_plan_id
                 WHERE c.id = ? AND c.active = TRUE
                 """,
@@ -384,8 +387,8 @@ class MobileCustomerQueryModule {
                 formatTimestamp(rs.getTimestamp("delivered_at")),
                 rs.getBoolean("receipt_visible"),
                 rs.getBoolean("receipt_ever_existed"),
-                canChangeAddress(rs.getDate("serve_date").toLocalDate()),
-                resolveChangeAddressMode(rs.getDate("serve_date").toLocalDate()),
+                canChangeAddress(rs.getDate("serve_date").toLocalDate(), rs.getString("status")),
+                resolveChangeAddressMode(rs.getDate("serve_date").toLocalDate(), rs.getString("status")),
                 rs.getBoolean("aftersale_open"),
                 rs.getString("aftersale_status"),
                 rs.getString("aftersale_type"),
@@ -397,6 +400,28 @@ class MobileCustomerQueryModule {
             status
         );
         return PageResponse.of(items, 1, 20, items.size());
+    }
+
+    MobileWalletBalanceResponse walletBalance(long customerId) {
+        Integer remaining = jdbcTemplate.query(
+            """
+                SELECT COALESCE(mw.total_meals - mw.consumed_meals, 0) AS remaining_meals
+                FROM customers c
+                LEFT JOIN meal_wallets mw ON mw.id = (
+                    SELECT id
+                    FROM meal_wallets
+                    WHERE customer_id = c.id
+                      AND active = TRUE
+                      AND (expired_at IS NULL OR expired_at >= CURRENT_TIMESTAMP)
+                    ORDER BY id
+                    LIMIT 1
+                )
+                WHERE c.id = ? AND c.active = TRUE
+                """,
+            ps -> ps.setLong(1, customerId),
+            rs -> rs.next() ? rs.getInt("remaining_meals") : null
+        );
+        return new MobileWalletBalanceResponse(remaining == null ? 0 : remaining);
     }
 
     PageResponse<WalletTransactionResponse> walletTransactions(long customerId) {
@@ -523,8 +548,8 @@ class MobileCustomerQueryModule {
         return receiptVisibleAt.isAfter(LocalDateTime.now()) ? "PENDING_DISPATCH" : "DELIVERED";
     }
 
-    private String resolveChangeAddressMode(LocalDate serveDate) {
-        if (serveDate == null) {
+    private String resolveChangeAddressMode(LocalDate serveDate, String status) {
+        if (serveDate == null || isTerminalStatus(status)) {
             return "LOCKED";
         }
         LocalDate today = LocalDate.now();
@@ -535,6 +560,10 @@ class MobileCustomerQueryModule {
             return "CONTACT_SUPPORT";
         }
         return "LOCKED";
+    }
+
+    private boolean isTerminalStatus(String status) {
+        return status != null && (status.equals("CANCELLED") || status.equals("REFUNDED"));
     }
 
     private AdminSettingsSnapshot loadAdminSettingsSnapshot() {
@@ -731,7 +760,10 @@ class MobileCustomerQueryModule {
         };
     }
 
-    private boolean canChangeAddress(LocalDate serveDate) {
+    private boolean canChangeAddress(LocalDate serveDate, String status) {
+        if (isTerminalStatus(status)) {
+            return false;
+        }
         return serveDate != null && serveDate.isAfter(LocalDate.now());
     }
 

@@ -103,13 +103,10 @@ class MiniappOrderModule {
         String merchantRemark = normalizeCustomerMerchantRemark(customerId);
         Long mergeTargetOrderId = findMergeTargetOrderId(customerId, orderDate, mealPeriod, addressId);
         if (mergeTargetOrderId != null) {
-            // 短时间重复下单拦截：目标订单最近 2 分钟内有扣餐流水，说明是用户
-            // "繁忙提示后重试"或重复点击，直接返回已有订单，不再累加数量、不再扣餐。
-            if (hasRecentConsumeWithin(mergeTargetOrderId, 120)) {
-                log.warn("拦截短时间重复下单: customerId={} serveDate={} mealPeriod={} targetOrderId={} units={}",
-                    customerId, orderDate, mealPeriod, mergeTargetOrderId, units);
-                return new MobileCreateOrderResponse(mergeTargetOrderId, "MERGED", "ALREADY_RESERVED");
-            }
+            // 短时间重复下单不再按「2 分钟扣餐流水窗口」拦截：用户短时间再次下单（加餐）
+            // 属于正常业务，直接合并累加数量并扣餐。防重复依赖幂等(clientRequestId)：
+            // 同一请求的网络重试复用同一 clientRequestId 会在 Controller 幂等层被拦，
+            // 不会走到这里造成同餐次数量叠加。
             ExistingOrderNoteRow existingOrder = loadExistingOrderNoteRow(mergeTargetOrderId);
             String mergedUserNote = mergeOrderNote(
                 preferredOrderNote(existingOrder.userNote(), existingOrder.note()),
@@ -200,23 +197,6 @@ class MiniappOrderModule {
             currentStatus != null ? currentStatus : "PENDING_DISPATCH",
             "RESERVED"
         );
-    }
-
-    /** 目标订单最近 N 秒内是否存在扣餐流水（用于识别短时间重复提交） */
-    private boolean hasRecentConsumeWithin(long mealSlotOrderId, int withinSeconds) {
-        Integer count = jdbcTemplate.queryForObject(
-            """
-                SELECT COUNT(*)
-                FROM wallet_transactions
-                WHERE related_order_id = ?
-                  AND transaction_type = 'CONSUME'
-                  AND created_at >= DATE_SUB(NOW(3), INTERVAL ? SECOND)
-                """,
-            Integer.class,
-            mealSlotOrderId,
-            withinSeconds
-        );
-        return count != null && count > 0;
     }
 
     private void attemptRefreshQueueState(long mealSlotOrderId) {
@@ -345,8 +325,11 @@ class MiniappOrderModule {
     }
 
     private long activeWalletId(long customerId) {
+        // 确定性选择「id 最小的有效 active 钱包」：与 customerHome 展示口径一致，
+        // 避免依赖 MySQL 行序在多个 active 钱包（含已过期）时取到不同钱包，
+        // 导致前端显示余量充足、实际扣减钱包余量不足的「只下了午餐」问题。
         Long walletId = jdbcTemplate.query(
-            "SELECT id FROM meal_wallets WHERE customer_id = ? AND active = TRUE AND (expired_at IS NULL OR expired_at >= CURRENT_TIMESTAMP)",
+            "SELECT id FROM meal_wallets WHERE customer_id = ? AND active = TRUE AND (expired_at IS NULL OR expired_at >= CURRENT_TIMESTAMP) ORDER BY id LIMIT 1",
             ps -> ps.setLong(1, customerId),
             rs -> rs.next() ? rs.getLong(1) : null
         );

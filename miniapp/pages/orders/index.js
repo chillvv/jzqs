@@ -22,6 +22,7 @@ Page({
     ],
     currentStatus: '',
     targetOrderId: null,
+    targetOrderIds: [],
     showingTargetOrderOnly: false,
     items: [],
     loading: false,
@@ -34,8 +35,13 @@ Page({
       statusBarHeight: app.globalData.statusBarHeight,
       navBarHeight: app.globalData.navBarHeight
     });
-    if (options.orderId) {
-      this.setData({ targetOrderId: options.orderId });
+    const orderIds = options.orderIds
+      ? options.orderIds.split(',').filter(Boolean)
+      : options.orderId
+        ? [options.orderId]
+        : [];
+    if (orderIds.length) {
+      this.setData({ targetOrderIds: orderIds, targetOrderId: orderIds[0] });
       wx.setNavigationBarTitle({ title: '关联订单' });
     }
   },
@@ -59,7 +65,7 @@ Page({
   },
 
   async loadOrders() {
-    const { currentStatus, targetOrderId } = this.data;
+    const { currentStatus, targetOrderIds } = this.data;
     if (demo.isActive() && onboarding.isRunningFlow()) {
       this.applyDemoOrders();
       this.showGuide();
@@ -72,11 +78,11 @@ Page({
       if (currentStatus) {
         items = items.filter((item) => item.customerStatus === currentStatus);
       }
-      items = resolveVisibleOrders(items, targetOrderId);
+      items = resolveVisibleOrders(items, targetOrderIds);
 
       this.setData({
         items,
-        showingTargetOrderOnly: Boolean(targetOrderId)
+        showingTargetOrderOnly: Boolean(targetOrderIds.length)
       });
     } catch (error) {
       wx.showToast({ title: error.message || '加载失败', icon: 'none' });
@@ -131,11 +137,12 @@ Page({
   },
 
   viewAllOrders() {
-    if (!this.data.targetOrderId) {
+    if (!this.data.targetOrderIds.length) {
       return;
     }
     this.setData({
       targetOrderId: null,
+      targetOrderIds: [],
       showingTargetOrderOnly: false,
       items: []
     });

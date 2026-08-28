@@ -59,12 +59,14 @@ function mapOrderForDisplay(item) {
   };
 }
 
-function resolveVisibleOrders(items, targetOrderId) {
-  if (!targetOrderId) {
+function resolveVisibleOrders(items, targetOrderIds) {
+  if (!targetOrderIds || !targetOrderIds.length) {
     return items;
   }
-  const matchedItem = (items || []).find((item) => String(item.id) === String(targetOrderId));
-  return matchedItem ? [matchedItem] : [];
+  // 支持多个目标订单：一次下单（午餐+晚餐）的关联订单应全部展示，
+  // 不能只筛第一个导致晚餐订单在列表里"消失"。
+  const idSet = new Set(targetOrderIds.map(String));
+  return (items || []).filter((item) => idSet.has(String(item.id)));
 }
 
 module.exports = {

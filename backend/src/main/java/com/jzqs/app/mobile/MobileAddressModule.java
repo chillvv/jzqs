@@ -186,7 +186,7 @@ class MobileAddressModule {
     private MobileOrderAddressChangeResponse changeCustomerOrderAddressInternal(long customerId, long orderId, long addressId, boolean enforceWindow) {
         CustomerOrderAddressRow order = jdbcTemplate.query(
             """
-                SELECT mso.address_id, do.serve_date
+                SELECT mso.address_id, do.serve_date, mso.status
                 FROM meal_slot_orders mso
                 JOIN daily_orders do ON do.id = mso.daily_order_id
                 WHERE mso.id = ? AND do.customer_id = ?
@@ -201,12 +201,16 @@ class MobileAddressModule {
                 }
                 return new CustomerOrderAddressRow(
                     rs.getLong("address_id"),
-                    rs.getObject("serve_date", LocalDate.class)
+                    rs.getObject("serve_date", LocalDate.class),
+                    rs.getString("status")
                 );
             }
         );
         if (order == null) {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "未找到该订单");
+        }
+        if (order.status() != null && (order.status().equals("CANCELLED") || order.status().equals("REFUNDED"))) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "该订单已取消或已退款，无法更换地址");
         }
         if (enforceWindow && !canChangeAddress(order.serveDate())) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "送餐当天请联系客服修改地址");
@@ -369,6 +373,6 @@ class MobileAddressModule {
     private record CustomerContactRow(String name, String phone) {
     }
 
-    private record CustomerOrderAddressRow(long addressId, LocalDate serveDate) {
+    private record CustomerOrderAddressRow(long addressId, LocalDate serveDate, String status) {
     }
 }
