@@ -1,0 +1,78 @@
+# 工单机制（issue tracker，本地 markdown）
+
+Issues and specs for this repo live as markdown files in `.scratch/`。
+规范来源：`docs/agents/issue-tracker.md`（mattpocock `setup-matt-pocock-skills` 生成）。
+
+## 目录规范
+
+```
+.scratch/
+├── <feature-slug>/
+│   ├── spec.md                      ← 该需求的规格（to-spec 产出）
+│   └── issues/
+│       ├── 01-<slug>.md             ← 每个 ticket 一个文件，从 01 编号
+│       ├── 02-<slug>.md
+│       └── ...
+└── <effort>/                        ← wayfinder 大型任务
+    ├── map.md                       ← 地图：Destination/Notes/Decisions/迷雾/Out of scope
+    └── issues/
+        ├── 01-<slug>.md             ← 决策 ticket（Type: research|prototype|grilling|task）
+        └── ...
+```
+
+**禁止**：把一个 feature 的所有 ticket 合并进单个文件。一 ticket 一文件。
+
+## Ticket 文件模板
+
+```markdown
+# <NN> — <Ticket title>
+
+**What to build:** 从用户视角描述的端到端行为，不是分层实现清单。
+
+**Blocked by:** 依赖的 ticket 编号/标题，或 "None — can start immediately"
+
+**Status:** needs-triage | needs-info | ready-for-agent | ready-for-human | wontfix | in-progress | done
+
+**类型:** bug | enhancement
+**优先级:** high | medium | low
+
+## Acceptance criteria
+
+- [ ] 验收条件 1
+- [ ] 验收条件 2
+```
+
+## wayfinder ticket 附加字段
+
+```
+**Type:** research | prototype | grilling | task
+**Status:** claimed | resolved
+```
+
+- **Claim**：动手前先置 `Status: claimed`（assignee 即锁，防并发会话重复处理）
+- **Resolve**：在 `## Answer` 段追加答案，置 `Status: resolved`，并把 gist+链接追加到 `map.md` 的 Decisions-so-far
+- **Frontier**：扫描 `issues/` 中 open + 无未 resolved 依赖 + 未 claimed 的文件，编号最小者优先
+
+## 状态流转
+
+```
+needs-triage → needs-info（要更多信息）
+             → ready-for-agent（AI 可以做了）→ in-progress → done
+             → ready-for-human（需要人工）
+             → wontfix（不做了）
+```
+
+## 常用指令
+
+- "**记个工单**" → 创建 `.scratch/<slug>/issues/01-<slug>.md`
+- "**看下有哪些工单**" → 列出所有 issues 及状态
+- "**看下 frontier**" → 列出可立即开工的 ticket（依赖已 resolved 且未 claimed）
+- 开发前 → 读工单规格 → `codebase-design` → `tdd`
+
+## 当前工单
+
+| 工单 | 状态 | 说明 |
+|------|------|------|
+| [create-consistency-check-sql/01](create-consistency-check-sql/issues/01-consistency-check-sql.md) | ready-for-agent | 上线前一致性巡检 SQL |
+| [fix-test-compile-errors/01](fix-test-compile-errors/issues/01-fix-test-compile-errors.md) | resolved | 测试编译修复，272 测试全绿 |
+| [fix-cloudfunctions-test-cache/01](fix-cloudfunctions-test-cache/issues/01-fix-cloudfunctions-test-cache.md) | done | cloudfunctions 云函数测试 require.cache 污染修复（Node 测试） |
