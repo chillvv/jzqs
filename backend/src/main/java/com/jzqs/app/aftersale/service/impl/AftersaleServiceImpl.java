@@ -167,6 +167,7 @@ public class AftersaleServiceImpl implements AftersaleService {
         ensureOrderAllowsAftersale(order.status());
         ensureNoOpenCase(request.orderId());
         String operatorName = fallbackOperator(request.operatorName(), "后台客服");
+        boolean refund = "REFUND".equals(request.type());
         long caseId = insertCase(
             request.orderId(),
             order.customerId(),
@@ -179,11 +180,42 @@ public class AftersaleServiceImpl implements AftersaleService {
             null,
             normalizeText(request.remark()),
             "ADMIN_DIRECT",
-            "REFUND".equals(request.type()),
+            refund,
             operatorName
         );
         insertAction(caseId, "CREATE", request.reasonText(), operatorName);
-        return new AdminAftersaleCreateResponse(caseId, "PENDING");
+        // 后台直接发起的售后立即生效，无需再到售后中心二次“同意”；
+        // 退回/补回餐数固定为该订单申请时的餐数（meal_slot_orders.quantity），确保账实一致。
+        int meals = resolveOrderMealQuantity(request.orderId());
+        if (meals <= 0) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "该订单餐数为0，无法处理售后");
+        }
+        if (refund) {
+            completeRefundCase(
+                caseId,
+                order.customerId(),
+                request.orderId(),
+                order.status(),
+                request.reasonCode(),
+                request.reasonText(),
+                normalizeText(request.remark()),
+                operatorName,
+                "REFUND_TO_WALLET"
+            );
+            insertAction(caseId, "REFUND_TO_WALLET", normalizeText(request.remark()), operatorName);
+        } else {
+            compensateMeals(
+                caseId,
+                order.customerId(),
+                request.orderId(),
+                meals,
+                normalizeText(request.remark()),
+                operatorName,
+                Math.max(request.estimatedLossMeals(), 0)
+            );
+            insertAction(caseId, "COMPENSATE_MEALS", normalizeText(request.remark()), operatorName);
+        }
+        return new AdminAftersaleCreateResponse(caseId, "COMPLETED");
     }
 
     @Override
@@ -220,7 +252,6 @@ public class AftersaleServiceImpl implements AftersaleService {
                 request.reasonText(),
                 "未送达自动退款",
                 "系统自动处理",
-                1,
                 "AUTO_REFUND_TO_WALLET"
             );
             insertAction(caseId, "AUTO_REFUND_TO_WALLET", "未送达自动退款", "系统自动处理");
@@ -280,7 +311,6 @@ public class AftersaleServiceImpl implements AftersaleService {
                 existingCase.reasonText(),
                 normalizeText(request.adminRemark()),
                 operatorName,
-                walletDelta,
                 action
             );
             insertAction(caseId, "REFUND_TO_WALLET", request.adminRemark(), operatorName);
@@ -616,19 +646,17 @@ public class AftersaleServiceImpl implements AftersaleService {
         String reasonText,
         String adminRemark,
         String operatorName,
-        int walletDelta,
         String action
     ) {
         clearDispatchLinks(orderId);
         if (!walletTransactionExists(caseId, "REFUND_RETURN")) {
             long walletId = findActiveWalletId(customerId);
-            Long originalTransactionId = findOriginalTransactionId(walletId, orderId, orderStatus);
 
-            // 退款统一退回该订单的餐数（meal_slot_orders.quantity），只能退该单的餐数，
-            // 不允许手动指定或按其他额度退回。
+            // 退款统一退回该订单申请时的餐数（meal_slot_orders.quantity），只允许退该单的餐数，
+            // 不允许手动指定或按其他额度退回；餐数为0的订单不允许退款。
             int effectiveDelta = resolveOrderMealQuantity(orderId);
             if (effectiveDelta <= 0) {
-                effectiveDelta = Math.max(walletDelta, 1);
+                throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "该订单餐数为0，无法退回餐次");
             }
             rollbackMeal(walletId, orderStatus, effectiveDelta);
 
@@ -640,20 +668,21 @@ public class AftersaleServiceImpl implements AftersaleService {
                 buildRefundRemark(reasonText),
                 caseId,
                 orderId,
-                originalTransactionId,
+                null,
                 reasonCode,
                 reasonText,
                 TimeUtils.now()
             );
-            if (originalTransactionId != null) {
-                markOriginalTransactionRefunded(
-                    originalTransactionId,
-                    refundTransactionId,
-                    caseId,
-                    reasonCode,
-                    reasonText
-                );
-            }
+            // 加餐合并会产生多笔扣餐流水：属于该订单的全部未退款 CONSUME 流水一次性标记退回，
+            // 保证"属于该订单的餐数全部退回"，退款后由商家自行重新下单，避免流水与状态割裂。
+            markOrderConsumeTransactionsRefunded(
+                walletId,
+                orderId,
+                refundTransactionId,
+                caseId,
+                reasonCode,
+                reasonText
+            );
             
             // 更新售后单状态，并确保 wallet_delta 记录的是实际退回的数量
             jdbcTemplate.update(
@@ -691,6 +720,66 @@ public class AftersaleServiceImpl implements AftersaleService {
         );
     }
 
+    private void compensateMeals(
+        long caseId,
+        long customerId,
+        long orderId,
+        int meals,
+        String adminRemark,
+        String operatorName,
+        int estimatedLossMeals
+    ) {
+        // 补偿统一按该订单申请时的餐数（meal_slot_orders.quantity）补回餐次，不允许手动指定或按其他额度补回。
+        if (!walletTransactionExists(caseId, "COMPENSATION_RETURN")) {
+            long walletId = findActiveWalletId(customerId);
+            jdbcTemplate.update(
+                "UPDATE meal_wallets SET total_meals = total_meals + ? WHERE id = ?",
+                meals,
+                walletId
+            );
+            insertWalletTransaction(
+                walletId,
+                "COMPENSATION_RETURN",
+                meals,
+                operatorName,
+                "售后补回餐次",
+                caseId,
+                orderId,
+                null,
+                null,
+                null,
+                TimeUtils.now()
+            );
+        }
+        jdbcTemplate.update(
+            """
+                UPDATE aftersale_cases
+                SET resolution_type = ?,
+                    resolution_action = ?,
+                    wallet_delta = ?,
+                    settled_loss_meals = ?,
+                    gift_zero_meal_count = 0,
+                    gift_veggie_juice_count = 0,
+                    refund_blocking = FALSE,
+                    status = 'COMPLETED',
+                    admin_remark = ?,
+                    processed_at = CURRENT_TIMESTAMP,
+                    processed_by = ?,
+                    operator_name = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+            "COMPENSATE_MEALS",
+            "COMPENSATE_MEALS",
+            meals,
+            estimatedLossMeals,
+            normalizeText(adminRemark),
+            operatorName,
+            operatorName,
+            caseId
+        );
+    }
+
     private void insertAction(long caseId, String actionType, String actionNote, String operatorName) {
         jdbcTemplate.update(
             "INSERT INTO aftersale_actions (aftersale_case_id, action_type, action_note, operator_name) VALUES (?, ?, ?, ?)",
@@ -701,40 +790,16 @@ public class AftersaleServiceImpl implements AftersaleService {
         );
     }
 
-    private Long findOriginalTransactionId(long walletId, long orderId, String orderStatus) {
-        // 扣餐统一发生在下单/加餐时（CONSUME 流水），退款按原 CONSUME 记录额度退回。
-        return queryOriginalTransactionId(walletId, orderId, "CONSUME");
-    }
-
-    private Long queryOriginalTransactionId(long walletId, long orderId, String transactionType) {
-        return jdbcTemplate.query(
-            """
-                SELECT id
-                FROM wallet_transactions
-                WHERE wallet_id = ?
-                  AND transaction_type = ?
-                  AND refunded = FALSE
-                  AND (related_order_id = ? OR related_order_id IS NULL)
-                ORDER BY CASE WHEN related_order_id = ? THEN 0 ELSE 1 END, id DESC
-                LIMIT 1
-                """,
-            ps -> {
-                ps.setLong(1, walletId);
-                ps.setString(2, transactionType);
-                ps.setLong(3, orderId);
-                ps.setLong(4, orderId);
-            },
-            rs -> rs.next() ? rs.getLong("id") : null
-        );
-    }
-
-    private void markOriginalTransactionRefunded(
-        long originalTransactionId,
+    private void markOrderConsumeTransactionsRefunded(
+        long walletId,
+        long orderId,
         long refundTransactionId,
         long aftersaleId,
         String reasonCode,
         String reasonText
     ) {
+        // 加餐合并会产生多笔 CONSUME 流水，退款时该订单所有未退款扣餐流水一次性全部标记，
+        // 确保"属于该订单的餐数全部退回"，避免用户端流水出现"扣了未退"的割裂展示。
         jdbcTemplate.update(
             """
                 UPDATE wallet_transactions
@@ -743,13 +808,17 @@ public class AftersaleServiceImpl implements AftersaleService {
                     related_transaction_id = ?,
                     refund_reason_code = ?,
                     refund_reason_text = ?
-                WHERE id = ?
+                WHERE wallet_id = ?
+                  AND transaction_type = 'CONSUME'
+                  AND refunded = FALSE
+                  AND related_order_id = ?
                 """,
             aftersaleId,
             refundTransactionId,
             normalizeText(reasonCode),
             normalizeText(reasonText),
-            originalTransactionId
+            walletId,
+            orderId
         );
     }
 

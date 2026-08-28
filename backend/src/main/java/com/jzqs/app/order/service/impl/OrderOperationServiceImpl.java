@@ -162,13 +162,10 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
                     orderOperationRepository.decreaseConsumedMeals(walletId, quantity);
                     long refundTransactionId = insertWalletTransactionByAdminReturnId(
                         walletId, "REFUND", quantity, "退款退回餐次", orderId);
-                    // 对齐售后退款口径：把原扣餐流水标记为已退款，回填退款流水与原因，
+                    // 对齐售后退款口径：该订单所有未退款扣餐流水一次性标记为已退款（加餐合并可能有多笔），
                     // 避免用户端流水出现"扣了未退"的割裂展示。
-                    Long originalTransactionId = orderSupportRepository.findOriginalConsumeTransactionId(walletId, orderId);
-                    if (originalTransactionId != null) {
-                        orderSupportRepository.markTransactionRefunded(
-                            originalTransactionId, refundTransactionId, "USER_CANCEL", "用户取消订单");
-                    }
+                    orderSupportRepository.markOrderConsumeTransactionsRefunded(
+                        walletId, orderId, refundTransactionId, "USER_CANCEL", "用户取消订单");
                 }
             }
         }

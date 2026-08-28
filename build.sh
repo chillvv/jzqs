@@ -35,6 +35,7 @@ fail()  { printf "\033[1;31m[FAIL]\033[0m %s\n" "$*" >&2; exit 1; }
 build_backend_jar() {
   info "用 Maven 容器打包后端 jar（含测试，测试失败则构建失败）..."
   docker run --rm \
+    --network host \
     -v "$PWD":/app \
     -v "$HOME/.m2":/root/.m2 \
     -w /app/backend \
@@ -47,6 +48,7 @@ build_backend_jar() {
 run_backend_tests() {
   info "运行后端测试（不打包）..."
   docker run --rm \
+    --network host \
     -v "$PWD":/app \
     -v "$HOME/.m2":/root/.m2 \
     -w /app/backend \

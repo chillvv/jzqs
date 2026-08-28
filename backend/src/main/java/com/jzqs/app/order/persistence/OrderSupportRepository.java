@@ -125,30 +125,9 @@ public class OrderSupportRepository {
         return key == null ? 0L : key.longValue();
     }
 
-    /** 查找该钱包下该订单对应的原扣餐流水（与售后退款链路同一口径：优先关联本订单，老数据未关联订单的兜底）。 */
-    public Long findOriginalConsumeTransactionId(long walletId, long orderId) {
-        return jdbcTemplate.query(
-            """
-                SELECT id
-                FROM wallet_transactions
-                WHERE wallet_id = ?
-                  AND transaction_type = 'CONSUME'
-                  AND refunded = FALSE
-                  AND (related_order_id = ? OR related_order_id IS NULL)
-                ORDER BY CASE WHEN related_order_id = ? THEN 0 ELSE 1 END, id DESC
-                LIMIT 1
-                """,
-            ps -> {
-                ps.setLong(1, walletId);
-                ps.setLong(2, orderId);
-                ps.setLong(3, orderId);
-            },
-            rs -> rs.next() ? rs.getLong("id") : null
-        );
-    }
-
-    /** 将原扣餐流水标记为已退款，并回填关联的退款流水与原因，保证用户端流水状态闭环。 */
-    public void markTransactionRefunded(long transactionId, long relatedTransactionId, String reasonCode, String reasonText) {
+    /** 将该订单所有未退款的原扣餐流水一次性标记为已退款（加餐合并订单可能有多笔 CONSUME 流水），
+     *  并回填关联的退款流水与原因，保证用户端流水状态闭环。 */
+    public void markOrderConsumeTransactionsRefunded(long walletId, long orderId, long relatedTransactionId, String reasonCode, String reasonText) {
         jdbcTemplate.update(
             """
                 UPDATE wallet_transactions
@@ -156,12 +135,16 @@ public class OrderSupportRepository {
                     related_transaction_id = ?,
                     refund_reason_code = ?,
                     refund_reason_text = ?
-                WHERE id = ?
+                WHERE wallet_id = ?
+                  AND transaction_type = 'CONSUME'
+                  AND refunded = FALSE
+                  AND related_order_id = ?
                 """,
             relatedTransactionId,
             reasonCode,
             reasonText,
-            transactionId
+            walletId,
+            orderId
         );
     }
 

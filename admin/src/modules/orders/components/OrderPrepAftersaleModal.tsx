@@ -39,13 +39,13 @@ export function OrderPrepAftersaleModal({ isOpen, onClose, onSuccess, activeItem
     setSubmittingOrderAftersale(true);
     try {
       await createOrderAftersale(activeItem.id, {
-        type: "COMPENSATION",
-        reasonCode: "ADMIN_COMPENSATION",
+        type: "REFUND",
+        reasonCode: "ADMIN_DIRECT",
         reasonText,
         // 处理说明同时作为商家处理结果，用户端小程序会展示该内容
         remark: reasonText
       });
-      toast("售后已创建");
+      toast(`已退款并作废该订单，退回 ${activeItem.quantity} 餐`);
       onClose();
       onSuccess();
     } catch (err: any) {
@@ -86,6 +86,15 @@ export function OrderPrepAftersaleModal({ isOpen, onClose, onSuccess, activeItem
             <div><strong>客户</strong><span>{activeItem.customerName} / {activeItem.customerPhone}</span></div>
             <div><strong>出餐 / 配送</strong><span>{mealPeriodLabel(activeItem.mealPeriod)} / {mealPeriodLabel(activeItem.deliveryMealPeriod)} ×{activeItem.quantity}</span></div>
             <div><strong>当前状态</strong><span>{activeItem.displayStatusLabel || resolveOrderDisplayStatusLabel(resolveOrderDisplayStatus(activeItem))}</span></div>
+          </div>
+        </div>
+
+        <div className="auth-panel" style={{ borderColor: "rgba(37, 99, 235, 0.3)", background: "rgba(37, 99, 235, 0.04)" }}>
+          <div className="auth-panel__grid">
+            <div style={{ gridColumn: "1 / -1" }}>
+              <strong>退款说明</strong>
+              <span>提交后直接退款并作废该订单：退回该订单 {activeItem.quantity} 餐，订单从订单中心移除，退款后请重新下单。</span>
+            </div>
           </div>
         </div>
 

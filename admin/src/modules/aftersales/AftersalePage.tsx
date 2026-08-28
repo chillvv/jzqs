@@ -241,7 +241,7 @@ export function AftersalePage() {
         sourceCategory: "NORMAL",
         remark: createForm.remark.trim()
       });
-      toast("售后已登记");
+      toast("售后已处理并生效");
       setShowCreateModal(false);
       await reloadList("ledger", "ALL");
       setViewMode("ledger");
@@ -662,6 +662,9 @@ export function AftersalePage() {
                   >
                     退款
                   </button>
+                </div>
+                <div style={{ marginTop: "8px", color: "var(--text-sub)", fontSize: "13px" }}>
+                  提交后售后直接生效，退回/补回餐数为该订单的餐数，无需再进入处理流程。
                 </div>
               </div>
 
