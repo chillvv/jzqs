@@ -23,18 +23,10 @@
 # 本地工作记忆（不提交，含跨会话 agent 记忆，属个人本地状态）
 .codebuddy/
 
-# ---------- 测试类与测试资源 (生产环境不需要) ----------
-/tests/
-/backend/src/test/
-/admin/src/**/*.test.ts
-/admin/src/**/*.test.tsx
-/admin/scripts/
-/admin/temp-test/
-/miniapp/tests/
-/miniapp-rider/tests/
-
-# ---------- 开发文档与本地规格说明 ----------
-/docs/
+# ---------- 测试与文档（2026-08-29 起不再忽略，老板拍板）----------
+# 测试文件必须入库：否则 CI 在 checkout 后无测试可跑，违反铁律 3「CI 必须跑测试」。
+# 曾忽略 /tests/ /backend/src/test/ admin 测试 /miniapp/tests/ /miniapp-rider/tests/ /docs/
+# 生产构建不需要测试文件 → 排除逻辑改由各模块 .dockerignore 承担。
 
 # ---------- IDE ----------
 .idea/

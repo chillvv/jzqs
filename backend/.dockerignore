@@ -4,3 +4,5 @@ uploads
 *.txt
 tmp_*
 target
+# 生产镜像不需要测试文件（测试入库但构建排除，2026-08-29）
+src/test
