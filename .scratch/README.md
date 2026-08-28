@@ -76,3 +76,6 @@ needs-triage → needs-info（要更多信息）
 | [create-consistency-check-sql/01](create-consistency-check-sql/issues/01-consistency-check-sql.md) | ready-for-agent | 上线前一致性巡检 SQL |
 | [fix-test-compile-errors/01](fix-test-compile-errors/issues/01-fix-test-compile-errors.md) | resolved | 测试编译修复，272 测试全绿 |
 | [fix-cloudfunctions-test-cache/01](fix-cloudfunctions-test-cache/issues/01-fix-cloudfunctions-test-cache.md) | done | cloudfunctions 云函数测试 require.cache 污染修复（Node 测试） |
+| [local-e2e-coverage/01](local-e2e-coverage/issues/01-fix-smart-webapp-testing-pointer.md) | done | 修复 smart 的 `webapp-testing` 悬空指针（该技能不存在） |
+| [local-e2e-coverage/02](local-e2e-coverage/issues/02-localize-admin-e2e.md) | in-progress | admin E2E 本地化：脚本已改造，浏览器跑通待起服务 |
+| [local-e2e-coverage/03](local-e2e-coverage/issues/03-cross-end-e2e-local-db.md) | done | 跨端 E2E 连本地 3307（CrossEndFlowE2ETest 3/3 通过） |
