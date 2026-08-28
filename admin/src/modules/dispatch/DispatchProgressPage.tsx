@@ -403,6 +403,8 @@ export function DispatchProgressPage() {
                     : order.deliveryStatus === "DELIVERED"
                       ? "is-delivered"
                       : "is-pending";
+                  // 多份订单 (quantity > 1)：仅显示数量徽章，卡片样式保持原样
+                  const isMultiple = order.quantity > 1;
                   return (
                     <button
                       key={order.orderId}
@@ -411,9 +413,16 @@ export function DispatchProgressPage() {
                       onClick={() => setSelectedOrderId(order.orderId)}
                     >
                       <div className="dispatch-order-tile__top">
-                        <div>
-                          <strong style={{ fontSize: "15px", display: "block", marginBottom: "4px" }}>
-                            #{order.sequenceNumber} {order.customerName}
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <strong style={{ fontSize: "15px", display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px", minWidth: 0 }}>
+                            <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              #{order.sequenceNumber} {order.customerName}
+                            </span>
+                            {isMultiple ? (
+                              <span className="quantity-badge" title={`本订单共 ${order.quantity} 份`} style={{ flexShrink: 0 }}>
+                                ×{order.quantity}
+                              </span>
+                            ) : null}
                           </strong>
                           <div className="dispatch-inline-note">{order.deliveryAddress}</div>
                         </div>

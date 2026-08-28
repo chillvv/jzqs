@@ -298,18 +298,32 @@ export function DispatchAreasPage() {
     const sourceAreaCode = activeArea.areaCode;
     setBatchMoving(true);
     try {
-      await Promise.all(
-        orderIds.map((orderId) =>
-          moveOrderToArea(sourceAreaCode, orderId, { targetAreaCode })
-        )
-      );
+      // 必须串行：后端每个订单都是独立事务，并发更新 dispatch_assignments /
+      // dispatch_batches / dispatch_batch_items / rider_profiles 会触发 InnoDB 死锁，
+      // 表现为前端"系统繁忙，请稍后重试"（详见后端 CannotAcquireLockException 堆栈）。
+      // 单事务走批量接口是后续优化点，这里先用串行兜底保证可用。
+      const moved: number[] = [];
+      const failed: number[] = [];
+      for (const orderId of orderIds) {
+        try {
+          await moveOrderToArea(sourceAreaCode, orderId, { targetAreaCode });
+          moved.push(orderId);
+        } catch (err: any) {
+          // 单单失败不打断后续订单：先把能移的移过去，最后统一报告失败的清单
+          // eslint-disable-next-line no-console
+          console.error("移区单订单失败", orderId, err);
+          failed.push(orderId);
+        }
+      }
       setIsReordering(false);
       setLocalOrders([]);
       setSelectedOrderIds([]);
       await reload();
-      toast(`已将 ${orderIds.length} 单移到「${targetAreaCode}」`);
-    } catch (err: any) {
-      toast(getErrorMessage(err, "批量移区失败"), "error");
+      if (failed.length > 0) {
+        toast(`已移 ${moved.length} 单，${failed.length} 单失败：#${failed.join(" #")}`, "error");
+      } else {
+        toast(`已将 ${moved.length} 单移到「${targetAreaCode}」`);
+      }
     } finally {
       setBatchMoving(false);
     }

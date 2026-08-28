@@ -131,6 +131,8 @@ class DispatchQueryModule {
         // 未分配区域：尚未写入 dispatch_assignments 的晚餐订单（排除已取消/退款）。
         // 注意：不能用 mso.status='PENDING_DISPATCH' 判断，因为区域分配后 mso 可能仍保持 PENDING_DISPATCH；
         // 也不能用 rider_address_bindings 排除，否则已绑定骑手但待分配的订单会被两边都漏掉。
+        // 以下所有口径与订单中心列表保持一致（排除取消/退款 + 已确认退款的售后），
+        // 保证「未分配 + 已分配 + 已送达 = 订单中心可见总份数」闭合对账。
         int pendingCount = queryCount(
             """
                 SELECT COALESCE(SUM(mso.quantity), 0)
@@ -141,6 +143,13 @@ class DispatchQueryModule {
                   AND doo.serve_date = ?
                   AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
                   AND da.id IS NULL
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM aftersale_cases ac
+                      WHERE ac.meal_slot_order_id = mso.id
+                        AND ac.refund_blocking = TRUE
+                        AND ac.status = 'COMPLETED'
+                  )
                 """,
             targetDate,
             finalMealPeriod,
@@ -157,6 +166,13 @@ class DispatchQueryModule {
                 WHERE mso.status NOT IN ('CANCELLED', 'REFUNDED')
                   AND doo.serve_date = ?
                   AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM aftersale_cases ac
+                      WHERE ac.meal_slot_order_id = mso.id
+                        AND ac.refund_blocking = TRUE
+                        AND ac.status = 'COMPLETED'
+                  )
                 """,
             targetDate,
             finalMealPeriod,
@@ -172,6 +188,13 @@ class DispatchQueryModule {
                   AND da.rider_name IS NULL
                   AND doo.serve_date = ?
                   AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM aftersale_cases ac
+                      WHERE ac.meal_slot_order_id = mso.id
+                        AND ac.refund_blocking = TRUE
+                        AND ac.status = 'COMPLETED'
+                  )
                 """,
             targetDate,
             finalMealPeriod,
@@ -191,6 +214,12 @@ class DispatchQueryModule {
         String finalMealPeriod = normalizedMealPeriod(mealPeriod);
         List<RiderProgressRow> rows = jdbcTemplate.query(
             """
+                -- 注意:此处 INNER JOIN meal_slot_orders 是「统计无残留」的关键,
+                -- 任何已被硬删的 meal_slot_orders 都会让此行自动被过滤掉,
+                -- 配合 V25/V27 的 ON DELETE CASCADE 外键,即使应用层清理失败,
+                -- 也不会出现「订单不存在但骑手进度还计数」的幻数。
+                -- 同时显式排除已终态的订单,即使 dispatch_assignments 历史脏数据
+                -- 因为某种原因未同步,也不会污染 delivered/total 统计。
                 SELECT
                     da.rider_name,
                     da.area_code,
@@ -201,10 +230,23 @@ class DispatchQueryModule {
                 FROM dispatch_assignments da
                 JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
+                -- 与订单中心列表 findPrepPage 的 JOIN 口径一致：排除"客户已被删除"的孤儿订单，
+                -- 否则骑手进度会把订单中心列表里根本看不到的订单也算进 total/completed。
+                JOIN customers c ON c.id = doo.customer_id
                 LEFT JOIN dispatch_batch_items dbi ON dbi.meal_slot_order_id = da.meal_slot_order_id
                 WHERE doo.serve_date = ?
                   AND da.rider_name IS NOT NULL
                   AND da.rider_name <> ''
+                  AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
+                  -- 与订单中心列表口径一致：排除已确认退款（refund_blocking 已完成）的订单，
+                  -- 否则骑手进度会比订单中心多算份数。
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM aftersale_cases ac
+                      WHERE ac.meal_slot_order_id = mso.id
+                        AND ac.refund_blocking = TRUE
+                        AND ac.status = 'COMPLETED'
+                  )
                   AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
                 ORDER BY da.rider_name, da.area_code, da.sequence_number, da.id
                 """,
@@ -537,6 +579,17 @@ class DispatchQueryModule {
                 ) dr ON dr.meal_slot_order_id = mso.id
                 WHERE da.area_code = ?
                   AND doo.serve_date = ?
+                  -- 与 riderProgress 统计同一口径:订单中心已取消/已退款的订单不再进入骑手队列,
+                  -- 避免「订单中心已退款但骑手进度仍残留」的幻数。
+                  AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
+                  -- 与订单中心列表一致：排除已确认退款（refund_blocking 已完成）的订单
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM aftersale_cases ac
+                      WHERE ac.meal_slot_order_id = mso.id
+                        AND ac.refund_blocking = TRUE
+                        AND ac.status = 'COMPLETED'
+                  )
                   AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
                 ORDER BY
                     CASE WHEN da.status = 'DELIVERED' THEN 1 ELSE 0 END,
@@ -608,8 +661,11 @@ class DispatchQueryModule {
                 JOIN dispatch_assignments da ON da.meal_slot_order_id = de.meal_slot_order_id
                 JOIN meal_slot_orders mso ON mso.id = de.meal_slot_order_id
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
+                JOIN customers c ON c.id = doo.customer_id
                 WHERE de.resolved = FALSE
                   AND doo.serve_date = ?
+                  -- 同 riderProgress 口径:已取消/已退款订单的异常不参与骑手异常计数
+                  AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
                   AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
                 GROUP BY de.rider_name, da.area_code
                 """,

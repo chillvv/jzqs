@@ -189,8 +189,10 @@ public class OrderQueryRepository {
         // 统计口径：仅统计当日出餐、且未取消/未退款的餐次份数
         // （秒退款、已取消的订单不计入顶部卡片，与下方订单面板口径一致）
         // meal_slot_orders 没有 serve_date 列，需通过 daily_orders 关联获取出餐日期
+        // 同时 JOIN customers 排除"客户已被删除"的孤儿订单——列表 findPrepPage 因 INNER JOIN customers
+        // 会隐藏这些订单，若统计不排除，顶部卡片就会比列表聚合多几份（与看板口径保持一致）。
         String counted = "mso.status NOT IN ('CANCELLED', 'REFUNDED') AND do.serve_date = ?";
-        String countedFrom = "meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id";
+        String countedFrom = "meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id JOIN customers c ON c.id = do.customer_id";
         Integer totalMeals = jdbcTemplate.queryForObject(
             "SELECT COALESCE(SUM(mso.quantity), 0) FROM " + countedFrom + " WHERE " + counted,
             Integer.class, businessDate

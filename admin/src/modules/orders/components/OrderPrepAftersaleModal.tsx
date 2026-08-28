@@ -17,17 +17,13 @@ interface Props {
 export function OrderPrepAftersaleModal({ isOpen, onClose, onSuccess, activeItem }: Props) {
   const [submittingOrderAftersale, setSubmittingOrderAftersale] = useState(false);
   const [orderAftersaleForm, setOrderAftersaleForm] = useState({
-    intent: "COMPENSATION",
-    reasonText: "",
-    remark: ""
+    reasonText: ""
   });
 
   useEffect(() => {
     if (isOpen && activeItem) {
       setOrderAftersaleForm({
-        intent: "COMPENSATION",
-        reasonText: `订单 #${activeItem.id} 售后处理`,
-        remark: ""
+        reasonText: ""
       });
     }
   }, [isOpen, activeItem]);
@@ -35,9 +31,8 @@ export function OrderPrepAftersaleModal({ isOpen, onClose, onSuccess, activeItem
   async function handleOrderAftersaleSubmit() {
     if (!activeItem) return;
     const reasonText = orderAftersaleForm.reasonText.trim();
-    const remark = orderAftersaleForm.remark.trim();
     if (!reasonText) {
-      toast("请填写售后原因", "error");
+      toast("请填写处理说明", "error");
       return;
     }
 
@@ -45,11 +40,12 @@ export function OrderPrepAftersaleModal({ isOpen, onClose, onSuccess, activeItem
     try {
       await createOrderAftersale(activeItem.id, {
         type: "COMPENSATION",
-        reasonCode: orderAftersaleForm.intent === "COMPENSATION" ? "ADMIN_COMPENSATION" : "ADMIN_EXCEPTION",
+        reasonCode: "ADMIN_COMPENSATION",
         reasonText,
-        remark: remark || (orderAftersaleForm.intent === "REGISTER_ONLY" ? "已登记异常，等待后续处理" : "请前往售后台账继续处理")
+        // 处理说明同时作为商家处理结果，用户端小程序会展示该内容
+        remark: reasonText
       });
-      toast(orderAftersaleForm.intent === "REGISTER_ONLY" ? "异常已登记到售后台账" : "补偿售后已创建");
+      toast("售后已创建");
       onClose();
       onSuccess();
     } catch (err: any) {
@@ -94,43 +90,13 @@ export function OrderPrepAftersaleModal({ isOpen, onClose, onSuccess, activeItem
         </div>
 
         <div className="form-group" style={{ marginBottom: 0 }}>
-          <label className="form-label">处理意图</label>
-          <div className="action-chip-row">
-            {[
-              { key: "COMPENSATION", label: "登记补偿" },
-              { key: "REGISTER_ONLY", label: "登记异常" }
-            ].map((option) => (
-              <button
-                key={option.key}
-                type="button"
-                className={`action-chip ${orderAftersaleForm.intent === option.key ? "active" : ""}`}
-                onClick={() => setOrderAftersaleForm((current) => ({ ...current, intent: option.key }))}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <label className="form-label">售后原因</label>
+          <label className="form-label">处理说明</label>
           <SafeTextarea
             className="form-control"
             value={orderAftersaleForm.reasonText}
             onValueChange={(value) => setOrderAftersaleForm((current) => ({ ...current, reasonText: value }))}
             rows={3}
-            placeholder="请填写退款、补偿或异常原因"
-          />
-        </div>
-
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <label className="form-label">商家备注</label>
-          <SafeTextarea
-            className="form-control"
-            value={orderAftersaleForm.remark}
-            onValueChange={(value) => setOrderAftersaleForm((current) => ({ ...current, remark: value }))}
-            rows={3}
-            placeholder="补充处理说明、异常细节或后续跟进备注"
+            placeholder="请填写问题原因与处理结果，将展示给用户查看"
           />
         </div>
       </div>

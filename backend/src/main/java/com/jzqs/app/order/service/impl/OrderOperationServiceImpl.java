@@ -160,7 +160,15 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
                 Long walletId = findActiveWalletIdByCustomerId(customerId);
                 if (walletId != null) {
                     orderOperationRepository.decreaseConsumedMeals(walletId, quantity);
-                    insertWalletTransactionByAdmin(walletId, "REFUND", quantity, "退款退回餐次", orderId);
+                    long refundTransactionId = insertWalletTransactionByAdminReturnId(
+                        walletId, "REFUND", quantity, "退款退回餐次", orderId);
+                    // 对齐售后退款口径：把原扣餐流水标记为已退款，回填退款流水与原因，
+                    // 避免用户端流水出现"扣了未退"的割裂展示。
+                    Long originalTransactionId = orderSupportRepository.findOriginalConsumeTransactionId(walletId, orderId);
+                    if (originalTransactionId != null) {
+                        orderSupportRepository.markTransactionRefunded(
+                            originalTransactionId, refundTransactionId, "USER_CANCEL", "用户取消订单");
+                    }
                 }
             }
         }
@@ -220,6 +228,9 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
         // 必须在删除订单前级联清理售后工单，否则会残留孤儿售后单，
         // 导致看板"待处理售后"出现点不开的幻数。
         orderOperationRepository.deleteAftersaleCases(orderId);
+        // 级联清理关联的餐次流水（扣餐/退款），避免用户端流水指向已删除订单、
+        // 点击跳转落空形成"凭空"流水；与派单/回执/备注/售后同一清理口径。
+        orderSupportRepository.deleteWalletTransactionsByOrderId(orderId);
         orderOperationRepository.deleteMealSlotOrder(orderId);
 
         Integer remainingSlots = orderOperationRepository.countRemainingSlots(dailyOrderId);

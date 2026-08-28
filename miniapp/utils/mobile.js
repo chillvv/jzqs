@@ -76,6 +76,7 @@ function transactionLabel(type) {
       return '取消释放';
     case 'CONSUME':
       return '预定核销';
+    case 'REFUND':
     case 'REFUND_RETURN':
       return '退款退回';
     case 'COMPENSATION_RETURN':

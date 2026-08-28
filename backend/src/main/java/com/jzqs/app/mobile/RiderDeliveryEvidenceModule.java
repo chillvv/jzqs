@@ -87,7 +87,7 @@ class RiderDeliveryEvidenceModule {
         }
 
         int updatedCount = 0;
-        String normalizedReferenceImageUrl = riderReceiptStorageSupport.buildReceiptUrl(request.referenceImageUrl());
+        String normalizedReferenceImageUrl = riderReceiptStorageSupport.copyToAddressReferenceStorage(request.referenceImageUrl());
         for (Long addressId : uniqueAddressIds) {
             upsertAddressReferenceImage(addressId, normalizedReferenceImageUrl, null, resolveRiderName(riderId));
             updatedCount++;
@@ -103,7 +103,7 @@ class RiderDeliveryEvidenceModule {
         if (isBlank(referenceImageUrl)) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "参考图不能为空");
         }
-        String normalizedReferenceImageUrl = riderReceiptStorageSupport.buildReceiptUrl(referenceImageUrl);
+        String normalizedReferenceImageUrl = riderReceiptStorageSupport.copyToAddressReferenceStorage(referenceImageUrl);
         upsertAddressReferenceImage(addressId, normalizedReferenceImageUrl, null, resolveRiderName(riderId));
         return new RiderAddressReferenceReplaceResponse(addressId, normalizedReferenceImageUrl, true);
     }
@@ -266,7 +266,10 @@ class RiderDeliveryEvidenceModule {
         if (count != null && count > 0) {
             return;
         }
-        upsertAddressReferenceImage(addressId, receiptUrl, orderId, riderName);
+        // 参考图不能直接引用回执图：回执图会被每日定时清理任务删除，届时参考图将 404。
+        // 这里先把回执图复制成独立的地址参考图（address-references 目录，永不清理），再落库。
+        String referenceImageUrl = riderReceiptStorageSupport.copyToAddressReferenceStorage(receiptUrl);
+        upsertAddressReferenceImage(addressId, referenceImageUrl, orderId, riderName);
     }
 
     private void upsertAddressReferenceImage(long addressId, String referenceImageUrl, Long sourceOrderId, String riderName) {

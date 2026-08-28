@@ -87,12 +87,25 @@
       </view>
 
       <!-- 参考图直接展示，无需点击即可看到 -->
-      <view wx:if="{{hasReferenceImage && referenceImageUrl}}" class="reference-inline" bindtap="previewReferenceImage">
-        <image class="reference-inline-img" src="{{referenceImageUrl}}" mode="aspectFill" lazy-load="{{true}}"></image>
+      <view wx:if="{{hasReferenceImage && referenceImageUrl && !referenceImageError}}" class="reference-inline" bindtap="previewReferenceImage">
+        <image
+          class="reference-inline-img"
+          src="{{referenceImageUrl}}"
+          mode="aspectFill"
+          lazy-load="{{true}}"
+          binderror="onReferenceImageError"
+        ></image>
         <view class="reference-inline-hint">
           <text class="material-symbols-outlined reference-inline-hint-icon">🔍</text>
           <text class="reference-inline-hint-text">点击查看大图</text>
         </view>
+      </view>
+
+      <!-- 参考图加载失败兜底（原图已不可用），避免渲染层反复报 404 -->
+      <view wx:elif="{{hasReferenceImage && !referenceImageLoading && referenceImageError}}" class="reference-empty" bindtap="handleUploadReferenceImage">
+        <image class="reference-empty-icon" src="/assets/icons/camera.svg" mode="aspectFit"></image>
+        <text class="reference-empty-title">参考图已失效</text>
+        <text class="reference-empty-copy">原参考图无法加载，可重新上传一张。</text>
       </view>
 
       <view wx:elif="{{!referenceImageLoading}}" class="reference-empty" bindtap="handleUploadReferenceImage">

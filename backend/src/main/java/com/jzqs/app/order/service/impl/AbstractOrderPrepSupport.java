@@ -71,6 +71,20 @@ abstract class AbstractOrderPrepSupport {
         );
     }
 
+    /** 同 {@link #insertWalletTransactionByAdmin}，但返回新流水 id，用于回填原扣餐流水的退款标记。 */
+    protected long insertWalletTransactionByAdminReturnId(long walletId, String transactionType, int mealDelta, String remark, Long relatedOrderId) {
+        var admin = AdminRequestContextSupport.currentAdminOrNull();
+        return orderSupportRepository.insertWalletTransactionReturnId(
+            walletId,
+            transactionType,
+            mealDelta,
+            admin == null ? "系统" : admin.operatorName(),
+            admin == null ? null : admin.userId(),
+            remark,
+            relatedOrderId
+        );
+    }
+
     protected String resolveMealPeriod(Object mealPeriodValue, Object legacyMealSummaryValue, String fallbackMealPeriod) {
         String normalizedMealPeriod = normalizeMealPeriod(stringValue(mealPeriodValue));
         if (!normalizedMealPeriod.isBlank()) {

@@ -1,37 +1,30 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { fetchDashboardOverview } from "../../shared/api/http";
 import type { DashboardOverviewResponse } from "../../shared/api/types";
 import {
-  buildDashboardHeroMetrics,
+  buildDashboardFlowSteps,
   buildDashboardOrderTrendSummary,
-  buildDashboardProgressItems,
-  buildDashboardTomorrowSummary,
-  buildDashboardTodoItems,
-  normalizeDashboardOverview,
-  type DashboardActionKey
+  normalizeDashboardOverview
 } from "./dashboardPage.helpers";
-import { LowBalanceAlertModal } from "./LowBalanceAlertModal";
+import { useAdminRealtime } from "../../shared/realtime/adminRealtime";
 import { AsyncContentView, type AsyncContentViewStatus } from "../../shared/components/AsyncContentView";
+import { Clock, Truck, PackageCheck, ClipboardCheck } from "lucide-react";
 
-const TONE_CLASS_MAP: Record<string, string> = {
-  blue: "dashboard-bi__value--blue",
-  cyan: "dashboard-bi__value--cyan",
-  emerald: "dashboard-bi__value--emerald",
-  violet: "dashboard-bi__value--violet",
-  amber: "dashboard-bi__value--amber",
-  red: "dashboard-bi__value--red"
-};
+// 看板数据相关的实时事件前缀。
+// 骑手派单/送达/回执/异常、后台手动派单、以及订单增删改都会触发这些事件，
+// 订阅后即可在事件到来时立刻重拉看板，保证与订单中心、骑手中心始终一致。
+const DASHBOARD_EVENT_PREFIXES = ["dispatch.", "customer.order", "customer.wallet"];
+// WebSocket 断连时仍能保持同步的兜底轮询间隔（秒）
+const DASHBOARD_POLLING_MS = 15000;
 
 function buildLinePath(values: number[], width: number, height: number, paddingX: number, paddingTop: number, paddingBottom: number) {
   if (!values.length) {
     return "";
   }
-
   const chartHeight = height - paddingTop - paddingBottom;
   const stepX = values.length === 1 ? 0 : (width - paddingX * 2) / (values.length - 1);
   const maxValue = Math.max(...values, 1);
-
   return values
     .map((value, index) => {
       const x = paddingX + stepX * index;
@@ -45,7 +38,6 @@ function buildAreaPath(values: number[], width: number, height: number, paddingX
   if (!values.length) {
     return "";
   }
-
   const linePath = buildLinePath(values, width, height, paddingX, paddingTop, paddingBottom);
   const stepX = values.length === 1 ? 0 : (width - paddingX * 2) / (values.length - 1);
   const startX = paddingX;
@@ -54,495 +46,329 @@ function buildAreaPath(values: number[], width: number, height: number, paddingX
   return `${linePath} L ${endX} ${baseY} L ${startX} ${baseY} Z`;
 }
 
-function buildBarMetrics(values: number[], height: number, paddingTop: number, paddingBottom: number) {
-  const chartHeight = height - paddingTop - paddingBottom;
-  const maxValue = Math.max(...values, 1);
-  return values.map((value) => ({
-    height: Math.max((value / maxValue) * chartHeight, value > 0 ? 8 : 0),
-    maxValue
-  }));
-}
+const FLOW_ICONS = {
+  PENDING: Clock,
+  DISPATCH_PENDING: ClipboardCheck,
+  DISPATCHING: Truck,
+  DELIVERED: PackageCheck
+} as const;
 
-type QuickLink = {
-  key: string;
-  title: string;
-  desc: string;
-  path: string;
+// 按流转步骤序号映射图标（2 待处理 / 3 待派单 / 4 配送中 / 5 已送达）
+const FLOW_ICONS_BY_STEP: Record<number, (typeof FLOW_ICONS)[keyof typeof FLOW_ICONS]> = {
+  2: FLOW_ICONS.PENDING,
+  3: FLOW_ICONS.DISPATCH_PENDING,
+  4: FLOW_ICONS.DISPATCHING,
+  5: FLOW_ICONS.DELIVERED
 };
 
-const QUICK_LINKS: QuickLink[] = [
-  { key: "orders", title: "订单助手", desc: "处理今日订单", path: "/orders" },
-  { key: "dispatch", title: "调度中心", desc: "派单与配送", path: "/dispatch" },
-  { key: "customers", title: "客户经营", desc: "续卡/余额提醒", path: "/customers" },
-  { key: "aftersales", title: "售后中心", desc: "处理售后工单", path: "/aftersales" },
-  { key: "menu", title: "菜单配置", desc: "未来菜单安排", path: "/menu" }
-];
+const FLOW_TONE: Record<string, { bar: string; num: string; iconBg: string }> = {
+  neutral: { bar: "flow-step__bar-fill--neutral", num: "stat-val--neutral", iconBg: "flow-step__icon-bg--neutral" },
+  blue:    { bar: "flow-step__bar-fill--blue",    num: "stat-val--blue",    iconBg: "flow-step__icon-bg--blue" },
+  emerald: { bar: "flow-step__bar-fill--emerald", num: "stat-val--emerald", iconBg: "flow-step__icon-bg--emerald" }
+};
 
 export function DashboardPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [data, setData] = useState<DashboardOverviewResponse>(normalizeDashboardOverview({}));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lowBalanceModalVisible, setLowBalanceModalVisible] = useState(false);
+  const mountedRef = useRef(true);
+  const activeReloadRef = useRef<Promise<void>>(Promise.resolve());
+  const queuedReloadRef = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    fetchDashboardOverview()
-      .then((response) => {
-        if (cancelled) {
-          return;
-        }
-        setData(normalizeDashboardOverview(response));
-        setError(null);
-      })
-      .catch((err) => {
-        if (cancelled) {
-          return;
-        }
-        setError(err?.response?.data?.message || err?.message || String(err));
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      });
-
+    mountedRef.current = true;
     return () => {
-      cancelled = true;
+      mountedRef.current = false;
     };
   }, []);
 
-  const heroMetrics = useMemo(() => buildDashboardHeroMetrics(data), [data]);
-  const progressItems = useMemo(() => buildDashboardProgressItems(data), [data]);
-  const todoItems = useMemo(() => buildDashboardTodoItems(data), [data]);
-  const tomorrowSummary = useMemo(() => buildDashboardTomorrowSummary(data), [data]);
+  // 可复用加载函数：静默刷新（不闪 loading），用于实时事件 / 轮询
+  const loadOverview = useCallback(({ silent = false }: { silent?: boolean } = {}) => {
+    activeReloadRef.current = activeReloadRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        if (!silent && mountedRef.current) {
+          setLoading(true);
+        }
+        try {
+          const response = await fetchDashboardOverview();
+          if (!mountedRef.current) {
+            return;
+          }
+          setData(normalizeDashboardOverview(response));
+          setError(null);
+        } catch (err) {
+          if (mountedRef.current && !silent) {
+            const e = err as { response?: { data?: { message?: string } }; message?: string };
+            const msg: string =
+              e?.response?.data?.message ||
+              e?.message ||
+              String(err);
+            setError(msg);
+          }
+        } finally {
+          if (mountedRef.current) {
+            setLoading(false);
+          }
+        }
+      });
+    return activeReloadRef.current;
+  }, []);
+
+  // 首次加载 / 每次路由进入看板页时强制重新拉取最新数据
+  // （从骑手中心 / 订单中心等页面跳转进来，保证看到的一定是最新数据，而不是缓存的旧值）
+  useEffect(() => {
+    void loadOverview().catch(() => undefined);
+  }, [loadOverview, location.key]);
+
+  // 实时订阅：派单 / 送达 / 回执 / 异常 / 订单增删改 → 立刻静默重拉看板
+  useEffect(() => {
+    return useAdminRealtime((message) => {
+      const eventType = message?.eventType || message?.type || "";
+      const isDashboardEvent = DASHBOARD_EVENT_PREFIXES.some((prefix) => eventType.startsWith(prefix));
+      if (!isDashboardEvent) {
+        return;
+      }
+      if (queuedReloadRef.current) {
+        return;
+      }
+      queuedReloadRef.current = true;
+      void loadOverview({ silent: true })
+        .catch(() => undefined)
+        .finally(() => {
+          queuedReloadRef.current = false;
+        });
+    });
+  }, [loadOverview]);
+
+  // 轮询兜底：即使 WebSocket 断连，数字也会定期刷新，避免长期失步
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void loadOverview({ silent: true }).catch(() => undefined);
+    }, DASHBOARD_POLLING_MS);
+    return () => window.clearInterval(timer);
+  }, [loadOverview]);
+
+  const flowSteps = useMemo(() => buildDashboardFlowSteps(data), [data]);
   const orderTrend = Array.isArray(data.orderTrend) ? data.orderTrend : [];
-  const growthTrend = Array.isArray(data.growthTrend) ? data.growthTrend : [];
   const orderSummary = useMemo(() => buildDashboardOrderTrendSummary(data), [data]);
 
-  const dashboardStatus: AsyncContentViewStatus = loading
+  const status: AsyncContentViewStatus = loading
     ? "loading"
     : error
       ? "error"
       : "success";
 
-  if (dashboardStatus !== "success") {
+  if (status !== "success") {
     return (
       <div className="admin-stack">
         <AsyncContentView
-          status={dashboardStatus}
+          status={status}
           error={error ?? undefined}
           onRetry={() => {
             setError(null);
-            window.location.reload();
+            void loadOverview().catch(() => undefined);
           }}
         />
       </div>
     );
   }
 
+  const todayTotal = data.todayServeMealCount;
+  const todayLunch = data.todayServeLunchCount;
+  const todayDinner = data.todayServeDinnerCount;
+
+  // 订单趋势图几何参数
+  const W = 760;
+  const H = 220;
+  const PAD_X = 72;
+  const PAD_TOP = 36;
+  const PAD_BOTTOM = 44;
   const orderValues = orderTrend.map((item) => item.total);
   const lunchValues = orderTrend.map((item) => item.lunch);
   const dinnerValues = orderTrend.map((item) => item.dinner);
   const orderMax = Math.max(...orderValues, 1);
-  const orderLinePath = buildLinePath(orderValues, 760, 220, 72, 40, 48);
-  const orderAreaPath = buildAreaPath(orderValues, 760, 220, 72, 40, 48);
-  const lunchLinePath = buildLinePath(lunchValues, 760, 220, 72, 40, 48);
-  const dinnerLinePath = buildLinePath(dinnerValues, 760, 220, 72, 40, 48);
+  const orderLinePath = buildLinePath(orderValues, W, H, PAD_X, PAD_TOP, PAD_BOTTOM);
+  const orderAreaPath = buildAreaPath(orderValues, W, H, PAD_X, PAD_TOP, PAD_BOTTOM);
+  const lunchLinePath = buildLinePath(lunchValues, W, H, PAD_X, PAD_TOP, PAD_BOTTOM);
+  const dinnerLinePath = buildLinePath(dinnerValues, W, H, PAD_X, PAD_TOP, PAD_BOTTOM);
   const orderPeakIndex = orderValues.findIndex((value) => value === orderSummary.peakValue);
-  const orderStepX = orderTrend.length === 1 ? 0 : (760 - 72 * 2) / Math.max(orderTrend.length - 1, 1);
-  const orderPeakX = orderPeakIndex < 0 ? 72 : 72 + orderPeakIndex * orderStepX;
-  const orderPeakY = 40 + (132 - (orderSummary.peakValue / orderMax) * 132);
-
-  const growthNewCards = growthTrend.map((item) => item.newCards);
-  const growthRecharges = growthTrend.map((item) => item.recharges);
-  const growthBarMetrics = buildBarMetrics([...growthNewCards, ...growthRecharges], 220, 28, 34);
-  const growthMax = Math.max(...growthNewCards, ...growthRecharges, 1);
-  const growthPeaks = {
-    newCards: Math.max(...growthNewCards, 0),
-    recharges: Math.max(...growthRecharges, 0)
-  };
-  const totalServe = data.todayServeMealCount;
-  const progressFlowTotal = Math.max(totalServe, 1);
-  const completionRate = totalServe > 0 ? Math.round((data.deliveredOrdersToday / totalServe) * 100) : 0;
+  const orderStepX = orderTrend.length === 1 ? 0 : (W - PAD_X * 2) / Math.max(orderTrend.length - 1, 1);
+  const orderPeakX = orderPeakIndex < 0 ? PAD_X : PAD_X + orderPeakIndex * orderStepX;
+  const orderPeakY = PAD_TOP + ((H - PAD_TOP - PAD_BOTTOM) - (orderSummary.peakValue / orderMax) * (H - PAD_TOP - PAD_BOTTOM));
+  const axisValue = (tick: number) => PAD_BOTTOM + ((H - PAD_TOP - PAD_BOTTOM) / 3) * tick;
 
   return (
     <div className="dashboard-bi">
       <div className="page-header dashboard-bi__header">
-        <div>
-          <h2 className="page-title">经营看板</h2>
-          <p className="page-subtitle">聚焦今日与明日，所有指标都标注统计口径。</p>
-        </div>
-        <div className="dashboard-bi__header-actions">
-          <div className="dashboard-bi__quick-nav" role="navigation" aria-label="快捷入口">
-            {QUICK_LINKS.map((link) => (
-              <button
-                key={link.key}
-                type="button"
-                className="dashboard-bi__quick-nav-btn"
-                onClick={() => navigate(link.path)}
-              >
-                <span className="dashboard-bi__quick-nav-title">{link.title}</span>
-                <span className="dashboard-bi__quick-nav-desc">{link.desc}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+        <h2 className="page-title">经营看板</h2>
       </div>
 
-      <div className="dashboard-bi__metrics">
-        {heroMetrics.map((item) => (
-          <div
-            key={item.label}
-            className="dashboard-bi__metric-card dashboard-bi__metric-card--clickable"
-            onClick={() => item.path && navigate(item.path)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                if (item.path) {
-                  navigate(item.path);
+      {/* ========== 今日 · 午餐 晚餐 分卡（stat-card 蓝色边框白色风格） ========== */}
+      <section className="dashboard-bi__today-meal-row stat-row stat-row--double">
+        <div
+          className="stat-card stat-card--meal"
+          role="button"
+          tabIndex={0}
+          onClick={() => navigate("/orders")}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("/orders"); } }}
+        >
+          <div className="stat-title">
+            今日午餐
+            <span className="stat-meal-badge stat-meal-badge--lunch">LUNCH</span>
+          </div>
+          <div className="stat-val stat-val--blue">{todayLunch}</div>
+          <div className="stat-footer">份 · 与订单中心同口径</div>
+        </div>
+
+        <div
+          className="stat-card stat-card--meal"
+          role="button"
+          tabIndex={0}
+          onClick={() => navigate("/orders")}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("/orders"); } }}
+        >
+          <div className="stat-title">
+            今日晚餐
+            <span className="stat-meal-badge stat-meal-badge--dinner">DINNER</span>
+          </div>
+          <div className="stat-val stat-val--blue">{todayDinner}</div>
+          <div className="stat-footer">份 · 与订单中心同口径</div>
+        </div>
+      </section>
+
+      {/* ========== 今日 · 流转（4 张 stat-card 撑满） ========== */}
+      <section className="stat-row dashboard-bi__flow-row">
+        {flowSteps.map((step) => {
+          const tone = FLOW_TONE[step.tone];
+          const Icon = FLOW_ICONS_BY_STEP[step.index] ?? FLOW_ICONS.PENDING;
+          return (
+            <div
+              key={step.label}
+              className="stat-card stat-card--flow"
+              role="button"
+              tabIndex={0}
+              onClick={() => step.path && navigate(step.path)}
+              onKeyDown={(e) => {
+                if ((e.key === "Enter" || e.key === " ") && step.path) {
+                  e.preventDefault();
+                  navigate(step.path);
                 }
-              }
-            }}
-          >
-            <div className="dashboard-bi__metric-label">{item.label}</div>
-            <div className={`dashboard-bi__metric-value ${TONE_CLASS_MAP[item.tone] ?? ""}`}>
-              {item.value}
-              <span>{item.unit}</span>
-            </div>
-            <div className="dashboard-bi__metric-detail">{item.detail}</div>
-            <div className="dashboard-bi__metric-scope">口径 · 按出餐日统计</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="dashboard-bi__layout">
-        <div className="dashboard-bi__main">
-          <section className="table-container dashboard-bi__panel">
-            <div className="dashboard-bi__panel-header">
-              <div>
-                <div className="dashboard-bi__eyebrow">今日 · 流转</div>
-                <h3 className="dashboard-bi__panel-title">今日订单流转</h3>
-                <p className="dashboard-bi__panel-desc">
-                  按出餐日统计，每一份订单走到哪一步清晰可见。
-                </p>
+              }}
+            >
+              <div className="stat-title flow-step__title-row">
+                <span className={`flow-step__index flow-step__index--${step.tone}`}>{step.index}</span>
+                <span className="flow-step__name">{step.label}</span>
+                <span className={`flow-step__icon-bg ${tone.iconBg}`} style={{ marginLeft: "auto" }}>
+                  <Icon size={14} />
+                </span>
               </div>
-              <button className="dashboard-bi__panel-link" onClick={() => navigate("/orders")}>
-                进入订单中心
-              </button>
-            </div>
-
-            <div className="dashboard-bi__flow">
-              {progressItems.map((item, index) => {
-                const ratio = Math.min(100, Math.round((item.value / progressFlowTotal) * 100));
-                return (
-                  <button
-                    type="button"
-                    key={item.label}
-                    className="dashboard-bi__flow-step"
-                    onClick={() => navigate(item.path)}
-                  >
-                    <div className="dashboard-bi__flow-step-head">
-                      <span className="dashboard-bi__flow-step-index">{index + 1}</span>
-                      <span className="dashboard-bi__flow-step-name">{item.label}</span>
-                    </div>
-                    <div className={`dashboard-bi__flow-step-value ${TONE_CLASS_MAP[item.tone] ?? ""}`}>
-                      {item.value}
-                      <span>份</span>
-                    </div>
-                    <div className="dashboard-bi__flow-step-bar">
-                      <span
-                        className={`dashboard-bi__flow-step-bar-fill dashboard-bi__value--${item.tone}`}
-                        style={{ width: `${Math.max(ratio, item.value > 0 ? 12 : 0)}%` }}
-                      />
-                    </div>
-                    <div className="dashboard-bi__flow-step-detail">{item.detail}</div>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="dashboard-bi__flow-legend">
-              <span>
-                完成率
-                <strong>{completionRate}%</strong>
-              </span>
-              <span>
-                待处理
-                <strong>{data.pendingOrdersToday}</strong> 份
-              </span>
-              <span>
-                今日取消
-                <strong>{data.cancellationsToday}</strong> 份
-              </span>
-            </div>
-          </section>
-        </div>
-
-        <aside className="dashboard-bi__side">
-          <section className="table-container dashboard-bi__panel dashboard-bi__panel--highlight">
-            <div className="dashboard-bi__panel-header">
-              <div>
-                <div className="dashboard-bi__eyebrow">明日 · 备餐预览</div>
-                <h3 className="dashboard-bi__panel-title">明日要备多少餐？</h3>
-                <p className="dashboard-bi__panel-desc">覆盖客户、固定订餐一目了然。</p>
+              <div className="stat-val-row">
+                <span className={`stat-val ${tone.num}`}>{step.value}</span>
+                <span className="stat-unit">份</span>
               </div>
-              <button className="dashboard-bi__panel-link" onClick={() => navigate("/orders")}>
-                进入备餐管理
-              </button>
-            </div>
-
-            <div className="dashboard-bi__tomorrow-summary">
-              <div className="dashboard-bi__tomorrow-big">
-                <span className="dashboard-bi__tomorrow-big-value">{tomorrowSummary.meals}</span>
-                <span className="dashboard-bi__tomorrow-big-unit">份待备</span>
-              </div>
-              <div className="dashboard-bi__tomorrow-customer">
-                覆盖 <strong>{tomorrowSummary.customers}</strong> 位客户 · 固定订餐 {tomorrowSummary.fixed} 位
-                （{tomorrowSummary.fixedShare}%）
-              </div>
-            </div>
-
-            <div className="dashboard-bi__tomorrow-meals">
-              <button
-                className="dashboard-bi__tomorrow-meal dashboard-bi__tomorrow-meal--lunch"
-                onClick={() => navigate("/orders")}
-              >
-                <div className="dashboard-bi__tomorrow-meal-period">午餐</div>
-                <div className="dashboard-bi__tomorrow-meal-value">{tomorrowSummary.lunches}</div>
-                <div className="dashboard-bi__tomorrow-meal-share">
-                  占比 {tomorrowSummary.lunchShare}%
-                </div>
-              </button>
-              <button
-                className="dashboard-bi__tomorrow-meal dashboard-bi__tomorrow-meal--dinner"
-                onClick={() => navigate("/orders")}
-              >
-                <div className="dashboard-bi__tomorrow-meal-period">晚餐</div>
-                <div className="dashboard-bi__tomorrow-meal-value">{tomorrowSummary.dinners}</div>
-                <div className="dashboard-bi__tomorrow-meal-share">
-                  占比 {tomorrowSummary.dinnerShare}%
-                </div>
-              </button>
-            </div>
-
-            <div className="dashboard-bi__tomorrow-fixed">
-              <div className="dashboard-bi__tomorrow-fixed-bar">
+              <div className="flow-step__bar">
                 <span
-                  className="dashboard-bi__tomorrow-fixed-bar-fill"
-                  style={{ width: `${tomorrowSummary.fixedShare}%` }}
+                  className={`flow-step__bar-fill ${tone.bar}`}
+                  style={{
+                    width: step.value > 0
+                      ? `${Math.min(100, Math.round((step.value / Math.max(todayTotal, 1)) * 100))}%`
+                      : "0%"
+                  }}
                 />
               </div>
-              <div className="dashboard-bi__tomorrow-fixed-note">
-                固定订餐占比 {tomorrowSummary.fixedShare}%，剩余 {tomorrowSummary.customers - tomorrowSummary.fixed} 位客户等待手动下单
-              </div>
+              <div className="stat-footer">{step.detail}</div>
             </div>
-          </section>
-        </aside>
-      </div>
+          );
+        })}
+      </section>
 
-      <div className="dashboard-bi__layout dashboard-bi__layout--equal">
-        <section className="table-container dashboard-bi__panel">
-          <div className="dashboard-bi__panel-header">
-            <div>
-              <div className="dashboard-bi__eyebrow">待办与提醒</div>
-              <h3 className="dashboard-bi__panel-title">商家待办</h3>
-              <p className="dashboard-bi__panel-desc">点击进入对应模块处理。</p>
-            </div>
-          </div>
-
-          <div className="dashboard-bi__todo-list">
-            {todoItems.map((item) => (
-              <button
-                key={item.label}
-                type="button"
-                className="dashboard-bi__todo-item"
-                onClick={() => {
-                  if (item.key === ("低余额客户" as DashboardActionKey)) {
-                    setLowBalanceModalVisible(true);
-                    return;
-                  }
-                  navigate(item.path);
-                }}
-              >
-                <span className={`dashboard-bi__todo-bullet dashboard-bi__value--${item.tone}`}>•</span>
-                <span className="dashboard-bi__todo-content">
-                  <span className="dashboard-bi__todo-label">{item.label}</span>
-                  <span className="dashboard-bi__todo-detail">{item.detail}</span>
-                </span>
-                <span className={`dashboard-bi__todo-value ${TONE_CLASS_MAP[item.tone] ?? ""}`}>
-                  {item.value}
-                </span>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="table-container dashboard-bi__panel dashboard-bi__panel--chart">
-          <div className="dashboard-bi__panel-header">
-            <div>
-              <div className="dashboard-bi__eyebrow">趋势 · 近 7 天</div>
-              <h3 className="dashboard-bi__panel-title">订单趋势</h3>
-              <p className="dashboard-bi__panel-desc">按出餐日期统计，已剔除取消/退款。</p>
-            </div>
-            <button className="dashboard-bi__panel-link" onClick={() => navigate("/analysis")}>
-              查看分析详情
-            </button>
-          </div>
-
-          <div className="dashboard-bi__legend">
-            <span><i className="dashboard-bi__legend-dot dashboard-bi__legend-dot--blue" />订单份数</span>
-            <span><i className="dashboard-bi__legend-dot dashboard-bi__legend-dot--emerald" />午餐</span>
-            <span><i className="dashboard-bi__legend-dot dashboard-bi__legend-dot--violet" />晚餐</span>
-            <span><i className="dashboard-bi__legend-dot dashboard-bi__legend-dot--red" />峰值标记</span>
-          </div>
-
-          <div className="dashboard-bi__chart-wrap">
-            <svg className="dashboard-bi__chart-svg dashboard-bi__chart-svg--compact" viewBox="0 0 760 220" role="img" aria-label="订单趋势图">
-              <defs>
-                <linearGradient id="dashboardOrderArea" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="rgba(37, 99, 235, 0.26)" />
-                  <stop offset="100%" stopColor="rgba(37, 99, 235, 0.02)" />
-                </linearGradient>
-              </defs>
-
-              {[1, 2, 3].map((tick) => {
-                const y = 40 + (132 / 4) * tick;
-                return <line key={tick} x1="72" y1={y} x2="688" y2={y} stroke="rgba(0, 0, 0, 0.03)" strokeDasharray="4 8" />;
-              })}
-              <line x1="72" y1="40" x2="72" y2="172" stroke="rgba(0, 0, 0, 0.03)" />
-              <line x1="72" y1="172" x2="688" y2="172" stroke="rgba(0, 0, 0, 0.03)" />
-
-              <path d={orderAreaPath} fill="url(#dashboardOrderArea)" />
-              <path d={orderLinePath} stroke="#2457f5" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-              <path d={lunchLinePath} stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-              <path d={dinnerLinePath} stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-
-              <circle cx={orderPeakX} cy={orderPeakY} r="1.5" fill="#ef4444" />
-              <circle cx={orderPeakX} cy={orderPeakY} r="3" fill="rgba(239,68,68,0.14)" />
-
-              {[0, Math.round(orderMax / 3), Math.round((orderMax * 2) / 3), orderMax].map((tick, index) => {
-                const y = 172 - (132 / 3) * index;
-                return (
-                  <text key={index} x="20" y={y + 4} className="dashboard-bi__axis">
-                    {tick}
-                  </text>
-                );
-              })}
-
-              {orderTrend.map((item, index) => (
-                <text
-                  key={item.label}
-                  x={72 + orderStepX * index}
-                  y="196"
-                  textAnchor="middle"
-                  className="dashboard-bi__axis"
-                >
-                  {item.label}
-                </text>
-              ))}
-              <text x={orderPeakX + 12} y={Math.max(orderPeakY - 12, 24)} className="dashboard-bi__axis">
-                高峰 {orderSummary.peakValue}
-              </text>
-            </svg>
-          </div>
-
-          <div className="dashboard-bi__summary-grid dashboard-bi__summary-grid--four">
-            <div className="dashboard-bi__summary-card">
-              <div className="dashboard-bi__summary-label">近 7 天累计</div>
-              <div className="dashboard-bi__summary-value">{orderSummary.sum}</div>
-              <div className="dashboard-bi__summary-note">份</div>
-            </div>
-            <div className="dashboard-bi__summary-card">
-              <div className="dashboard-bi__summary-label">日均</div>
-              <div className="dashboard-bi__summary-value">{orderSummary.averageValue}</div>
-              <div className="dashboard-bi__summary-note">份/天</div>
-            </div>
-            <div className="dashboard-bi__summary-card">
-              <div className="dashboard-bi__summary-label">午餐占比</div>
-              <div className="dashboard-bi__summary-value dashboard-bi__value--emerald">{orderSummary.lunchShare}%</div>
-              <div className="dashboard-bi__summary-note">午餐/全单</div>
-            </div>
-            <div className="dashboard-bi__summary-card">
-              <div className="dashboard-bi__summary-label">波动区间</div>
-              <div className="dashboard-bi__summary-value dashboard-bi__value--amber">{orderSummary.rangeText}</div>
-              <div className="dashboard-bi__summary-note">最少~最多</div>
-            </div>
-          </div>
-        </section>
-      </div>
-
-      <section className="table-container dashboard-bi__panel dashboard-bi__panel--chart">
+      {/* ========== 趋势 · 近 7 天（午餐晚餐分开） ========== */}
+      <section className="dashboard-bi__panel dashboard-bi__panel--chart">
         <div className="dashboard-bi__panel-header">
           <div>
-            <div className="dashboard-bi__eyebrow">增长 · 近 5 天</div>
-            <h3 className="dashboard-bi__panel-title">新开卡与续卡</h3>
-            <p className="dashboard-bi__panel-desc">跟踪新增客户与续卡充值餐数。</p>
+            <div className="dashboard-bi__eyebrow">近 7 天</div>
+            <h3 className="dashboard-bi__panel-title">订单趋势</h3>
           </div>
-          <button className="dashboard-bi__panel-link" onClick={() => navigate("/customers")}>
-            查看客户经营
+          <button className="dashboard-bi__panel-link" onClick={() => navigate("/analysis")}>
+            查看完整分析
           </button>
         </div>
 
         <div className="dashboard-bi__legend">
-          <span><i className="dashboard-bi__legend-dot dashboard-bi__legend-dot--emerald" />新开卡</span>
-          <span><i className="dashboard-bi__legend-dot dashboard-bi__legend-dot--violet" />续卡 / 充值</span>
+          <span><i className="dashboard-bi__legend-dot dashboard-bi__legend-dot--blue" />全部</span>
+          <span><i className="dashboard-bi__legend-dot dashboard-bi__legend-dot--emerald" />午餐</span>
+          <span><i className="dashboard-bi__legend-dot dashboard-bi__legend-dot--violet" />晚餐</span>
         </div>
 
         <div className="dashboard-bi__chart-wrap">
-          <svg className="dashboard-bi__chart-svg dashboard-bi__chart-svg--compact" viewBox="0 0 760 220" role="img" aria-label="开卡续卡趋势图">
-            {[1, 2, 3].map((tick) => {
-              const y = 28 + (154 / 4) * tick;
-              return <line key={tick} x1="48" y1={y} x2="730" y2={y} stroke="rgba(0, 0, 0, 0.03)" strokeDasharray="4 8" />;
-            })}
-            <line x1="48" y1="28" x2="48" y2="184" stroke="rgba(0, 0, 0, 0.03)" />
-            <line x1="48" y1="184" x2="730" y2="184" stroke="rgba(0, 0, 0, 0.03)" />
+          <svg className="dashboard-bi__chart-svg dashboard-bi__chart-svg--compact" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="订单趋势图">
+            <defs>
+              <linearGradient id="dashboardOrderArea" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="rgba(37, 99, 235, 0.18)" />
+                <stop offset="100%" stopColor="rgba(37, 99, 235, 0.02)" />
+              </linearGradient>
+            </defs>
 
-            {growthTrend.map((item, index) => {
-              const groupX = 72 + index * 130;
-              const greenBar = growthBarMetrics[index];
-              const violetBar = growthBarMetrics[index + growthTrend.length];
-              return (
-                <g key={item.label}>
-                  <rect x={groupX} y={184 - greenBar.height} width="32" height={greenBar.height} rx="9" fill="#10b981" />
-                  <rect x={groupX + 40} y={184 - violetBar.height} width="32" height={violetBar.height} rx="9" fill="#7c3aed" />
-                  <text x={groupX + 36} y="204" textAnchor="middle" className="dashboard-bi__axis">{item.label}</text>
-                </g>
-              );
+            {[1, 2].map((tick) => {
+              const y = PAD_TOP + ((H - PAD_TOP - PAD_BOTTOM) / 3) * tick;
+              return <line key={tick} x1={PAD_X} y1={y} x2={W - PAD_X} y2={y} stroke="rgba(0, 0, 0, 0.04)" strokeDasharray="4 8" />;
             })}
+            <line x1={PAD_X} y1={PAD_TOP} x2={PAD_X} y2={H - PAD_BOTTOM} stroke="rgba(0, 0, 0, 0.06)" />
+            <line x1={PAD_X} y1={H - PAD_BOTTOM} x2={W - PAD_X} y2={H - PAD_BOTTOM} stroke="rgba(0, 0, 0, 0.06)" />
 
-            {[0, Math.round(growthMax / 3), Math.round((growthMax * 2) / 3), growthMax].map((tick, index) => {
-              const y = 184 - (154 / 3) * index;
-              return (
-                <text key={index} x="14" y={y + 4} className="dashboard-bi__axis">
-                  {tick}
+            <path d={orderAreaPath} fill="url(#dashboardOrderArea)" />
+            <path d={orderLinePath} stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            <path d={lunchLinePath} stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+            <path d={dinnerLinePath} stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+
+            {orderPeakIndex >= 0 ? (
+              <>
+                <circle cx={orderPeakX} cy={orderPeakY} r="3" fill="rgba(239,68,68,0.18)" />
+                <circle cx={orderPeakX} cy={orderPeakY} r="1.6" fill="#ef4444" />
+                <text x={orderPeakX + 8} y={Math.max(orderPeakY - 8, 24)} className="dashboard-bi__axis">
+                  {`高峰 ${orderSummary.peakValue}`}
                 </text>
-              );
-            })}
+              </>
+            ) : null}
+
+            {[0, Math.round(orderMax / 3), Math.round((orderMax * 2) / 3), orderMax].map((tick, index) => (
+              <text key={index} x="20" y={axisValue(index) + 4} className="dashboard-bi__axis">{tick}</text>
+            ))}
+
+            {orderTrend.map((item, index) => (
+              <text key={item.label} x={PAD_X + orderStepX * index} y={H - PAD_BOTTOM + 24} textAnchor="middle" className="dashboard-bi__axis">
+                {item.label}
+              </text>
+            ))}
           </svg>
         </div>
 
-        <div className="dashboard-bi__summary-grid dashboard-bi__summary-grid--two">
+        <div className="dashboard-bi__summary-grid dashboard-bi__summary-grid--four">
           <div className="dashboard-bi__summary-card">
-            <div className="dashboard-bi__summary-label">新开卡峰值</div>
-            <div className="dashboard-bi__summary-value dashboard-bi__value--emerald">{growthPeaks.newCards}</div>
-            <div className="dashboard-bi__summary-note">近 5 天单日最高</div>
+            <div className="dashboard-bi__summary-label">7 日累计</div>
+            <div className="dashboard-bi__summary-value">{orderSummary.sum}</div>
+            <div className="dashboard-bi__summary-note">份</div>
           </div>
           <div className="dashboard-bi__summary-card">
-            <div className="dashboard-bi__summary-label">续卡 / 充值峰值</div>
-            <div className="dashboard-bi__summary-value dashboard-bi__value--violet">{growthPeaks.recharges}</div>
-            <div className="dashboard-bi__summary-note">客户复购活跃度</div>
+            <div className="dashboard-bi__summary-label">日均</div>
+            <div className="dashboard-bi__summary-value">{orderSummary.averageValue}</div>
+            <div className="dashboard-bi__summary-note">份 / 天</div>
+          </div>
+          <div className="dashboard-bi__summary-card">
+            <div className="dashboard-bi__summary-label">午餐占比</div>
+            <div className="dashboard-bi__summary-value dashboard-bi__value--emerald">{orderSummary.lunchShare}%</div>
+            <div className="dashboard-bi__summary-note">近 7 天</div>
+          </div>
+          <div className="dashboard-bi__summary-card">
+            <div className="dashboard-bi__summary-label">区间</div>
+            <div className="dashboard-bi__summary-value dashboard-bi__value--amber">{orderSummary.rangeText}</div>
+            <div className="dashboard-bi__summary-note">最少 ~ 最多</div>
           </div>
         </div>
       </section>
-
-      <LowBalanceAlertModal
-        visible={lowBalanceModalVisible}
-        onClose={() => setLowBalanceModalVisible(false)}
-      />
     </div>
   );
 }

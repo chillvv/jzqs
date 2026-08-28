@@ -45,8 +45,16 @@ public class OperationsAnalysisServiceImpl implements OperationsAnalysisService 
             Integer.class,
             java.sql.Date.valueOf(targetDate)
         );
+        // 售后数：以 meal_slot_orders 主表为准，过滤掉订单已被删除的孤儿售后单，
+        // 与订单中心/看板口径保持一致，避免删除订单后统计未扣减。
         Integer aftersaleCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM aftersale_cases WHERE DATE(created_at) = ?",
+            """
+            SELECT COUNT(*)
+            FROM aftersale_cases ac
+            JOIN meal_slot_orders mso ON mso.id = ac.meal_slot_order_id
+            JOIN daily_orders do ON do.id = mso.daily_order_id
+            WHERE DATE(ac.created_at) = ?
+            """,
             Integer.class,
             java.sql.Date.valueOf(targetDate)
         );

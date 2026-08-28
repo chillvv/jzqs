@@ -28,8 +28,21 @@ public class DashboardServiceImpl implements DashboardService {
         LocalDate businessDate = resolveBusinessDate();
         LocalDate upcomingServeDate = resolveUpcomingServeDate(businessDate);
         PackageReminderSettings settings = loadPackageReminderSettings();
+        // 今日送达份数：以 meal_slot_orders 主表为准（与订单中心口径一致）。
+        // delivery_receipts 是子表，若订单已被硬删而回执残留（孤儿），直接 count 会虚高；
+        // 用 INNER JOIN 关联主表，删除过的订单自动扣减，并排除已取消/已退款的回执。
+        // 同时 JOIN customers 排除"客户已被删除"的孤儿订单（与订单中心列表 findPrepPage 的 JOIN 口径一致），
+        // 避免看板出现订单中心列表里根本看不到的订单。
         int deliveredToday = countByBusinessDate(
-            "SELECT COUNT(*) FROM delivery_receipts WHERE CAST(delivered_at AS DATE) = ?",
+            """
+            SELECT COUNT(*)
+            FROM delivery_receipts dr
+            JOIN meal_slot_orders mso ON mso.id = dr.meal_slot_order_id
+            JOIN daily_orders do ON do.id = mso.daily_order_id
+            JOIN customers c ON c.id = do.customer_id
+            WHERE CAST(dr.delivered_at AS DATE) = ?
+              AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
+            """,
             businessDate
         );
         // 今日出餐餐数（按出餐日 serve_date 统计，与折线图口径一致，避免商家看到 3 份单但折线图飙到 53 的困惑）
@@ -46,8 +59,18 @@ public class DashboardServiceImpl implements DashboardService {
         int rechargeCustomersToday = countDistinctCustomersByTransactionType(businessDate, "GRANT");
         // 今日充值餐数（新增销售的口径，因为系统是餐包制，无金额字段，用充值餐数衡量"新增营收"）
         int rechargedMealsToday = sumMealDeltaByBusinessDate(businessDate, "GRANT") + sumMealDeltaByBusinessDate(businessDate, "OPEN");
+        // 今日新增售后数：同样以 meal_slot_orders 主表为准，过滤掉订单已被删除的孤儿售后单，
+        // 避免"删除过订单后看板仍 +1"的幻数（与 countOpenAftersales 的 JOIN 口径保持一致）。
+        // 并 JOIN customers 排除客户已删除的孤儿订单，与订单中心列表口径一致。
         int aftersaleToday = countByBusinessDate(
-            "SELECT COUNT(*) FROM aftersale_cases WHERE CAST(created_at AS DATE) = ?",
+            """
+            SELECT COUNT(*)
+            FROM aftersale_cases ac
+            JOIN meal_slot_orders mso ON mso.id = ac.meal_slot_order_id
+            JOIN daily_orders do ON do.id = mso.daily_order_id
+            JOIN customers c ON c.id = do.customer_id
+            WHERE CAST(ac.created_at AS DATE) = ?
+            """,
             businessDate
         );
         // 统一按出餐日 serve_date 口径：今天的单 = 今天要出餐的单，与"今日出餐"对齐
@@ -159,41 +182,34 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     private int quantityByServeDate(LocalDate serveDate, String mealPeriod) {
-        if (mealPeriod == null) {
-            return countByBusinessDate(
-                """
-                SELECT COALESCE(SUM(mso.quantity), 0)
-                FROM meal_slot_orders mso
-                JOIN daily_orders do ON do.id = mso.daily_order_id
-                WHERE do.serve_date = ?
-                  AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
-                  AND NOT EXISTS (
-                      SELECT 1
-                      FROM aftersale_cases ac
-                      WHERE ac.meal_slot_order_id = mso.id
-                        AND ac.refund_blocking = TRUE
-                        AND ac.status IN ('PENDING', 'PROCESSING', 'APPROVED', 'COMPLETED')
-                  )
-                """,
-                serveDate
-            );
-        }
-        return nvl(jdbcTemplate.queryForObject(
-            """
+        // 口径与「订单中心可见列表」完全一致 (OrderQueryRepository.findPrepPage)：
+        //   1) 排除已取消/已退款 (前端展示层再过滤 CANCELLED，此处直接排除两者)
+        //   2) 排除存在已确认退款售后 (refund_blocking=TRUE 且工单已 COMPLETED) 的订单
+        //   3) JOIN customers 排除"客户已被删除"的孤儿订单——订单中心列表因 INNER JOIN customers
+        //      会隐藏这些订单，若统计不排除，看板就会比订单中心多几份（实测多 10 份左右）。
+        // 订单中心顶部卡片是基于该列表本地聚合的，所以看板必须用同一套过滤条件，
+        // 否则"已确认退款但还没改主状态"的订单会出现在看板而不出现在订单中心，
+        // 造成看板比订单中心多几份。
+        String baseSql = """
             SELECT COALESCE(SUM(mso.quantity), 0)
             FROM meal_slot_orders mso
             JOIN daily_orders do ON do.id = mso.daily_order_id
+            JOIN customers c ON c.id = do.customer_id
             WHERE do.serve_date = ?
-              AND mso.meal_period = ?
               AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
               AND NOT EXISTS (
                   SELECT 1
                   FROM aftersale_cases ac
                   WHERE ac.meal_slot_order_id = mso.id
                     AND ac.refund_blocking = TRUE
-                    AND ac.status IN ('PENDING', 'PROCESSING', 'APPROVED', 'COMPLETED')
+                    AND ac.status = 'COMPLETED'
               )
-            """,
+            """;
+        if (mealPeriod == null) {
+            return countByBusinessDate(baseSql, serveDate);
+        }
+        return nvl(jdbcTemplate.queryForObject(
+            baseSql + " AND mso.meal_period = ?",
             Integer.class,
             serveDate,
             mealPeriod
@@ -202,7 +218,21 @@ public class DashboardServiceImpl implements DashboardService {
 
     private int quantityByServeDateAndStatus(LocalDate serveDate, String status) {
         return nvl(jdbcTemplate.queryForObject(
-            "SELECT COALESCE(SUM(mso.quantity), 0) FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE do.serve_date = ? AND mso.status = ?",
+            """
+            SELECT COALESCE(SUM(mso.quantity), 0)
+            FROM meal_slot_orders mso
+            JOIN daily_orders do ON do.id = mso.daily_order_id
+            JOIN customers c ON c.id = do.customer_id
+            WHERE do.serve_date = ?
+              AND mso.status = ?
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM aftersale_cases ac
+                  WHERE ac.meal_slot_order_id = mso.id
+                    AND ac.refund_blocking = TRUE
+                    AND ac.status = 'COMPLETED'
+              )
+            """,
             Integer.class,
             serveDate,
             status
@@ -214,7 +244,21 @@ public class DashboardServiceImpl implements DashboardService {
             return 0;
         }
         return nvl(jdbcTemplate.queryForObject(
-            "SELECT COALESCE(SUM(mso.quantity), 0) FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE do.serve_date = ? AND mso.status IN (?, ?)",
+            """
+            SELECT COALESCE(SUM(mso.quantity), 0)
+            FROM meal_slot_orders mso
+            JOIN daily_orders do ON do.id = mso.daily_order_id
+            JOIN customers c ON c.id = do.customer_id
+            WHERE do.serve_date = ?
+              AND mso.status IN (?, ?)
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM aftersale_cases ac
+                  WHERE ac.meal_slot_order_id = mso.id
+                    AND ac.refund_blocking = TRUE
+                    AND ac.status = 'COMPLETED'
+              )
+            """,
             Integer.class,
             serveDate,
             statuses.get(0),
@@ -328,6 +372,7 @@ public class DashboardServiceImpl implements DashboardService {
             SELECT COUNT(DISTINCT do.customer_id)
             FROM daily_orders do
             JOIN meal_slot_orders mso ON mso.daily_order_id = do.id
+            JOIN customers c ON c.id = do.customer_id
             WHERE do.serve_date = ?
               AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
               AND do.locked = FALSE
@@ -347,6 +392,7 @@ public class DashboardServiceImpl implements DashboardService {
             SELECT COUNT(DISTINCT do.customer_id)
             FROM daily_orders do
             JOIN meal_slot_orders mso ON mso.daily_order_id = do.id
+            JOIN customers c ON c.id = do.customer_id
             WHERE do.serve_date = ?
               AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
               AND mso.confirmed_from_subscription = TRUE

@@ -99,8 +99,8 @@
 
   <view wx:elif="{{!loading}}" class="subpage-card">
     <view class="empty-state-wrap">
-      <view class="empty-title">{{targetOrderId ? '未找到对应的关联订单' : '当前筛选条件下暂无订单'}}</view>
-      <view class="empty-desc">去看看今天的营养菜单吧</view>
+      <view class="empty-title">{{targetOrderId ? '该订单已被删除或不再展示' : '当前筛选条件下暂无订单'}}</view>
+      <view class="empty-desc">{{targetOrderId ? '餐次流水仍可查看，但原订单记录已不存在' : '去看看今天的营养菜单吧'}}</view>
       <button class="btn-go-order" bindtap="goToOrder">去点餐</button>
     </view>
     <view wx:if="{{targetOrderId}}" class="action-row">

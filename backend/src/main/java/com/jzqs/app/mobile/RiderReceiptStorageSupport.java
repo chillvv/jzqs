@@ -97,6 +97,61 @@ class RiderReceiptStorageSupport {
         }
     }
 
+    /**
+     * 把一份已上传的图片（通常是回执图）复制成独立的地址参考图。
+     * <p>
+     * 参考图落盘到与回执图完全隔离的 {@code address-references} 目录，且永不参与
+     * 回执的定期清理（DataCleanupService 只按 delivery_receipts.receipt_url 删除
+     * rider-receipts 下的文件），因此即使回执图被清理，地址参考图依然可用。
+     *
+     * @param sourceUrl 源图片路径（/uploads/... 或完整 URL，也可以是已存在的参考图路径）
+     * @return 复制后独立的参考图 URL；若源路径不是受管上传文件（如 cloud://）则原样返回
+     */
+    String copyToAddressReferenceStorage(String sourceUrl) {
+        String sourcePath = buildReceiptUrl(sourceUrl);
+        if (isBlank(sourcePath) || !sourcePath.startsWith("/uploads/")) {
+            return sourcePath;
+        }
+        if (sourcePath.startsWith("/uploads/address-references/")) {
+            // 已是独立参考图，无需再复制。
+            return sourcePath;
+        }
+
+        Path relativeSource = Path.of(sourcePath.substring("/uploads/".length()));
+        Path sourceFile = uploadRootDir.resolve(relativeSource).normalize();
+        ensureWithinUploadRoot(sourceFile);
+        if (!Files.isRegularFile(sourceFile)) {
+            // 源文件已不存在（如已被回执清理删除），无法复制，返回原路径交由展示层兜底。
+            return sourcePath;
+        }
+
+        String extension = resolveExtensionFromPath(sourcePath);
+        String fileName = "ref-" + System.currentTimeMillis() + "-" + UUID.randomUUID() + extension;
+        Path relativeTarget = Path.of("address-references", fileName);
+        Path targetFile = uploadRootDir.resolve(relativeTarget).normalize();
+        ensureWithinUploadRoot(targetFile);
+
+        try {
+            Files.createDirectories(targetFile.getParent());
+            Files.copy(sourceFile, targetFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException ex) {
+            throw new IllegalStateException("复制地址参考图失败", ex);
+        }
+        return toPublicUploadPath(relativeTarget);
+    }
+
+    private String resolveExtensionFromPath(String uploadPath) {
+        String lower = uploadPath.toLowerCase();
+        for (String ext : new String[] {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}) {
+            if (lower.endsWith(ext)) {
+                return ".png".equals(ext) ? ".png"
+                    : ".jpeg".equals(ext) ? ".jpg"
+                    : ext;
+            }
+        }
+        return ".jpg";
+    }
+
     private String sanitizeFileKey(String riderName) {
         String base = isBlank(riderName) ? "rider" : riderName.trim();
         return base.replaceAll("[^0-9A-Za-z\\u4e00-\\u9fa5_-]", "_");

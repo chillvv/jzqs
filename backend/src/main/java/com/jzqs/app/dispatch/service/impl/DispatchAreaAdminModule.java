@@ -230,6 +230,8 @@ class DispatchAreaAdminModule {
                 JOIN customer_addresses ca ON ca.id = mso.address_id
                 WHERE da.area_code = ?
                   AND da.status IN ('AREA_ASSIGNED', 'DISPATCHING')
+                  -- 订单中心已取消/已退款的订单不视为配送中,不应阻塞区域删除
+                  AND mso.status NOT IN ('CANCELLED', 'REFUNDED')
                 ORDER BY mso.id
                 """,
             (rs, rowNum) -> new DispatchAreaBlockingOrderResponse(

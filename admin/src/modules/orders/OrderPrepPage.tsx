@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import * as XLSX from "xlsx";
 import useSWR from "swr";
 import {
   swrFetcher,
   assignDispatch,
   deleteDeliveryReceipt,
-  cancelOrder,
   cancelSubscriptionConfirmation,
   confirmSubscription,
   createManualOrder,
@@ -69,6 +69,7 @@ import { OrderRemarkLabelDialog } from "./components/OrderRemarkLabelDialog";
 import { AppSelect } from "../../shared/components/AppSelect";
 import { AdminDialog } from "../../shared/components/AdminDialog";
 import { AsyncContentView, type AsyncContentViewStatus } from "../../shared/components/AsyncContentView";
+import { useAdminRealtime } from "../../shared/realtime/adminRealtime";
 import { RemarkField } from "../../shared/components/RemarkField";
 import { SafeInput, SafeTextarea } from "../../shared/components/SafeInput";
 import { DatePicker } from "../../shared/components/DatePicker";
@@ -176,6 +177,43 @@ export function OrderPrepPage() {
   const confirmationItems: SubscriptionConfirmationItem[] = confirmationsResponse?.data || [];
   const ordersError = ordersErrorObj ? getErrorMessage(ordersErrorObj, "加载订单失败") : "";
 
+  // 每次从其它页面（骑手中心 / 看板等）跳转进入订单中心时，强制重新验证并刷新最新数据，
+  // 避免 SWR 直接返回缓存导致"订单中心显示的是旧数据"。
+  const location = useLocation();
+  useEffect(() => {
+    void mutateList(undefined, { revalidate: true }).catch(() => undefined);
+    void mutateStats(undefined, { revalidate: true }).catch(() => undefined);
+    void mutateConfirmations(undefined, { revalidate: true }).catch(() => undefined);
+  }, [location.key, mutateList, mutateStats, mutateConfirmations]);
+
+  // 与骑手中心 / 调度中心保持实时一致：
+  // 骑手派单、送达、回执、异常、以及小程序下单/取消都会触发 dispatch.* 与 customer.order 事件，
+  // 订阅后静默重新拉取订单列表与统计，避免"骑手已派完但订单中心还显示 3 份待派"这类失步。
+  const ORDER_CENTER_EVENT_PREFIXES = ["dispatch.", "customer.order", "customer.wallet"];
+  useEffect(() => {
+    return useAdminRealtime((message) => {
+      const eventType = message?.eventType || message?.type || "";
+      const isRelevant = ORDER_CENTER_EVENT_PREFIXES.some((prefix) => eventType.startsWith(prefix));
+      if (!isRelevant) {
+        return;
+      }
+      void mutateList().catch(() => undefined);
+      void mutateStats().catch(() => undefined);
+      void mutateConfirmations().catch(() => undefined);
+    });
+  }, [mutateList, mutateStats, mutateConfirmations]);
+
+  // 轮询兜底：WebSocket 断连时仍能定期同步，避免数字长期不刷新
+  const ORDER_CENTER_POLLING_MS = 15000;
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void mutateList().catch(() => undefined);
+      void mutateStats().catch(() => undefined);
+      void mutateConfirmations().catch(() => undefined);
+    }, ORDER_CENTER_POLLING_MS);
+    return () => window.clearInterval(timer);
+  }, [mutateList, mutateStats, mutateConfirmations]);
+
   // Forms state
   const [manualForm, setManualForm] = useState(createInitialManualCreateForm);
   const [manualCustomers, setManualCustomers] = useState<ManualCreateCustomerSearchResponse[]>([]);
@@ -189,9 +227,6 @@ export function OrderPrepPage() {
   const [uploadingReceipt, setUploadingReceipt] = useState(false);
   const [submittingEdit, setSubmittingEdit] = useState(false);
   const [submittingSpecialProcess, setSubmittingSpecialProcess] = useState(false);
-  const [submittingRefund, setSubmittingRefund] = useState(false);
-  const [isRefundConfirmOpen, setIsRefundConfirmOpen] = useState(false);
-  const [refundTargetItem, setRefundTargetItem] = useState<OrderPrepItemResponse | null>(null);
   const [processingConfirmationId, setProcessingConfirmationId] = useState<number | null>(null);
   const [processingConfirmationAction, setProcessingConfirmationAction] = useState<"confirm" | "cancel" | null>(null);
   const [assignForm, setAssignForm] = useState({ riderName: "", areaCode: "" });
@@ -613,30 +648,6 @@ export function OrderPrepPage() {
 
   function closeOrderAftersaleModal() {
     setOrderAftersaleItem(null);
-  }
-
-  function openRefundConfirm(item: OrderPrepItemResponse) {
-    setRefundTargetItem(item);
-    setIsRefundConfirmOpen(true);
-  }
-
-  async function handleRefundOrder(item: OrderPrepItemResponse) {
-    if (submittingRefund) return;
-    setSubmittingRefund(true);
-    try {
-      await cancelOrder(item.id);
-      setIsRefundConfirmOpen(false);
-      setRefundTargetItem(null);
-      setIsOrderDetailOpen(false);
-      setActiveItem(null);
-      await reloadOrders();
-      toast("退款成功，已退回餐次");
-    } catch (err: any) {
-      toast(getErrorMessage(err, "退款失败"), "error");
-      throw err;
-    } finally {
-      setSubmittingRefund(false);
-    }
   }
 
   async function handleReceiptSubmit() {
@@ -1681,62 +1692,9 @@ export function OrderPrepPage() {
                   删除回执
                 </button>
               ) : null}
-              {activeItem.canCancel ? (
-                <button
-                  className="btn btn-outline"
-                  onClick={() => openRefundConfirm(activeItem)}
-                >
-                  退款
-                </button>
-              ) : null}
             </div>
           </div>
         ) : null}
-      </AdminDialog>
-
-      <AdminDialog
-        open={isRefundConfirmOpen}
-        title="确认退款"
-        width={480}
-        onClose={submittingRefund ? () => undefined : () => { setIsRefundConfirmOpen(false); setRefundTargetItem(null); }}
-        footer={
-          <div style={{ display: "flex", gap: "12px", justifyContent: "flex-end" }}>
-            <button className="btn btn-outline" onClick={() => { setIsRefundConfirmOpen(false); setRefundTargetItem(null); }} disabled={submittingRefund}>取消</button>
-            <button
-              className="btn btn-primary"
-              disabled={submittingRefund}
-              onClick={() => refundTargetItem && handleRefundOrder(refundTargetItem).catch(() => undefined)}
-            >
-              {submittingRefund ? "退款中..." : "确认退款"}
-            </button>
-          </div>
-        }
-      >
-        {refundTargetItem && (
-          <div style={{ display: "grid", gap: "14px", fontSize: "14px" }}>
-            <p style={{ margin: 0, color: "var(--text-main)" }}>
-              退款后该订单将取消，并退回该单消耗的餐券到客户余额，明细记为「退款退回餐次」。
-            </p>
-            <div className="delete-confirm-details">
-              <div className="delete-confirm-details__item">
-                <span className="delete-confirm-details__label">客户：</span>
-                <span className="delete-confirm-details__value">{refundTargetItem.customerName}</span>
-              </div>
-              <div className="delete-confirm-details__item">
-                <span className="delete-confirm-details__label">电话：</span>
-                <span className="delete-confirm-details__value">{refundTargetItem.customerPhone}</span>
-              </div>
-              <div className="delete-confirm-details__item">
-                <span className="delete-confirm-details__label">餐次：</span>
-                <span className="delete-confirm-details__value">{mealPeriodLabel(refundTargetItem.mealPeriod)} / {mealPeriodLabel(refundTargetItem.deliveryMealPeriod)}</span>
-              </div>
-              <div className="delete-confirm-details__item">
-                <span className="delete-confirm-details__label">退回餐数：</span>
-                <span className="delete-confirm-details__value">{refundTargetItem.quantity || 1} 餐次</span>
-              </div>
-            </div>
-          </div>
-        )}
       </AdminDialog>
 
       {/* Subscription Preview Check Modal */}

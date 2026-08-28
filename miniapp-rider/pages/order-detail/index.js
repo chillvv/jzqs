@@ -59,6 +59,7 @@ Page({
     referenceUploading: false,
     referenceImageUrl: '',
     hasReferenceImage: false,
+    referenceImageError: false, // 参考图加载失败兜底
     refreshInterval: null,
     currentDateLabel: '',
     demoActive: false
@@ -307,6 +308,7 @@ Page({
       referenceUploading: false,
       referenceImageUrl: '',
       hasReferenceImage: false,
+      referenceImageError: false,
       demoActive: true
     });
   },
@@ -442,7 +444,8 @@ Page({
       this.setData({
         referenceImageLoading: false,
         referenceImageUrl: resolvedUrl || '',
-        hasReferenceImage: Boolean(resolvedUrl)
+        hasReferenceImage: Boolean(resolvedUrl),
+        referenceImageError: false
       });
       if (!resolvedUrl && options.showEmptyToast) {
         wx.showToast({ title: '当前地址暂无参考图', icon: 'none' });
@@ -464,6 +467,13 @@ Page({
       return;
     }
     imageUtil.previewImage([referenceImageUrl], 0);
+  },
+
+  // 参考图加载失败（死链/已删除）时切换到兜底提示，避免渲染层反复报 404
+  onReferenceImageError() {
+    if (!this.data.referenceImageError) {
+      this.setData({ referenceImageError: true });
+    }
   },
 
   async handleUploadReferenceImage() {
@@ -498,15 +508,18 @@ Page({
       }
       wx.showLoading({ title: '上传中...', mask: true });
       const uploadResult = await taskService.uploadReceipt(paths[0]);
-      const referenceImageUrl = uploadResult.fileKey || uploadResult.previewUrl;
-      await taskService.replaceAddressReferenceImage(order.addressId, referenceImageUrl);
+      const uploadedImageUrl = uploadResult.fileKey || uploadResult.previewUrl;
+      const replaceResult = await taskService.replaceAddressReferenceImage(order.addressId, uploadedImageUrl);
+      // 后端会把上传图复制为独立的地址参考图（不回执图），取后端返回的正式参考图 URL 展示
+      const referenceImageUrl = (replaceResult && replaceResult.referenceImageUrl) || uploadedImageUrl;
       const resolvedUrl = resolveMediaUrl(referenceImageUrl, app.globalData.apiBaseUrl) || '';
       const hadReferenceImage = this.data.hasReferenceImage;
       wx.hideLoading();
       this.setData({
         referenceUploading: false,
         referenceImageUrl: resolvedUrl,
-        hasReferenceImage: true
+        hasReferenceImage: true,
+        referenceImageError: false
       });
       wx.showToast({ title: hadReferenceImage ? '参考图已更新' : '参考图已保存', icon: 'success' });
     } catch (error) {

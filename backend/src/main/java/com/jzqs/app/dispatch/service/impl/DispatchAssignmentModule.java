@@ -77,6 +77,15 @@ class DispatchAssignmentModule {
                 if (defaultRiderName != null) {
                     dispatchOrder(orderId, defaultRiderName, normalizedAreaCode, true);
                 } else {
+                    // 归区前校验订单真实状态:已取消/已退款的订单不允许写入派单记录,
+                    // 与 dispatchOrder 的状态前置校验同口径,从源头杜绝「订单中心已退款但骑手进度残留」。
+                    String orderStatus = loadOrderStatusForUpdate(orderId);
+                    if (!"PENDING_DISPATCH".equals(orderStatus)) {
+                        throw new BusinessException(
+                            ErrorCode.ORDER_STATUS_INVALID,
+                            "订单状态已变更（" + (orderStatus == null ? "不存在" : orderStatus) + "），无法归区，请刷新后重试"
+                        );
+                    }
                     int sequenceNumber = nextAreaSequence(
                         normalizedAreaCode,
                         orderContext.serveDate(),
@@ -346,30 +355,73 @@ class DispatchAssignmentModule {
             .map(DispatchOrderReorderItemRequest::orderId)
             .filter(id -> id != null && id > 0)
             .toList();
-        if (!orderIds.isEmpty()) {
-            String placeholders = String.join(",", Collections.nCopies(orderIds.size(), "?"));
-            List<Object> tempArgs = new ArrayList<>(orderIds.size());
-            tempArgs.addAll(orderIds);
+        if (orderIds.isEmpty()) {
+            return new DispatchAreaOrdersReorderResponse(normalizedAreaCode, 0);
+        }
+
+        // 收集本次涉及的所有批次。腾位必须覆盖整个批次（含骑手端手动调整过、manually_adjusted=TRUE 的行），
+        // 否则写入目标序号时会撞 uk_dispatch_batch_items_batch_sequence(batch_id, current_sequence) 唯一键，
+        // 报 DuplicateKeyException（日志可见 Duplicate entry '<batchId>-<seq>'）。
+        String orderPlaceholders = String.join(",", Collections.nCopies(orderIds.size(), "?"));
+        List<Long> batchIds = jdbcTemplate.query(
+            "SELECT DISTINCT batch_id FROM dispatch_batch_items WHERE meal_slot_order_id IN (" + orderPlaceholders + ")",
+            (rs, rowNum) -> rs.getLong("batch_id"),
+            orderIds.toArray()
+        );
+
+        // 1) 把涉及批次内的所有行序号整体抬升，为 1..N 腾出连续空间。
+        //    不再按 manually_adjusted 过滤：管理员调整区域顺序是权威操作，必须能覆盖骑手端的手动调整。
+        if (!batchIds.isEmpty()) {
+            String batchPlaceholders = String.join(",", Collections.nCopies(batchIds.size(), "?"));
             jdbcTemplate.update(
-                "UPDATE dispatch_batch_items SET current_sequence = current_sequence + 1000 WHERE manually_adjusted = FALSE AND meal_slot_order_id IN (" + placeholders + ")",
-                tempArgs.toArray()
+                "UPDATE dispatch_batch_items SET current_sequence = current_sequence + 100000 WHERE batch_id IN (" + batchPlaceholders + ")",
+                batchIds.toArray()
             );
         }
 
+        // 2) 逐单写入目标序号（管理员调整覆盖骑手端手动调整，不再排除 manually_adjusted 行）。
         int updatedCount = 0;
         for (DispatchOrderReorderItemRequest item : items) {
+            if (item.orderId() == null || item.orderId() <= 0) {
+                continue;
+            }
             jdbcTemplate.update(
                 "UPDATE dispatch_assignments SET sequence_number = ? WHERE meal_slot_order_id = ? AND area_code = ?",
                 item.sequenceNumber(),
                 item.orderId(),
                 normalizedAreaCode
             );
-            jdbcTemplate.update(
-                "UPDATE dispatch_batch_items SET current_sequence = ? WHERE meal_slot_order_id = ? AND manually_adjusted = FALSE",
+            int affected = jdbcTemplate.update(
+                "UPDATE dispatch_batch_items SET current_sequence = ? WHERE meal_slot_order_id = ?",
                 item.sequenceNumber(),
                 item.orderId()
             );
-            updatedCount++;
+            if (affected > 0) {
+                updatedCount++;
+            }
+        }
+
+        // 3) 把批次内未出现在本次 items 中的订单（例如已送达、或漏传的订单）按原相对顺序
+        //    压缩重编号到 items 之后，保持批次序号连续，避免出现 100001 之类的大编号残留。
+        if (!batchIds.isEmpty()) {
+            String batchPlaceholders = String.join(",", Collections.nCopies(batchIds.size(), "?"));
+            List<Object> tailArgs = new ArrayList<>(batchIds.size() + orderIds.size());
+            tailArgs.addAll(batchIds);
+            tailArgs.addAll(orderIds);
+            List<Long> tailOrderIds = jdbcTemplate.query(
+                "SELECT meal_slot_order_id FROM dispatch_batch_items WHERE batch_id IN ("
+                    + batchPlaceholders + ") AND meal_slot_order_id NOT IN (" + orderPlaceholders + ") ORDER BY current_sequence, id",
+                (rs, rowNum) -> rs.getLong("meal_slot_order_id"),
+                tailArgs.toArray()
+            );
+            int nextSequence = orderIds.size() + 1;
+            for (Long tailOrderId : tailOrderIds) {
+                jdbcTemplate.update(
+                    "UPDATE dispatch_batch_items SET current_sequence = ? WHERE meal_slot_order_id = ?",
+                    nextSequence++,
+                    tailOrderId
+                );
+            }
         }
         publishDispatchEvent("dispatch.queue.changed", normalizedAreaCode, null, items.get(0).orderId());
         return new DispatchAreaOrdersReorderResponse(normalizedAreaCode, updatedCount);
@@ -635,6 +687,12 @@ class DispatchAssignmentModule {
                 dispatchOrder(orderId, targetRiderName, areaCode, true);
             } else {
                 // 区域尚未分配过任何骑手：仅归区、骑手留空（待分配骑手），这是合法状态。
+                // 归区前仍校验订单真实状态:已取消/已退款的订单不写入派单,避免骑手进度残留。
+                String orderStatus = loadOrderStatusForUpdate(orderId);
+                if (!"PENDING_DISPATCH".equals(orderStatus)) {
+                    log.warn("自动归区跳过订单: orderId={} 状态={} 已取消/退款或不存在", orderId, orderStatus);
+                    continue;
+                }
                 int sequenceNumber = nextAreaSequence(areaCode, order.serveDate(), order.mealPeriod());
                 insertAndReturnId(
                     """
@@ -677,6 +735,19 @@ class DispatchAssignmentModule {
             mealPeriod
         );
         return sequence == null ? 1 : sequence;
+    }
+
+    /**
+     * 以 FOR UPDATE 行锁读取订单当前状态。
+     * 用于归区/派单写入前的前置校验:确保订单仍处于 PENDING_DISPATCH,
+     * 从源头阻止「订单中心已取消/已退款但派单记录仍被写入」的残留。
+     */
+    private String loadOrderStatusForUpdate(long orderId) {
+        return jdbcTemplate.query(
+            "SELECT status FROM meal_slot_orders WHERE id = ? FOR UPDATE",
+            ps -> ps.setLong(1, orderId),
+            rs -> rs.next() ? rs.getString("status") : null
+        );
     }
 
     private DispatchOrderContext loadOrderContext(long orderId) {
