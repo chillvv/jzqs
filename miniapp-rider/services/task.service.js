@@ -245,18 +245,6 @@ async function getAddressReferenceImage(addressId) {
   });
 }
 
-async function saveBatchAddressReferenceImage(addressIds, referenceImageUrl) {
-  return await request({
-    url: '/api/rider/address-reference/batch',
-    method: 'POST',
-    data: {
-      addressIds,
-      referenceImageUrl
-    },
-    header: { 'content-type': 'application/json' }
-  });
-}
-
 async function replaceAddressReferenceImage(addressId, referenceImageUrl) {
   return await request({
     url: `/api/rider/address-reference/${addressId}`,
@@ -285,6 +273,5 @@ module.exports = {
   undoDelivery,
   saveOrderSequence,
   getAddressReferenceImage,
-  saveBatchAddressReferenceImage,
   replaceAddressReferenceImage
 };

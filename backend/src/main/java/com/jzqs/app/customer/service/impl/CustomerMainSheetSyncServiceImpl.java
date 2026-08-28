@@ -231,7 +231,7 @@ public class CustomerMainSheetSyncServiceImpl implements CustomerMainSheetSyncSe
                 INSERT INTO meal_wallets
                     (customer_id, package_plan_id, total_meals, consumed_meals, active, opened_at, expired_at, last_adjusted_at)
                 VALUES
-                    (?, ?, ?, 0, 0, TRUE, ?, ?, CURRENT_TIMESTAMP)
+                    (?, ?, ?, 0, TRUE, ?, ?, CURRENT_TIMESTAMP)
                 """,
                 customerId,
                 packagePlanId,

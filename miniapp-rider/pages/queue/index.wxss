@@ -154,7 +154,7 @@
   flex-shrink: 0;
 }
 
-.batch-btn-inline {
+.ref-toggle-btn-inline {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -167,7 +167,7 @@
   border: 1rpx solid rgba(16, 185, 129, 0.4);
 }
 
-.batch-btn-inline:active {
+.ref-toggle-btn-inline:active {
   opacity: 0.9;
   transform: scale(0.95);
 }
@@ -357,27 +357,6 @@
   font-size: 40rpx;
 }
 
-.batch-hint {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12rpx;
-  padding: 20rpx 24rpx;
-  background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.04) 100%);
-  border: 1rpx solid rgba(16, 185, 129, 0.2);
-  border-radius: 20rpx;
-  color: #047857;
-  font-size: 26rpx;
-  font-weight: 600;
-  margin-bottom: 12rpx;
-}
-
-.batch-hint .hint-icon {
-  width: 36rpx;
-  height: 36rpx;
-  display: block;
-}
-
 .order-card {
   background-color: var(--surface, #FFFFFF);
   border-radius: 32rpx;
@@ -425,11 +404,6 @@
   align-items: center;
   gap: 20rpx;
   width: 100%;
-}
-
-.order-card-selected {
-  border-color: rgba(16, 185, 129, 0.42);
-  box-shadow: 0 10rpx 26rpx rgba(16, 185, 129, 0.12);
 }
 
 /* 待配送状态 - 蓝色背景 */
@@ -501,27 +475,6 @@
   white-space: nowrap;
   align-self: center;
   flex-shrink: 0;
-}
-
-.batch-checkbox {
-  width: 40rpx;
-  height: 40rpx;
-  border-radius: 999rpx;
-  border: 2rpx solid #a7f3d0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: transparent;
-  background: var(--surface);
-  font-size: 24rpx;
-  font-weight: 700;
-  flex-shrink: 0;
-}
-
-.batch-checkbox-selected {
-  background: #059669;
-  border-color: #059669;
-  color: #ffffff;
 }
 
 .order-badge {
@@ -857,64 +810,6 @@
   opacity: 0.92;
 }
 
-.batch-action-bar {
-  position: fixed;
-  left: 24rpx;
-  right: 24rpx;
-  bottom: calc(136rpx + env(safe-area-inset-bottom) + 24rpx);
-  background: rgba(255, 255, 255, 0.96);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1rpx solid rgba(226, 232, 240, 0.8);
-  border-radius: 28rpx;
-  padding: 20rpx;
-  box-shadow: 0 12rpx 32rpx rgba(15, 23, 42, 0.08);
-  display: flex;
-  align-items: center;
-  gap: 16rpx;
-  z-index: 60;
-}
-
-.batch-action-safe-spacer {
-  height: calc(180rpx + env(safe-area-inset-bottom) + 136rpx);
-}
-
-.batch-action-summary {
-  flex: 1;
-  min-width: 0;
-}
-
-.batch-action-count {
-  display: block;
-  font-size: 28rpx;
-  font-weight: 800;
-  color: var(--on-surface);
-}
-
-.batch-action-copy {
-  display: block;
-  margin-top: 6rpx;
-  font-size: 22rpx;
-  color: #64748b;
-}
-
-.batch-submit-btn {
-  margin: 0;
-  min-width: 260rpx;
-  height: 88rpx;
-  padding: 0 28rpx;
-  border-radius: 999rpx;
-  border: none;
-  background: #059669;
-  color: #ffffff;
-  font-size: 28rpx;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 8rpx 20rpx rgba(16, 185, 129, 0.24);
-}
-
 .date-picker-mask {
   position: fixed;
   inset: 0;
@@ -985,4 +880,29 @@
 .date-picker-option__value {
   font-size: 26rpx;
   color: var(--success);
+}
+
+/* ========== 上移/下移排序按钮 (v4) ========== */
+.sort-btn {
+  width: 60rpx;
+  height: 60rpx;
+  border-radius: 16rpx;
+  background: rgba(37, 99, 235, 0.08);
+  border: 1rpx solid rgba(37, 99, 235, 0.18);
+  color: var(--primary, #2563EB);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36rpx;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.sort-btn:active {
+  background: rgba(37, 99, 235, 0.22);
+  transform: scale(0.92);
+}
+
+.sort-btn-disabled {
+  opacity: 0.3;
 }

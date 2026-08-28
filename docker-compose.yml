@@ -22,6 +22,8 @@ services:
       - mysql_data:/var/lib/mysql
     ports:
       - "${MYSQL_PORT:-3306}:3306"
+      # 3307 为测试专用端口：本机 127.0.0.1:3306 可能被 IDE 占用，集成测试改连 3307
+      - "3307:3306"
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
       interval: 10s

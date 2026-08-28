@@ -20,7 +20,7 @@ const STAGES = [
     getSteps: () => ([
       { centered: true, title: '骑手工作台', desc: '这里是你当天要送的订单。花 1 分钟走一遍「进详情 → 传回执」流程，演示订单都是假的，随时可「跳过」。' },
       { selector: '.toggle-section', fallbacks: ['.stats-bento', '.main-content'], title: '午/晚餐切换与统计', desc: '顶部可切换午餐/晚餐，下面能看到总份数、已完成、待配送。' },
-      { selector: '.batch-btn-inline', fallbacks: ['.header-action-group'], title: '批量传图', desc: '同一楼栋的多笔订单可批量上传同一张参考图，省时省力（演示环境不会真实上传）。' },
+      { selector: '.ref-toggle-btn-inline', fallbacks: ['.header-action-group'], title: '参考图显示开关', desc: '点这里可随时显示或隐藏每笔订单的地址参考图。' },
       { selector: '.order-card', fallbacks: ['.orders-list', '.main-content'], title: '点订单进详情', desc: '点任意一张订单卡片进入详情，上传送达照片作为回执。' }
     ])
   },

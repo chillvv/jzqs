@@ -14,6 +14,37 @@
 --       本脚本幂等：重复执行不会报错（通过 information_schema 判断是否存在）。
 -- ============================================================================
 
+-- 前置清理：删除子表中引用了不存在订单/客户的孤儿记录（否则加外键会失败）。
+-- 与 backend/scripts/init-test-db.sh 的孤儿清理口径一致；对生产库同样安全
+-- （这些记录本就是脏数据，V24 已处理订单侧，此处兜底子表侧）。
+DELETE da FROM dispatch_assignments da
+  LEFT JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
+  WHERE mso.id IS NULL;
+DELETE dbi FROM dispatch_batch_items dbi
+  LEFT JOIN meal_slot_orders mso ON mso.id = dbi.meal_slot_order_id
+  WHERE mso.id IS NULL;
+DELETE dr FROM delivery_receipts dr
+  LEFT JOIN meal_slot_orders mso ON mso.id = dr.meal_slot_order_id
+  WHERE mso.id IS NULL;
+DELETE ac FROM aftersale_cases ac
+  LEFT JOIN meal_slot_orders mso ON mso.id = ac.meal_slot_order_id
+  WHERE mso.id IS NULL;
+DELETE ac FROM aftersale_cases ac
+  LEFT JOIN customers c ON c.id = ac.customer_id
+  WHERE c.id IS NULL;
+DELETE cs FROM customer_delivery_subscriptions cs
+  LEFT JOIN meal_slot_orders mso ON mso.id = cs.meal_slot_order_id
+  WHERE mso.id IS NULL;
+DELETE cs FROM customer_delivery_subscriptions cs
+  LEFT JOIN customers c ON c.id = cs.customer_id
+  WHERE c.id IS NULL;
+DELETE on_ FROM order_notes on_
+  LEFT JOIN meal_slot_orders mso ON mso.id = on_.meal_slot_order_id
+  WHERE mso.id IS NULL;
+DELETE on_ FROM order_notes on_
+  LEFT JOIN customers c ON c.id = on_.customer_id
+  WHERE c.id IS NULL;
+
 -- aftersale_cases 尚无主键，先补上（加外键需要被引用表/引用表有确定性行标识）
 -- 兼容已存在 id 列的环境：若存在则跳过
 SET @has_id := (SELECT COUNT(*) FROM information_schema.COLUMNS
