@@ -1,0 +1,17 @@
+{
+  "name": "jzqs-admin-e2e",
+  "version": "1.0.0",
+  "description": "admin 后台浏览器 E2E（Playwright，默认本地 localhost:5173）",
+  "main": "admin-e2e.spec.js",
+  "scripts": {
+    "test": "playwright test admin-e2e.spec.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@playwright/test": "^1.62.1",
+    "mysql2": "^3.24.2"
+  }
+}
