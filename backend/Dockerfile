@@ -5,10 +5,12 @@
 FROM maven:3.9.9-eclipse-temurin-17 AS build
 WORKDIR /build
 COPY pom.xml .
+# 阿里云 Maven 镜像（服务器下载 Maven Central 极慢，曾致部署 20 分钟）
+COPY .mvn/settings.xml .mvn/settings.xml
 # 先拉依赖并走缓存，未改动 pom 时后续构建复用
-RUN --mount=type=cache,target=/root/.m2 mvn -B dependency:go-offline
+RUN --mount=type=cache,target=/root/.m2 mvn -B -s /build/.mvn/settings.xml dependency:go-offline
 COPY src ./src
-RUN --mount=type=cache,target=/root/.m2 mvn -B package -DskipTests
+RUN --mount=type=cache,target=/root/.m2 mvn -B -s /build/.mvn/settings.xml package -DskipTests
 
 FROM eclipse-temurin:17-jre
 WORKDIR /app

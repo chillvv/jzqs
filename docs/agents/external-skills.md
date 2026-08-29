@@ -41,6 +41,7 @@ smart 采用**指针式外接**（ADR-0001）：smart 只存"何时调用 + 调�
 | **grill-with-docs** | `grill-with-docs/SKILL.md` | S0-S2 需求澄清 | 内部会调 `grilling` + `domain-modeling` 两次；有 repo 时优于 `grill-me` |
 | **resolving-merge-conflicts** | `resolving-merge-conflicts/SKILL.md` | 任何 git 冲突 | **按意图解决，永不 `--abort`** |
 | **memory-merger** | `~\ .agents\skills\memory-merger\SKILL.md`（**全局技能**，不在 mattpocock 目录，2026-08-29 已装） | 记忆沉淀 / 任何任务收尾 | 借鉴其**两级沉淀**（经验先落记忆文件草稿 → 成熟后合并进指令文件并清理）+ **domain 化归类** + **合并前用户审批**；落地路径用我们自己的 `.codebuddy/memory`（项目）/ LEARNINGS.md（全局），不用它的 vscode-userdata 约定。触发 `/memory-merger >domain [scope]`，但 scope 概念映射到我们的双轨 |
+| **breakdown-test** | `~\ .agents\skills\breakdown-test\SKILL.md`（**全局技能**，2026-08-29 已装，Snyk Low Risk） | S7 测试策略生成 | **ISTQB 五技术**（等价类划分/边界值分析/决策表/状态转换/基于经验探索）+ **ISO 25010 质量矩阵**（8 质量特性优先级）+ **四类测试覆盖**（功能/非功能/结构/回归）+ **覆盖目标**（关键路径 line>80%/branch>90%、验收标准 100%、高风险场景 100%）+ **质量门禁**（entry/exit）。产出落 `.scratch/<slug>/test-strategy.md`；**不用**它的 `docs/ways-of-work/` 路径与 story point 估算 |
 
 ### 不存在的外部能力（悬空指针排查结果）
 

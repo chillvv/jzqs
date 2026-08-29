@@ -44,7 +44,7 @@ build_backend_jar() {
     -v "$HOME/.m2":/root/.m2 \
     -w /app/backend \
     "$MAVEN_IMAGE" \
-    mvn -B clean package -Dmaven.test.skip=true
+    mvn -B -s /app/backend/.mvn/settings.xml clean package -Dmaven.test.skip=true
   [ -f "$JAR_PATH" ] || fail "打包失败：未生成 $JAR_PATH"
   ok "后端 jar 已生成：$JAR_PATH"
 }
@@ -57,7 +57,7 @@ run_backend_tests() {
     -v "$HOME/.m2":/root/.m2 \
     -w /app/backend \
     "$MAVEN_IMAGE" \
-    mvn -B test
+    mvn -B -s /app/backend/.mvn/settings.xml test
   ok "后端测试通过"
 }
 
@@ -96,7 +96,9 @@ prune_old_images() {
       docker rmi "$img" >/dev/null 2>&1 && info "已删除旧镜像: $img" || true
     fi
   done
-  docker builder prune -f >/dev/null 2>&1 || true
+  # 只清 3 天前的构建缓存：保留近期 cache 加速 docker compose build（后端多阶段构建复用依赖层），
+  # 之前 -f 全清导致每次部署全量下载依赖（服务器网络慢，部署曾 20 分钟）
+  docker builder prune -f --filter "until=72h" >/dev/null 2>&1 || true
   ok "旧镜像/构建缓存清理完成"
 }
 
