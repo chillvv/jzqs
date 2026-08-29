@@ -268,7 +268,8 @@ export function OrderPrepPage() {
       mealPeriod: resolveMealPeriod(item),
       quantity: String(item.quantity || 1),
       deliveryAddress: item.deliveryAddress || "",
-      merchantRemark: item.merchantRemark || "",
+      // 只编辑「本单」商家备注：merchantRemark 是合并后的展示串，回写会把客户长期备注也存进订单
+      merchantRemark: item.orderMerchantRemark ?? item.merchantRemark ?? "",
       status: item.status || "PENDING_DISPATCH"
     });
     setIsEditOpen(true);

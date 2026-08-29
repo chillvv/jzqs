@@ -8,6 +8,16 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // echarts 拆独立 chunk：体积大且极少变更，浏览器可长期缓存，业务代码更新不重复下载
+          echarts: ["echarts/core", "echarts/charts", "echarts/components", "echarts/renderers"]
+        }
+      }
+    }
+  },
   server: {
     host: "0.0.0.0",
     port: 5173,

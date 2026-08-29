@@ -11,6 +11,7 @@ import com.jzqs.app.dispatch.api.DispatchOverviewResponse;
 import com.jzqs.app.dispatch.api.DispatchPendingItemResponse;
 import com.jzqs.app.dispatch.api.DispatchReassignmentResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderProgressResponse;
+import com.jzqs.app.common.util.OrderNoteTexts;
 import java.sql.Timestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -728,19 +729,25 @@ class DispatchQueryModule {
         return projections;
     }
 
+    /**
+     * 备注展示 = 快照条目（长期 + 本单一次）在前，订单列值兜底追加在后，去重后逗号拼接。
+     * 不能用「有快照就丢弃列值」的回退写法：那会让订单列上的商家备注在用户备注出现后被顶掉。
+     */
     private String resolveProjectedUserNote(OrderNoteProjection projection, String legacyValue) {
-        if (projection != null && projection.hasOrderNotes()) {
-            return projection.userNote().isBlank() ? "-" : projection.userNote();
-        }
-        String normalized = normalizeLegacyNote(legacyValue);
-        return normalized.isBlank() ? "-" : normalized;
+        List<String> parts = projection == null
+            ? new ArrayList<>()
+            : OrderNoteTexts.newParts(projection.userNotes());
+        OrderNoteTexts.addPart(parts, legacyValue);
+        String joined = OrderNoteTexts.join(parts);
+        return joined.isEmpty() ? "-" : joined;
     }
 
     private String resolveProjectedAdminNote(OrderNoteProjection projection, String legacyValue) {
-        if (projection != null && projection.hasOrderNotes()) {
-            return projection.adminNote();
-        }
-        return normalizeLegacyNote(legacyValue);
+        List<String> parts = projection == null
+            ? new ArrayList<>()
+            : OrderNoteTexts.newParts(projection.merchantNotes());
+        OrderNoteTexts.addPart(parts, legacyValue);
+        return OrderNoteTexts.join(parts);
     }
 
     private String normalizeLegacyNote(String value) {
@@ -809,7 +816,7 @@ class DispatchQueryModule {
     ) {
     }
 
-    private record OrderNoteProjection(String userNote, String adminNote, boolean hasOrderNotes) {
+    private record OrderNoteProjection(List<String> userNotes, List<String> merchantNotes) {
     }
 
     private static final class DispatchNoteAccumulator {
@@ -829,9 +836,8 @@ class DispatchQueryModule {
 
         private OrderNoteProjection toProjection() {
             return new OrderNoteProjection(
-                String.join(" / ", userNotes),
-                String.join(" / ", merchantNotes),
-                true
+                List.copyOf(userNotes),
+                List.copyOf(merchantNotes)
             );
         }
     }

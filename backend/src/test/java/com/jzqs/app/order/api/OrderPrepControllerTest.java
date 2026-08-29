@@ -86,9 +86,9 @@ class OrderPrepControllerTest {
     @Test
     void shouldReturnTomorrowOrderPrepList() throws Exception {
         given(orderPrepService.prepPage(any())).willReturn(PageResponse.of(List.of(
-            new OrderPrepItemResponse(1L, "张先生", "13800000001", "LUNCH", "LUNCH", "午餐 / 香煎鸡胸肉套餐", 1, "少饭，不要洋葱", "补偿送果蔬汁", "高新区科技园A座8层", "MINIAPP", "高新区", "骑手小李", true, true, "PENDING_DISPATCH", "PENDING_DISPATCH", "待配送", "", true, true, false, "", "", "", null, 0L, "2026-05-13"),
-            new OrderPrepItemResponse(2L, "李女士", "13900000002", "DINNER", "DINNER", "晚餐 / 泰式柠檬龙利鱼", 1, "-", "", "阳光小区3栋2单元", "MINIAPP", "高新区", "骑手小李", false, false, "PENDING_DISPATCH", "REFUND_PROCESSING", "退款处理中", "", true, true, false, "", "", "", null, 0L, "2026-05-13"),
-            new OrderPrepItemResponse(3L, "王总", "13700000003", "LUNCH", "LUNCH", "午餐 / 香煎鸡胸肉套餐", 2, "微辣", "优先出餐", "财富中心写字楼1201", "BACKEND", "高新区", "", true, false, "DELIVERED", "DELIVERED", "已完成", "", false, false, false, "", "", "", "2026-05-14 12:30:00", 0L, "2026-05-13")
+            new OrderPrepItemResponse(1L, "张先生", "13800000001", "LUNCH", "LUNCH", "午餐 / 香煎鸡胸肉套餐", 1, "少饭，不要洋葱", "补偿送果蔬汁", "补偿送果蔬汁", "高新区科技园A座8层", "MINIAPP", "高新区", "骑手小李", true, true, "PENDING_DISPATCH", "PENDING_DISPATCH", "待配送", "", true, true, false, "", "", "", null, 0L, "2026-05-13"),
+            new OrderPrepItemResponse(2L, "李女士", "13900000002", "DINNER", "DINNER", "晚餐 / 泰式柠檬龙利鱼", 1, "-", "", "", "阳光小区3栋2单元", "MINIAPP", "高新区", "骑手小李", false, false, "PENDING_DISPATCH", "REFUND_PROCESSING", "退款处理中", "", true, true, false, "", "", "", null, 0L, "2026-05-13"),
+            new OrderPrepItemResponse(3L, "王总", "13700000003", "LUNCH", "LUNCH", "午餐 / 香煎鸡胸肉套餐", 2, "微辣", "优先出餐", "优先出餐", "财富中心写字楼1201", "BACKEND", "高新区", "", true, false, "DELIVERED", "DELIVERED", "已完成", "", false, false, false, "", "", "", "2026-05-14 12:30:00", 0L, "2026-05-13")
         ), 1, 20, 3));
         mockMvc.perform(get("/api/admin/orders"))
             .andExpect(status().isOk())

@@ -107,7 +107,7 @@ class MobilePortalOrderResilienceTest {
     void shouldKeepMiniappOrderSuccessfulWhenOrderNoteSnapshotFails() {
         doThrow(new IllegalStateException("snapshot exploded"))
             .when(orderNoteSnapshotService)
-            .writeOrderSnapshot(anyLong(), anyLong(), anyString(), any(), any(), anyList(), any());
+            .writeOrderSnapshot(anyLong(), anyLong(), anyString(), any(), anyList(), any());
 
         MobileCreateOrderResponse result = assertDoesNotThrow(() -> mobilePortalService.createMiniappOrder(
             1L,

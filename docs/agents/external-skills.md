@@ -40,6 +40,7 @@ smart 采用**指针式外接**（ADR-0001）：smart 只存"何时调用 + 调�
 | **improve-codebase-architecture** | `improve-codebase-architecture/SKILL.md` | S4 / S11 | HTML 报告写系统 temp，不落 repo |
 | **grill-with-docs** | `grill-with-docs/SKILL.md` | S0-S2 需求澄清 | 内部会调 `grilling` + `domain-modeling` 两次；有 repo 时优于 `grill-me` |
 | **resolving-merge-conflicts** | `resolving-merge-conflicts/SKILL.md` | 任何 git 冲突 | **按意图解决，永不 `--abort`** |
+| **memory-merger** | `~\ .agents\skills\memory-merger\SKILL.md`（**全局技能**，不在 mattpocock 目录，2026-08-29 已装） | 记忆沉淀 / 任何任务收尾 | 借鉴其**两级沉淀**（经验先落记忆文件草稿 → 成熟后合并进指令文件并清理）+ **domain 化归类** + **合并前用户审批**；落地路径用我们自己的 `.codebuddy/memory`（项目）/ LEARNINGS.md（全局），不用它的 vscode-userdata 约定。触发 `/memory-merger >domain [scope]`，但 scope 概念映射到我们的双轨 |
 
 ### 不存在的外部能力（悬空指针排查结果）
 

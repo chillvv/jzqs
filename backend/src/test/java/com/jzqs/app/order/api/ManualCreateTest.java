@@ -223,7 +223,7 @@ public class ManualCreateTest {
             )
         );
         assertEquals(
-            "再加一餐；多菜",
+            "再加一餐，多菜",
             jdbcTemplate.queryForObject(
                 """
                     SELECT mso.merchant_remark

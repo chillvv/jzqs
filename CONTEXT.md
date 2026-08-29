@@ -32,6 +32,21 @@ _区分_：Batch 是"这一轮派单"，Assignment 是"这一轮里的一单"。
 **SubscriptionConfirmation（订阅确认）** — `subscription_confirmations`。
 **SubscriptionImportSkip（订阅导入跳过项）** — `subscription_import_skips`。
 
+## 备注
+
+**OrderUserNote（用户备注）** — 客户侧对某 MealSlotOrder 的要求（少饭、不要辣等）。
+**OrderMerchantRemark（商家备注）** — 运营侧对某 MealSlotOrder 的要求（重点关注、本餐送果蔬汁等）。
+两侧**各自独立成栏**，互不覆盖。
+
+按来源再分两类，**同栏内合并展示**（2026-08-29 老板拍板：长期 + 一次性都用逗号隔开一起出现）：
+- **长期备注** — 挂在 Customer 上，`customer_notes`。对所有订单生效。
+- **一次性备注** — 只挂在某一单上，落在 `meal_slot_orders` 的订单列（`user_note` / `merchant_remark`）。
+
+**OrderNoteSnapshot（订单备注快照）** — `order_notes`，是上面两类来源的**投影**，不是第二套存储。
+`note_type` 区分 USER / MERCHANT，`source_type` 区分来源（CUSTOMER_PROFILE / CUSTOMER_ORDER_INPUT /
+MERCHANT_ORDER_ONCE / MERCHANT_PROFILE / MERCHANT_TIME_BOXED）。每次写备注都全删重写。
+_纪律_：改了订单列的入口必须重建快照；不要往 `order_notes` 直接插行（会被重写冲掉）。
+
 ## 状态语言
 
 **订单状态** 与 **派单状态** 是两套独立的状态机，必须同步（走状态机 helper）：
@@ -62,4 +77,5 @@ _区分_：Batch 是"这一轮派单"，Assignment 是"这一轮里的一单"。
 - 说"订单"指 **MealSlotOrder**；指 `daily_orders` 时必须说"日报单"。
 - 说"派单"需区分 **Batch**（批次）还是 **Assignment**（分配）。
 - 说"订阅"需指明是哪一张表（Rule / Delivery / Nightly），四者不是一回事。
+- 说"备注"需区分 **用户备注** 还是 **商家备注**，以及 **长期** 还是 **一次性**。`order_notes` 只是投影。
 - 新概念先在此登记，再进代码。命名冲突时以此文件为准。

@@ -44,6 +44,13 @@ class OrderNoteSnapshotServiceTest {
         jdbcTemplate.update("DELETE FROM meal_wallets WHERE id = ?", WALLET_ID);
         jdbcTemplate.update("DELETE FROM customer_addresses WHERE id = ?", ADDRESS_ID);
 
+        // 本类用 V1 基线里不存在的 customer 1（基线客户从 382 起），单跑本类时 customer 1 不存在，
+        // 插地址会撞 fk_customer_addresses_customer。用 INSERT IGNORE 兜底，避免依赖其它测试类先建。
+        jdbcTemplate.update(
+            "INSERT IGNORE INTO customers (id, name, phone, source, active, customer_status) VALUES (?, '快照测试客户1', '13900000001', 'BACKEND', TRUE, 'FORMAL')",
+            CUSTOMER_ID
+        );
+
         jdbcTemplate.update(
             """
                 INSERT INTO customer_addresses (
@@ -115,11 +122,23 @@ class OrderNoteSnapshotServiceTest {
         assertEquals(
             List.of(
                 "CUSTOMER_PROFILE:SNAPSHOT",
-                "SUBSCRIPTION_DEFAULT:SNAPSHOT",
+                "MERCHANT_ORDER_ONCE:ORDER_ONCE",
                 "MERCHANT_PROFILE:SNAPSHOT",
                 "MERCHANT_TIME_BOXED:SNAPSHOT"
             ),
             sourceAndScope
+        );
+
+        // 回归：后台录单填的商家备注必须落在商家侧，历史版本曾把它塞进用户侧的
+        // SUBSCRIPTION_DEFAULT，导致它显示在「用户备注」栏。
+        assertEquals(
+            List.of("MERCHANT"),
+            jdbcTemplate.query(
+                "SELECT note_type FROM order_notes WHERE meal_slot_order_id = ? AND content = ?",
+                (rs, rowNum) -> rs.getString("note_type"),
+                orderId,
+                "本次不要辣"
+            )
         );
     }
 
@@ -167,7 +186,7 @@ class OrderNoteSnapshotServiceTest {
         assertEquals(
             List.of(
                 "CUSTOMER_PROFILE:SNAPSHOT",
-                "SUBSCRIPTION_DEFAULT:SNAPSHOT",
+                "MERCHANT_ORDER_ONCE:ORDER_ONCE",
                 "MERCHANT_PROFILE:SNAPSHOT",
                 "MERCHANT_TIME_BOXED:SNAPSHOT"
             ),

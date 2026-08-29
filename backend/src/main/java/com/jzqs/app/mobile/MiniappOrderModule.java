@@ -3,6 +3,7 @@ package com.jzqs.app.mobile;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.common.realtime.RealtimeAudienceModule;
+import com.jzqs.app.common.util.OrderNoteTexts;
 import com.jzqs.app.dispatch.service.DispatchService;
 import com.jzqs.app.mobile.api.MobileCreateOrderResponse;
 import com.jzqs.app.order.service.OrderNoteSnapshotService;
@@ -143,6 +144,7 @@ class MiniappOrderModule {
                 mergeTargetOrderId,
                 customerId,
                 normalizeSnapshotNote(mergedUserNote),
+                existingMerchantRemark(mergeTargetOrderId, merchantRemark),
                 mergeTime
             );
             jdbcTemplate.execute("/* force flush */ SELECT 1");
@@ -179,7 +181,7 @@ class MiniappOrderModule {
         );
         jdbcTemplate.update("UPDATE meal_wallets SET consumed_meals = consumed_meals + ? WHERE id = ?", units, walletId);
         insertWalletTransaction(walletId, "CONSUME", -units, "小程序", "用户自主下单", now, mealSlotOrderId);
-        attemptWriteOrderSnapshot(mealSlotOrderId, customerId, finalUserNote, snapshotTime);
+        attemptWriteOrderSnapshot(mealSlotOrderId, customerId, finalUserNote, merchantRemark, snapshotTime);
 
         jdbcTemplate.execute("/* force flush */ SELECT 1");
         attemptAutoAssignPendingOrders(mealPeriod, mealSlotOrderId, customerId);
@@ -260,6 +262,7 @@ class MiniappOrderModule {
         long mealSlotOrderId,
         long customerId,
         String orderUserNote,
+        String orderMerchantRemark,
         LocalDateTime snapshotTime
     ) {
         try {
@@ -268,8 +271,7 @@ class MiniappOrderModule {
                 customerId,
                 "小程序",
                 orderUserNote,
-                null,
-                List.of(),
+                List.of(orderMerchantRemark),
                 snapshotTime
             );
         } catch (RuntimeException ex) {
@@ -611,6 +613,33 @@ class MiniappOrderModule {
         }
     }
 
+    /**
+     * 合并加餐时订单列上的商家备注保持「已有优先」（与上面 UPDATE 的 CASE 口径一致），
+     * 快照用它重建，避免把后台/运营填的备注冲掉。
+     */
+    private String existingMerchantRemark(long mealSlotOrderId, String fallbackRemark) {
+        try {
+            List<String> remarks = jdbcTemplate.queryForList(
+                "SELECT COALESCE(merchant_remark, '') FROM meal_slot_orders WHERE id = ?",
+                String.class,
+                mealSlotOrderId
+            );
+            if (remarks.isEmpty()) {
+                return fallbackRemark;
+            }
+            String normalized = normalizeOrderMergeNote(remarks.get(0));
+            return normalized.isEmpty() ? fallbackRemark : normalized;
+        } catch (RuntimeException ex) {
+            log.warn(
+                "miniapp merge order merchant remark skipped orderId={} reason={}",
+                mealSlotOrderId,
+                ex.getMessage(),
+                ex
+            );
+            return fallbackRemark;
+        }
+    }
+
     private String preferredOrderNote(Object userNote, Object fallbackNote) {
         String normalizedUserNote = normalizeOrderMergeNote(userNote);
         if (!normalizedUserNote.isEmpty()) {
@@ -636,7 +665,7 @@ class MiniappOrderModule {
         if (current.contains(incoming)) {
             return current;
         }
-        return current + "；" + incoming;
+        return current + OrderNoteTexts.SEPARATOR + incoming;
     }
 
     private LocalDate currentWeekMonday(LocalDate date) {

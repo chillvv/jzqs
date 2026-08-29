@@ -6,6 +6,7 @@ import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.common.realtime.RealtimeAudienceModule;
+import com.jzqs.app.common.util.OrderNoteTexts;
 import com.jzqs.app.mobile.api.RiderDeliveryExceptionReportResponse;
 import com.jzqs.app.mobile.api.RiderQueueItemActionResponse;
 import com.jzqs.app.mobile.api.RiderQueueItemResponse;
@@ -1036,19 +1037,25 @@ class RiderQueueSupport {
         return projections;
     }
 
+    /**
+     * 备注展示 = 快照条目（长期 + 本单一次）在前，订单列值兜底追加在后，去重后逗号拼接。
+     * 骑手端沿用既有语义：用户备注为空时展示 `-`。
+     */
     private String resolveProjectedUserNote(OrderNoteProjection projection, String legacyValue) {
-        if (projection != null && projection.hasOrderNotes()) {
-            return projection.userNote().isBlank() ? "-" : projection.userNote();
-        }
-        String normalized = normalizeSpecialValue(legacyValue);
-        return normalized.isBlank() ? "-" : normalized;
+        List<String> parts = projection == null
+            ? new ArrayList<>()
+            : OrderNoteTexts.newParts(projection.userNotes());
+        OrderNoteTexts.addPart(parts, legacyValue);
+        String joined = OrderNoteTexts.join(parts);
+        return joined.isEmpty() ? "-" : joined;
     }
 
     private String resolveProjectedAdminNote(OrderNoteProjection projection, String legacyValue) {
-        if (projection != null && projection.hasOrderNotes()) {
-            return projection.adminNote();
-        }
-        return normalizeSpecialValue(legacyValue);
+        List<String> parts = projection == null
+            ? new ArrayList<>()
+            : OrderNoteTexts.newParts(projection.merchantNotes());
+        OrderNoteTexts.addPart(parts, legacyValue);
+        return OrderNoteTexts.join(parts);
     }
 
     private MealSlotContext loadMealSlotContext(long mealSlotOrderId) {
@@ -1108,7 +1115,7 @@ class RiderQueueSupport {
         String referenceImageUrl
     ) {}
 
-    private record OrderNoteProjection(String userNote, String adminNote, boolean hasOrderNotes) {}
+    private record OrderNoteProjection(List<String> userNotes, List<String> merchantNotes) {}
 
     private static final class RiderOrderNoteAccumulator {
         private final List<String> userNotes = new ArrayList<>();
@@ -1126,7 +1133,7 @@ class RiderQueueSupport {
         }
 
         private OrderNoteProjection toProjection() {
-            return new OrderNoteProjection(String.join(" / ", userNotes), String.join(" / ", merchantNotes), true);
+            return new OrderNoteProjection(List.copyOf(userNotes), List.copyOf(merchantNotes));
         }
     }
 

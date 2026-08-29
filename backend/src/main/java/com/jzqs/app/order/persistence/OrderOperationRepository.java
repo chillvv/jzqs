@@ -85,20 +85,13 @@ public class OrderOperationRepository {
         );
     }
 
-    public void insertOrderNote(long orderId, long customerId, String noteType, String scopeType, String content, String createdBy) {
-        jdbcTemplate.update(
-            """
-                INSERT INTO order_notes (
-                    meal_slot_order_id, customer_id, note_type, source_type, scope_type, content, effective_status, created_by
-                ) VALUES (?, ?, ?, 'MERCHANT_ORDER_ONCE', ?, ?, 'ACTIVE', ?)
-                """,
-            orderId,
-            customerId,
-            noteType,
-            scopeType,
-            content,
-            createdBy
+    public String findOrderUserNote(long orderId) {
+        String userNote = jdbcTemplate.query(
+            "SELECT COALESCE(user_note, note, '') FROM meal_slot_orders WHERE id = ?",
+            ps -> ps.setLong(1, orderId),
+            rs -> rs.next() ? rs.getString(1) : ""
         );
+        return userNote == null ? "" : userNote;
     }
 
     public int cancelOrder(long orderId) {

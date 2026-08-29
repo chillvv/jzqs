@@ -269,6 +269,7 @@ Page({
         : [];
       const fallbackNeedAttention = Boolean(
         (item.note && item.note !== '-')
+        || (item.merchantRemark && item.merchantRemark !== '-')
         || (item.adminNote && item.adminNote !== '-')
         || (item.customerNote && item.customerNote !== '-')
         || (item.merchantNote && item.merchantNote !== '-')

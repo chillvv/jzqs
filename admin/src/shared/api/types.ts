@@ -262,7 +262,10 @@ export type OrderPrepItemResponse = {
   mealSummary: string;
   quantity: number;
   userNote: string;
+  /** 展示用商家备注：快照条目 + 订单列值，逗号拼接 */
   merchantRemark: string;
+  /** 只属于这一单的商家备注（订单列原始值），编辑弹窗用这个，避免把长期备注回写进订单 */
+  orderMerchantRemark?: string;
   deliveryAddress: string;
   source: string;
   areaCode?: string;

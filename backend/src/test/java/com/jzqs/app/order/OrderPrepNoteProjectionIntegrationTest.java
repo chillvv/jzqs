@@ -101,8 +101,8 @@ class OrderPrepNoteProjectionIntegrationTest {
 
         assertThat(response.items()).hasSize(1);
         OrderPrepItemResponse item = response.items().get(0);
-        assertThat(item.userNote()).isEqualTo("长期少饭 / 本次不要辣");
-        assertThat(item.merchantRemark()).isEqualTo("重点关注 / 本餐送果蔬汁");
+        assertThat(item.userNote()).isEqualTo("长期少饭，本次不要辣");
+        assertThat(item.merchantRemark()).isEqualTo("重点关注，本餐送果蔬汁");
     }
 
     @Test
@@ -111,9 +111,45 @@ class OrderPrepNoteProjectionIntegrationTest {
 
         assertThat(response.items()).hasSize(1);
         OrderPrepItemResponse item = response.items().get(0);
-        assertThat(item.userNote()).isEqualTo("长期少饭 / 本次不要辣");
-        assertThat(item.merchantRemark()).isEqualTo("重点关注 / 本餐送果蔬汁");
+        assertThat(item.userNote()).isEqualTo("长期少饭，本次不要辣");
+        assertThat(item.merchantRemark()).isEqualTo("重点关注，本餐送果蔬汁");
         assertThat(item.priorityCustomer()).isFalse();
+    }
+
+    @Test
+    void shouldKeepOrderColumnRemarkAlongsideSnapshotNotes() {
+        // 回归：订单列上的商家备注不能因为出现备注快照就被整列丢弃，
+        // 也不能因为出现用户备注就消失——两者要合并展示。
+        jdbcTemplate.update(
+            "UPDATE meal_slot_orders SET user_note = '列上的用户备注', merchant_remark = '列上的商家备注' WHERE id = ?",
+            ORDER_ID
+        );
+
+        PageResponse<OrderPrepItemResponse> response = orderPrepService.prepPage(LocalDate.now().plusDays(4).toString());
+
+        OrderPrepItemResponse item = response.items().stream()
+            .filter(candidate -> candidate.id() == ORDER_ID)
+            .findFirst()
+            .orElseThrow();
+        assertThat(item.userNote()).isEqualTo("长期少饭，本次不要辣，列上的用户备注");
+        assertThat(item.merchantRemark()).isEqualTo("重点关注，本餐送果蔬汁，列上的商家备注");
+    }
+
+    @Test
+    void shouldNotDuplicateRemarkThatAppearsInBothSnapshotAndOrderColumn() {
+        jdbcTemplate.update(
+            "UPDATE meal_slot_orders SET user_note = '本次不要辣', merchant_remark = '本餐送果蔬汁' WHERE id = ?",
+            ORDER_ID
+        );
+
+        PageResponse<OrderPrepItemResponse> response = orderPrepService.prepPage(LocalDate.now().plusDays(4).toString());
+
+        OrderPrepItemResponse item = response.items().stream()
+            .filter(candidate -> candidate.id() == ORDER_ID)
+            .findFirst()
+            .orElseThrow();
+        assertThat(item.userNote()).isEqualTo("长期少饭，本次不要辣");
+        assertThat(item.merchantRemark()).isEqualTo("重点关注，本餐送果蔬汁");
     }
 
     @Test

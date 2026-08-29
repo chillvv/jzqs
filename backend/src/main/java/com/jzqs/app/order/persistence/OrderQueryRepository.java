@@ -2,6 +2,7 @@ package com.jzqs.app.order.persistence;
 
 import com.jzqs.app.common.api.PageResponse;
 import com.jzqs.app.common.util.BusinessDateResolver;
+import com.jzqs.app.common.util.OrderNoteTexts;
 import com.jzqs.app.order.api.ManualCreateCustomerAddressResponse;
 import com.jzqs.app.order.api.ManualCreateCustomerSearchResponse;
 import com.jzqs.app.order.api.OrderNoteItemResponse;
@@ -588,6 +589,7 @@ public class OrderQueryRepository {
             row.quantity(),
             resolveProjectedUserNote(projection, row.userNote()),
             resolveProjectedMerchantRemark(projection, row.merchantRemark()),
+            OrderNoteTexts.normalize(row.merchantRemark()),
             row.deliveryAddress(),
             row.source(),
             row.areaCode(),
@@ -610,23 +612,24 @@ public class OrderQueryRepository {
         );
     }
 
+    /**
+     * 备注展示 = 快照条目（长期 + 本单一次）在前，订单列值兜底追加在后，去重后逗号拼接。
+     * 不能用「有快照就丢弃列值」的回退写法：那会让订单列上的商家备注在用户备注出现后被顶掉。
+     */
     private String resolveProjectedUserNote(OrderNoteProjection projection, String legacyValue) {
-        if (projection != null && projection.hasOrderNotes()) {
-            return projection.userNote();
-        }
-        return normalizeLegacyNote(legacyValue);
+        List<String> parts = projection == null
+            ? new ArrayList<>()
+            : OrderNoteTexts.newParts(projection.userNotes());
+        OrderNoteTexts.addPart(parts, legacyValue);
+        return OrderNoteTexts.join(parts);
     }
 
     private String resolveProjectedMerchantRemark(OrderNoteProjection projection, String legacyValue) {
-        if (projection != null && projection.hasOrderNotes()) {
-            return projection.merchantRemark();
-        }
-        return normalizeLegacyNote(legacyValue);
-    }
-
-    private String normalizeLegacyNote(String value) {
-        String normalized = stringValue(value);
-        return "-".equals(normalized) ? "" : normalized;
+        List<String> parts = projection == null
+            ? new ArrayList<>()
+            : OrderNoteTexts.newParts(projection.merchantNotes());
+        OrderNoteTexts.addPart(parts, legacyValue);
+        return OrderNoteTexts.join(parts);
     }
 
     private String formatTimestamp(Timestamp value) {
@@ -690,7 +693,7 @@ public class OrderQueryRepository {
     ) {
     }
 
-    private record OrderNoteProjection(String userNote, String merchantRemark, boolean hasOrderNotes) {
+    private record OrderNoteProjection(List<String> userNotes, List<String> merchantNotes) {
     }
 
     private record OrderNoteRow(long orderId, String noteType, String content) {
@@ -713,9 +716,8 @@ public class OrderQueryRepository {
 
         private OrderNoteProjection toProjection() {
             return new OrderNoteProjection(
-                String.join(" / ", userNotes),
-                String.join(" / ", merchantNotes),
-                true
+                List.copyOf(userNotes),
+                List.copyOf(merchantNotes)
             );
         }
     }

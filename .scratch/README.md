@@ -79,3 +79,5 @@ needs-triage → needs-info（要更多信息）
 | [local-e2e-coverage/01](local-e2e-coverage/issues/01-fix-smart-webapp-testing-pointer.md) | done | 修复 smart 的 `webapp-testing` 悬空指针（该技能不存在） |
 | [local-e2e-coverage/02](local-e2e-coverage/issues/02-localize-admin-e2e.md) | in-progress | admin E2E 本地化：脚本已改造，浏览器跑通待起服务 |
 | [local-e2e-coverage/03](local-e2e-coverage/issues/03-cross-end-e2e-local-db.md) | done | 跨端 E2E 连本地 3307（CrossEndFlowE2ETest 3/3 通过） |
+| [order-note-merge/01](order-note-merge/issues/01-merge-note-projection-with-comma.md) | done | 三端备注投影改「列 ∪ 快照」去重 + 逗号拼接 |
+| [order-note-merge/02](order-note-merge/issues/02-snapshot-preserve-one-time-notes.md) | done | 订单级商家备注收敛成单一落点 + 修错列 bug + V30 迁移 |

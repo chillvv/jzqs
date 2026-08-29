@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import * as echarts from "echarts/core";
 import { useLocation, useNavigate } from "react-router-dom";
 import { fetchDashboardOverview } from "../../shared/api/http";
 import type { DashboardOverviewResponse } from "../../shared/api/types";
@@ -9,6 +10,7 @@ import {
 } from "./dashboardPage.helpers";
 import { useAdminRealtime } from "../../shared/realtime/adminRealtime";
 import { AsyncContentView, type AsyncContentViewStatus } from "../../shared/components/AsyncContentView";
+import { EChart } from "../../shared/components/EChart";
 import { Clock, Truck, PackageCheck, ClipboardCheck } from "lucide-react";
 
 // 看板数据相关的实时事件前缀。
@@ -17,34 +19,6 @@ import { Clock, Truck, PackageCheck, ClipboardCheck } from "lucide-react";
 const DASHBOARD_EVENT_PREFIXES = ["dispatch.", "customer.order", "customer.wallet"];
 // WebSocket 断连时仍能保持同步的兜底轮询间隔（秒）
 const DASHBOARD_POLLING_MS = 15000;
-
-function buildLinePath(values: number[], width: number, height: number, paddingX: number, paddingTop: number, paddingBottom: number) {
-  if (!values.length) {
-    return "";
-  }
-  const chartHeight = height - paddingTop - paddingBottom;
-  const stepX = values.length === 1 ? 0 : (width - paddingX * 2) / (values.length - 1);
-  const maxValue = Math.max(...values, 1);
-  return values
-    .map((value, index) => {
-      const x = paddingX + stepX * index;
-      const y = paddingTop + chartHeight - (value / maxValue) * chartHeight;
-      return `${index === 0 ? "M" : "L"} ${x} ${y}`;
-    })
-    .join(" ");
-}
-
-function buildAreaPath(values: number[], width: number, height: number, paddingX: number, paddingTop: number, paddingBottom: number) {
-  if (!values.length) {
-    return "";
-  }
-  const linePath = buildLinePath(values, width, height, paddingX, paddingTop, paddingBottom);
-  const stepX = values.length === 1 ? 0 : (width - paddingX * 2) / (values.length - 1);
-  const startX = paddingX;
-  const endX = paddingX + stepX * (values.length - 1);
-  const baseY = height - paddingBottom;
-  return `${linePath} L ${endX} ${baseY} L ${startX} ${baseY} Z`;
-}
 
 const FLOW_ICONS = {
   PENDING: Clock,
@@ -180,25 +154,102 @@ export function DashboardPage() {
   const todayLunch = data.todayServeLunchCount;
   const todayDinner = data.todayServeDinnerCount;
 
-  // 订单趋势图几何参数
-  const W = 760;
-  const H = 220;
-  const PAD_X = 72;
-  const PAD_TOP = 36;
-  const PAD_BOTTOM = 44;
+  // ===== 订单趋势图（ECharts）=====
+  // Y 轴刻度方向由 ECharts 内部保证（值越大越靠上），不再手写坐标映射，杜绝刻度颠倒类 bug
   const orderValues = orderTrend.map((item) => item.total);
   const lunchValues = orderTrend.map((item) => item.lunch);
   const dinnerValues = orderTrend.map((item) => item.dinner);
-  const orderMax = Math.max(...orderValues, 1);
-  const orderLinePath = buildLinePath(orderValues, W, H, PAD_X, PAD_TOP, PAD_BOTTOM);
-  const orderAreaPath = buildAreaPath(orderValues, W, H, PAD_X, PAD_TOP, PAD_BOTTOM);
-  const lunchLinePath = buildLinePath(lunchValues, W, H, PAD_X, PAD_TOP, PAD_BOTTOM);
-  const dinnerLinePath = buildLinePath(dinnerValues, W, H, PAD_X, PAD_TOP, PAD_BOTTOM);
-  const orderPeakIndex = orderValues.findIndex((value) => value === orderSummary.peakValue);
-  const orderStepX = orderTrend.length === 1 ? 0 : (W - PAD_X * 2) / Math.max(orderTrend.length - 1, 1);
-  const orderPeakX = orderPeakIndex < 0 ? PAD_X : PAD_X + orderPeakIndex * orderStepX;
-  const orderPeakY = PAD_TOP + ((H - PAD_TOP - PAD_BOTTOM) - (orderSummary.peakValue / orderMax) * (H - PAD_TOP - PAD_BOTTOM));
-  const axisValue = (tick: number) => PAD_BOTTOM + ((H - PAD_TOP - PAD_BOTTOM) / 3) * tick;
+  const chartOption = {
+    color: ["#2563eb", "#10b981", "#7c3aed"],
+    grid: { left: 52, right: 24, top: 36, bottom: 30 },
+    legend: {
+      top: 0,
+      right: 4,
+      icon: "circle",
+      itemWidth: 10,
+      itemHeight: 10,
+      itemGap: 18,
+      textStyle: { color: "#64748b", fontSize: 12, fontWeight: 600 }
+    },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "line" },
+      backgroundColor: "rgba(255,255,255,0.96)",
+      borderColor: "rgba(226,232,240,0.9)",
+      textStyle: { color: "#334155", fontSize: 12 }
+    },
+    xAxis: {
+      type: "category",
+      boundaryGap: false,
+      data: orderTrend.map((item) => item.label),
+      axisLine: { lineStyle: { color: "rgba(0,0,0,0.08)" } },
+      axisTick: { show: false },
+      axisLabel: { color: "#94a3b8", fontSize: 11, fontWeight: 700 }
+    },
+    yAxis: {
+      type: "value",
+      min: 0,
+      splitLine: { lineStyle: { color: "rgba(0,0,0,0.04)", type: "dashed" } },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: "#94a3b8", fontSize: 11, fontWeight: 700 }
+    },
+    series: [
+      {
+        name: "全部",
+        type: "line",
+        data: orderValues,
+        smooth: true,
+        symbol: "circle",
+        symbolSize: 5,
+        lineStyle: { width: 2, color: "#2563eb" },
+        itemStyle: { color: "#2563eb" },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: "rgba(37, 99, 235, 0.18)" },
+            { offset: 1, color: "rgba(37, 99, 235, 0.02)" }
+          ])
+        },
+        markPoint: {
+          data: [{ type: "max", name: "高峰" }],
+          symbol: "circle",
+          symbolSize: 9,
+          itemStyle: { color: "rgba(239,68,68,0.18)" },
+          label: {
+            show: true,
+            color: "#ef4444",
+            fontSize: 11,
+            fontWeight: 700,
+            position: "top",
+            formatter: (params: unknown) => {
+              const value = (params as { value?: number }).value ?? 0;
+              return `高峰 ${value}`;
+            }
+          }
+        }
+      },
+      {
+        name: "午餐",
+        type: "line",
+        data: lunchValues,
+        smooth: true,
+        symbol: "circle",
+        symbolSize: 4,
+        lineStyle: { width: 1.5, color: "#10b981" },
+        itemStyle: { color: "#10b981" }
+      },
+      {
+        name: "晚餐",
+        type: "line",
+        data: dinnerValues,
+        smooth: true,
+        symbol: "circle",
+        symbolSize: 4,
+        lineStyle: { width: 1.5, color: "#7c3aed" },
+        itemStyle: { color: "#7c3aed" }
+      }
+    ]
+  };
 
   return (
     <div className="dashboard-bi">
@@ -297,53 +348,8 @@ export function DashboardPage() {
           </button>
         </div>
 
-        <div className="dashboard-bi__legend">
-          <span><i className="dashboard-bi__legend-dot dashboard-bi__legend-dot--blue" />全部</span>
-          <span><i className="dashboard-bi__legend-dot dashboard-bi__legend-dot--emerald" />午餐</span>
-          <span><i className="dashboard-bi__legend-dot dashboard-bi__legend-dot--violet" />晚餐</span>
-        </div>
-
         <div className="dashboard-bi__chart-wrap">
-          <svg className="dashboard-bi__chart-svg dashboard-bi__chart-svg--compact" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="订单趋势图">
-            <defs>
-              <linearGradient id="dashboardOrderArea" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="rgba(37, 99, 235, 0.18)" />
-                <stop offset="100%" stopColor="rgba(37, 99, 235, 0.02)" />
-              </linearGradient>
-            </defs>
-
-            {[1, 2].map((tick) => {
-              const y = PAD_TOP + ((H - PAD_TOP - PAD_BOTTOM) / 3) * tick;
-              return <line key={tick} x1={PAD_X} y1={y} x2={W - PAD_X} y2={y} stroke="rgba(0, 0, 0, 0.04)" strokeDasharray="4 8" />;
-            })}
-            <line x1={PAD_X} y1={PAD_TOP} x2={PAD_X} y2={H - PAD_BOTTOM} stroke="rgba(0, 0, 0, 0.06)" />
-            <line x1={PAD_X} y1={H - PAD_BOTTOM} x2={W - PAD_X} y2={H - PAD_BOTTOM} stroke="rgba(0, 0, 0, 0.06)" />
-
-            <path d={orderAreaPath} fill="url(#dashboardOrderArea)" />
-            <path d={orderLinePath} stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-            <path d={lunchLinePath} stroke="#10b981" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-            <path d={dinnerLinePath} stroke="#7c3aed" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-
-            {orderPeakIndex >= 0 ? (
-              <>
-                <circle cx={orderPeakX} cy={orderPeakY} r="3" fill="rgba(239,68,68,0.18)" />
-                <circle cx={orderPeakX} cy={orderPeakY} r="1.6" fill="#ef4444" />
-                <text x={orderPeakX + 8} y={Math.max(orderPeakY - 8, 24)} className="dashboard-bi__axis">
-                  {`高峰 ${orderSummary.peakValue}`}
-                </text>
-              </>
-            ) : null}
-
-            {[0, Math.round(orderMax / 3), Math.round((orderMax * 2) / 3), orderMax].map((tick, index) => (
-              <text key={index} x="20" y={axisValue(index) + 4} className="dashboard-bi__axis">{tick}</text>
-            ))}
-
-            {orderTrend.map((item, index) => (
-              <text key={item.label} x={PAD_X + orderStepX * index} y={H - PAD_BOTTOM + 24} textAnchor="middle" className="dashboard-bi__axis">
-                {item.label}
-              </text>
-            ))}
-          </svg>
+          <EChart option={chartOption} height={300} ariaLabel="近 7 天订单趋势图" />
         </div>
 
         <div className="dashboard-bi__summary-grid dashboard-bi__summary-grid--four">

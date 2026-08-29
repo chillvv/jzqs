@@ -27,6 +27,7 @@ public final class AdminRowMappers {
             rs.getInt("quantity"),
             rs.getString("user_note"),
             rs.getString("merchant_remark"),
+            rs.getString("merchant_remark"),
             rs.getString("delivery_address"),
             rs.getString("source"),
             rs.getString("area_code"),

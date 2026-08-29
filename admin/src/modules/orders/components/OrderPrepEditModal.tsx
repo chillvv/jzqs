@@ -32,7 +32,8 @@ export function OrderPrepEditModal({ isOpen, onClose, onSuccess, activeItem }: P
         mealPeriod: resolveMealPeriod(activeItem),
         quantity: String(activeItem.quantity || 1),
         deliveryAddress: activeItem.deliveryAddress || "",
-        merchantRemark: activeItem.merchantRemark || "",
+        // 只编辑「本单」商家备注：merchantRemark 是合并后的展示串，回写会把客户长期备注也存进订单
+        merchantRemark: activeItem.orderMerchantRemark ?? activeItem.merchantRemark ?? "",
         priorityCustomer: Boolean(activeItem.priorityCustomer),
         status: activeItem.status || "PENDING_DISPATCH"
       });
@@ -107,10 +108,10 @@ export function OrderPrepEditModal({ isOpen, onClose, onSuccess, activeItem }: P
             <SafeTextarea className="form-control" value={editForm.deliveryAddress} onValueChange={(value) => setEditForm({ ...editForm, deliveryAddress: value })} placeholder="填写详细配送地址" />
           </div>
           <RemarkField
-            label="商家备注"
+            label="商家备注（仅本单）"
             value={editForm.merchantRemark}
             onChange={(value) => setEditForm({ ...editForm, merchantRemark: value })}
-            placeholder="例如：少饭、多菜、先送"
+            placeholder="只对这一单生效，客户长期备注另在客户中心维护"
             scene="ORDER_REMARK"
             multiline
           />

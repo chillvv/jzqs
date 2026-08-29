@@ -3,6 +3,7 @@ package com.jzqs.app.order.service.impl;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.common.security.AdminRequestContextSupport;
+import com.jzqs.app.common.util.OrderNoteTexts;
 import com.jzqs.app.order.persistence.OrderSupportRepository;
 import java.util.List;
 
@@ -136,12 +137,7 @@ abstract class AbstractOrderPrepSupport {
         if (current.contains(incoming)) {
             return current;
         }
-        return current + "；" + incoming;
-    }
-
-    protected String normalizeSnapshotNote(String note) {
-        String normalized = stringValue(note);
-        return normalized.isBlank() || "-".equals(normalized) ? null : normalized;
+        return current + OrderNoteTexts.SEPARATOR + incoming;
     }
 
     protected String resolveOrderMerchantRemark(long customerId, String currentOrderMerchantRemark) {

@@ -5,10 +5,10 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -171,8 +171,8 @@ class MiniappOrderModuleTest {
             MERGE_ORDER_ID
         );
         assertEquals(2, ((Number) order.get("quantity")).intValue());
-        assertEquals("少饭；不要辣", order.get("note"));
-        assertEquals("少饭；不要辣", order.get("user_note"));
+        assertEquals("少饭，不要辣", order.get("note"));
+        assertEquals("少饭，不要辣", order.get("user_note"));
         assertEquals(
             1,
             jdbcTemplate.queryForObject("SELECT consumed_meals FROM meal_wallets WHERE id = ?", Integer.class, WALLET_ID)
@@ -191,9 +191,8 @@ class MiniappOrderModuleTest {
             eq(MERGE_ORDER_ID),
             eq(CUSTOMER_ID),
             eq("小程序"),
-            eq("少饭；不要辣"),
-            isNull(),
-            eq(List.of()),
+            eq("少饭，不要辣"),
+            eq(List.of("")),
             any(LocalDateTime.class)
         );
         verify(dispatchService).autoAssignPendingOrders("LUNCH");
@@ -213,7 +212,7 @@ class MiniappOrderModuleTest {
         LocalDate tomorrow = LocalDate.now().plusDays(1);
         doThrow(new IllegalStateException("snapshot exploded"))
             .when(orderNoteSnapshotService)
-            .writeOrderSnapshot(anyLong(), anyLong(), anyString(), any(), any(), any(), any(LocalDateTime.class));
+            .writeOrderSnapshot(anyLong(), anyLong(), anyString(), any(), anyList(), any(LocalDateTime.class));
         doThrow(new IllegalStateException("dispatch exploded"))
             .when(dispatchService)
             .autoAssignPendingOrders("DINNER");
@@ -264,8 +263,7 @@ class MiniappOrderModuleTest {
             eq(CUSTOMER_ID),
             eq("小程序"),
             eq("加饭"),
-            isNull(),
-            eq(List.of()),
+            eq(List.of("")),
             any(LocalDateTime.class)
         );
         verify(dispatchService).autoAssignPendingOrders("DINNER");

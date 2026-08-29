@@ -52,6 +52,8 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
         if (updated == 0) {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID, "订单不存在");
         }
+        // 备注快照由订单列重建，否则订单中心/派单中心/骑手端看到的还是旧备注。
+        refreshOrderNoteSnapshot(orderId, requireOrderCustomerIdViaRepository(orderId), request.merchantRemark());
         return new OrderMerchantRemarkUpdateResponse(orderId, "UPDATED");
     }
 
@@ -93,6 +95,8 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
         }
         // 状态同步：编辑订单若把状态改为终态，同步派单分配记录，避免数据不一致。
         orderOperationRepository.syncDispatchAssignmentForTerminalStatus(orderId, status);
+        // 备注同步：订单级商家备注落在订单列，备注快照要跟着重建，否则三端展示仍用旧备注。
+        refreshOrderNoteSnapshot(orderId, customerId, merchantRemark);
         log.info("编辑订单档案: orderId={} 新状态={} mealPeriod={} quantity={} addressId={}",
             orderId, status, mealPeriod, quantity, addressId);
         return new OrderProfileUpdateResponse(orderId, "UPDATED", addressId);
@@ -102,18 +106,15 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
     @Transactional
     public OrderNoteCreateResponse addOrderNote(long orderId, OrderNoteCreateRequest request) {
         long customerId = requireOrderCustomerIdViaRepository(orderId);
-        String noteType = normalizeOrderNoteType(request.noteType());
-        String scopeType = normalizeOrderNoteScope(request.scopeType());
+        normalizeOrderNoteType(request.noteType());
+        normalizeOrderNoteScope(request.scopeType());
         String content = requireOrderNoteContent(request.content());
 
-        orderOperationRepository.insertOrderNote(
-            orderId,
-            customerId,
-            noteType,
-            scopeType,
-            content,
-            "ADMIN"
-        );
+        // 订单级备注的唯一落点是 meal_slot_orders.merchant_remark，备注快照由该列重建。
+        // 历史实现是再插一条 order_notes（第二套实现），用户加餐触发快照全删重写时会被冲掉。
+        String mergedRemark = mergeOrderNote(orderOperationRepository.findOrderMerchantRemark(orderId), content);
+        orderOperationRepository.updateMerchantRemark(orderId, mergedRemark);
+        refreshOrderNoteSnapshot(orderId, customerId, mergedRemark);
         return new OrderNoteCreateResponse(orderId, "CREATED");
     }
 
@@ -264,6 +265,23 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
         return customerIds.get(0);
     }
 
+    /**
+     * 用订单列上的当前值重建备注快照。
+     *
+     * <p>订单级商家备注的落点是 {@code meal_slot_orders.merchant_remark}，快照只是它的投影；
+     * 任何改了这个列的入口都必须重建快照，否则三端展示会停留在旧备注。
+     */
+    private void refreshOrderNoteSnapshot(long orderId, long customerId, String merchantRemark) {
+        orderNoteSnapshotService.writeOrderSnapshot(
+            orderId,
+            customerId,
+            "后台客服",
+            orderOperationRepository.findOrderUserNote(orderId),
+            List.of(merchantRemark),
+            TimeUtils.now()
+        );
+    }
+
     private ManualCreateOrderResponse manualCreateWithDate(long customerId, String mealPeriod, String deliveryMealPeriod, String merchantRemark, String deliveryAddress, String source, LocalDate serveDate, int quantity) {
         long addressId = ensureCustomerAddress(customerId, deliveryAddress);
         String resolvedMerchantRemark = resolveOrderMerchantRemark(customerId, merchantRemark);
@@ -330,14 +348,14 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
             "SUBSCRIPTION".equals(source) ? "固定订餐自动扣餐" : "代客录单加餐",
             mealSlotOrderId
         );
-        String normalizedSnapshotNote = normalizeSnapshotNote(resolvedMerchantRemark);
+        // 商家备注走商家侧：既落订单列 merchant_remark，也作为「本单一次性商家备注」进快照。
+        // 历史写法把它塞进用户侧的 subscriptionDefaultNote，导致商家备注显示在「用户备注」栏。
         orderNoteSnapshotService.writeOrderSnapshot(
             mealSlotOrderId,
             customerId,
             "SUBSCRIPTION".equals(source) ? "系统" : "后台客服",
             null,
-            normalizedSnapshotNote,
-            List.of(),
+            List.of(resolvedMerchantRemark),
             snapshotTime
         );
         refreshBatchAndPublishEvents(customerId, mealSlotOrderId);

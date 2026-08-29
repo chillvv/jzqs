@@ -1,6 +1,7 @@
 package com.jzqs.app.order;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.jzqs.app.order.api.OrderNoteCreateResponse;
 import com.jzqs.app.order.api.OrderNoteCreateRequest;
@@ -34,6 +35,7 @@ class OrderNotesServiceIntegrationTest {
         jdbcTemplate.update("DELETE FROM customer_addresses WHERE id = 9201");
         jdbcTemplate.update("DELETE FROM customer_addresses WHERE customer_id = ?", CUSTOMER_ID);
         jdbcTemplate.update("DELETE FROM daily_orders WHERE customer_id = ?", CUSTOMER_ID);
+        jdbcTemplate.update("DELETE FROM customer_notes WHERE customer_id = ?", CUSTOMER_ID);
         jdbcTemplate.update("DELETE FROM customers WHERE id = ?", CUSTOMER_ID);
 
         jdbcTemplate.update(
@@ -70,15 +72,14 @@ class OrderNotesServiceIntegrationTest {
                 )
                 """
         );
+        // 长期备注走 customer_notes（快照的一手信源），不再直接插 order_notes：
+        // order_notes 只是投影，任何写入都会触发全删重写，直接插的行会被冲掉。
         jdbcTemplate.update(
             """
-                INSERT INTO order_notes (
-                    meal_slot_order_id, customer_id, note_type, source_type, scope_type, content, effective_status, created_by
-                ) VALUES (
-                    9201, ?, 'USER', 'CUSTOMER_PROFILE', 'SNAPSHOT', '长期少饭', 'ACTIVE', 'test'
-                )
-                """
-            ,
+                INSERT INTO customer_notes (
+                    customer_id, note_type, scope_type, content, is_active, display_order, created_by, updated_by
+                ) VALUES (?, 'USER', 'LONG_TERM', '长期少饭', TRUE, 0, 'test', 'test')
+                """,
             CUSTOMER_ID
         );
     }
@@ -94,9 +95,43 @@ class OrderNotesServiceIntegrationTest {
         assertThat(result.status()).isEqualTo("CREATED");
 
         OrderNotesResponse response = orderPrepService.orderNotes(9201L);
-        assertThat(response.userNotes()).extracting(note -> note.content()).containsExactly("长期少饭");
+        assertThat(response.userNotes()).extracting(note -> note.content()).containsExactly("长期少饭", "本次少饭");
         assertThat(response.merchantNotes()).extracting(note -> note.content()).containsExactly("本餐送果蔬汁");
         assertThat(response.merchantNotes()).extracting(note -> note.sourceType()).containsExactly("MERCHANT_ORDER_ONCE");
         assertThat(response.merchantNotes()).extracting(note -> note.scopeType()).containsExactly("ORDER_ONCE");
+    }
+
+    @Test
+    void shouldLandOneTimeMerchantNoteInOrderColumnNotInUserSide() {
+        orderPrepService.addOrderNote(
+            9201L,
+            new OrderNoteCreateRequest("MERCHANT", "ORDER_ONCE", "本餐送果蔬汁")
+        );
+
+        // 订单级商家备注的唯一落点是订单列（快照由它重建）。
+        // 历史实现是另插一条 order_notes（第二套实现），用户加餐触发快照全删重写时会被冲掉。
+        assertEquals(
+            "本餐送果蔬汁",
+            jdbcTemplate.queryForObject("SELECT merchant_remark FROM meal_slot_orders WHERE id = 9201", String.class)
+        );
+
+        OrderNotesResponse response = orderPrepService.orderNotes(9201L);
+        assertThat(response.merchantNotes()).extracting(note -> note.content()).containsExactly("本餐送果蔬汁");
+        assertThat(response.userNotes()).extracting(note -> note.content()).doesNotContain("本餐送果蔬汁");
+    }
+
+    @Test
+    void shouldAppendOneTimeMerchantNoteToExistingOrderColumnRemark() {
+        jdbcTemplate.update("UPDATE meal_slot_orders SET merchant_remark = '少饭' WHERE id = 9201");
+
+        orderPrepService.addOrderNote(
+            9201L,
+            new OrderNoteCreateRequest("MERCHANT", "ORDER_ONCE", "本餐送果蔬汁")
+        );
+
+        assertEquals(
+            "少饭，本餐送果蔬汁",
+            jdbcTemplate.queryForObject("SELECT merchant_remark FROM meal_slot_orders WHERE id = 9201", String.class)
+        );
     }
 }

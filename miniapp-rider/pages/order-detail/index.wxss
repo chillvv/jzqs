@@ -106,14 +106,22 @@
 .inline-remark-item {
   font-size: 26rpx;
   line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
 }
 
 .inline-remark-label {
   font-weight: 700;
+  flex-shrink: 0;
+  margin-right: 8rpx;
 }
 
 .inline-remark-value {
   color: var(--on-surface, #0f172a);
+  flex: 1;
+  /* 备注已按逗号合并多条长期/一次性内容，可能较长；长串（英文/URL）强制断行，避免横向溢出 */
+  word-break: break-all;
+  word-wrap: break-word;
 }
 
 .address-text {

@@ -237,7 +237,7 @@ Page({
         receiptUrl: resolveMediaUrl(order.receiptUrl, app.globalData.apiBaseUrl),
         mealLabel: getMealPeriodLabel(order.mealPeriod),
         customerNote: normalizeOptionalText(order.customerNote || order.note),
-        merchantNote: normalizeOptionalText(order.merchantNote || order.adminNote),
+        merchantNote: normalizeOptionalText(order.merchantNote || order.adminNote || order.merchantRemark),
         receiptNote: normalizeOptionalText(order.receiptNote)
       };
 

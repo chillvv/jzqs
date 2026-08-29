@@ -260,7 +260,7 @@ class MobilePortalRealtimePublishingTest {
         doThrow(new IllegalStateException("snapshot exploded"))
             .when(brokenSnapshotService)
             .writeOrderSnapshot(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.anyLong(), anyString(),
-                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.any());
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.any());
         MobilePortalServiceImpl service = createService(weChatService, brokenSnapshotService);
 
         MobileCreateOrderResponse result = assertDoesNotThrow(() -> service.createMiniappOrder(
