@@ -151,6 +151,8 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_PORT || 22 }}
+          # 服务器到 Maven Central 网络慢，构建含依赖下载，默认 10m 超时不够（2026-08-29 曾 574s 超时）
+          command_timeout: 30m
           script: |
             set -e
             echo "==> [1/3] 拉取最新代码 (commit: ${{ github.sha }})"
