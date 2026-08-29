@@ -94,6 +94,9 @@ class JwtUtilsTest {
     @Test
     void requiresExplicitSecretWhenDefaultSecretIsNotExplicitlyAllowed() {
         System.clearProperty(JWT_SECRET_PROPERTY);
+        // 全局 surefire systemPropertyVariables 已设 allow-default-secret=true，
+        // 必须显式清掉本属性，否则本测试依赖执行顺序（前面测试的 @AfterEach 才清），CI 会闪红
+        System.clearProperty(ALLOW_DEFAULT_SECRET_PROPERTY);
         System.setProperty("spring.profiles.active", "prod");
 
         IllegalStateException exception = assertThrows(
