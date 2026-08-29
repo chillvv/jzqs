@@ -17,7 +17,9 @@ jobs:
     # APP_JWT_SECRET 兜底（surefire 的 allow-default-secret 在部分 Maven 环境下不可靠）
     env:
       TZ: Asia/Shanghai
-      APP_JWT_SECRET: ci-test-jwt-secret
+      # 注意：不能设 APP_JWT_SECRET —— JwtUtilsTest.requiresExplicitSecret 会因
+      # readPropertyOrEnv 读到环境变量而不抛"未配置"异常；surefire systemPropertyVariables
+      # 的 allow-default-secret=true 已兜底 ManualCreateTest
     services:
       mysql:
         image: mysql:8.0

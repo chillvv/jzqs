@@ -23,7 +23,10 @@ class JwtUtilsTest {
     @AfterEach
     void tearDown() {
         System.clearProperty(JWT_SECRET_PROPERTY);
-        System.clearProperty(ALLOW_DEFAULT_SECRET_PROPERTY);
+        // 恢复全局允许默认密钥（surefire systemPropertyVariables 设的 true）：
+        // requiresExplicitSecret 会清掉它，若不恢复，同 fork JVM 的后续测试类
+        // （如 ManualCreateTest）会报 APP_JWT_SECRET 未配置（测试间顺序污染）
+        System.setProperty(ALLOW_DEFAULT_SECRET_PROPERTY, "true");
         System.clearProperty("spring.profiles.active");
     }
 
