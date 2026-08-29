@@ -33,16 +33,20 @@ warn()  { printf "\033[1;33m[WARN]\033[0m %s\n" "$*"; }
 fail()  { printf "\033[1;31m[FAIL]\033[0m %s\n" "$*" >&2; exit 1; }
 
 build_backend_jar() {
-  info "用 Maven 容器打包后端 jar（含测试，测试失败则构建失败）..."
+  # 测试由 GitHub Actions test job 在每次 push 时承担（铁律 3：CI 必须跑测试）。
+  # 部署构建跳过测试（-Dmaven.test.skip=true，连编译都不做），
+  # 避免依赖服务器测试环境（服务器无测试库/存在未跟踪残留测试，曾导致部署时 112 个测试 Error，2026-08-29）。
+  # 手动验证测试：./build.sh test 或 mvn test。
+  info "用 Maven 容器打包后端 jar（跳过测试，测试由 CI 承担）..."
   docker run --rm \
     --network host \
     -v "$PWD":/app \
     -v "$HOME/.m2":/root/.m2 \
     -w /app/backend \
     "$MAVEN_IMAGE" \
-    mvn -B clean package
+    mvn -B clean package -Dmaven.test.skip=true
   [ -f "$JAR_PATH" ] || fail "打包失败：未生成 $JAR_PATH"
-  ok "后端 jar 已生成：$JAR_PATH（测试已通过）"
+  ok "后端 jar 已生成：$JAR_PATH"
 }
 
 run_backend_tests() {
