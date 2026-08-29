@@ -13,11 +13,17 @@ jobs:
   test:
     name: Backend Tests
     runs-on: ubuntu-latest
+    # 与本地一致：JVM 时区 Asia/Shanghai（MySQL TIMESTAMP 往返依赖时区，CI 默认 UTC 会差 8 小时）；
+    # APP_JWT_SECRET 兜底（surefire 的 allow-default-secret 在部分 Maven 环境下不可靠）
+    env:
+      TZ: Asia/Shanghai
+      APP_JWT_SECRET: ci-test-jwt-secret
     services:
       mysql:
         image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: root
+          TZ: Asia/Shanghai
         ports:
           - 3307:3306
         options: >-
@@ -45,11 +51,14 @@ jobs:
     name: Admin Browser E2E
     runs-on: ubuntu-latest
     needs: test
+    env:
+      TZ: Asia/Shanghai
     services:
       mysql:
         image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: root
+          TZ: Asia/Shanghai
         ports:
           - 3307:3306
         options: >-

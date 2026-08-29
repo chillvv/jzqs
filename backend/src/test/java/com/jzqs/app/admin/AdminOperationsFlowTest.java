@@ -50,7 +50,9 @@ class AdminOperationsFlowTest {
         jdbcTemplate.update("DELETE FROM meal_slot_orders");
         jdbcTemplate.update("DELETE FROM daily_orders");
         jdbcTemplate.update("DELETE FROM customer_addresses WHERE id IN (1, 2, 3, 1301)");
-        jdbcTemplate.update("DELETE FROM meal_wallets WHERE id IN (1, 2, 3)");
+        // 按 customer_id 清：共享测试库里可能残留其他测试类给 customer 1 建的 active 钱包（如 ManualCreateTest 的 9201），
+        // 只按 id 清会触发 uk_meal_wallets_active_customer 唯一冲突
+        jdbcTemplate.update("DELETE FROM meal_wallets WHERE customer_id IN (1, 2, 3)");
         jdbcTemplate.update("DELETE FROM customers WHERE id IN (1, 2, 3)");
         jdbcTemplate.update("DELETE FROM wallet_transactions WHERE id > 3");
         jdbcTemplate.update("DELETE FROM menu_week_items");
@@ -166,7 +168,7 @@ class AdminOperationsFlowTest {
     }
 
     @Test
-    void shouldMergeManualCreateOrderForSameAddressAndUseFullWidthSemicolon() {
+    void shouldMergeManualCreateOrderForSameAddressAndUseComma() {
         jdbcTemplate.update("UPDATE meal_slot_orders SET status = 'PENDING_DISPATCH', merchant_remark = '少饭' WHERE id = 3");
         jdbcTemplate.update("UPDATE daily_orders SET status = 'PENDING_DISPATCH' WHERE id = 3");
         jdbcTemplate.update(
@@ -189,6 +191,6 @@ class AdminOperationsFlowTest {
         assertEquals("MERGED", merged.status());
         assertEquals(3L, merged.orderId());
         assertEquals(3, jdbcTemplate.queryForObject("SELECT quantity FROM meal_slot_orders WHERE id = 3", Integer.class));
-        assertEquals("少饭；多菜", jdbcTemplate.queryForObject("SELECT merchant_remark FROM meal_slot_orders WHERE id = 3", String.class));
+        assertEquals("少饭，多菜", jdbcTemplate.queryForObject("SELECT merchant_remark FROM meal_slot_orders WHERE id = 3", String.class));
     }
 }

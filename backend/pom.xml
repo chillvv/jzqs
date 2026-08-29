@@ -105,7 +105,13 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <argLine>-Dfile.encoding=UTF-8 -Djdk.net.URLClassPath.disableClassPathURLCheck=true -Dapp.jwt.allow-default-secret=true</argLine>
+                    <!-- 用 systemPropertyVariables 而非 argLine：更可靠地把系统属性传给 fork JVM，
+                         避免个别环境（如 CI runner 的 Maven）argLine 未生效导致 APP_JWT_SECRET 未配置 -->
+                    <systemPropertyVariables>
+                        <file.encoding>UTF-8</file.encoding>
+                        <jdk.net.URLClassPath.disableClassPathURLCheck>true</jdk.net.URLClassPath.disableClassPathURLCheck>
+                        <app.jwt.allow-default-secret>true</app.jwt.allow-default-secret>
+                    </systemPropertyVariables>
                     <useManifestOnlyJar>false</useManifestOnlyJar>
                 </configuration>
             </plugin>
