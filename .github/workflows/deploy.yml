@@ -60,6 +60,8 @@ jobs:
         image: mysql:8.0
         env:
           MYSQL_ROOT_PASSWORD: root
+          # backend 固定连 jzqs 库且 url 无 createDatabaseIfNotExist，镜像必须先建库
+          MYSQL_DATABASE: jzqs
           TZ: Asia/Shanghai
         ports:
           - 3307:3306
