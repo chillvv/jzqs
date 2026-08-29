@@ -123,7 +123,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: 记录部署来源 commit
-        run: echo "触发 commit: ${{ github.sha }}"
+        run: |
+          echo "触发 commit: ${{ github.sha }}"
 
       - name: 将服务器 host 加入 known_hosts
         run: |
