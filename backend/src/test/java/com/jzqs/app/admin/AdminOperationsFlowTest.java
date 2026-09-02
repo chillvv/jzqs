@@ -178,7 +178,7 @@ class AdminOperationsFlowTest {
 
         ManualCreateOrderResponse merged = orderPrepService.manualCreate(
             3L,
-            null,
+            1301L,
             "LUNCH",
             "LUNCH",
             "多菜",
