@@ -1,5 +1,6 @@
 package com.jzqs.app.customer.model.entity;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -40,7 +41,10 @@ public class CustomerEntity {
     @TableField("source_channel")
     private String sourceChannel;
 
-    @TableField("merchant_remark")
+    // updateStrategy = ALWAYS：清空商家备注时实体值为 null，
+    // MyBatis-Plus updateById 默认（NOT_NULL）会忽略 null 字段导致清空失效，
+    // 故显式声明该字段始终参与 UPDATE，保证「删除备注」能真正落库为 NULL。
+    @TableField(value = "merchant_remark", updateStrategy = FieldStrategy.ALWAYS)
     private String merchantRemark;
 
     @TableField("current_openid")

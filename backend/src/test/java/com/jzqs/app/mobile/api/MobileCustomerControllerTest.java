@@ -3,6 +3,7 @@ package com.jzqs.app.mobile.api;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -98,6 +99,7 @@ class MobileCustomerControllerTest {
             eq("2026-05-13"),
             eq("LUNCH"),
             eq("高新区科技园A座8层"),
+            isNull(),
             eq("少饭"),
             anyInt()
         )).willReturn(new MobileCreateOrderResponse(1001L, "PENDING_DISPATCH", "RESERVED"));
@@ -390,7 +392,7 @@ class MobileCustomerControllerTest {
     @Test
     void shouldReturnAddresses() throws Exception {
         given(mobilePortalService.customerAddresses(1L)).willReturn(List.of(
-            new MobileAddressResponse(1L, "张先生", "13800000001", "高新区科技园A座8层", "高新区", true)
+            new MobileAddressResponse(1L, "张先生", "13800000001", "高新区科技园A座8层", null, "高新区", true, null, null)
         ));
 
         mockMvc.perform(get("/api/mobile/customer/addresses").header("Authorization", AUTH_HEADER))
@@ -406,9 +408,12 @@ class MobileCustomerControllerTest {
             eq("张先生"),
             eq("13800000001"),
             eq("高新区科技园A座8层"),
+            eq(null),
             eq("高新区"),
-            eq(true)
-        )).willReturn(new MobileAddressResponse(1L, "张先生", "13800000001", "高新区科技园A座8层", "高新区", true));
+            eq(true),
+            eq(null),
+            eq(null)
+        )).willReturn(new MobileAddressResponse(1L, "张先生", "13800000001", "高新区科技园A座8层", null, "高新区", true, null, null));
 
         mockMvc.perform(post("/api/mobile/customer/addresses")
                 .contentType(MediaType.APPLICATION_JSON)

@@ -132,7 +132,8 @@ class OrderPrepServiceIntegrationTest {
         orderPrepService.updateOrderProfile(9101L, new OrderProfileUpdateRequest(
             null,
             null,
-            "测试新地址B座",
+            null,
+            9102L,
             "客服联系后改地址",
             null,
             null

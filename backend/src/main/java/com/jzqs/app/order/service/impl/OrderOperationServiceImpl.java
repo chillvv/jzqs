@@ -68,7 +68,6 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
         long customerId = current.customerId();
         String currentMealPeriod = stringValue(current.mealPeriod());
         int quantity = request.quantity() != null ? request.quantity() : current.quantity();
-        String deliveryAddress = fallbackString(request.deliveryAddress(), current.deliveryAddress());
         String merchantRemark = request.merchantRemark() != null
             ? stringValue(request.merchantRemark())
             : stringValue(current.merchantRemark());
@@ -79,7 +78,7 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
             ? stringValue(request.status())
             : stringValue(current.status());
         String mealPeriod = resolveMealPeriod(request.mealPeriod(), null, currentMealPeriod);
-        long addressId = ensureCustomerAddress(customerId, deliveryAddress);
+        long addressId = ensureCustomerAddress(customerId, request.addressId());
 
         Integer updated = orderOperationRepository.updateOrderProfile(
             orderId,
@@ -130,7 +129,7 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
             mealPeriod,
             deliveryMealPeriod,
             merchantRemark,
-            resolveManualCreateDeliveryAddress(customerId, addressId, deliveryAddress),
+            addressId,
             source,
             date,
             quantity
@@ -282,8 +281,8 @@ public class OrderOperationServiceImpl extends AbstractOrderPrepSupport implemen
         );
     }
 
-    private ManualCreateOrderResponse manualCreateWithDate(long customerId, String mealPeriod, String deliveryMealPeriod, String merchantRemark, String deliveryAddress, String source, LocalDate serveDate, int quantity) {
-        long addressId = ensureCustomerAddress(customerId, deliveryAddress);
+    private ManualCreateOrderResponse manualCreateWithDate(long customerId, String mealPeriod, String deliveryMealPeriod, String merchantRemark, Long requestedAddressId, String source, LocalDate serveDate, int quantity) {
+        long addressId = ensureCustomerAddress(customerId, requestedAddressId);
         String resolvedMerchantRemark = resolveOrderMerchantRemark(customerId, merchantRemark);
 
         Long walletId = orderOperationRepository.findAvailableWalletId(customerId);

@@ -6,7 +6,12 @@ import {
   buildMealPrepExportRows,
   buildOrderPrepView,
   buildOrderPrepSummary,
+  buildOrderPrepCompactSummary,
+  buildOrderPrepDefaultTab,
+  buildSubscriptionConfirmationPanelState,
+  formatOrderNote,
   resolveOrderDisplayStatusLabel,
+  resolveOrderSourceLabel,
   resolveOrderStatusTone
 } from "./orderPrepPage.helpers";
 import type { OrderPrepItemResponse } from "../../shared/api/types";
@@ -258,5 +263,112 @@ describe("order prep helpers", () => {
       "腾讯大厦B座",
       "商家备注：提前送"
     ].join("\n"));
+  });
+});
+
+describe("formatOrderNote", () => {
+  it("renders blank or missing notes as a dash", () => {
+    expect(formatOrderNote("")).toBe("-");
+    expect(formatOrderNote("  ")).toBe("-");
+    expect(formatOrderNote(null)).toBe("-");
+    expect(formatOrderNote("少饭")).toBe("少饭");
+  });
+});
+
+describe("resolveOrderSourceLabel", () => {
+  it("labels miniapp, backend and fixed-subscription sources", () => {
+    expect(resolveOrderSourceLabel(items[0])).toBe("小程序");
+    expect(resolveOrderSourceLabel(items[1])).toBe("后台录入");
+    expect(resolveOrderSourceLabel({ ...items[2], fixedSubscription: true })).toBe("固定订餐");
+  });
+});
+
+describe("buildOrderPrepView", () => {
+  it("filters by keyword, meal period, source and display status together", () => {
+    const result = buildOrderPrepView(
+      items,
+      {
+        keyword: "13800000002",
+        mealPeriod: "DINNER",
+        source: "BACKEND",
+        status: "REFUND_PROCESSING",
+        remark: "ALL"
+      },
+      1,
+      10
+    );
+
+    expect(result.totalItems).toBe(1);
+    expect(result.totalPages).toBe(1);
+    expect(result.pageItems.map((item) => item.id)).toEqual([2]);
+  });
+
+  it("excludes cancelled orders, pins refund-processing on top and paginates the rest", () => {
+    const viewItems: OrderPrepItemResponse[] = [
+      ...items,
+      { ...items[0], id: 4, status: "REFUND_PROCESSING", displayStatus: "REFUND_PROCESSING" },
+      { ...items[0], id: 5, status: "CANCELLED", displayStatus: "CANCELLED" }
+    ];
+
+    const firstPage = buildOrderPrepView(
+      viewItems,
+      { keyword: "", mealPeriod: "LUNCH", source: "ALL", status: "ALL", remark: "ALL" },
+      1,
+      2
+    );
+
+    expect(firstPage.totalItems).toBe(3);
+    expect(firstPage.totalPages).toBe(2);
+    expect(firstPage.pageItems.map((item) => item.id)).toEqual([4, 1]);
+
+    const secondPage = buildOrderPrepView(
+      viewItems,
+      { keyword: "", mealPeriod: "LUNCH", source: "ALL", status: "ALL", remark: "ALL" },
+      2,
+      2
+    );
+
+    expect(secondPage.pageItems.map((item) => item.id)).toEqual([3]);
+  });
+});
+
+describe("buildOrderPrepCompactSummary", () => {
+  it("builds per-meal counter cards from the current summary", () => {
+    expect(buildOrderPrepCompactSummary(
+      { totalMeals: 105, lunchCount: 62, dinnerCount: 43 },
+      {
+        totalMeals: 105,
+        lunchCount: 62,
+        dinnerCount: 43,
+        confirmationCount: 7,
+        lunchConfirmationCount: 5,
+        dinnerConfirmationCount: 2
+      }
+    )).toEqual([
+      { label: "午餐", value: "62 份", tone: "orange", mealPeriod: "LUNCH" },
+      { label: "晚餐", value: "43 份", tone: "green", mealPeriod: "DINNER" },
+      { label: "午餐待确认", value: "5 份", tone: "red" },
+      { label: "晚餐待确认", value: "2 份", tone: "blue" }
+    ]);
+  });
+});
+
+describe("buildOrderPrepDefaultTab", () => {
+  it("opens the orders tab unless confirmations are pending", () => {
+    expect(buildOrderPrepDefaultTab(0)).toBe("ORDERS");
+    expect(buildOrderPrepDefaultTab(5)).toBe("CONFIRMATION");
+  });
+});
+
+describe("buildSubscriptionConfirmationPanelState", () => {
+  it("shows an expanded panel only when confirmations exist", () => {
+    expect(buildSubscriptionConfirmationPanelState(0)).toEqual({
+      visible: false,
+      expanded: false
+    });
+    expect(buildSubscriptionConfirmationPanelState(5)).toEqual({
+      visible: true,
+      expanded: true
+    });
   });
 });

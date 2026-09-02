@@ -1,44 +1,91 @@
-/* 地址半屏弹窗 */
-.hero-inline-row {
+/* ===== 地址列表卡片 ===== */
+.addr-card {
+  padding: 28rpx 32rpx;
+}
+
+.addr-head {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 12rpx;
 }
 
-.manage-default-btn {
-  font-size: 26rpx;
-  color: var(--brand-primary, #B8D060);
-  padding: 6rpx 20rpx;
-  border: 2rpx solid var(--brand-primary, #B8D060);
-  border-radius: 32rpx;
-  flex-shrink: 0;
-}
-
-.radio-indicator {
-  width: 40rpx;
-  height: 40rpx;
-  border-radius: 50%;
-  border: 3rpx solid var(--border);
-  margin-right: 20rpx;
+.addr-person {
   display: flex;
+  align-items: baseline;
+  gap: 20rpx;
+}
+
+.addr-name {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.addr-phone {
+  font-size: 26rpx;
+  color: var(--text-sub);
+}
+
+.addr-detail {
+  margin-bottom: 20rpx;
+}
+
+.addr-district {
+  display: block;
+  font-size: 24rpx;
+  color: var(--text-muted, #999999);
+  line-height: 1.4;
+  margin-bottom: 6rpx;
+}
+
+.addr-detail-main {
+  display: block;
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--text-main);
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.addr-actions {
+  display: flex;
+  justify-content: flex-end;
   align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  align-self: flex-start;
-  margin-top: 6rpx;
+  gap: 32rpx;
+  border-top: 2rpx solid var(--border);
+  padding-top: 20rpx;
 }
 
-.radio-indicator.checked {
-  border-color: var(--brand-primary, #B8D060);
+.addr-action {
+  font-size: 26rpx;
+  color: var(--text-sub);
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  line-height: 1;
 }
 
-.radio-dot {
-  width: 22rpx;
-  height: 22rpx;
-  border-radius: 50%;
-  background: var(--brand-primary, #B8D060);
+.addr-action::after {
+  border: none;
 }
 
+.addr-action-primary {
+  color: var(--brand-primary, #B8D060);
+  font-weight: 600;
+}
+
+.addr-action-danger {
+  color: #ff4d4f;
+}
+
+.addr-action-current {
+  font-size: 26rpx;
+  color: var(--text-muted);
+}
+
+/* ===== 半屏弹窗 ===== */
 .address-popup-mask {
   position: fixed;
   top: 0;
@@ -62,47 +109,239 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: var(--bg-card);
-  border-radius: 32rpx 32rpx 0 0;
+  background: var(--bg-card, #fff);
+  border-radius: 28rpx 28rpx 0 0;
   z-index: 1000;
   transform: translateY(100%);
-  transition: transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   display: flex;
   flex-direction: column;
-  max-height: 80vh;
+  max-height: 85vh;
 }
 
 .address-popup-container.show {
   transform: translateY(0);
 }
 
+/* 弹窗头部（带 iOS 风格的拖动指示器） */
 .popup-header {
+  position: relative;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 32rpx;
-  font-size: 32rpx;
-  font-weight: 700;
-  color: var(--text-main);
-  border-bottom: 2rpx solid var(--border);
+  padding: 16rpx 32rpx 20rpx;
 }
 
-.close-btn {
-  font-size: 40rpx;
-  color: var(--text-muted);
-  padding: 0 16rpx;
-  margin-right: -16rpx;
+.popup-header::before {
+  content: '';
+  position: absolute;
+  top: 8rpx;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 80rpx;
+  height: 6rpx;
+  background: var(--border, #e0e0e0);
+  border-radius: 3rpx;
+}
+
+.popup-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: 1rpx;
+}
+
+.popup-close {
+  width: 56rpx;
+  height: 56rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 36rpx;
+  color: var(--text-muted, #999);
   line-height: 1;
 }
 
+/* 弹窗主体 */
 .popup-body {
   flex: 1;
-  min-height: 300rpx;
-  max-height: 50vh;
-  padding: 0 32rpx;
+  min-height: 200rpx;
+  padding: 4rpx 20rpx 32rpx;
 }
 
+/* 当前用户行 */
+.user-row {
+  display: flex;
+  align-items: baseline;
+  gap: 24rpx;
+  padding: 24rpx 0;
+  border-bottom: 2rpx solid var(--border, #f0f0f0);
+}
+
+.user-name {
+  font-size: 32rpx;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.user-phone {
+  font-size: 26rpx;
+  color: var(--text-sub, #888);
+}
+
+/* 地图选点卡片（核心 CTA） */
+.locate-card {
+  display: flex;
+  align-items: center;
+  background: linear-gradient(135deg, rgba(146, 170, 64, 0.10) 0%, rgba(184, 208, 96, 0.10) 100%);
+  border: 2rpx solid rgba(146, 170, 64, 0.25);
+  border-radius: 20rpx;
+  padding: 28rpx;
+  margin: 32rpx 0;
+  transition: background 0.15s ease;
+}
+
+.locate-card--hover {
+  background: linear-gradient(135deg, rgba(146, 170, 64, 0.20) 0%, rgba(184, 208, 96, 0.20) 100%);
+}
+
+.locate-icon-wrap {
+  width: 80rpx;
+  height: 80rpx;
+  background: linear-gradient(135deg, #92AA40 0%, #B8D060 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 24rpx;
+  flex-shrink: 0;
+  box-shadow: 0 6rpx 16rpx rgba(146, 170, 64, 0.30);
+}
+
+.locate-icon {
+  font-size: 40rpx;
+  color: #fff;
+  line-height: 1;
+}
+
+.locate-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.locate-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: 6rpx;
+}
+
+.locate-sub {
+  font-size: 22rpx;
+  color: var(--text-sub, #888);
+  line-height: 1.4;
+}
+
+.locate-arrow {
+  font-size: 44rpx;
+  color: var(--text-muted, #bbb);
+  margin-left: 16rpx;
+  flex-shrink: 0;
+  font-weight: 300;
+}
+
+/* 详细地址输入块 */
+.form-block {
+  margin-bottom: 32rpx;
+}
+
+.form-label {
+  font-size: 26rpx;
+  color: var(--text-sub, #888);
+  margin-bottom: 16rpx;
+  font-weight: 500;
+}
+
+/* 定位地址（只读，多行完整显示，避免 input 单行裁剪） */
+.locate-address-readonly {
+  font-size: 30rpx;
+  color: var(--text-main, #333);
+  line-height: 1.5;
+  padding: 20rpx;
+  background: #f7f7f9;
+  border-radius: 16rpx;
+  word-break: break-all;
+}
+
+.input-wrap {
+  background: #f7f7f9;
+  border-radius: 16rpx;
+  padding: 0;
+  box-sizing: border-box;
+  border: 2rpx solid transparent;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.input-wrap:focus-within {
+  border-color: var(--brand-primary, #92AA40);
+  background: #fff;
+}
+
+.detail-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  height: 88rpx;
+  padding: 0 20rpx;
+  font-size: 30rpx;
+  color: var(--text-main);
+  line-height: 88rpx;
+}
+
+.detail-input::placeholder {
+  color: var(--text-muted, #bbb);
+}
+
+/* 默认地址开关 */
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24rpx 0 8rpx;
+}
+
+.switch-label {
+  font-size: 30rpx;
+  color: var(--text-main);
+}
+
+/* 底部固定保存按钮 */
 .popup-footer {
-  padding: 24rpx 32rpx;
-  border-top: 2rpx solid var(--border);
+  padding: 20rpx 32rpx;
+  padding-bottom: calc(20rpx + env(safe-area-inset-bottom));
+  border-top: 2rpx solid var(--border, #f0f0f0);
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.save-btn {
+  width: 100%;
+  background: linear-gradient(135deg, #92AA40 0%, #B8D060 100%);
+  color: #fff;
+  border-radius: 48rpx;
+  padding: 28rpx;
+  font-size: 32rpx;
+  font-weight: 600;
+  letter-spacing: 4rpx;
+  box-shadow: 0 6rpx 20rpx rgba(146, 170, 64, 0.28);
+}
+
+.save-btn[disabled] {
+  background: #d5d5d5;
+  color: #fff;
+  box-shadow: none;
+}
+
+.save-btn::after {
+  border: none;
 }

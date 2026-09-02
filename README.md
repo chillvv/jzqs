@@ -10,11 +10,11 @@
 | `admin/` | React 18 + TypeScript + Vite + shadcn/ui | Web 管理后台 | `npm install && npm run dev` |
 | `miniapp/` | 微信小程序（原生） | 用户端 | 微信开发者工具打开 |
 | `miniapp-rider/` | 微信小程序（原生） | 骑手端 | 微信开发者工具打开 |
-| `cloudfunctions/` | 微信云函数 (Node.js) | `cleanStorage` / `cleanupReceipts` | 微信云开发部署 |
+| `cloudfunctions/` | 微信云函数 (Node.js) | `cleanupReceipts`（定时清理回执云图片） | 微信云开发部署 |
 
 ## 目录结构
 
-详见 [`Project_Folders_Structure_Blueprint.md`](./Project_Folders_Structure_Blueprint.md)。
+详见 [`docs/structure-blueprint.md`](./docs/structure-blueprint.md)。
 
 ```
 jzqs/
@@ -47,7 +47,7 @@ cd admin && npm install && npm run dev
 ## 部署（重要，AI 必读）
 
 - **修改任何代码后必须重新构建对应容器，否则线上运行的是旧版本。**
-- 完整部署流程与坑位见 **`DEPLOYMENT.md`**，一键部署用 **`./build.sh`**：
+- 完整部署流程与坑位见 **[`docs/deployment.md`](./docs/deployment.md)**，一键部署用 **`./build.sh`**：
 
   ```bash
   ./build.sh all        # 全量部署（后端 + 前端）
@@ -66,5 +66,5 @@ cd admin && npm install && npm run dev
 
 ## 文档与规范
 
-- 目录结构规范：[`Project_Folders_Structure_Blueprint.md`](./Project_Folders_Structure_Blueprint.md)
+- 目录结构规范：[`docs/structure-blueprint.md`](./docs/structure-blueprint.md)
 - 忽略规则：见 `.gitignore`（依赖、构建产物、日志、本地配置、AI 工具产物等一律不上传）

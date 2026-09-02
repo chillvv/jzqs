@@ -120,7 +120,9 @@ class MobileRiderControllerTest {
                 "PENDING",
                 "",
                 "",
-                ""
+                "",
+                null,
+                null
             )
         ), 1, 20, 1));
 

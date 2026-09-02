@@ -16,8 +16,9 @@ jzqs.top {
         reverse_proxy backend:8080 {
             transport http {
                 dial_timeout 5s
-                response_header_timeout 30s
-                read_timeout 30s
+                response_header_timeout 60s
+                # 骑手端上传回执图（≤5MB）走弱网时较慢，30s 会掐断首次上传（同 jango 站点 /api/* 的处理）
+                read_timeout 120s
                 write_timeout 30s
             }
         }

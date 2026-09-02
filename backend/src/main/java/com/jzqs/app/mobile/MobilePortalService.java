@@ -34,6 +34,7 @@ import com.jzqs.app.mobile.api.RiderQueueItemResponse;
 import com.jzqs.app.mobile.api.RiderQueueReorderResponse;
 import com.jzqs.app.mobile.api.RiderTaskItemResponse;
 import com.jzqs.app.order.api.OrderActionResponse;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import org.springframework.web.multipart.MultipartFile;
@@ -62,6 +63,8 @@ public interface MobilePortalService {
     MobileCreateOrderResponse createMiniappOrder(String phone, String serveDate, String mealPeriod, String deliveryAddress, String note, int quantity);
 
     MobileCreateOrderResponse createMiniappOrder(long customerId, String serveDate, String mealPeriod, String deliveryAddress, String note, int quantity);
+
+    MobileCreateOrderResponse createMiniappOrder(long customerId, String serveDate, String mealPeriod, String deliveryAddress, Long addressId, String note, int quantity);
 
     MobileDeliverySubscriptionAuthorizeResponse authorizeDeliverySubscription(long customerId, long orderId, String templateId, String acceptResult);
 
@@ -96,11 +99,11 @@ public interface MobilePortalService {
 
     List<MobileAddressResponse> customerAddresses(long customerId);
 
-    MobileAddressResponse saveCustomerAddress(String phone, String contactName, String contactPhone, String addressLine, String areaCode, boolean isDefault);
+    MobileAddressResponse saveCustomerAddress(String phone, String contactName, String contactPhone, String addressLine, String doorNumber, String areaCode, boolean isDefault, BigDecimal latitude, BigDecimal longitude);
 
-    MobileAddressResponse saveCustomerAddress(long customerId, String contactName, String contactPhone, String addressLine, String areaCode, boolean isDefault);
+    MobileAddressResponse saveCustomerAddress(long customerId, String contactName, String contactPhone, String addressLine, String doorNumber, String areaCode, boolean isDefault, BigDecimal latitude, BigDecimal longitude);
 
-    MobileAddressResponse updateCustomerAddress(long customerId, long addressId, String contactName, String contactPhone, String addressLine, String areaCode, boolean isDefault);
+    MobileAddressResponse updateCustomerAddress(long customerId, long addressId, String contactName, String contactPhone, String addressLine, String doorNumber, String areaCode, boolean isDefault, BigDecimal latitude, BigDecimal longitude);
 
     void deleteCustomerAddress(long customerId, long addressId);
 

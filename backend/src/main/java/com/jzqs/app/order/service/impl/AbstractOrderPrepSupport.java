@@ -18,38 +18,22 @@ abstract class AbstractOrderPrepSupport {
         return orderSupportRepository.findActiveWalletIdByCustomerId(customerId);
     }
 
-    protected long ensureCustomerAddress(long customerId, String deliveryAddress) {
-        List<Long> existingIds = orderSupportRepository.findCustomerAddressIds(customerId, deliveryAddress);
-        if (!existingIds.isEmpty()) {
-            return existingIds.get(0);
-        }
-        OrderSupportRepository.CustomerProfile customer = orderSupportRepository.findCustomerProfile(customerId);
-        if (customer == null) {
-            throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "未找到该客户");
-        }
-        return orderSupportRepository.insertCustomerAddress(
-            customerId,
-            stringValue(customer.name()),
-            stringValue(customer.phone()),
-            deliveryAddress,
-            deliveryAddress.contains("高新区") ? "高新区" : "老城区"
-        );
-    }
-
-    protected String resolveManualCreateDeliveryAddress(long customerId, Long addressId, String deliveryAddress) {
+    protected long ensureCustomerAddress(long customerId, Long addressId) {
+        // 地址关联一律用 ID 精确确认，不做任何 address_line 文本匹配：
+        // - 显式传了地址 ID → 校验归属后直接使用（哪个 ID 就是哪个地址）；
+        // - 未传地址 ID → 回退到该客户默认地址（ID 关联）。
         if (addressId != null && addressId > 0) {
-            List<String> addressLines = orderSupportRepository.findAddressLines(addressId, customerId);
-            if (!addressLines.isEmpty()) {
-                return addressLines.get(0);
+            List<String> ownedLines = orderSupportRepository.findAddressLines(addressId, customerId);
+            if (!ownedLines.isEmpty()) {
+                return addressId;
             }
-            throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "未找到该客户地址");
+            throw new BusinessException(ErrorCode.ADDRESS_NOT_FOUND, "配送地址不存在或不属于该客户");
         }
-
-        String normalizedAddress = stringValue(deliveryAddress);
-        if (normalizedAddress.isBlank()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请选择配送地址");
+        Long defaultAddressId = orderSupportRepository.findDefaultAddressId(customerId);
+        if (defaultAddressId == null) {
+            throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "该客户没有可用地址");
         }
-        return normalizedAddress;
+        return defaultAddressId;
     }
 
     protected void insertWalletTransaction(long walletId, String transactionType, int mealDelta, String operatorName, String remark, Long relatedOrderId) {

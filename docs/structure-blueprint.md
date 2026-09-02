@@ -61,8 +61,7 @@ jzqs/
 │   ├── tests/                # 测试（忽略）
 │   └── app.js / app.json / app.wxss / project.config.json
 ├── cloudfunctions/           # 微信云函数（每函数独立部署）
-│   ├── cleanStorage/         # config.json + index.js + package.json + node_modules
-│   └── cleanupReceipts/      # 同上
+│   └── cleanupReceipts/      # config.json + index.js + package.json + node_modules
 ├── .gitignore
 ├── docker-compose.yml        # 多服务编排
 ├── Caddyfile                 # 反向代理

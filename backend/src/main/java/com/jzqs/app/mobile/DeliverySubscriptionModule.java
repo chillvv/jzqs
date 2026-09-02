@@ -345,7 +345,9 @@ class DeliverySubscriptionModule {
                 COALESCE(c.current_openid, c.openid, '') AS current_openid,
                 mwi.dish_items_json AS dish_items_json,
                 rp.phone AS rider_phone,
-                ca.address_line AS pickup_location
+                CASE WHEN ca.door_number IS NOT NULL AND ca.door_number <> ''
+                     THEN CONCAT(ca.address_line, ' ', ca.door_number)
+                     ELSE ca.address_line END AS pickup_location
             FROM customer_delivery_subscriptions cds
             JOIN meal_slot_orders mso ON mso.id = cds.meal_slot_order_id
             JOIN daily_orders do ON do.id = mso.daily_order_id

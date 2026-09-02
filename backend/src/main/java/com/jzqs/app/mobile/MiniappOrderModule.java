@@ -64,6 +64,20 @@ class MiniappOrderModule {
         String note,
         int quantity
     ) {
+        return createOrder(customerId, serveDate, mealPeriod, deliveryAddress, null, note, quantity);
+    }
+
+    // 显式传 addressId：前端下单精确关联用户选的那条地址，避免 address_line 文本匹配
+    // 命中同名的「无坐标旧地址」导致骑手端拿不到坐标、导航退化为复制地址。
+    MobileCreateOrderResponse createOrder(
+        long customerId,
+        String serveDate,
+        String mealPeriod,
+        String deliveryAddress,
+        Long addressId,
+        String note,
+        int quantity
+    ) {
         ensureOrderingEnabled();
         LocalDate orderDate = LocalDate.parse(serveDate);
         String normalizedMealPeriod = normalizeMealPeriod(mealPeriod);
@@ -75,6 +89,7 @@ class MiniappOrderModule {
             orderDate,
             normalizedMealPeriod,
             deliveryAddress,
+            addressId,
             normalizeNote(note),
             units
         );
@@ -94,13 +109,25 @@ class MiniappOrderModule {
         String finalUserNote,
         int units
     ) {
+        return createOrder(customerId, orderDate, mealPeriod, deliveryAddress, null, finalUserNote, units);
+    }
+
+    MobileCreateOrderResponse createOrder(
+        long customerId,
+        LocalDate orderDate,
+        String mealPeriod,
+        String deliveryAddress,
+        Long requestedAddressId,
+        String finalUserNote,
+        int units
+    ) {
         long walletId = activeWalletId(customerId);
         int remainingMeals = remainingMealsForUpdate(walletId);
         if (remainingMeals < units) {
             throw new BusinessException(ErrorCode.INSUFFICIENT_MEALS, "剩余餐次不足，无法下单");
         }
 
-        long addressId = ensureCustomerAddress(customerId, deliveryAddress);
+        long addressId = ensureCustomerAddress(customerId, requestedAddressId);
         String merchantRemark = normalizeCustomerMerchantRemark(customerId);
         Long mergeTargetOrderId = findMergeTargetOrderId(customerId, orderDate, mealPeriod, addressId);
         if (mergeTargetOrderId != null) {
@@ -399,37 +426,21 @@ class MiniappOrderModule {
         );
     }
 
-    private long ensureCustomerAddress(long customerId, String deliveryAddress) {
-        if (!isBlank(deliveryAddress)) {
-            List<Long> existingIds = jdbcTemplate.queryForList(
-                "SELECT id FROM customer_addresses WHERE customer_id = ? AND address_line = ?",
-                Long.class,
-                customerId,
-                deliveryAddress
+    private long ensureCustomerAddress(long customerId, Long requestedAddressId) {
+        // 地址关联一律用 ID 精确确认，不做任何 address_line 文本匹配：
+        // - 显式传了地址 ID → 校验归属后直接使用（哪个 ID 就是哪个地址）；
+        // - 未传地址 ID → 回退到该客户默认地址（ID 关联）。
+        if (requestedAddressId != null && requestedAddressId > 0) {
+            Integer owned = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM customer_addresses WHERE id = ? AND customer_id = ?",
+                Integer.class,
+                requestedAddressId,
+                customerId
             );
-            if (!existingIds.isEmpty()) {
-                return existingIds.get(0);
+            if (owned != null && owned > 0) {
+                return requestedAddressId;
             }
-            CustomerContactRow customer = jdbcTemplate.query(
-                "SELECT name, phone FROM customers WHERE id = ?",
-                ps -> ps.setLong(1, customerId),
-                rs -> rs.next() ? new CustomerContactRow(rs.getString("name"), rs.getString("phone")) : null
-            );
-            if (customer == null) {
-                throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "未找到对应客户");
-            }
-            long insertedAddressId = insertAndReturnId(
-                "INSERT INTO customer_addresses (customer_id, contact_name, contact_phone, address_line, area_code, is_default) VALUES (?, ?, ?, ?, ?, FALSE)",
-                customerId,
-                safeString(customer.name()),
-                safeString(customer.phone()),
-                deliveryAddress,
-                deliveryAddress.contains("高新区") ? "高新区" : "老城区"
-            );
-            if (insertedAddressId > 0) {
-                return insertedAddressId;
-            }
-            return resolveLatestCustomerAddressId(customerId, deliveryAddress);
+            throw new BusinessException(ErrorCode.ADDRESS_NOT_FOUND, "配送地址不存在或不属于该客户");
         }
         Long defaultAddressId = jdbcTemplate.query(
             "SELECT id FROM customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, id ASC",
@@ -552,28 +563,6 @@ class MiniappOrderModule {
         return resolvedId;
     }
 
-    private long resolveLatestCustomerAddressId(long customerId, String deliveryAddress) {
-        Long resolvedId = jdbcTemplate.query(
-            """
-                SELECT id
-                FROM customer_addresses
-                WHERE customer_id = ?
-                  AND address_line = ?
-                ORDER BY id DESC
-                LIMIT 1
-                """,
-            ps -> {
-                ps.setLong(1, customerId);
-                ps.setString(2, deliveryAddress);
-            },
-            rs -> rs.next() ? rs.getLong(1) : null
-        );
-        if (resolvedId == null || resolvedId <= 0) {
-            throw new IllegalStateException("无法定位刚创建的客户地址");
-        }
-        return resolvedId;
-    }
-
     private String normalizeSnapshotNote(String note) {
         String normalized = isBlank(note) ? "" : note.trim();
         return normalized.isEmpty() || "-".equals(normalized) ? null : normalized;
@@ -681,8 +670,5 @@ class MiniappOrderModule {
     }
 
     private record ExistingOrderNoteRow(String note, String userNote) {
-    }
-
-    private record CustomerContactRow(String name, String phone) {
     }
 }

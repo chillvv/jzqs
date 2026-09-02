@@ -5,6 +5,7 @@ import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.mobile.api.MobileAddressResponse;
 import com.jzqs.app.mobile.api.MobileDefaultAddressResponse;
 import com.jzqs.app.mobile.api.MobileOrderAddressChangeResponse;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import org.slf4j.Logger;
@@ -39,7 +40,7 @@ class MobileAddressModule {
     List<MobileAddressResponse> customerAddresses(long customerId) {
         return jdbcTemplate.query(
             """
-                SELECT id, contact_name, contact_phone, address_line, area_code, is_default
+                SELECT id, contact_name, contact_phone, address_line, door_number, area_code, is_default, latitude, longitude
                 FROM customer_addresses
                 WHERE customer_id = ?
                 ORDER BY is_default DESC, id ASC
@@ -49,8 +50,11 @@ class MobileAddressModule {
                 rs.getString("contact_name"),
                 rs.getString("contact_phone"),
                 rs.getString("address_line"),
+                rs.getString("door_number"),
                 rs.getString("area_code"),
-                rs.getBoolean("is_default")
+                rs.getBoolean("is_default"),
+                rs.getBigDecimal("latitude"),
+                rs.getBigDecimal("longitude")
             ),
             customerId
         );
@@ -61,12 +65,18 @@ class MobileAddressModule {
         String contactName,
         String contactPhone,
         String addressLine,
+        String doorNumber,
         String areaCode,
-        boolean isDefault
+        boolean isDefault,
+        BigDecimal latitude,
+        BigDecimal longitude
     ) {
         ContactSnapshot contact = resolveCustomerAddressContact(customerId);
         String finalAddressLine = requireAddressLine(addressLine);
+        String finalDoorNumber = doorNumber == null ? null : doorNumber.trim();
         String finalAreaCode = areaCode == null ? "" : areaCode.trim();
+        BigDecimal finalLatitude = sanitizeLatitude(latitude);
+        BigDecimal finalLongitude = sanitizeLongitude(finalLatitude, longitude);
         if (isDefault) {
             jdbcTemplate.update("UPDATE customer_addresses SET is_default = FALSE WHERE customer_id = ?", customerId);
         }
@@ -83,19 +93,23 @@ class MobileAddressModule {
         }
         long addressId = insertAndReturnId(
             """
-                INSERT INTO customer_addresses (customer_id, contact_name, contact_phone, address_line, area_code, is_default)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO customer_addresses (customer_id, contact_name, contact_phone, address_line, door_number, area_code, is_default, latitude, longitude)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
             customerId,
             // Keep current behavior: address book contact info follows customer profile.
             contact.name(),
             contact.phone(),
             finalAddressLine,
+            finalDoorNumber,
             finalAreaCode,
-            isDefault
+            isDefault,
+            finalLatitude,
+            finalLongitude
         );
-        log.info("客户新增地址: customer={} addressId={} area_code={} isDefault={}", customerId, addressId, finalAreaCode, isDefault);
-        return new MobileAddressResponse(addressId, contact.name(), contact.phone(), finalAddressLine, finalAreaCode, isDefault);
+        log.info("客户新增地址: customer={} addressId={} area_code={} isDefault={} 定位={}",
+            customerId, addressId, finalAreaCode, isDefault, finalLatitude != null);
+        return new MobileAddressResponse(addressId, contact.name(), contact.phone(), finalAddressLine, finalDoorNumber, finalAreaCode, isDefault, finalLatitude, finalLongitude);
     }
 
     MobileAddressResponse updateCustomerAddress(
@@ -104,8 +118,11 @@ class MobileAddressModule {
         String contactName,
         String contactPhone,
         String addressLine,
+        String doorNumber,
         String areaCode,
-        boolean isDefault
+        boolean isDefault,
+        BigDecimal latitude,
+        BigDecimal longitude
     ) {
         Integer count = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM customer_addresses WHERE id = ? AND customer_id = ?",
@@ -116,31 +133,37 @@ class MobileAddressModule {
         if (count == null || count == 0) {
             throw new BusinessException(ErrorCode.ADDRESS_NOT_FOUND, "未找到该地址");
         }
-        
+
         ContactSnapshot contact = resolveCustomerAddressContact(customerId);
         String finalAddressLine = requireAddressLine(addressLine);
+        String finalDoorNumber = doorNumber == null ? null : doorNumber.trim();
         String finalAreaCode = areaCode == null ? "" : areaCode.trim();
-        
+        BigDecimal finalLatitude = sanitizeLatitude(latitude);
+        BigDecimal finalLongitude = sanitizeLongitude(finalLatitude, longitude);
+
         if (isDefault) {
             jdbcTemplate.update("UPDATE customer_addresses SET is_default = FALSE WHERE customer_id = ?", customerId);
         }
-        
+
         jdbcTemplate.update(
             """
-                UPDATE customer_addresses 
-                SET contact_name = ?, contact_phone = ?, address_line = ?, area_code = ?, is_default = ?
+                UPDATE customer_addresses
+                SET contact_name = ?, contact_phone = ?, address_line = ?, door_number = ?, area_code = ?, is_default = ?, latitude = ?, longitude = ?
                 WHERE id = ? AND customer_id = ?
                 """,
             contact.name(),
             contact.phone(),
             finalAddressLine,
+            finalDoorNumber,
             finalAreaCode,
             isDefault,
+            finalLatitude,
+            finalLongitude,
             addressId,
             customerId
         );
-        
-        return new MobileAddressResponse(addressId, contact.name(), contact.phone(), finalAddressLine, finalAreaCode, isDefault);
+
+        return new MobileAddressResponse(addressId, contact.name(), contact.phone(), finalAddressLine, finalDoorNumber, finalAreaCode, isDefault, finalLatitude, finalLongitude);
     }
 
     void deleteCustomerAddress(long customerId, long addressId) {
@@ -344,6 +367,30 @@ class MobileAddressModule {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "详细地址不能超过120个字");
         }
         return value;
+    }
+
+    // 坐标来自用户端 wx.chooseLocation 选点；范围非法（如传了 0,0 或越界值）一律视为未定位存 NULL，
+    // 避免骑手端拿坏坐标导航到错误位置。
+    private BigDecimal sanitizeLatitude(BigDecimal latitude) {
+        if (latitude == null) {
+            return null;
+        }
+        double value = latitude.doubleValue();
+        if (value < -90 || value > 90 || value == 0) {
+            return null;
+        }
+        return latitude;
+    }
+
+    private BigDecimal sanitizeLongitude(BigDecimal latitude, BigDecimal longitude) {
+        if (latitude == null || longitude == null) {
+            return null;
+        }
+        double value = longitude.doubleValue();
+        if (value < -180 || value > 180 || value == 0) {
+            return null;
+        }
+        return longitude;
     }
 
     private boolean canChangeAddress(LocalDate serveDate) {

@@ -59,18 +59,6 @@
         </view>
       </view>
 
-      <!-- Remarks embedded in Order Info -->
-      <view class="inline-remarks" wx:if="{{(order.customerNote && order.customerNote !== '-') || (order.merchantNote && order.merchantNote !== '-')}}">
-        <view class="inline-remark-item" wx:if="{{order.customerNote && order.customerNote !== '-'}}">
-          <text class="inline-remark-label text-primary">用户备注：</text>
-          <text class="inline-remark-value">{{order.customerNote}}</text>
-        </view>
-        <view class="inline-remark-item" wx:if="{{order.merchantNote && order.merchantNote !== '-'}}">
-          <text class="inline-remark-label text-warning">商家嘱咐：</text>
-          <text class="inline-remark-value">{{order.merchantNote}}</text>
-        </view>
-      </view>
-
       <!-- 参考图：直接展示，无需点击查看；支持更改/上传 -->
       <view class="reference-summary-card">
         <view class="reference-summary-icon">
@@ -119,6 +107,22 @@
         <text class="reference-loading-text">参考图加载中...</text>
       </view>
 
+    </view>
+
+    <!-- 订单备注：有任何备注（用户/商家）时独立成卡、醒目展示，骑手进详情第二眼就能看到 -->
+    <view class="detail-card order-note-card" wx:if="{{order.customerNote || order.merchantNote}}">
+      <view class="card-header">
+        <text class="material-symbols-outlined text-warning">⚠</text>
+        <text class="card-title">订单备注</text>
+      </view>
+      <view class="order-note-row" wx:if="{{order.customerNote}}">
+        <text class="order-note-label">用户备注</text>
+        <text class="order-note-value" user-select>{{order.customerNote}}</text>
+      </view>
+      <view class="order-note-row" wx:if="{{order.merchantNote}}">
+        <text class="order-note-label order-note-label--merchant">商家嘱咐</text>
+        <text class="order-note-value" user-select>{{order.merchantNote}}</text>
+      </view>
     </view>
 
     <!-- 送达信息 -->

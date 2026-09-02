@@ -134,6 +134,7 @@ class OrderPrepControllerTest {
             "DINNER",
             2,
             "高新区软件园G座",
+            18L,
             "换成低卡版",
             true,
             "DELIVERED"
@@ -149,6 +150,7 @@ class OrderPrepControllerTest {
                       "mealPeriod": "DINNER",
                       "quantity": 2,
                       "deliveryAddress": "高新区软件园G座",
+                      "addressId": 18,
                       "merchantRemark": "换成低卡版",
                       "priorityCustomer": true,
                       "status": "DELIVERED"

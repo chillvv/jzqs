@@ -42,6 +42,13 @@ smart 采用**指针式外接**（ADR-0001）：smart 只存"何时调用 + 调�
 | **resolving-merge-conflicts** | `resolving-merge-conflicts/SKILL.md` | 任何 git 冲突 | **按意图解决，永不 `--abort`** |
 | **memory-merger** | `~\ .agents\skills\memory-merger\SKILL.md`（**全局技能**，不在 mattpocock 目录，2026-08-29 已装） | 记忆沉淀 / 任何任务收尾 | 借鉴其**两级沉淀**（经验先落记忆文件草稿 → 成熟后合并进指令文件并清理）+ **domain 化归类** + **合并前用户审批**；落地路径用我们自己的 `.codebuddy/memory`（项目）/ LEARNINGS.md（全局），不用它的 vscode-userdata 约定。触发 `/memory-merger >domain [scope]`，但 scope 概念映射到我们的双轨 |
 | **breakdown-test** | `~\ .agents\skills\breakdown-test\SKILL.md`（**全局技能**，2026-08-29 已装，Snyk Low Risk） | S7 测试策略生成 | **ISTQB 五技术**（等价类划分/边界值分析/决策表/状态转换/基于经验探索）+ **ISO 25010 质量矩阵**（8 质量特性优先级）+ **四类测试覆盖**（功能/非功能/结构/回归）+ **覆盖目标**（关键路径 line>80%/branch>90%、验收标准 100%、高风险场景 100%）+ **质量门禁**（entry/exit）。产出落 `.scratch/<slug>/test-strategy.md`；**不用**它的 `docs/ways-of-work/` 路径与 story point 估算 |
+| **grilling** | `~\ .agents\skills\grilling\SKILL.md`（**全局技能**，2026-08-30 已装，Snyk Low Risk） | S0 想法 / 任何需求深挖 | **设计树 + frontier 轮次追问**：每轮问完所有"现在能问"的决策点，编号 + 给推荐答案，等用户回答再下一轮；**事实 AI 自查（派子 agent），决策问老板**；frontier 清空且老板确认共识才停。原 grill-me 技能依赖的 grilling |
+| **web-artifacts-builder** | `~\ .agents\skills\web-artifacts-builder\SKILL.md`（全局技能，已装） | S3 设计可视化预览 | React+Tailwind+shadcn 构建复杂多组件原型，`bundle-artifact.sh` 打成单 HTML 直接预览；轻量原型用 `prototype`；**不做简单单文件 HTML/JSX** |
+| **java-springboot** | `~\ .agents\skills\java-springboot\SKILL.md`（全局技能，2026-08-30 已装，Snyk Low Risk） | S4/S6 Java 代码质量约束 | Java/Spring Boot 代码怎么写好维护、质量高、兼容好。**按语言调用框架技能**纪律的示例：技术栈定 Java 后主动用它；前端同理（React/Vue/小程序各有热门技能） |
+| **sql-optimization** | `~\ .agents\skills\sql-optimization\SKILL.md`（全局技能，2026-08-30 已装，Snyk Low Risk） | S5 SQL 性能优化 | SQL 查询性能优化、慢查询排查、索引建议 |
+| **mysql** | `~\ .agents\skills\mysql\SKILL.md`（全局技能，2026-08-30 已装，Snyk Med Risk） | S5 MySQL 专项 | PlanetScale 官方 MySQL 技能（jzqs 就是 MySQL）：schema 设计、查询、连接管理最佳实践 |
+| **database-migration** | `~\ .agents\skills\database-migration\SKILL.md`（全局技能，2026-08-30 已装，Snyk Low Risk） | S5 数据库迁移 | 迁移脚本设计、版本管理、向后兼容（Flyway 已用，此技能作参考） |
+| **property-based-testing** | `~\ .agents\skills\property-based-testing\SKILL.md`（全局技能，2026-08-30 已装，Gen High Risk=误报，纯知识无恶意代码，Trail of Bits 出品） | S7 属性测试 | **机制化极端场景**：声明业务不变量（守恒/可逆/不变量/oracle/幂等），框架自动生成极端输入找反例；9 种属性目录 + 强度排序；无代数结构才用示例测试。**解决"AI 不主动往极端想"的机制保证** |
 
 ### 不存在的外部能力（悬空指针排查结果）
 
@@ -50,6 +57,7 @@ smart 采用**指针式外接**（ADR-0001）：smart 只存"何时调用 + 调�
 | 名称 | 核查日期 | 处置 |
 |------|---------|------|
 | `webapp-testing` | 2026-08-29 | 不存在（Test-Path=False）。E2E 改用项目自建 Playwright，脚本在 `backend/scripts/e2e/browser/` |
+| `to-prd` | 2026-08-30 | skills.sh 显示 mattpocock/skills@to-prd（36.6万装，历史累计）但**已被删除**：GitHub main 分支 `skills/to-prd/SKILL.md` 404；`skills/deprecated/` 为空（README 明示"退役技能直接删除"）；npx skills 拉最新仓库 37 技能中无此名。替代 = `to-questionnaire`（转问卷）+ `to-spec`（合成）。**勿再引用 to-prd**，skills.sh 是缓存旧数据 |
 
 **新增任何指针前，必须先 `Test-Path` 验证路径存在**，否则即为悬空指针，违反本表"路径不存在须明确报出"的纪律。
 

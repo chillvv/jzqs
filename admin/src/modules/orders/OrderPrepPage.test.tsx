@@ -121,4 +121,32 @@ describe("OrderPrepPage", () => {
 
     view.unmount();
   });
+
+  it("resets filters to defaults after refresh (orders center is not persistent)", async () => {
+    // 即使 localStorage 残留了上次的筛选（历史持久化写入），订单中心刷新后也应还原默认
+    window.localStorage.setItem("page-mem:orders-active-tab", JSON.stringify("SUBSCRIPTION_MANAGEMENT"));
+    window.localStorage.setItem("page-mem:orders-subscription-filters", JSON.stringify({ keyword: "张三", statusFilter: "ALL", mealPeriod: "DINNER" }));
+
+    const view = renderIntoDom(
+      <MemoryRouter initialEntries={["/orders"]}>
+        <OrderPrepPage />
+      </MemoryRouter>
+    );
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    // 默认停在「普通订单」tab
+    const tabButtons = Array.from(view.container.querySelectorAll("button"));
+    const ordersTab = tabButtons.find((button) => button.textContent?.includes("普通订单"));
+    expect(ordersTab?.className).toContain("is-active");
+
+    // 订阅搜索框不渲染（未停在订阅 tab），普通订单关键字为空
+    expect(view.container.querySelector('input[placeholder="搜索客户姓名或电话"]')).toBeNull();
+    const keywordInput = view.container.querySelector('input[placeholder="客户姓名/手机号/备注"]') as HTMLInputElement | null;
+    expect(keywordInput?.value ?? "").toBe("");
+
+    view.unmount();
+  });
 });

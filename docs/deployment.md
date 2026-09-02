@@ -83,6 +83,14 @@ docker exec jzqs-mysql mysql -ujzqs -p jzqs -e "SELECT version, success FROM fly
 - **云函数**：`cloudfunctions/` 下的函数用微信开发者工具右键「上传并部署：云端安装依赖」。
 - 小程序依赖后端 `backend`，需先保证后端已部署最新版。
 
+#### 云开发控制台定时触发器：cleanStorage 已废弃，需手动迁移
+
+`cleanStorage` 云函数已从代码库删除（与 `cleanupReceipts` 职责重叠，回执云图片清理统一由 `cleanupReceipts` 走后端 `/api/internal/receipts/*` 接口完成并同步状态）。**云开发控制台的触发器是控制台侧配置，删除代码不会自动清理**，曾部署过 cleanStorage 的环境需手动操作：
+
+1. 微信开发者工具 → 云开发控制台 → 云函数 → `cleanStorage` → 触发器：删除其 `dailyCleanup` 定时触发器（每天 03:00），并删除 `cleanStorage` 云函数本体。
+2. 确认 `cleanupReceipts` 存在 `dailyCleanup` 定时触发器（每天 02:50，见其 `config.json`）。用「上传并部署：云端安装依赖（不上传 node_modules）」重新部署时会按 `config.json` 同步触发器；若曾在控制台手动建过触发器，核对时间与 config 一致、无重复。
+3. 检查完成后可在云开发控制台 → 定时触发器/云函数日志确认只剩 `cleanupReceipts` 在每日执行。旧版本曾在云数据库 `receipt_files` 集合留有历史记录的，可一次性手动清理，该集合已无代码写入。
+
 ### 5. Caddy 反向代理
 
 只有修改了 `Caddyfile` 才需要重启：

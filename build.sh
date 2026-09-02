@@ -17,7 +17,7 @@
 #   - 数据库结构变更（db/migration/V*.sql）由 Flyway 在
 #     后端启动时自动执行，无需手动操作。
 #
-# 详细文档见 DEPLOYMENT.md
+# 详细文档见 docs/deployment.md
 # ============================================================
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -117,4 +117,4 @@ case "$ACTION" in
   *)       warn "未知参数: $ACTION（支持 backend / admin / test / all / status）"; exit 1 ;;
 esac
 
-ok "完成。若页面无变化，请硬刷新浏览器；仍有问题见 DEPLOYMENT.md。"
+ok "完成。若页面无变化，请硬刷新浏览器；仍有问题见 docs/deployment.md。"

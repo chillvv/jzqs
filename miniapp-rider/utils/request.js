@@ -155,39 +155,57 @@ function request({ url, method = 'GET', data, header, requireWorkbench = true, t
 
 function uploadFile({ url, filePath, name = 'file', formData, requireWorkbench = true, hideLoading = true, hideErrorToast = false }) {
   const app = getApp();
+  // 与 request 一致：对网络抖动/网关超时等瞬时故障做最多 2 次退避重试，
+  // 否则骑手第一次传回执图偶发失败就要整单重来。401 与明确业务错误不重试。
+  const MAX_RETRIES = 2;
   return new Promise((resolve, reject) => {
-    const sendUpload = () => {
-      if (requireWorkbench && !app.canUseWorkbench()) {
-        reject(new Error(app.getWorkbenchBlockMessage()));
-        return;
-      }
-      
-      const token = wx.getStorageSync(AUTH_TOKEN_KEY);
-      const uploadFormData = {
-        ...formData
-      };
-      
-      // 自动添加 token 到请求头
-      const header = {};
-      if (token) {
-        header.Authorization = `Bearer ${token}`;
-      }
-      
-      if (!hideLoading) {
-        showGlobalLoading();
-      }
+    const attemptUpload = (retry) => {
+      const sendUpload = () => {
+        if (requireWorkbench && !app.canUseWorkbench()) {
+          reject(new Error(app.getWorkbenchBlockMessage()));
+          return;
+        }
 
-      wx.uploadFile({
-        url: `${app.globalData.apiBaseUrl}${url}`,
-        filePath,
-        name,
-        formData: uploadFormData,
-        header: header,
-        timeout: 60000, // 上传文件超时 60 秒
-        success(res) {
-          try {
-            const body = JSON.parse(res.data || '{}');
-            
+        const token = wx.getStorageSync(AUTH_TOKEN_KEY);
+        const uploadFormData = {
+          ...formData
+        };
+
+        const uploadHeader = {
+          ...resolveServiceHeaders(app.globalData.serviceHeaders)
+        };
+        if (token) {
+          uploadHeader.Authorization = `Bearer ${token}`;
+        }
+
+        if (!hideLoading) {
+          showGlobalLoading();
+        }
+
+        wx.uploadFile({
+          url: `${app.globalData.apiBaseUrl}${url}`,
+          filePath,
+          name,
+          formData: uploadFormData,
+          header: uploadHeader,
+          timeout: 60000, // 上传文件超时 60 秒
+          success(res) {
+            let body = {};
+            try {
+              body = JSON.parse(res.data || '{}');
+            } catch (error) {
+              if (retry < MAX_RETRIES) {
+                console.warn('[上传] 响应解析失败，准备重试', url, 'retry=', retry + 1);
+                setTimeout(() => attemptUpload(retry + 1), 500 * (retry + 1));
+                return;
+              }
+              if (!hideErrorToast && typeof wx.showToast === 'function') {
+                wx.showToast({ title: '上传失败', icon: 'none', duration: 2000 });
+              }
+              reject(error);
+              return;
+            }
+
             // token 失效处理
             if (res.statusCode === 401) {
               handleUnauthorized(app);
@@ -198,60 +216,72 @@ function uploadFile({ url, filePath, name = 'file', formData, requireWorkbench =
               reject(new Error(errorMsg));
               return;
             }
-            
+
             if (res.statusCode >= 200 && res.statusCode < 300 && body.code === 'OK') {
               resolve(body.data);
               return;
             }
+
             const errorMsg = body.message || '上传失败';
+            // 5xx 与后端兜底「系统繁忙」属瞬时故障，可重试；其余业务错误直接报给用户
+            const isRetryable = res.statusCode >= 500
+              || errorMsg.indexOf('系统繁忙') >= 0
+              || errorMsg.indexOf('上传失败') >= 0;
+            if (isRetryable && retry < MAX_RETRIES) {
+              console.warn('[上传] 瞬时错误，准备重试', url, errorMsg, 'retry=', retry + 1);
+              setTimeout(() => attemptUpload(retry + 1), 500 * (retry + 1));
+              return;
+            }
             if (!hideErrorToast && typeof wx.showToast === 'function') {
               wx.showToast({ title: errorMsg, icon: 'none', duration: 2000 });
             }
             reject(new Error(errorMsg));
-          } catch (error) {
-            if (!hideErrorToast && typeof wx.showToast === 'function') {
-              wx.showToast({ title: '上传失败', icon: 'none', duration: 2000 });
+          },
+          fail(err) {
+            // 只打印错误信息，避免 err 对象可能携带请求头/token 等敏感信息
+            console.error('[上传失败]', url, err && err.errMsg ? err.errMsg : err);
+
+            let errorMsg = '网络请求失败';
+            if (err.errMsg && err.errMsg.includes('timeout')) {
+              errorMsg = '上传超时，请检查网络';
+            } else {
+              errorMsg = '无法连接服务器，请检查后端是否启动';
             }
-            reject(error);
+            if (retry < MAX_RETRIES) {
+              console.warn('[上传] 网络错误，准备重试', url, errorMsg, 'retry=', retry + 1);
+              setTimeout(() => attemptUpload(retry + 1), 500 * (retry + 1));
+              return;
+            }
+            if (!hideErrorToast && typeof wx.showToast === 'function') {
+              wx.showToast({ title: errorMsg, icon: 'none', duration: 2000 });
+            }
+            reject(new Error(errorMsg));
+          },
+          complete() {
+            if (!hideLoading) {
+              hideGlobalLoading();
+            }
           }
-        },
-        fail(err) {
-          // 只打印错误信息，避免 err 对象可能携带请求头/token 等敏感信息
-          console.error('[上传失败]', url, err && err.errMsg ? err.errMsg : err);
-          
-          let errorMsg = '网络请求失败';
-          if (err.errMsg && err.errMsg.includes('timeout')) {
-            errorMsg = '上传超时，请检查网络';
-          } else {
-            errorMsg = '无法连接服务器，请检查后端是否启动';
-          }
-          if (!hideErrorToast && typeof wx.showToast === 'function') {
-            wx.showToast({ title: errorMsg, icon: 'none', duration: 2000 });
-          }
-          reject(new Error(errorMsg));
-        },
-        complete() {
-          if (!hideLoading) {
-            hideGlobalLoading();
-          }
-        }
-      });
+        });
+      };
+
+      // 不需要工作台权限的上传，直接发送
+      if (!requireWorkbench) {
+        sendUpload();
+        return;
+      }
+
+      // 需要工作台权限的上传，等待认证完成
+      if (app.globalData.riderAuthReady) {
+        sendUpload();
+        return;
+      }
+      app.waitForRiderAuth()
+        .then(sendUpload)
+        .catch(() => reject(new Error('登录失败，请稍后重试')));
     };
 
-    // 不需要工作台权限的上传，直接发送
-    if (!requireWorkbench) {
-      sendUpload();
-      return;
-    }
-
-    // 需要工作台权限的上传，等待认证完成
-    if (app.globalData.riderAuthReady) {
-      sendUpload();
-      return;
-    }
-    app.waitForRiderAuth()
-      .then(sendUpload)
-      .catch(() => reject(new Error('登录失败，请稍后重试')));
+    attemptUpload(0);
   });
 }
 

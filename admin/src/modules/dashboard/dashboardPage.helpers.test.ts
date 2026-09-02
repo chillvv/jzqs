@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildDashboardFlowSteps } from "./dashboardPage.helpers";
+import {
+  buildDashboardFlowSteps,
+  buildDashboardOrderTrendSummary,
+  normalizeDashboardOverview
+} from "./dashboardPage.helpers";
 import type { DashboardOverviewResponse } from "../../shared/api/types";
 
 const overview: DashboardOverviewResponse = {
@@ -52,5 +56,57 @@ describe("buildDashboardFlowSteps", () => {
     const empty = buildDashboardFlowSteps({ ...overview, todayServeMealCount: 0, deliveredOrdersToday: 0 });
     expect(empty[3].completionRate).toBeNull();
     expect(empty[3].detail).toBe("等待今日首单送达");
+  });
+});
+
+describe("buildDashboardOrderTrendSummary", () => {
+  const trendOverview: DashboardOverviewResponse = {
+    ...overview,
+    orderTrend: [
+      { label: "05/09", total: 96, lunch: 54, dinner: 42 },
+      { label: "05/10", total: 101, lunch: 58, dinner: 43 },
+      { label: "05/11", total: 132, lunch: 76, dinner: 56 },
+      { label: "05/12", total: 108, lunch: 61, dinner: 47 }
+    ]
+  };
+
+  it("summarizes peak, average, lunch share and value range of the trend", () => {
+    expect(buildDashboardOrderTrendSummary(trendOverview)).toEqual({
+      peakValue: 132,
+      peakLabel: "05/11",
+      averageValue: 109,
+      lunchShare: 57,
+      rangeText: "96-132",
+      sum: 437
+    });
+  });
+
+  it("falls back to neutral values when the trend is empty", () => {
+    expect(buildDashboardOrderTrendSummary(overview)).toEqual({
+      peakValue: 0,
+      peakLabel: "-",
+      averageValue: 0,
+      lunchShare: 0,
+      rangeText: "0-0",
+      sum: 0
+    });
+  });
+});
+
+describe("normalizeDashboardOverview", () => {
+  it("fills missing numeric and trend fields with safe defaults", () => {
+    const normalized = normalizeDashboardOverview({
+      deliveredToday: 7,
+      tomorrowMealCount: 9
+    });
+
+    expect(normalized).toMatchObject({
+      deliveredToday: 7,
+      tomorrowMealCount: 9,
+      tomorrowLunchCount: 0,
+      deliveredOrdersToday: 7,
+      orderTrend: [],
+      growthTrend: []
+    });
   });
 });

@@ -1,5 +1,6 @@
 package com.jzqs.app.mobile.api;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 public record RiderQueueItemResponse(
@@ -27,6 +28,8 @@ public record RiderQueueItemResponse(
     String receiptStatus,
     String receiptUrl,
     String receiptNote,
-    String referenceImageUrl
+    String referenceImageUrl,
+    BigDecimal latitude,
+    BigDecimal longitude
 ) {
 }

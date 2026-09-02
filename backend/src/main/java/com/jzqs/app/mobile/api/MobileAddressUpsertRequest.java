@@ -3,6 +3,7 @@ package com.jzqs.app.mobile.api;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 
 public record MobileAddressUpsertRequest(
     @NotBlank
@@ -15,7 +16,11 @@ public record MobileAddressUpsertRequest(
     @NotBlank
     @Size(min = 4, max = 120, message = "详细地址长度需在4到120个字符之间")
     String addressLine,
+    @Size(max = 100, message = "门牌号不能超过100个字")
+    String doorNumber,
     String areaCode,
-    boolean isDefault
+    boolean isDefault,
+    BigDecimal latitude,
+    BigDecimal longitude
 ) {
 }

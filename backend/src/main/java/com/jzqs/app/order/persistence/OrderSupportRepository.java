@@ -33,39 +33,12 @@ public class OrderSupportRepository {
         );
     }
 
-    public List<Long> findCustomerAddressIds(long customerId, String deliveryAddress) {
-        return jdbcTemplate.queryForList(
-            "SELECT id FROM customer_addresses WHERE customer_id = ? AND address_line = ?",
-            Long.class,
-            customerId,
-            deliveryAddress
-        );
-    }
-
-    public CustomerProfile findCustomerProfile(long customerId) {
+    public Long findDefaultAddressId(long customerId) {
         return jdbcTemplate.query(
-            "SELECT name, phone FROM customers WHERE id = ?",
+            "SELECT id FROM customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, id ASC LIMIT 1",
             ps -> ps.setLong(1, customerId),
-            rs -> rs.next() ? new CustomerProfile(rs.getString("name"), rs.getString("phone")) : null
+            rs -> rs.next() ? rs.getLong("id") : null
         );
-    }
-
-    public long insertCustomerAddress(long customerId, String contactName, String contactPhone, String deliveryAddress, String areaCode) {
-        KeyHolder keyHolder = new GeneratedKeyHolder();
-        jdbcTemplate.update(connection -> {
-            var ps = connection.prepareStatement(
-                "INSERT INTO customer_addresses (customer_id, contact_name, contact_phone, address_line, area_code, is_default) VALUES (?, ?, ?, ?, ?, FALSE)",
-                new String[] {"id"}
-            );
-            ps.setLong(1, customerId);
-            ps.setString(2, contactName);
-            ps.setString(3, contactPhone);
-            ps.setString(4, deliveryAddress);
-            ps.setString(5, areaCode);
-            return ps;
-        }, keyHolder);
-        Number key = keyHolder.getKey();
-        return key == null ? 0L : key.longValue();
     }
 
     public List<String> findAddressLines(long addressId, long customerId) {
@@ -159,8 +132,5 @@ public class OrderSupportRepository {
             String.class,
             customerId
         );
-    }
-
-    public record CustomerProfile(String name, String phone) {
     }
 }

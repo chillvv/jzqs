@@ -132,7 +132,7 @@ test.describe("admin 后台核心链路（浏览器 E2E）", () => {
          FROM meal_slot_orders o
          JOIN dispatch_assignments da ON da.meal_slot_order_id = o.id
         WHERE o.status IN ('DELIVERED','CANCELLED','REFUNDED')
-          AND da.status IN ('ASSIGNED','ACCEPTED','PICKED_UP')`
+          AND da.status IN ('PENDING','AREA_ASSIGNED','DISPATCHING')`
     );
     if (orphanActive) {
       console.log(`🔍 终态订单仍挂活跃派单分配的条数 = ${orphanActive[0].c}`);

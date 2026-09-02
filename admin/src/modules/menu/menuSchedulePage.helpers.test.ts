@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildMenuWeekSummary } from "./menuSchedulePage.helpers";
+import { buildMenuWeekSummary, resolveWeekStatusLabel } from "./menuSchedulePage.helpers";
 import type { AdminMenuWeekResponse } from "../../shared/api/types";
 
 const week: AdminMenuWeekResponse = {
@@ -38,5 +38,13 @@ describe("buildMenuWeekSummary", () => {
       unconfiguredSlotCount: 1,
       completionRate: "50%"
     });
+  });
+});
+
+describe("resolveWeekStatusLabel", () => {
+  it("maps week lifecycle statuses to chinese labels", () => {
+    expect(resolveWeekStatusLabel("DRAFT")).toBe("待发布");
+    expect(resolveWeekStatusLabel("PUBLISHED")).toBe("已发布");
+    expect(resolveWeekStatusLabel("ARCHIVED")).toBe("已归档");
   });
 });

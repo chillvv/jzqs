@@ -76,7 +76,6 @@ import { DatePicker } from "../../shared/components/DatePicker";
 import { toast } from "../../shared/components/Toast";
 import { formatLocalDateInputValue } from "../../shared/utils/dateTime";
 import { useServeDate } from "../../shared/hooks/useServeDate";
-import { usePersistedState, PAGE_MEMORY_KEYS } from "../../shared/hooks/usePersistedState";
 import { SubscriptionManagementTab, type SubscriptionManagementFilters, type SubscriptionMealPeriod, type SubscriptionStatusFilter } from "./SubscriptionManagementTab";
 
 function defaultFilterDate() {
@@ -132,19 +131,16 @@ export function OrderPrepPage() {
   const [previewCheckResult, setPreviewCheckResult] = useState<SubscriptionPreviewCheckResponse | null>(null);
   const [isPreviewCheckOpen, setIsPreviewCheckOpen] = useState(false);
 
-  // Pagination & Filter state
-  const [currentPage, setCurrentPage] = usePersistedState<number>(PAGE_MEMORY_KEYS.orderCurrentPage, 1);
-  const [activeTab, setActiveTab] = usePersistedState<OrderPrepTab>(PAGE_MEMORY_KEYS.orderActiveTab, "ORDERS");
+  // Pagination & Filter state（订单中心不持久化筛选：刷新/重进页面后一律还原默认）
+  const [currentPage, setCurrentPage] = useState(1);
+  const [activeTab, setActiveTab] = useState<OrderPrepTab>("ORDERS");
   const [hasManualTabSelection, setHasManualTabSelection] = useState(false);
   const [filterDate, setFilterDate] = useServeDate();
-  const [mealPeriodFilter, setMealPeriodFilter] = usePersistedState<OrderPrepMealPeriodFilter>(
-    PAGE_MEMORY_KEYS.orderMealPeriod,
-    "LUNCH"
-  );
-  const [sourceFilter, setSourceFilter] = usePersistedState<OrderPrepSourceFilter>(PAGE_MEMORY_KEYS.orderSourceFilter, "ALL");
-  const [statusFilter, setStatusFilter] = usePersistedState<OrderPrepStatusFilter>(PAGE_MEMORY_KEYS.orderStatusFilter, "ALL");
-  const [remarkFilter, setRemarkFilter] = usePersistedState<OrderPrepRemarkFilter>(PAGE_MEMORY_KEYS.orderRemarkFilter, "ALL");
-  const [keywordFilter, setKeywordFilter] = usePersistedState<string>(PAGE_MEMORY_KEYS.orderKeyword, "");
+  const [mealPeriodFilter, setMealPeriodFilter] = useState<OrderPrepMealPeriodFilter>("LUNCH");
+  const [sourceFilter, setSourceFilter] = useState<OrderPrepSourceFilter>("ALL");
+  const [statusFilter, setStatusFilter] = useState<OrderPrepStatusFilter>("ALL");
+  const [remarkFilter, setRemarkFilter] = useState<OrderPrepRemarkFilter>("ALL");
+  const [keywordFilter, setKeywordFilter] = useState<string>("");
   const [subscriptionFilters, setSubscriptionFilters] = useState<SubscriptionManagementFilters>({
     keyword: "",
     statusFilter: "ALL",

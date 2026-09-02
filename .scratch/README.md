@@ -81,3 +81,7 @@ needs-triage → needs-info（要更多信息）
 | [local-e2e-coverage/03](local-e2e-coverage/issues/03-cross-end-e2e-local-db.md) | done | 跨端 E2E 连本地 3307（CrossEndFlowE2ETest 3/3 通过） |
 | [order-note-merge/01](order-note-merge/issues/01-merge-note-projection-with-comma.md) | done | 三端备注投影改「列 ∪ 快照」去重 + 逗号拼接 |
 | [order-note-merge/02](order-note-merge/issues/02-snapshot-preserve-one-time-notes.md) | done | 订单级商家备注收敛成单一落点 + 修错列 bug + V30 迁移 |
+| [rider-miniapp-optimization/01](rider-miniapp-optimization/issues/01-upload-retry.md) | done | 骑手回执上传补退避重试 + 服务路由头 |
+| [rider-miniapp-optimization/02](rider-miniapp-optimization/issues/02-navigation-address.md) | done | 导航按客户地址：后端地理编码代理 + 分层导航 |
+| [rider-miniapp-optimization/03](rider-miniapp-optimization/issues/03-order-detail-notes.md) | done | 订单详情备注独立卡片醒目展示 |
+| [rider-miniapp-optimization/04](rider-miniapp-optimization/issues/04-rider-tests.md) | done | 骑手端测试补充与全量验证（进度见 [progress.md](rider-miniapp-optimization/progress.md)） |

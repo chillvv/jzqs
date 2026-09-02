@@ -36,8 +36,12 @@ function stripApiBaseUrlPrefix(url, baseUrl) {
   return url;
 }
 
+// 后端骑手接口沿旧语义用 "-" 表示无备注；这里统一归一化为空串，
+// 页面只需判断字段非空即可决定是否展示「订单备注」卡片。
 function normalizeOptionalText(value) {
-  return typeof value === 'string' ? value.trim() : '';
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  return trimmed === '-' ? '' : trimmed;
 }
 
 Page({

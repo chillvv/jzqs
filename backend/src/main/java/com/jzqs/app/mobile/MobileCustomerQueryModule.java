@@ -94,7 +94,9 @@ class MobileCustomerQueryModule {
                     mw.expired_at,
                     c.merchant_remark,
                     (
-                        SELECT ca.address_line
+                        SELECT CASE WHEN ca.door_number IS NOT NULL AND ca.door_number <> ''
+                                    THEN CONCAT(ca.address_line, ' ', ca.door_number)
+                                    ELSE ca.address_line END
                         FROM customer_addresses ca
                         WHERE ca.customer_id = c.id
                         ORDER BY ca.is_default DESC, ca.id ASC
@@ -314,7 +316,9 @@ class MobileCustomerQueryModule {
                     COALESCE(ms.meal_detail, '') AS meal_detail,
                     COALESCE(ms.merchant_note, '-') AS merchant_note,
                     COALESCE(mso.user_note, mso.note, '-') AS note,
-                    ca.address_line AS delivery_address,
+                    CASE WHEN ca.door_number IS NOT NULL AND ca.door_number <> ''
+                         THEN CONCAT(ca.address_line, ' ', ca.door_number)
+                         ELSE ca.address_line END AS delivery_address,
                     mso.address_id AS address_id,
                     do.source,
                     mso.status,

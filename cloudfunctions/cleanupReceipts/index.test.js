@@ -77,6 +77,22 @@ describe('cleanupReceipts 云函数', { concurrency: false }, () => {
     );
   });
 
+  test('readRequiredConfig rejects missing API_BASE_URL', () => {
+    const { __test__ } = freshIndex();
+    assert.throws(
+      () => __test__.readRequiredConfig({ INTERNAL_API_TOKEN: 't' }),
+      /API_BASE_URL 未配置/
+    );
+  });
+
+  test('readRequiredConfig rejects placeholder internal token', () => {
+    const { __test__ } = freshIndex();
+    assert.throws(
+      () => __test__.readRequiredConfig({ API_BASE_URL: 'https://jzqs.top', INTERNAL_API_TOKEN: 'change_this_to_an_internal_call_secret' }),
+      /INTERNAL_API_TOKEN 未配置或仍为占位值/
+    );
+  });
+
   test('requestJson sends X-Internal-Token and parses JSON', async () => {
     let captured = null;
     installHttpsMock((opts, callback) => {
@@ -122,6 +138,45 @@ describe('cleanupReceipts 云函数', { concurrency: false }, () => {
     await assert.rejects(
       () => __test__.requestJson(require('https'), 'GET', 'https://jzqs.top/x', 'token'),
       /请求失败: 401/
+    );
+  });
+
+  test('requestJson resolves null on empty body', async () => {
+    installHttpsMock((opts, callback) => {
+      setImmediate(() => {
+        const res = { statusCode: 200, on: (evt, fn) => { if (evt === 'end') fn(); } };
+        callback(res);
+      });
+      return { on: () => {}, write: () => {}, end: () => {} };
+    });
+    const { __test__ } = freshIndex();
+    const result = await __test__.requestJson(require('https'), 'POST', 'https://jzqs.top/y', 'token');
+    assert.equal(result, null);
+  });
+
+  test('requestJson rejects when response body is not valid JSON', async () => {
+    installHttpsMock((opts, callback) => {
+      setImmediate(() => {
+        const res = { statusCode: 200, on: (evt, fn) => { if (evt === 'data') fn('not-json{'); if (evt === 'end') fn(); } };
+        callback(res);
+      });
+      return { on: () => {}, write: () => {}, end: () => {} };
+    });
+    const { __test__ } = freshIndex();
+    await assert.rejects(
+      () => __test__.requestJson(require('https'), 'GET', 'https://jzqs.top/x', 'token'),
+      /解析响应失败/
+    );
+  });
+
+  test('requestJson rejects on request error', async () => {
+    installHttpsMock(() => {
+      throw new Error('network down');
+    });
+    const { __test__ } = freshIndex();
+    await assert.rejects(
+      () => __test__.requestJson(require('https'), 'GET', 'https://jzqs.top/x', 'token'),
+      /network down/
     );
   });
 
@@ -255,6 +310,30 @@ describe('cleanupReceipts 云函数', { concurrency: false }, () => {
       const result = await main({}, {});
       assert.equal(result.deleted, 0);
       assert.equal(result.failed, 1);
+    } finally {
+      restore();
+    }
+  });
+
+  test('main counts batch-level failures when deleteFile throws', async () => {
+    installCloudMock({
+      deleteFile: async () => { throw new Error('batch boom'); }
+    });
+    installHttpsMock((opts, callback) => {
+      setImmediate(() => {
+        const res = { statusCode: 200, on: (evt, fn) => { if (evt === 'data') fn(JSON.stringify({ data: { fileIds: ['cloud://a.jpg'], cutoff: '今天 00:00' } })); if (evt === 'end') fn(); } };
+        callback(res);
+      });
+      return { on: () => {}, write: () => {}, end: () => {} };
+    });
+    const { main } = freshIndex();
+    const restore = withMainEnv();
+    try {
+      const result = await main({}, {});
+      assert.equal(result.scanned, 1);
+      assert.equal(result.deleted, 0);
+      assert.equal(result.failed, 1);
+      assert.ok(result.errors.some((msg) => msg.includes('batch boom')));
     } finally {
       restore();
     }

@@ -13,6 +13,7 @@ import com.jzqs.app.mobile.api.RiderQueueItemResponse;
 import com.jzqs.app.mobile.api.RiderQueueReorderResponse;
 import com.jzqs.app.mobile.api.RiderBatchSummaryResponse;
 import com.jzqs.app.mobile.api.RiderTaskItemResponse;
+import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDate;
@@ -46,7 +47,11 @@ class RiderQueueSupport {
                 mso.id AS meal_slot_order_id,
                 c.name AS customer_name,
                 c.phone AS customer_phone,
-                ca.address_line AS delivery_address,
+                CASE WHEN ca.door_number IS NOT NULL AND ca.door_number <> ''
+                     THEN CONCAT(ca.address_line, ' ', ca.door_number)
+                     ELSE ca.address_line END AS delivery_address,
+                ca.latitude AS latitude,
+                ca.longitude AS longitude,
                 mso.meal_period AS production_meal_period,
                 COALESCE(mso.delivery_meal_period, mso.meal_period) AS delivery_meal_period,
                 COALESCE(ms.meal_name, CASE WHEN mso.meal_period = 'LUNCH' THEN '待配置午餐' ELSE '待配置晚餐' END) AS meal_name,
@@ -151,7 +156,11 @@ class RiderQueueSupport {
                 mso.id AS meal_slot_order_id,
                 c.name AS customer_name,
                 c.phone AS customer_phone,
-                ca.address_line AS delivery_address,
+                CASE WHEN ca.door_number IS NOT NULL AND ca.door_number <> ''
+                     THEN CONCAT(ca.address_line, ' ', ca.door_number)
+                     ELSE ca.address_line END AS delivery_address,
+                ca.latitude AS latitude,
+                ca.longitude AS longitude,
                 mso.meal_period AS production_meal_period,
                 COALESCE(mso.delivery_meal_period, mso.meal_period) AS delivery_meal_period,
                 COALESCE(ms.meal_name, CASE WHEN mso.meal_period = 'LUNCH' THEN '待配置午餐' ELSE '待配置晚餐' END) AS meal_name,
@@ -203,7 +212,9 @@ class RiderQueueSupport {
             SELECT
                 rp.id AS rider_profile_id,
                 c.phone AS customer_phone,
-                ca.address_line AS delivery_address
+                CASE WHEN ca.door_number IS NOT NULL AND ca.door_number <> ''
+                     THEN CONCAT(ca.address_line, ' ', ca.door_number)
+                     ELSE ca.address_line END AS delivery_address
             FROM meal_slot_orders mso
             JOIN daily_orders do ON do.id = mso.daily_order_id
             JOIN customers c ON c.id = do.customer_id
@@ -274,7 +285,11 @@ class RiderQueueSupport {
                 COALESCE(NULLIF(dbi.current_sequence, 0), NULLIF(da.sequence_number, 0), 0) AS current_sequence,
                 c.name AS customer_name,
                 c.phone AS customer_phone,
-                ca.address_line AS delivery_address,
+                CASE WHEN ca.door_number IS NOT NULL AND ca.door_number <> ''
+                     THEN CONCAT(ca.address_line, ' ', ca.door_number)
+                     ELSE ca.address_line END AS delivery_address,
+                ca.latitude AS latitude,
+                ca.longitude AS longitude,
                 mso.meal_period AS production_meal_period,
                 COALESCE(mso.delivery_meal_period, mso.meal_period) AS delivery_meal_period,
                 COALESCE(ms.meal_name, CASE WHEN mso.meal_period = 'LUNCH' THEN '待配置午餐' ELSE '待配置晚餐' END) AS meal_name,
@@ -320,6 +335,8 @@ class RiderQueueSupport {
             rs.getString("customer_name"),
             rs.getString("customer_phone"),
             rs.getString("delivery_address"),
+            rs.getBigDecimal("latitude"),
+            rs.getBigDecimal("longitude"),
             rs.getString("production_meal_period"),
             rs.getString("delivery_meal_period"),
             rs.getString("meal_name"),
@@ -354,7 +371,11 @@ class RiderQueueSupport {
                 COALESCE(NULLIF(dbi.current_sequence, 0), NULLIF(da.sequence_number, 0), 0) AS current_sequence,
                 c.name AS customer_name,
                 c.phone AS customer_phone,
-                ca.address_line AS delivery_address,
+                CASE WHEN ca.door_number IS NOT NULL AND ca.door_number <> ''
+                     THEN CONCAT(ca.address_line, ' ', ca.door_number)
+                     ELSE ca.address_line END AS delivery_address,
+                ca.latitude AS latitude,
+                ca.longitude AS longitude,
                 mso.meal_period AS production_meal_period,
                 COALESCE(mso.delivery_meal_period, mso.meal_period) AS delivery_meal_period,
                 COALESCE(ms.meal_name, CASE WHEN mso.meal_period = 'LUNCH' THEN '待配置午餐' ELSE '待配置晚餐' END) AS meal_name,
@@ -397,7 +418,11 @@ class RiderQueueSupport {
                 COALESCE(NULLIF(dbi.current_sequence, 0), NULLIF(da.sequence_number, 0), 0) AS current_sequence,
                 c.name AS customer_name,
                 c.phone AS customer_phone,
-                ca.address_line AS delivery_address,
+                CASE WHEN ca.door_number IS NOT NULL AND ca.door_number <> ''
+                     THEN CONCAT(ca.address_line, ' ', ca.door_number)
+                     ELSE ca.address_line END AS delivery_address,
+                ca.latitude AS latitude,
+                ca.longitude AS longitude,
                 mso.meal_period AS production_meal_period,
                 COALESCE(mso.delivery_meal_period, mso.meal_period) AS delivery_meal_period,
                 COALESCE(ms.meal_name, CASE WHEN mso.meal_period = 'LUNCH' THEN '待配置午餐' ELSE '待配置晚餐' END) AS meal_name,
@@ -440,6 +465,8 @@ class RiderQueueSupport {
             rs.getString("customer_name"),
             rs.getString("customer_phone"),
             rs.getString("delivery_address"),
+            rs.getBigDecimal("latitude"),
+            rs.getBigDecimal("longitude"),
             rs.getString("production_meal_period"),
             rs.getString("delivery_meal_period"),
             rs.getString("meal_name"),
@@ -635,7 +662,9 @@ class RiderQueueSupport {
             row.receiptStatus(),
             row.receiptUrl(),
             row.receiptNote(),
-            row.referenceImageUrl()
+            row.referenceImageUrl(),
+            row.latitude(),
+            row.longitude()
         );
     }
 
@@ -1102,6 +1131,8 @@ class RiderQueueSupport {
         String customerName,
         String customerPhone,
         String deliveryAddress,
+        BigDecimal latitude,
+        BigDecimal longitude,
         String productionMealPeriod,
         String deliveryMealPeriod,
         String mealName,

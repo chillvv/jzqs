@@ -8,6 +8,8 @@ public record MobileCreateOrderRequest(
     @NotBlank(message = "mealPeriod is required")
     String mealPeriod,
     String deliveryAddress,
+    // 显式地址 ID：前端下单精确关联用户选的那条带坐标地址，避免文本匹配命中同名旧地址
+    Long addressId,
     String note,
     Integer quantity,
     // 客户端每次下单生成的唯一请求 ID（时间戳+随机数），用于区分「有意加餐」与

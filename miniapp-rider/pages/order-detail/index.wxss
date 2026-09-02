@@ -92,33 +92,53 @@
   padding-bottom: 24rpx;
 }
 
-.inline-remarks {
-  background: var(--surface-container-low);
-  border-radius: 16rpx;
-  padding: 16rpx 20rpx;
-  margin-bottom: 20rpx;
-  display: flex;
-  flex-direction: column;
-  gap: 12rpx;
-  border: none;
+/* 订单备注卡片：有任何备注时独立成卡，警示底色让骑手必看 */
+.order-note-card {
+  background: #FFF8E6;
+  border: 1rpx solid rgba(217, 119, 6, 0.35);
+  border-left: 8rpx solid #D97706;
 }
 
-.inline-remark-item {
-  font-size: 26rpx;
-  line-height: 1.5;
+.order-note-card .card-header {
+  margin-bottom: 8rpx;
+}
+
+.order-note-card .card-title {
+  color: #B45309;
+}
+
+.order-note-row {
   display: flex;
   align-items: flex-start;
+  padding: 12rpx 0;
+  font-size: 28rpx;
+  line-height: 1.6;
 }
 
-.inline-remark-label {
-  font-weight: 700;
+.order-note-row + .order-note-row {
+  border-top: 1rpx dashed rgba(217, 119, 6, 0.3);
+}
+
+.order-note-label {
   flex-shrink: 0;
-  margin-right: 8rpx;
+  font-weight: 700;
+  color: #1D4ED8;
+  background: rgba(29, 78, 216, 0.08);
+  border-radius: 8rpx;
+  padding: 2rpx 12rpx;
+  margin-right: 16rpx;
+  margin-top: 2rpx;
 }
 
-.inline-remark-value {
-  color: var(--on-surface, #0f172a);
+.order-note-label--merchant {
+  color: #B45309;
+  background: rgba(217, 119, 6, 0.12);
+}
+
+.order-note-value {
   flex: 1;
+  color: #7C2D12;
+  font-weight: 600;
   /* 备注已按逗号合并多条长期/一次性内容，可能较长；长串（英文/URL）强制断行，避免横向溢出 */
   word-break: break-all;
   word-wrap: break-word;

@@ -2,9 +2,11 @@ package com.jzqs.app.customer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import com.jzqs.app.customer.api.CustomerAddressActionResponse;
 import com.jzqs.app.customer.api.CustomerAddressUpsertRequest;
+import com.jzqs.app.customer.api.CustomerProfileUpdateRequest;
 import com.jzqs.app.customer.service.CustomerAssetService;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -57,5 +59,36 @@ class CustomerAssetServiceIntegrationTest {
         assertEquals("高新区测试路 13 号", row.get("address_line"));
         assertEquals("高新区", row.get("area_code"));
         assertNotNull(row.get("is_default"));
+    }
+
+    @Test
+    void shouldClearMerchantRemarkWhenUpdatingProfileWithBlankRemark() {
+        // 商家先给客户写过永久备注，之后想清空
+        jdbcTemplate.update("UPDATE customers SET merchant_remark = '重点客户' WHERE id = 9913");
+
+        customerAssetService.updateCustomerProfile(9913L, new CustomerProfileUpdateRequest(
+            null, null, "", null, null, null, null, null, null, null, null
+        ));
+
+        String remark = jdbcTemplate.queryForObject(
+            "SELECT merchant_remark FROM customers WHERE id = 9913",
+            String.class
+        );
+        assertNull(remark);
+    }
+
+    @Test
+    void shouldUpdateMerchantRemarkWhenUpdatingProfileWithNewValue() {
+        jdbcTemplate.update("UPDATE customers SET merchant_remark = '旧备注' WHERE id = 9913");
+
+        customerAssetService.updateCustomerProfile(9913L, new CustomerProfileUpdateRequest(
+            null, null, "新备注", null, null, null, null, null, null, null, null
+        ));
+
+        String remark = jdbcTemplate.queryForObject(
+            "SELECT merchant_remark FROM customers WHERE id = 9913",
+            String.class
+        );
+        assertEquals("新备注", remark);
     }
 }

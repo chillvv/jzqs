@@ -245,8 +245,13 @@ class MiniappOrderModuleTest {
             jdbcTemplate.queryForObject("SELECT consumed_meals FROM meal_wallets WHERE id = ?", Integer.class, WALLET_ID)
         );
         assertEquals(
-            2,
+            1,
             jdbcTemplate.queryForObject("SELECT COUNT(*) FROM customer_addresses WHERE customer_id = ?", Integer.class, CUSTOMER_ID)
+        );
+        // 下单不再按地址文本匹配/新建地址，无显式 addressId 时回退到默认地址（ID 关联）
+        assertEquals(
+            DEFAULT_ADDRESS_ID,
+            jdbcTemplate.queryForObject("SELECT address_id FROM meal_slot_orders WHERE id = ?", Long.class, orderId)
         );
         assertEquals(
             1,

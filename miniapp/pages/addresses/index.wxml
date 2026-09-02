@@ -1,37 +1,32 @@
 <subpage-navbar title="{{selectOrderId ? '选择配送地址' : '收餐地址管理'}}" />
 
 <view class="subpage">
-  <view class="subpage-card">
-    <view class="hero-inline-row">
-      <view wx:if="{{!selectOrderId && items.length > 0}}" class="manage-default-btn" bindtap="toggleManageMode">
-        {{isManageMode ? '完成' : '设置默认'}}
-      </view>
-    </view>
-    <view wx:if="{{selectOrderId}}" class="subpage-subtitle">请选择一个已保存地址，用于替换当前订单的配送地址</view>
-    <view wx:elif="{{isManageMode}}" class="subpage-subtitle" style="margin-top: 8rpx;">勾选一个地址，点击"完成"设为默认</view>
+  <view wx:if="{{selectOrderId}}" class="subpage-card">
+    <view class="subpage-subtitle">请选择一个已保存地址，用于替换当前订单的配送地址</view>
   </view>
 
   <view wx:if="{{items.length}}">
-    <view wx:for="{{items}}" wx:key="id" class="subpage-card" data-id="{{item.id}}" bindtap="onCardTap">
-      <view class="order-head">
-        <view wx:if="{{isManageMode}}" class="radio-indicator {{selectedDefaultId === item.id ? 'checked' : ''}}">
-          <view wx:if="{{selectedDefaultId === item.id}}" class="radio-dot"></view>
+    <view wx:for="{{items}}" wx:key="id" class="subpage-card addr-card">
+      <view class="addr-head">
+        <view class="addr-person">
+          <text class="addr-name">{{item.contactName}}</text>
+          <text class="addr-phone">{{item.contactPhone}}</text>
         </view>
-        <view style="flex: 1;">
-          <view class="section-label" style="margin-bottom: 4rpx;">{{item.contactName}}</view>
-          <view class="section-label" style="font-size: 26rpx; color: var(--text-sub); margin-bottom: 12rpx; font-weight: normal;">{{item.contactPhone}}</view>
-          <view class="subpage-subtitle">{{item.addressLine}}</view>
-        </view>
-        <view wx:if="{{item.isDefault && !isManageMode}}" class="status-pill-default" style="white-space: nowrap; writing-mode: horizontal-tb;">默认地址</view>
+        <view wx:if="{{item.isDefault}}" class="status-pill-default">默认</view>
       </view>
-      <view wx:if="{{!isManageMode}}" class="action-row">
+      <view class="addr-detail">
+        <text wx:if="{{item.district}}" class="addr-district">{{item.district}}</text>
+        <text class="addr-detail-main">{{item.detail}}{{item.doorNumber ? ' ' + item.doorNumber : ''}}</text>
+      </view>
+      <view class="addr-actions">
         <block wx:if="{{selectOrderId}}">
-          <button wx:if="{{!item.isCurrentOrderAddress}}" class="sub-btn primary" data-id="{{item.id}}" bindtap="selectAddressForOrder">使用这个地址</button>
-          <view wx:else class="status-pill-default">当前配送地址</view>
+          <button wx:if="{{!item.isCurrentOrderAddress}}" class="addr-action addr-action-primary" data-id="{{item.id}}" bindtap="selectAddressForOrder">使用这个地址</button>
+          <text wx:else class="addr-action-current">当前配送地址</text>
         </block>
         <block wx:else>
-          <button class="sub-btn ghost" data-id="{{item.id}}" bindtap="editAddress" style="margin-left: 16rpx;">编辑</button>
-          <button class="sub-btn ghost" data-id="{{item.id}}" bindtap="deleteAddress" style="margin-left: 16rpx; color: #ff4d4f; border-color: #ff4d4f;">删除</button>
+          <button wx:if="{{!item.isDefault}}" class="addr-action" data-id="{{item.id}}" bindtap="setDefault">设为默认</button>
+          <button class="addr-action" data-id="{{item.id}}" bindtap="editAddress">编辑</button>
+          <button class="addr-action addr-action-danger" data-id="{{item.id}}" bindtap="deleteAddress">删除</button>
         </block>
       </view>
     </view>
@@ -47,26 +42,52 @@
   <view class="address-popup-mask {{showPopup ? 'show' : ''}}" bindtap="hideAddPopup"></view>
   <view class="address-popup-container {{showPopup ? 'show' : ''}}">
     <view class="popup-header">
-      <view>{{form.id ? '编辑地址' : '新增地址'}}</view>
-      <view class="close-btn" bindtap="hideAddPopup">×</view>
+      <view class="popup-title">{{form.id ? '编辑地址' : '新增地址'}}</view>
+      <view class="popup-close" bindtap="hideAddPopup">×</view>
     </view>
-    <scroll-view scroll-y class="popup-body" style="padding-top: 20rpx;">
-      <view class="inline-form-item">
-        <view class="inline-form-label">当前登录用户</view>
-        <view class="subpage-subtitle">{{customerProfile.name || '未设置姓名'}} {{customerProfile.phone || ''}}</view>
+
+    <scroll-view scroll-y class="popup-body" enhanced show-scrollbar="{{false}}">
+      <!-- 当前用户 -->
+      <view class="user-row">
+        <text class="user-name">{{customerProfile.name || '未设置姓名'}}</text>
+        <text class="user-phone">{{customerProfile.phone || ''}}</text>
       </view>
-      <view class="inline-form-item">
-        <view class="inline-form-label">详细地址</view>
-        <input class="form-input" data-field="addressLine" value="{{form.addressLine}}" bindinput="onInputChange" placeholder="请输入详细地址" />
+
+      <!-- 地图选点（整块可点击） -->
+      <view class="locate-card" bindtap="chooseLocation" hover-class="locate-card--hover">
+        <view class="locate-icon-wrap">
+          <text class="locate-icon">📍</text>
+        </view>
+        <view class="locate-content">
+          <view class="locate-title">{{form.latitude ? '已定位 · 点击重新选点' : '点击地图选点定位'}}</view>
+          <view class="locate-sub">{{form.latitude ? '位置已锁定，可继续编辑详细地址' : '骑手根据定位精准送达'}}</view>
+        </view>
+        <view class="locate-arrow">›</view>
       </view>
+
+      <!-- 定位地址（只读，选点自动填充） -->
+      <view class="form-block">
+        <view class="form-label">定位地址</view>
+        <view class="locate-address-readonly">{{form.addressLine || '选点后自动填充'}}</view>
+      </view>
+
+      <!-- 门牌号 -->
+      <view class="form-block">
+        <view class="form-label">门牌号</view>
+        <view class="input-wrap">
+          <input class="detail-input" data-field="doorNumber" value="{{form.doorNumber}}" bindinput="onInputChange" placeholder="如：1栋2单元3004，可备注放门口" placeholder-style="font-size:28rpx;color:#bbb;" />
+        </view>
+      </view>
+
+      <!-- 默认地址 -->
       <view class="switch-row">
-        <text class="inline-form-label">设置默认地址</text>
-        <switch checked="{{form.isDefault}}" color="#B8D060" bindchange="onDefaultChange" />
+        <text class="switch-label">设为默认地址</text>
+        <switch checked="{{form.isDefault}}" color="#92AA40" bindchange="onDefaultChange" />
       </view>
     </scroll-view>
-    <view class="popup-footer" style="padding-bottom: env(safe-area-inset-bottom); border-top: none; display: flex; flex-direction: column; gap: 24rpx; padding-top: 12rpx;">
-      <button class="sub-btn ghost full-btn" style="margin-top: 0;" bindtap="importWechatAddress">一键导入微信地址</button>
-      <button class="sub-btn primary full-btn" style="margin-top: 0;" bindtap="saveAddress" loading="{{saving}}" disabled="{{saving}}">保存地址</button>
+
+    <view class="popup-footer">
+      <button class="save-btn" bindtap="saveAddress" loading="{{saving}}" disabled="{{saving}}">保存地址</button>
     </view>
   </view>
 </view>

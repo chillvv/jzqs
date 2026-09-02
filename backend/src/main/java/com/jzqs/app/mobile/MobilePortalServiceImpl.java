@@ -41,6 +41,7 @@ import com.jzqs.app.mobile.api.RiderQueueReorderResponse;
 import com.jzqs.app.mobile.api.RiderTaskItemResponse;
 import com.jzqs.app.order.api.OrderActionResponse;
 import com.jzqs.app.order.service.OrderPrepService;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -169,6 +170,12 @@ public class MobilePortalServiceImpl implements MobilePortalService {
     @Transactional
     public MobileCreateOrderResponse createMiniappOrder(long customerId, String serveDate, String mealPeriod, String deliveryAddress, String note, int quantity) {
         return miniappOrderModule.createOrder(customerId, serveDate, mealPeriod, deliveryAddress, note, quantity);
+    }
+
+    @Override
+    @Transactional
+    public MobileCreateOrderResponse createMiniappOrder(long customerId, String serveDate, String mealPeriod, String deliveryAddress, Long addressId, String note, int quantity) {
+        return miniappOrderModule.createOrder(customerId, serveDate, mealPeriod, deliveryAddress, addressId, note, quantity);
     }
 
     @Override
@@ -355,10 +362,13 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         String contactName,
         String contactPhone,
         String addressLine,
+        String doorNumber,
         String areaCode,
-        boolean isDefault
+        boolean isDefault,
+        BigDecimal latitude,
+        BigDecimal longitude
     ) {
-        return saveCustomerAddress(findCustomerIdByPhone(phone), contactName, contactPhone, addressLine, areaCode, isDefault);
+        return saveCustomerAddress(findCustomerIdByPhone(phone), contactName, contactPhone, addressLine, doorNumber, areaCode, isDefault, latitude, longitude);
     }
 
     @Override
@@ -368,10 +378,13 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         String contactName,
         String contactPhone,
         String addressLine,
+        String doorNumber,
         String areaCode,
-        boolean isDefault
+        boolean isDefault,
+        BigDecimal latitude,
+        BigDecimal longitude
     ) {
-        return mobileAddressModule.saveCustomerAddress(customerId, contactName, contactPhone, addressLine, areaCode, isDefault);
+        return mobileAddressModule.saveCustomerAddress(customerId, contactName, contactPhone, addressLine, doorNumber, areaCode, isDefault, latitude, longitude);
     }
 
     @Override
@@ -382,10 +395,13 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         String contactName,
         String contactPhone,
         String addressLine,
+        String doorNumber,
         String areaCode,
-        boolean isDefault
+        boolean isDefault,
+        BigDecimal latitude,
+        BigDecimal longitude
     ) {
-        return mobileAddressModule.updateCustomerAddress(customerId, addressId, contactName, contactPhone, addressLine, areaCode, isDefault);
+        return mobileAddressModule.updateCustomerAddress(customerId, addressId, contactName, contactPhone, addressLine, doorNumber, areaCode, isDefault, latitude, longitude);
     }
 
     @Override

@@ -216,7 +216,8 @@ class DispatchRouteSuggestionModule {
             """
                 SELECT DISTINCT area_code
                 FROM dispatch_area_bindings
-                WHERE default_rider_profile_id IS NOT NULL
+                WHERE active = 1
+                  AND default_rider_profile_id IS NOT NULL
                 """,
             String.class
         );

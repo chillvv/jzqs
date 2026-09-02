@@ -223,7 +223,7 @@ Page({
           customerId: home && home.customerId
         }),
         selectedAddressId: defaultAddress ? defaultAddress.id : null,
-        selectedAddressText: defaultAddress ? defaultAddress.addressLine : '请先选择地址',
+        selectedAddressText: defaultAddress ? (defaultAddress.addressLine + (defaultAddress.doorNumber ? ' ' + defaultAddress.doorNumber : '')) : '请先选择地址',
         selectedContactText: defaultAddress ? `${defaultAddress.contactName} ${defaultAddress.contactPhone}` : '暂无地址'
       });
       this.restoreRemarkDraft(home && home.defaultUserRemark);
@@ -362,7 +362,7 @@ Page({
     if (selected) {
       this.setData({
         selectedAddressId: selected.id,
-        selectedAddressText: selected.addressLine,
+        selectedAddressText: selected.addressLine + (selected.doorNumber ? ' ' + selected.doorNumber : ''),
         selectedContactText: `${selected.contactName} ${selected.contactPhone}`,
         showAddressPopup: false
       });
@@ -545,6 +545,22 @@ Page({
     }
   },
 
+  // 下单时发现地址未定位：弹引导，跳转地址页补选点（带 editId 自动打开编辑弹窗）
+  promptAddressLocate(address) {
+    wx.showModal({
+      title: '请补充地址定位',
+      content: '「' + (address.addressLine || '该地址') + '」还没有地图定位，骑手可能找不到。请补充地图选点后再下单。',
+      confirmText: '去定位',
+      cancelText: '取消',
+      confirmColor: '#B8D060',
+      success: (res) => {
+        if (res.confirm) {
+          wx.navigateTo({ url: '/pages/addresses/index?editId=' + address.id });
+        }
+      }
+    });
+  },
+
   async submitOrder() {
     if (demo.isActive()) {
       wx.showToast({ title: '演示下单成功（未真实提交）', icon: 'none' });
@@ -579,6 +595,11 @@ Page({
       wx.showToast({ title: '请先选择配送地址', icon: 'none' });
       return;
     }
+    // 强制校验地址定位：老地址未选点（无坐标）时阻断下单，引导补定位，避免骑手找不到
+    if (selectedAddress.latitude == null || selectedAddress.longitude == null) {
+      this.promptAddressLocate(selectedAddress);
+      return;
+    }
     // 锁定提交按钮：必须在任何 await 之前，防止授权期间连点触发并发下单
     this.setData({ submitting: true });
 
@@ -607,6 +628,7 @@ Page({
           serveDate: this.data.serveDate,
           mealPeriod: 'LUNCH',
           deliveryAddress: selectedAddress.addressLine,
+          addressId: selectedAddress.id,
           note: this.data.remark,
           quantity: this.data.qty1,
           clientRequestId
@@ -622,6 +644,7 @@ Page({
           serveDate: this.data.serveDate,
           mealPeriod: 'DINNER',
           deliveryAddress: selectedAddress.addressLine,
+          addressId: selectedAddress.id,
           note: this.data.remark,
           quantity: this.data.qty2,
           clientRequestId

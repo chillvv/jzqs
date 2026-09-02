@@ -225,7 +225,7 @@ class CrossEndFlowE2ETest {
                   FROM meal_slot_orders o
                   JOIN dispatch_assignments da ON da.meal_slot_order_id = o.id
                  WHERE o.status IN ('DELIVERED', 'CANCELLED', 'REFUNDED')
-                   AND da.status IN ('PENDING', 'ASSIGNED', 'ACCEPTED', 'PICKED_UP', 'IN_TRANSIT', 'DISPATCHED')
+                   AND da.status IN ('PENDING', 'AREA_ASSIGNED', 'DISPATCHING')
                 """,
             Integer.class
         );

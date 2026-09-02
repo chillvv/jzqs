@@ -282,6 +282,7 @@ class DispatchAssignmentModule {
                     UPDATE dispatch_area_bindings
                     SET default_rider_profile_id = ?,
                         backup_rider_profile_id = NULL,
+                        active = 1,
                         updated_at = CURRENT_TIMESTAMP
                     WHERE area_code = ?
                     """,
@@ -652,6 +653,7 @@ class DispatchAssignmentModule {
                    AND rab.rn = 1
                 JOIN dispatch_area_bindings dab
                     ON dab.area_code = rab.area_code
+                   AND dab.active = 1
                 LEFT JOIN dispatch_assignments da ON da.meal_slot_order_id = mso.id
                 WHERE mso.status = 'PENDING_DISPATCH'
                   AND (? IS NULL OR COALESCE(mso.delivery_meal_period, mso.meal_period) = ?)
@@ -861,6 +863,7 @@ class DispatchAssignmentModule {
                 SELECT COALESCE(default_rider_profile_id, backup_rider_profile_id) AS rider_profile_id
                 FROM dispatch_area_bindings
                 WHERE area_code = ?
+                  AND active = 1
                   AND COALESCE(default_rider_profile_id, backup_rider_profile_id) IS NOT NULL
                 """,
             (rs, rowNum) -> rs.getLong("rider_profile_id"),
@@ -887,6 +890,7 @@ class DispatchAssignmentModule {
                 FROM dispatch_area_bindings dab
                 JOIN rider_profiles rp ON rp.id = dab.default_rider_profile_id
                 WHERE dab.area_code = ?
+                  AND dab.active = 1
                   AND rp.auth_status = 'ACTIVE'
                   AND rp.employment_status = 'ACTIVE'
                 """,
@@ -933,6 +937,7 @@ class DispatchAssignmentModule {
                 FROM dispatch_area_bindings dab
                 JOIN rider_profiles rp ON rp.id = dab.default_rider_profile_id
                 WHERE dab.area_code = ?
+                  AND dab.active = 1
                   AND rp.auth_status = 'ACTIVE'
                   AND rp.employment_status = 'ACTIVE'
                 """,

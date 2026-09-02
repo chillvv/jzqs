@@ -145,7 +145,7 @@ test('request uses service headers from app global config', async () => {
   assert.equal(requestCalls[0].header['X-Vm-Service'], 'rider-vm');
 });
 
-test('uploadFile only keeps token in authorization header', async () => {
+test('uploadFile carries token and service headers like request does', async () => {
   const uploadCalls = [];
 
   global.wx = {
@@ -154,6 +154,7 @@ test('uploadFile only keeps token in authorization header', async () => {
     },
     removeStorageSync() {},
     request() {},
+    showToast() {},
     uploadFile(options) {
       uploadCalls.push(options);
       options.success({
@@ -169,7 +170,11 @@ test('uploadFile only keeps token in authorization header', async () => {
   global.getApp = () => ({
     globalData: {
       apiBaseUrl: 'http://localhost:8081',
-      riderAuthReady: true
+      riderAuthReady: true,
+      serviceHeaders: {
+        'X-WX-SERVICE': 'rider-service',
+        'X-Vm-Service': 'rider-vm'
+      }
     },
     canUseWorkbench() {
       return true;
@@ -195,6 +200,125 @@ test('uploadFile only keeps token in authorization header', async () => {
 
   assert.equal(uploadCalls.length, 1);
   assert.equal(uploadCalls[0].header.Authorization, 'Bearer token-456');
+  // 上传走 TCB 网关路由时需要与 request 一致的服务路由头，否则首次上传就会 404
+  assert.equal(uploadCalls[0].header['X-WX-SERVICE'], 'rider-service');
+  assert.equal(uploadCalls[0].header['X-Vm-Service'], 'rider-vm');
   assert.equal(uploadCalls[0].formData.scene, 'receipt');
   assert.equal('token' in uploadCalls[0].formData, false);
+});
+
+test('uploadFile retries transient network failure and succeeds on second attempt', async () => {
+  const uploadCalls = [];
+
+  global.wx = {
+    getStorageSync() {
+      return 'token-456';
+    },
+    removeStorageSync() {},
+    request() {},
+    showToast() {},
+    uploadFile(options) {
+      uploadCalls.push(options);
+      if (uploadCalls.length === 1) {
+        options.fail({ errMsg: 'uploadFile:fail timeout' });
+        return;
+      }
+      options.success({
+        statusCode: 200,
+        data: JSON.stringify({
+          code: 'OK',
+          data: { fileKey: 'receipt.png' }
+        })
+      });
+    }
+  };
+
+  global.getApp = () => ({
+    globalData: {
+      apiBaseUrl: 'http://localhost:8081',
+      riderAuthReady: true
+    },
+    canUseWorkbench() {
+      return true;
+    },
+    waitForRiderAuth() {
+      return Promise.resolve();
+    },
+    getWorkbenchBlockMessage() {
+      return 'blocked';
+    },
+    resetRiderAuthState() {}
+  });
+
+  delete require.cache[require.resolve(requestModulePath)];
+  const requestUtils = require(requestModulePath);
+
+  const result = await requestUtils.uploadFile({
+    url: '/api/mobile/rider/uploads/receipt',
+    filePath: '/tmp/file.png',
+    requireWorkbench: false
+  });
+
+  // 首次网络抖动不再让骑手整单重传：自动退避重试一次后成功
+  assert.equal(uploadCalls.length, 2);
+  assert.deepEqual(result, { fileKey: 'receipt.png' });
+});
+
+test('uploadFile does not retry on 401 and clears auth token', async () => {
+  const uploadCalls = [];
+  const removedKeys = [];
+
+  global.wx = {
+    getStorageSync() {
+      return 'token-456';
+    },
+    removeStorageSync(key) {
+      removedKeys.push(key);
+    },
+    request() {},
+    showToast() {},
+    uploadFile(options) {
+      uploadCalls.push(options);
+      options.success({
+        statusCode: 401,
+        data: JSON.stringify({
+          code: 'UNAUTHORIZED',
+          message: 'expired'
+        })
+      });
+    }
+  };
+
+  global.getApp = () => ({
+    globalData: {
+      apiBaseUrl: 'http://localhost:8081',
+      riderAuthReady: true
+    },
+    canUseWorkbench() {
+      return true;
+    },
+    waitForRiderAuth() {
+      return Promise.resolve();
+    },
+    getWorkbenchBlockMessage() {
+      return 'blocked';
+    },
+    resetRiderAuthState() {}
+  });
+
+  delete require.cache[require.resolve(requestModulePath)];
+  const requestUtils = require(requestModulePath);
+
+  await assert.rejects(
+    requestUtils.uploadFile({
+      url: '/api/mobile/rider/uploads/receipt',
+      filePath: '/tmp/file.png',
+      requireWorkbench: false
+    }),
+    /登录已过期/
+  );
+
+  // 登录态失效属确定性错误，绝不能重试浪费 60s 超时
+  assert.equal(uploadCalls.length, 1);
+  assert.deepEqual(removedKeys, ['auth_token']);
 });

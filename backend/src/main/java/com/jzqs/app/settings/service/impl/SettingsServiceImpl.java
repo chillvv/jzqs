@@ -345,7 +345,8 @@ public class SettingsServiceImpl implements SettingsService {
                 FROM (
                     SELECT area_code
                     FROM dispatch_area_bindings
-                    WHERE area_code IS NOT NULL AND TRIM(area_code) <> ''
+                    WHERE active = 1
+                      AND area_code IS NOT NULL AND TRIM(area_code) <> ''
                     UNION
                     SELECT area_code
                     FROM dispatch_assignments

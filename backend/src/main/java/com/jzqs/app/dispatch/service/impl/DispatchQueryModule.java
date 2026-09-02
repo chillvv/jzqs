@@ -420,6 +420,7 @@ class DispatchQueryModule {
                     dab.updated_at AS updated_at
                 FROM dispatch_area_bindings dab
                 LEFT JOIN rider_profiles rp_default ON rp_default.id = dab.default_rider_profile_id
+                WHERE dab.active = 1
                 ORDER BY dab.area_code
                 """,
             (rs, rowNum) -> {
@@ -459,6 +460,7 @@ class DispatchQueryModule {
                 SELECT DISTINCT COALESCE(default_rider_profile_id, backup_rider_profile_id) AS rider_profile_id
                 FROM dispatch_area_bindings
                 WHERE area_code <> ?
+                  AND active = 1
                   AND COALESCE(default_rider_profile_id, backup_rider_profile_id) IS NOT NULL
                 """,
             (rs, rowNum) -> rs.getLong("rider_profile_id"),
@@ -469,6 +471,7 @@ class DispatchQueryModule {
                 SELECT DISTINCT COALESCE(default_rider_profile_id, backup_rider_profile_id) AS rider_profile_id
                 FROM dispatch_area_bindings
                 WHERE area_code = ?
+                  AND active = 1
                   AND COALESCE(default_rider_profile_id, backup_rider_profile_id) IS NOT NULL
                 """,
             (rs, rowNum) -> rs.getLong("rider_profile_id"),
@@ -482,7 +485,8 @@ class DispatchQueryModule {
                   AND id NOT IN (
                     SELECT COALESCE(default_rider_profile_id, backup_rider_profile_id) AS rider_profile_id
                     FROM dispatch_area_bindings
-                    WHERE COALESCE(default_rider_profile_id, backup_rider_profile_id) IS NOT NULL
+                    WHERE active = 1
+                      AND COALESCE(default_rider_profile_id, backup_rider_profile_id) IS NOT NULL
                   )
                 """,
             (rs, rowNum) -> rs.getLong("id")

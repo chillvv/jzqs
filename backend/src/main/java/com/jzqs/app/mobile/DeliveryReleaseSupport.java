@@ -42,7 +42,9 @@ public class DeliveryReleaseSupport {
                     COALESCE(mso.quantity, 1) AS quantity,
                     c.name AS customer_name,
                     COALESCE(c.phone, '') AS customer_phone,
-                    ca.address_line AS delivery_address,
+                    CASE WHEN ca.door_number IS NOT NULL AND ca.door_number <> ''
+                         THEN CONCAT(ca.address_line, ' ', ca.door_number)
+                         ELSE ca.address_line END AS delivery_address,
                     dr.delivered_at AS delivered_at,
                     COALESCE(cds.status,
                         CASE WHEN EXISTS (

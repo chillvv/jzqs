@@ -7,13 +7,27 @@ function normalizePhone(value) {
 
 const MAX_ADDRESSES_PER_CUSTOMER = 5;
 
+// 拆分完整地址为「省市区（区划）」和「详细地址」，供列表分两段展示（参考京东：区划小灰字 + 详细大加粗）
+function splitAddress(addressLine) {
+  const text = String(addressLine || '').trim();
+  // 优先按空格拆分（选点生成 "省市区 详细地址"），无空格再按区划前缀拆分
+  const m = text.match(/^(.+?[区县])\s+(.+)$/) || text.match(/^(.+?[区县])(.+)$/);
+  if (m && m[1] && m[2]) {
+    return { district: m[1].trim(), detail: m[2].trim() };
+  }
+  return { district: '', detail: text };
+}
+
 function buildEmptyForm(customerProfile, isDefault) {
   return {
     id: null,
     contactName: customerProfile.name || '',
     contactPhone: customerProfile.phone || '',
     addressLine: '',
-    isDefault: Boolean(isDefault)
+    doorNumber: '',
+    isDefault: Boolean(isDefault),
+    latitude: null,
+    longitude: null
   };
 }
 
@@ -25,11 +39,11 @@ function validateAddressForm(form, customerProfile) {
   if (!contactName || !contactPhone) {
     return '请先完善姓名和手机号';
   }
-  if (addressLine.length < 4) {
-    return '详细地址至少 4 个字';
+  if (!addressLine) {
+    return '请先地图选点定位';
   }
   if (addressLine.length > 120) {
-    return '详细地址不能超过120个字';
+    return '定位地址过长';
   }
   return '';
 }
@@ -46,8 +60,6 @@ Page({
     currentAddressId: null,
     currentOrderDeliveryAddress: '',
     noOtherAddress: false,
-    isManageMode: false,
-    selectedDefaultId: null,
     addressLimitReached: false,
     statusBarHeight: 0,
     navBarHeight: 44,
@@ -75,6 +87,10 @@ Page({
       // 即使后端 list 接口还没把 addressId 字段返回、或者上游入口漏传 currentAddressId，
       // 选择页依然能精准标记哪个是当前订单地址，避免出现"只有一个地址还是当前地址却显示使用这个地址"的自相矛盾。
       this.loadOrderAddressContext(selectOrderId);
+    }
+    // 从下单页跳转过来补定位：自动打开对应地址的编辑弹窗
+    if (options.editId) {
+      this.pendingEditId = Number(options.editId);
     }
   },
 
@@ -174,6 +190,10 @@ Page({
       const { currentAddressId, currentOrderDeliveryAddress } = this.data;
       const normalizedDeliveryAddress = currentOrderDeliveryAddress ? currentOrderDeliveryAddress.trim() : '';
       items.forEach((item) => {
+        const split = splitAddress(item.addressLine);
+        item.district = split.district;
+        item.detail = split.detail;
+        item.doorNumber = item.doorNumber || '';
         const matchesById = currentAddressId != null && Number(item.id) === currentAddressId;
         const matchesByText = !!normalizedDeliveryAddress
           && String(item.addressLine || '').trim() === normalizedDeliveryAddress;
@@ -182,6 +202,15 @@ Page({
       const noOtherAddress = this.data.selectOrderId != null
         && items.filter((item) => !item.isCurrentOrderAddress).length === 0;
       this.setData({ items, noOtherAddress, addressLimitReached: items.length >= MAX_ADDRESSES_PER_CUSTOMER });
+      // 从下单页跳转过来补定位：地址加载完后自动打开对应地址的编辑弹窗
+      if (this.pendingEditId) {
+        const editId = this.pendingEditId;
+        this.pendingEditId = null;
+        const target = items.find((item) => Number(item.id) === editId);
+        if (target) {
+          this.openEditPopup(target);
+        }
+      }
     } catch (error) {
       wx.showToast({ title: error.message || '加载失败', icon: 'none' });
     } finally {
@@ -211,20 +240,27 @@ Page({
     this.setData({ showPopup: false });
   },
 
+  openEditPopup(address) {
+    this.setData({
+      showPopup: true,
+      form: {
+        id: address.id,
+        contactName: this.data.customerProfile.name,
+        contactPhone: this.data.customerProfile.phone,
+        addressLine: address.addressLine || '',
+        doorNumber: address.doorNumber || '',
+        isDefault: address.isDefault,
+        latitude: address.latitude != null ? address.latitude : null,
+        longitude: address.longitude != null ? address.longitude : null
+      }
+    });
+  },
+
   editAddress(e) {
     const id = Number(e.currentTarget.dataset.id);
     const address = this.data.items.find(item => Number(item.id) === id);
     if (address) {
-      this.setData({
-        showPopup: true,
-        form: {
-          id: address.id,
-          contactName: this.data.customerProfile.name,
-          contactPhone: this.data.customerProfile.phone,
-          addressLine: address.addressLine,
-          isDefault: address.isDefault
-        }
-      });
+      this.openEditPopup(address);
     }
   },
 
@@ -263,16 +299,55 @@ Page({
     });
   },
 
-  importWechatAddress() {
-    wx.chooseAddress({
+  chooseLocation() {
+    const address = String(this.data.form.addressLine || '').trim();
+    // 静默复制已填地址，方便在选点页粘贴搜索
+    if (address && typeof wx.setClipboardData === 'function') {
+      wx.setClipboardData({ data: address });
+    }
+    // 已有坐标时（编辑地址）把地图初始定位到原坐标，方便微调
+    const options = {};
+    const currentLat = Number(this.data.form.latitude);
+    const currentLng = Number(this.data.form.longitude);
+    if (Number.isFinite(currentLat) && Number.isFinite(currentLng) && currentLat !== 0 && currentLng !== 0) {
+      options.latitude = currentLat;
+      options.longitude = currentLng;
+    }
+    wx.chooseLocation({
+      ...options,
       success: (res) => {
+        // 微信 chooseLocation 返回的 name（POI 名）和 address（完整行政区划+道路）
+        // 经常冗余：name 含"X区"前缀，address 又有完整"省市区"。
+        // 拼成「定位地址（省市区 + POI 名）」存 addressLine，门牌号 doorNumber 由用户另填
+        const addressText = res.address || '';
+        const nameText = res.name || '';
+        let district = '';
+        let detail = '';
+        if (addressText && nameText) {
+          const m = addressText.match(/^(.+?[区县])/);
+          district = m ? m[1] : '';
+          detail = nameText;
+          const districtMatch = district.match(/([\u4e00-\u9fa5]+[区县])$/);
+          if (districtMatch && detail.startsWith(districtMatch[1])) {
+            detail = detail.slice(districtMatch[1].length).trim();
+          }
+        } else {
+          detail = nameText || addressText;
+        }
+        const addressLine = [district, detail].filter(Boolean).join(' ');
         this.setData({
-          'form.addressLine': `${res.provinceName || ''}${res.cityName || ''}${res.countyName || ''}${res.detailInfo || ''}`.trim()
+          'form.latitude': res.latitude,
+          'form.longitude': res.longitude,
+          'form.addressLine': addressLine
         });
-        wx.showToast({ title: '已导入微信地址', icon: 'success' });
+        wx.showToast({ title: '已标记位置，请补充门牌号', icon: 'success' });
       },
-      fail: () => {
-        wx.showToast({ title: '未获取到微信地址', icon: 'none' });
+      fail(err) {
+        // 用户取消选点（errMsg 含 cancel）不打扰；其他失败（未授权/未声明隐私接口等）给提示
+        const msg = err && err.errMsg ? String(err.errMsg) : '';
+        if (msg.indexOf('cancel') === -1) {
+          wx.showToast({ title: '地图选点失败，请检查位置权限', icon: 'none' });
+        }
       }
     });
   },
@@ -281,19 +356,37 @@ Page({
     if (this.data.saving) {
       return;
     }
-    const { id, addressLine, isDefault } = this.data.form;
+    const { id, addressLine, doorNumber, isDefault, latitude, longitude } = this.data.form;
     const { customerProfile } = this.data;
     const validationError = validateAddressForm(this.data.form, customerProfile);
     if (validationError) {
       wx.showToast({ title: validationError, icon: 'none' });
       return;
     }
+    // 软校验：未选点（无坐标）时提醒，避免骑手找不到
+    if (latitude == null || longitude == null) {
+      const proceed = await new Promise((resolve) => {
+        wx.showModal({
+          title: '尚未定位',
+          content: '该地址还没有地图定位，骑手可能找不到。建议先地图选点。是否仍要保存？',
+          confirmText: '仍要保存',
+          cancelText: '去选点',
+          success: (res) => resolve(!!res.confirm)
+        });
+      });
+      if (!proceed) {
+        return;
+      }
+    }
     const payload = {
       contactName: customerProfile.name.trim(),
       contactPhone: normalizePhone(customerProfile.phone),
       addressLine: addressLine.trim(),
+      doorNumber: doorNumber ? doorNumber.trim() : null,
       areaCode: '',
-      isDefault
+      isDefault,
+      latitude: latitude != null ? latitude : null,
+      longitude: longitude != null ? longitude : null
     };
     this.setData({ saving: true });
     try {
@@ -326,45 +419,21 @@ Page({
     }
   },
 
-  toggleManageMode() {
-    if (this.data.isManageMode) {
-      this.confirmDefault();
-    } else {
-      const defaultAddr = this.data.items.find(item => item.isDefault);
-      this.setData({
-        isManageMode: true,
-        selectedDefaultId: defaultAddr ? defaultAddr.id : null
-      });
-    }
-  },
-
-  onCardTap(e) {
-    if (!this.data.isManageMode) return;
+  async setDefault(e) {
     const id = Number(e.currentTarget.dataset.id);
-    this.setData({ selectedDefaultId: id });
-  },
-
-  async confirmDefault() {
-    const { selectedDefaultId } = this.data;
-    if (!selectedDefaultId) {
-      this.setData({ isManageMode: false });
-      return;
-    }
     const currentDefault = this.data.items.find(item => item.isDefault);
-    if (currentDefault && currentDefault.id === selectedDefaultId) {
-      this.setData({ isManageMode: false });
+    if (currentDefault && currentDefault.id === id) {
       return;
     }
     try {
       await request({
-        url: `/api/mobile/customer/addresses/${selectedDefaultId}/default`,
+        url: `/api/mobile/customer/addresses/${id}/default`,
         method: 'POST'
       });
-      wx.showToast({ title: '默认地址已更新', icon: 'success' });
-      this.setData({ isManageMode: false });
+      wx.showToast({ title: '已设为默认地址', icon: 'success' });
       this.loadAddresses();
     } catch (error) {
-      wx.showToast({ title: error.message || '更新失败', icon: 'none' });
+      wx.showToast({ title: error.message || '设置失败', icon: 'none' });
     }
   },
 

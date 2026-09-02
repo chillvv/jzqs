@@ -105,6 +105,7 @@ public class MobileCustomerController {
             request.serveDate(),
             request.mealPeriod(),
             request.deliveryAddress(),
+            request.addressId(),
             request.note(),
             request.quantityOrDefault()
         );
@@ -267,8 +268,11 @@ public class MobileCustomerController {
             request.contactName(),
             request.contactPhone(),
             request.addressLine(),
+            request.doorNumber(),
             request.areaCode(),
-            request.isDefault()
+            request.isDefault(),
+            request.latitude(),
+            request.longitude()
         ));
     }
 
@@ -285,8 +289,11 @@ public class MobileCustomerController {
             request.contactName(),
             request.contactPhone(),
             request.addressLine(),
+            request.doorNumber(),
             request.areaCode(),
-            request.isDefault()
+            request.isDefault(),
+            request.latitude(),
+            request.longitude()
         ));
     }
 
