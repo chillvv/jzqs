@@ -33,12 +33,12 @@
     <!-- 订单信息 -->
     <view class="detail-card address-card">
       <view class="card-header">
-        <text class="material-symbols-outlined text-primary">📍</text>
+        <image class="card-head-icon" src="/assets/icons/location.svg" mode="aspectFit"></image>
         <text class="card-title">配送地址</text>
       </view>
       <view class="address-text" bindtap="handleCopyAddress">
-        <text wx:if="{{order.buildingInfo}}" class="address-building">{{order.buildingInfo}}</text>
-        {{order.deliveryAddress}}
+        <text wx:if="{{order.district}}" class="address-district">{{order.district}}</text>
+        <text class="address-detail">{{order.detail || order.deliveryAddress}}</text>
       </view>
 
       <!-- 客户信息：名字 + 联系/导航（放在地址下方、备注与参照图上方） -->
@@ -49,11 +49,11 @@
         </view>
         <view class="action-buttons">
           <view class="action-btn phone-btn" bindtap="handleCall">
-            <text class="material-symbols-outlined btn-icon">☎</text>
+            <image class="btn-icon" src="/assets/icons/phone.svg" mode="aspectFit"></image>
             <text class="btn-text">联系</text>
           </view>
           <view class="action-btn nav-btn" bindtap="handleNavigate">
-            <text class="material-symbols-outlined btn-icon">➜</text>
+            <image class="btn-icon" src="/assets/icons/navigation-white.svg" mode="aspectFit"></image>
             <text class="btn-text">导航</text>
           </view>
         </view>
@@ -62,7 +62,7 @@
       <!-- 参考图：直接展示，无需点击查看；支持更改/上传 -->
       <view class="reference-summary-card">
         <view class="reference-summary-icon">
-          <text class="material-symbols-outlined">🖼️</text>
+          <image class="reference-summary-icon-img" src="/assets/icons/image.svg" mode="aspectFit"></image>
         </view>
         <view class="reference-summary-copy">
           <text class="reference-summary-label">参考图</text>
@@ -84,7 +84,7 @@
           binderror="onReferenceImageError"
         ></image>
         <view class="reference-inline-hint">
-          <text class="material-symbols-outlined reference-inline-hint-icon">🔍</text>
+          <image class="reference-inline-hint-icon" src="/assets/icons/zoom.svg" mode="aspectFit"></image>
           <text class="reference-inline-hint-text">点击查看大图</text>
         </view>
       </view>
@@ -112,7 +112,7 @@
     <!-- 订单备注：有任何备注（用户/商家）时独立成卡、醒目展示，骑手进详情第二眼就能看到 -->
     <view class="detail-card order-note-card" wx:if="{{order.customerNote || order.merchantNote}}">
       <view class="card-header">
-        <text class="material-symbols-outlined text-warning">⚠</text>
+        <image class="card-head-icon" src="/assets/icons/warning.svg" mode="aspectFit"></image>
         <text class="card-title">订单备注</text>
       </view>
       <view class="order-note-row" wx:if="{{order.customerNote}}">
@@ -120,7 +120,7 @@
         <text class="order-note-value" user-select>{{order.customerNote}}</text>
       </view>
       <view class="order-note-row" wx:if="{{order.merchantNote}}">
-        <text class="order-note-label order-note-label--merchant">商家嘱咐</text>
+        <text class="order-note-label order-note-label--merchant">商家备注</text>
         <text class="order-note-value" user-select>{{order.merchantNote}}</text>
       </view>
     </view>
@@ -128,7 +128,7 @@
     <!-- 送达信息 -->
     <view class="detail-card proof-section">
       <view class="card-header">
-        <text class="material-symbols-outlined text-success">✓</text>
+        <image class="card-head-icon" src="/assets/icons/check-green.svg" mode="aspectFit"></image>
         <text class="card-title">送达凭证</text>
       </view>
 
@@ -152,11 +152,11 @@
           <!-- 编辑按钮 -->
           <view class="receipt-actions">
             <button class="action-btn-secondary" bindtap="enterEditReceiptMode">
-              <text class="material-symbols-outlined">✎</text>
+              <image class="btn-icon" src="/assets/icons/edit.svg" mode="aspectFit"></image>
               <text>编辑回执</text>
             </button>
             <button class="action-btn-danger" bindtap="handleUndoDelivery">
-              <text class="material-symbols-outlined">↺</text>
+              <image class="btn-icon" src="/assets/icons/undo.svg" mode="aspectFit"></image>
               <text>撤回送达</text>
             </button>
           </view>
@@ -173,7 +173,7 @@
           <view class="photo-preview" wx:if="{{receiptTempFilePath}}">
             <image class="preview-img" src="{{receiptTempFilePath}}" mode="aspectFill" bindtap="previewPhoto"></image>
             <view class="photo-delete-btn" catchtap="removePhoto">
-              <text class="material-symbols-outlined icon-sm">✕</text>
+              <image class="photo-delete-icon" src="/assets/icons/close.svg" mode="aspectFit"></image>
             </view>
           </view>
 
@@ -200,11 +200,11 @@
     <view class="detail-card detail-note-card detail-note-card--actions" wx:if="{{order.itemStatus !== 'DELIVERED' && !isEditingReceipt}}">
       <view class="detail-note-actions">
         <button class="action-btn-secondary" bindtap="handleDefer">
-          <text class="material-symbols-outlined">⏰</text>
+          <image class="btn-icon" src="/assets/icons/clock.svg" mode="aspectFit"></image>
           <text>稍后送这单</text>
         </button>
         <button class="action-btn-danger" bindtap="reportException">
-          <text class="material-symbols-outlined">⚠</text>
+          <image class="btn-icon" src="/assets/icons/alert.svg" mode="aspectFit"></image>
           <text>上报配送异常</text>
         </button>
       </view>
@@ -233,14 +233,14 @@
         disabled="{{submitting || showSuccessAnim}}"
         bindtap="handleSubmitReceipt"
       >
-        <text wx:if="{{showSuccessAnim}}" class="material-symbols-outlined success-check">✓</text>
+        <image wx:if="{{showSuccessAnim}}" class="success-check" src="/assets/icons/check-green.svg" mode="aspectFit"></image>
         <text wx:else>{{submitting ? (isEditingReceipt ? '更新中...' : '提交中...') : (isEditingReceipt ? '保存更新' : '确认送达')}}</text>
       </button>
     </view>
 
     <!-- 已送达且未编辑：显示已送达状态 -->
     <view class="delivered-status-btn" wx:else>
-      <text class="material-symbols-outlined">✓</text>
+      <image class="delivered-check-icon" src="/assets/icons/check-green.svg" mode="aspectFit"></image>
       <text>该订单已送达</text>
     </view>
   </view>

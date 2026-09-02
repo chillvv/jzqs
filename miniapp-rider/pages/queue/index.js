@@ -7,11 +7,26 @@ const taskService = require('../../services/task.service');
 const { createWorkbenchDateOptions, formatDateYMD } = require('../../utils/formatter');
 const { resolveQueueItemIdentity, resolveQueueItemRequestId } = require('../../utils/rider-queue');
 const { resolveMediaUrl } = require('../../utils/media-url');
+const { splitAddress } = require('../../utils/address');
 const realtime = require('../../utils/realtime');
 const guide = require('../../utils/guide');
 const demo = require('../../utils/demo');
 const onboarding = require('../../utils/onboarding');
 const AUTO_REFRESH_MS = 8000;
+
+// 备注归一化：null / "-" 视为无备注
+function normalizeRemark(value) {
+  if (typeof value !== 'string') return '';
+  const t = value.trim();
+  return t === '-' ? '' : t;
+}
+
+// 用户备注 + 商家备注用中文逗号拼接（与后端 OrderNoteTexts.SEPARATOR 一致）
+function buildRemarkSummary(item) {
+  return [normalizeRemark(item.note), normalizeRemark(item.merchantRemark)]
+    .filter(Boolean)
+    .join('，');
+}
 
 function buildWorkbenchDateState(selectedDate) {
   const dateOptions = createWorkbenchDateOptions().map((item) => ({
@@ -288,9 +303,22 @@ Page({
       const showDeliveryPhoto = item.itemStatus === 'DELIVERED' && resolvedReceiptUrl;
       const displayThumbUrl = showDeliveryPhoto ? resolvedReceiptUrl : resolvedReferenceUrl;
       const displayThumbLabel = showDeliveryPhoto ? '送达图' : '参考图';
+      const addrSplit = splitAddress(item.deliveryAddress);
+      const identity = resolveQueueItemIdentity(item);
+      let remarkSummary = buildRemarkSummary(item);
+      // 粘性：后端 note 字段在实时刷新时可能短暂抖动（有值 ↔ "-"），
+      // 一旦取到过备注就保持，避免备注行反复出现/消失导致布局跳动。
+      if (!this._remarkCache) this._remarkCache = {};
+      if (remarkSummary) {
+        this._remarkCache[identity] = remarkSummary;
+      } else if (this._remarkCache[identity]) {
+        remarkSummary = this._remarkCache[identity];
+      }
 
       return {
         ...item,
+        ...addrSplit,
+        remarkSummary,
         referenceImageUrl: resolvedReferenceUrl,
         receiptUrl: resolvedReceiptUrl,
         displayThumbUrl,
@@ -465,6 +493,7 @@ Page({
   },
 
   resetQueueState() {
+    this._remarkCache = {};
     this.setData({
       loading: false, isEditMode: false, allItems: [], currentMealItems: [],
       showDatePicker: false,

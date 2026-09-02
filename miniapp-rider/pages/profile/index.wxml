@@ -36,21 +36,21 @@
   </view>
 
   <!-- 待审核/已停用 -->
-  <view wx:if="{{viewState === 'pending' || viewState === 'blocked'}}" class="state-card" style="margin: 0 24rpx 32rpx; background: #fff; border-radius: 24rpx; padding: 32rpx;">
+  <view wx:if="{{viewState === 'pending' || viewState === 'blocked'}}" class="state-card">
     <view wx:if="{{viewState === 'pending'}}">
-      <view style="font-size: 32rpx; font-weight: 700; color: #111; margin-bottom: 12rpx;">账号审核中</view>
-      <view style="font-size: 26rpx; color: #999;">您的注册信息已提交，请耐心等待管理员审核通过后即可接单。</view>
+      <view class="state-card-title">账号审核中</view>
+      <view class="state-card-desc">您的注册信息已提交，请耐心等待管理员审核通过后即可接单。</view>
     </view>
     <view wx:if="{{viewState === 'blocked'}}">
-      <view style="font-size: 32rpx; font-weight: 700; color: #EF4444; margin-bottom: 12rpx;">账号已停用</view>
-      <view style="font-size: 26rpx; color: #999;">如有疑问请联系站长处理。</view>
+      <view class="state-card-title state-card-title--error">账号已停用</view>
+      <view class="state-card-desc">如有疑问请联系站长处理。</view>
     </view>
   </view>
 
   <view class="menu-group">
     <view class="list-item" bindtap="handleMenuClick" data-action="history">
       <view class="list-icon-wrap">
-        <text class="list-icon">📝</text>
+        <image class="list-icon" src="/assets/icons/history.svg" mode="aspectFit"></image>
         <view class="list-copy">
           <view class="list-title">历史订单</view>
           <view class="list-desc">查看已完成配送记录与历史回执。</view>
@@ -60,7 +60,7 @@
     </view>
     <view class="list-item" bindtap="handleMenuClick" data-action="settings">
       <view class="list-icon-wrap">
-        <text class="list-icon">⚙️</text>
+        <image class="list-icon" src="/assets/icons/settings.svg" mode="aspectFit"></image>
         <view class="list-copy">
           <view class="list-title">账号设置</view>
           <view class="list-desc">管理登录状态、接单信息和基础偏好。</view>
@@ -73,7 +73,7 @@
   <view class="menu-group">
     <view class="list-item" bindtap="onNewbieGuideTap">
       <view class="list-icon-wrap">
-        <text class="list-icon">🧭</text>
+        <image class="list-icon" src="/assets/icons/guide.svg" mode="aspectFit"></image>
         <view class="list-copy">
           <view class="list-title">新手指引</view>
           <view class="list-desc">完整走一遍工作台到上传回执的流程</view>

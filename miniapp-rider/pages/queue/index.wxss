@@ -4,7 +4,7 @@
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background-color: var(--background, #F5F5F7);
+  background-color: var(--bg-page, #F5F5F7);
   color: var(--on-background, #1B1B1D);
 }
 
@@ -258,12 +258,10 @@
 }
 
 .stat-value {
-  font-family: 'Courier New', 'SF Mono', Monaco, monospace;
-  font-size: 60rpx;
-  font-weight: 900;
-  letter-spacing: 0;
+  font-size: 44rpx;
+  font-weight: 800;
+  letter-spacing: -0.01em;
   color: var(--on-surface, #0F172A);
-  text-shadow: 0 2rpx 4rpx rgba(0,0,0,0.05);
 }
 
 .stat-label {
@@ -279,11 +277,11 @@
 }
 
 .text-success {
-  color: var(--success, #34C759);
+  color: var(--success, #10B981);
 }
 
 .text-primary {
-  color: var(--primary, #0050CB);
+  color: var(--primary, #2563EB);
 }
 
 /* Status Filter */
@@ -306,26 +304,26 @@
 }
 
 .chip-active-pending {
-  background-color: #FFF7ED;
-  color: #C2410C;
-  border-color: #EA580C;
-  box-shadow: 0 6rpx 20rpx rgba(234, 88, 12, 0.3);
+  background-color: #EEF2FF;
+  color: #2563EB;
+  border-color: #2563EB;
+  box-shadow: 0 6rpx 20rpx rgba(37, 99, 235, 0.28);
   font-weight: 800;
 }
 
 .chip-active-all {
-  background-color: #EEF2FF;
-  color: #4338CA;
-  border-color: #4F46E5;
-  box-shadow: 0 6rpx 20rpx rgba(79, 70, 229, 0.3);
+  background-color: var(--surface-container);
+  color: var(--on-surface);
+  border-color: var(--outline-variant);
+  box-shadow: none;
   font-weight: 800;
 }
 
 .chip-active-delivered {
-  background-color: #F0FDF4;
-  color: #15803D;
-  border-color: #16A34A;
-  box-shadow: 0 6rpx 20rpx rgba(22, 163, 74, 0.3);
+  background-color: #D1FAE5;
+  color: #10B981;
+  border-color: #10B981;
+  box-shadow: 0 6rpx 20rpx rgba(16, 185, 129, 0.28);
   font-weight: 800;
 }
 
@@ -366,8 +364,7 @@
   display: block; /* Changed to block */
   position: relative;
   overflow: hidden;
-  margin-bottom: 20rpx;
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .order-card-status-tag {
@@ -384,13 +381,13 @@
 }
 
 .tag-pending {
-  background-color: #FFF3E0;
-  color: #FF9800;
+  background-color: var(--primary-container);
+  color: var(--primary);
 }
 
 .tag-completed {
-  background-color: #E8F5E9;
-  color: #4CAF50;
+  background-color: var(--tertiary-container);
+  color: var(--success);
 }
 
 .order-card-content {
@@ -464,86 +461,23 @@
   flex-shrink: 0;
 }
 
-.special-tag-inline {
-  font-size: 22rpx;
-  font-weight: 800;
-  color: #DC2626;
-  background: var(--error-container);
-  padding: 6rpx 12rpx;
-  border-radius: 8rpx;
-  line-height: 1.2;
-  white-space: nowrap;
-  align-self: center;
-  flex-shrink: 0;
-}
-
 .order-badge {
-  position: relative;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
-  color: #1E293B;
-  padding: 8rpx 14rpx;
-  border-radius: 12rpx;
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  background: var(--primary-container);
+  color: var(--primary);
+  font-size: 24rpx;
+  font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: 'Courier New', 'SF Mono', Monaco, monospace;
-  font-size: 46rpx;
-  font-weight: 900;
-  letter-spacing: -0.02em;
   flex-shrink: 0;
-  min-width: 56rpx;
-  box-sizing: border-box;
-  border: 1rpx solid rgba(226, 232, 240, 0.9);
-  box-shadow: 0 2rpx 4rpx rgba(15, 23, 42, 0.04);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
-  transform-origin: center;
-  /* 不用 translateZ，避免影响父元素拖拽 */
-}
-
-.order-card:active .order-badge {
-  transform: scale(0.98);
-  border-color: rgba(37, 99, 235, 0.3);
-}
-
-.order-badge::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(135deg, 
-    rgba(255, 255, 255, 0.4) 0%, 
-    rgba(255, 255, 255, 0) 50%,
-    rgba(0, 0, 0, 0.02) 100%);
-  border-radius: 16rpx;
-  pointer-events: none;
-}
-
-.badge-prefix {
-  font-size: 22rpx;
-  margin-right: 4rpx;
-  opacity: 0.6;
-  font-weight: 600;
-  color: #64748B;
-  font-family: 'Courier New', 'SF Mono', Monaco, monospace;
-  letter-spacing: 0.02em;
 }
 
 .order-badge-completed {
-  background: linear-gradient(135deg, rgba(248, 250, 252, 0.9) 0%, rgba(241, 245, 249, 0.9) 100%);
-  color: #A0AEC0;
-  border: 1rpx solid rgba(226, 232, 240, 0.6);
-  box-shadow: 
-    inset 0 1rpx 2rpx rgba(255, 255, 255, 0.6),
-    0 1rpx 1rpx rgba(0, 0, 0, 0.01);
-}
-
-.order-badge-completed .badge-prefix {
-  color: #CBD5E0;
-  opacity: 0.4;
+  background: var(--surface-container);
+  color: var(--outline);
 }
 
 .order-info {
@@ -605,9 +539,23 @@
 }
 
 .address-icon-inline {
-  font-size: 26rpx;
-  margin-right: 2rpx;
+  width: 28rpx;
+  height: 28rpx;
+  margin-right: 4rpx;
+  margin-top: 4rpx;
   flex-shrink: 0;
+}
+
+.address-text-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.address-district {
+  font-size: 22rpx;
+  color: var(--outline, #94A3B8);
   line-height: 1.4;
 }
 
@@ -615,15 +563,21 @@
   flex: 1;
   min-width: 0;
   white-space: normal;
-  color: #64748B;
+  color: var(--on-surface);
+  font-weight: 600;
   word-break: break-all;
   line-height: 1.5;
 }
 
-.building-info-text {
-  color: var(--brand-color);
-  font-weight: 900;
-  margin-right: 8rpx;
+.order-remark-line {
+  margin-top: 4rpx;
+  font-size: 26rpx;
+  font-weight: 700;
+  color: #DC2626;
+  line-height: 1.5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .no-address {
@@ -650,25 +604,6 @@
   gap: 16rpx;
   flex-shrink: 0;
   margin-left: auto;
-}
-
-.status-tag {
-  font-size: 22rpx;
-  font-weight: 700;
-  padding: 10rpx 20rpx;
-  border-radius: 12rpx;
-  letter-spacing: 0.02em;
-  box-shadow: 0 2rpx 8rpx rgba(0, 0, 0, 0.05);
-}
-
-.tag-pending {
-  background-color: #FFF3E0;
-  color: #FF9800;
-}
-
-.tag-completed {
-  background-color: #E8F5E9;
-  color: #4CAF50;
 }
 
 .drag-handle {
@@ -793,7 +728,7 @@
   position: fixed;
   right: 32rpx;
   bottom: calc(136rpx + env(safe-area-inset-bottom) + 32rpx);
-  background: linear-gradient(135deg, #16A34A 0%, #15803D 100%);
+  background: linear-gradient(135deg, #10B981 0%, #059669 100%);
   color: #fff;
   font-size: 30rpx;
   font-weight: 700;
@@ -896,6 +831,11 @@
   font-size: 36rpx;
   font-weight: 700;
   flex-shrink: 0;
+}
+
+.sort-icon {
+  width: 40rpx;
+  height: 40rpx;
 }
 
 .sort-btn:active {

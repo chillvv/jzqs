@@ -19,11 +19,6 @@ function resolveAddress(orderOrParams) {
   return '';
 }
 
-function resolveName(orderOrParams) {
-  if (!orderOrParams || typeof orderOrParams !== 'object') return '';
-  return orderOrParams.customerName || orderOrParams.name || '';
-}
-
 function normalizeCoords(value) {
   const num = Number(value);
   return Number.isFinite(num) && num !== 0 ? num : null;
@@ -39,8 +34,7 @@ function copyAddress(text) {
 // 拉起导航：订单有坐标（顾客选点）→ 精准导航；无坐标（旧地址）→ 复制地址提示
 function navigate(orderOrParams) {
   const address = resolveAddress(orderOrParams);
-  const name = resolveName(orderOrParams);
-  if (!address && !name) {
+  if (!address) {
     showToast('暂无地址信息');
     return;
   }
@@ -54,10 +48,11 @@ function navigate(orderOrParams) {
 
   if (latitude !== null && longitude !== null) {
     // 订单自带坐标（顾客选点落库）：直接精确定位
+    // name 只用于地图标注标题，应显示地址而非客户姓名
     wx.openLocation({
       latitude,
       longitude,
-      name: name || '配送地址',
+      name: address,
       address,
       scale: 16
     });
@@ -65,7 +60,7 @@ function navigate(orderOrParams) {
   }
 
   // 旧地址无坐标：复制地址 + 提示骑手自行搜索
-  copyAddress(address || name);
+  copyAddress(address);
   showToast('该地址暂无定位，地址已复制，可到地图 App 搜索');
 }
 

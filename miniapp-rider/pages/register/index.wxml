@@ -11,53 +11,52 @@
 </view>
 <view class="subpage-nav-spacer" style="height: {{navBarHeight}}px;"></view>
 
-<view class="register-container">
-  <view class="register-header">
-    <text class="title">骑手注册</text>
-    <text class="subtitle">首次使用请先注册</text>
+<view class="register-shell">
+  <!-- Top Section: Logo and Welcome -->
+  <view class="register-hero">
+    <image class="register-logo" src="/assets/logo.jpeg" mode="aspectFill"></image>
+    <view class="register-title">骑手注册</view>
+    <view class="register-subtitle">首次使用，填写信息即可登记</view>
   </view>
 
-  <view class="register-form">
-    <!-- 姓名输入 -->
-    <view class="form-item">
-      <text class="label">姓名</text>
-      <input
-        class="input"
-        type="text"
-        placeholder="请输入真实姓名"
-        value="{{name}}"
-        bindinput="onNameInput"
-      />
+  <!-- Middle Section: Forms and Button -->
+  <view class="register-main">
+    <view class="register-form-group">
+      <view class="register-form-item">
+        <text class="register-label">姓名</text>
+        <input
+          class="register-input"
+          type="text"
+          placeholder="请输入真实姓名"
+          placeholder-class="register-placeholder"
+          value="{{name}}"
+          bindinput="onNameInput"
+        />
+      </view>
+      <view class="register-form-item register-form-item--last">
+        <text class="register-label">手机号</text>
+        <input
+          class="register-input"
+          type="number"
+          placeholder="请输入手机号"
+          placeholder-class="register-placeholder"
+          maxlength="11"
+          value="{{phone}}"
+          bindinput="onPhoneInput"
+        />
+      </view>
     </view>
 
-    <!-- 手机号输入 -->
-    <view class="form-item">
-      <text class="label">手机号</text>
-      <input
-        class="input"
-        type="number"
-        placeholder="请输入手机号"
-        maxlength="11"
-        value="{{phone}}"
-        bindinput="onPhoneInput"
-      />
-    </view>
-
-    <!-- 注册按钮 -->
     <button
       class="register-btn"
-      type="primary"
       loading="{{loading}}"
       disabled="{{loading}}"
       bindtap="onRegister"
-    >
-      {{loading ? '注册中...' : '注册'}}
-    </button>
+    >{{loading ? '注册中...' : '注册'}}</button>
 
-    <!-- 已有账号 -->
-    <view class="footer">
+    <view class="register-footer">
       <text>已有账号？</text>
-      <text class="link" bindtap="goToLogin">去登录</text>
+      <text class="register-link" bindtap="goToLogin">去登录</text>
     </view>
   </view>
 </view>

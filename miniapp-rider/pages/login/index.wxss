@@ -1,8 +1,6 @@
 page {
   background: var(--surface);
   --brand-secondary: #f2f2f2;
-  --text-main: #333333;
-  --text-sub: #999999;
   --text-link: #576b95;
 }
 
@@ -36,13 +34,13 @@ page {
 .auth-page-title {
   font-size: 48rpx;
   font-weight: 600;
-  color: var(--text-main);
+  color: var(--on-surface);
   margin-bottom: 16rpx;
 }
 
 .auth-page-subtitle {
   font-size: 28rpx;
-  color: var(--text-sub);
+  color: var(--on-surface-variant);
 }
 
 /* Middle Section */
@@ -70,7 +68,7 @@ page {
 .auth-form-input {
   flex: 1;
   font-size: 32rpx;
-  color: var(--text-main);
+  color: var(--on-surface);
   height: 100%;
 }
 
@@ -112,7 +110,7 @@ page {
 
 .auth-btn-secondary {
   background: var(--brand-secondary);
-  color: var(--text-main);
+  color: var(--on-surface);
 }
 
 .auth-btn-secondary[disabled] {

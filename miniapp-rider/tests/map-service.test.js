@@ -43,7 +43,7 @@ test('navigate with order coordinates opens map directly at that location', () =
   assert.equal(state.openedLocations.length, 1);
   assert.equal(state.openedLocations[0].latitude, 28.19);
   assert.equal(state.openedLocations[0].longitude, 112.98);
-  assert.equal(state.openedLocations[0].name, '王五');
+  assert.equal(state.openedLocations[0].name, '湖南省长沙市天心区书院路 5 号');
   assert.equal(state.openedLocations[0].address, '湖南省长沙市天心区书院路 5 号');
   assert.equal(state.clipboardData.length, 0);
 });

@@ -9,6 +9,7 @@ const mapService = require('../../services/map.service');
 const imageUtil = require('../../utils/image');
 const { resolveMediaUrl } = require('../../utils/media-url');
 const { formatCurrentDateTime, formatDateMMDD, formatDateYMD, getMealPeriodLabel } = require('../../utils/formatter');
+const { splitAddress } = require('../../utils/address');
 const { EXCEPTION_TYPE_OPTIONS } = require('../../utils/constants');
 const realtime = require('../../utils/realtime');
 const guide = require('../../utils/guide');
@@ -238,6 +239,7 @@ Page({
       // 规范化订单数据
       const normalizedOrder = {
         ...order,
+        ...splitAddress(order.deliveryAddress),
         receiptUrl: resolveMediaUrl(order.receiptUrl, app.globalData.apiBaseUrl),
         mealLabel: getMealPeriodLabel(order.mealPeriod),
         customerNote: normalizeOptionalText(order.customerNote || order.note),
@@ -295,6 +297,7 @@ Page({
     const app = getApp();
     const normalizedOrder = {
       ...order,
+      ...splitAddress(order.deliveryAddress),
       receiptUrl: resolveMediaUrl(order.receiptUrl, app.globalData.apiBaseUrl),
       mealLabel: getMealPeriodLabel(order.mealPeriod),
       customerNote: normalizeOptionalText(order.customerNote || order.note),

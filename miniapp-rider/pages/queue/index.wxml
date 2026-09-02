@@ -16,9 +16,7 @@
     <view class="order-card-content">
       <view class="order-card-header">
         <view class="order-badge-wrapper">
-          <view class="order-badge {{item.itemStatus === 'DELIVERED' && currentStatusFilter === '' ? 'order-badge-completed' : ''}}">
-            <text class="badge-prefix">#</text>{{index + 1}}
-          </view>
+          <view class="order-badge {{item.itemStatus === 'DELIVERED' ? 'order-badge-completed' : ''}}">{{index + 1}}</view>
         </view>
 
         <view class="order-info">
@@ -26,24 +24,28 @@
             <view class="order-name {{item.itemStatus === 'DELIVERED' ? 'order-name-completed' : ''}}">
               {{item.customerName}}
             </view>
-            <view wx:if="{{item.needAttention}}" class="special-tag-inline">{{item.attentionLabel || '有备注'}}</view>
             <view wx:if="{{item.quantity > 1}}" class="quantity-badge">
               ×{{item.quantity}}
             </view>
           </view>
 
           <view class="order-address-inline {{item.itemStatus === 'DELIVERED' ? 'order-address-completed' : ''}}">
-            <text class="address-icon-inline">📍</text>
-            <text class="address-text-content {{!item.deliveryAddress ? 'no-address' : ''}}"><text wx:if="{{item.buildingInfo}}" class="building-info-text">{{item.buildingInfo}}</text>{{item.deliveryAddress || '地址未提供'}}</text>
+            <image class="address-icon-inline" src="/assets/icons/location-gray.svg" mode="aspectFit"></image>
+            <view class="address-text-wrap">
+              <text wx:if="{{item.district}}" class="address-district">{{item.district}}</text>
+              <text class="address-text-content {{!item.deliveryAddress ? 'no-address' : ''}}">{{item.detail || item.deliveryAddress || '地址未提供'}}</text>
+            </view>
           </view>
+
+          <view wx:if="{{item.remarkSummary}}" class="order-remark-line">备注：{{item.remarkSummary}}</view>
         </view>
 
         <view class="order-right" style="{{isEditMode && item.itemStatus !== 'DELIVERED' ? '' : 'display: none;'}}">
           <view class="sort-btn {{item.canMoveUp ? '' : 'sort-btn-disabled'}}" catchtap="moveItemUp" data-index="{{index}}">
-            <text class="material-symbols-outlined">↑</text>
+            <image class="sort-icon" src="/assets/icons/arrow-up.svg" mode="aspectFit"></image>
           </view>
           <view class="sort-btn {{item.canMoveDown ? '' : 'sort-btn-disabled'}}" catchtap="moveItemDown" data-index="{{index}}">
-            <text class="material-symbols-outlined">↓</text>
+            <image class="sort-icon" src="/assets/icons/arrow-down.svg" mode="aspectFit"></image>
           </view>
         </view>
       </view>
