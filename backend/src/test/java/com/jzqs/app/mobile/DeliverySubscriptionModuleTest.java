@@ -139,12 +139,60 @@ class DeliverySubscriptionModuleTest {
             org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyString()
         );
+    }
+
+    @Test
+    void scheduledScanShouldSendReminderForOrderDeliveredAfterReleaseTime() {
+        // 场景：订单在餐期释放时间之后才送达（回执创建时即对用户可见），订阅仍为 AUTHORIZED。
+        // 定时扫描应补发送餐提醒（修复前仅扫 visible_to_customer = FALSE，该场景被永久跳过）。
+        given(settingsService.operationSettings()).willReturn(new com.jzqs.app.settings.api.OperationSettingsResponse(
+            true, "接单中", "", "", "", "[]", 3, 7, 3, false, true, "00:00", "17:30", false, "", "", "", false, "", "", "", ""
+        ));
+        // 释放时间设为 00:00，保证任意时刻运行测试都已过释放时间
+        jdbcTemplate.update("UPDATE admin_settings SET delivery_subscribe_lunch_time = '00:00' WHERE id = 1");
+        jdbcTemplate.update("UPDATE customers SET current_openid = 'openid_981' WHERE id = 981");
+        jdbcTemplate.update(
+            """
+                INSERT INTO delivery_receipts (id, meal_slot_order_id, receipt_url, delivered_at, visible_to_customer)
+                VALUES (1981, 981, '/uploads/r.jpg', CURRENT_TIMESTAMP, TRUE)
+                """);
+        jdbcTemplate.update(
+            """
+                INSERT INTO customer_delivery_subscriptions (
+                    customer_id, meal_slot_order_id, template_id, status, source, authorized_at
+                ) VALUES (?, ?, ?, 'AUTHORIZED', 'MINIAPP_ORDER_SUCCESS', CURRENT_TIMESTAMP)
+                """,
+            981L,
+            981L,
+            "tmpl-after-release"
+        );
+
+        int sentCount = module.sendScheduledMessages("LUNCH");
+
+        assertEquals(1, sentCount);
+        verify(weChatService).sendDeliverySubscribeMessage(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any()
+        );
         assertEquals(
-            "AUTHORIZED",
+            "SENT",
             jdbcTemplate.queryForObject(
                 "SELECT status FROM customer_delivery_subscriptions WHERE meal_slot_order_id = 981",
                 String.class
             )
         );
+
+        // 已发送后再次扫描不重复发送
+        assertEquals(0, module.sendScheduledMessages("LUNCH"));
+    }
+
+    @org.junit.jupiter.api.AfterEach
+    void restoreAdminSettings() {
+        jdbcTemplate.update("UPDATE admin_settings SET delivery_subscribe_lunch_time = '11:30' WHERE id = 1");
+        jdbcTemplate.update("UPDATE admin_settings SET delivery_subscribe_enabled = FALSE WHERE id = 1");
     }
 }

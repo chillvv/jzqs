@@ -228,7 +228,7 @@ class MobilePortalRealtimePublishingTest {
             realtimeAudienceModule,
             riderQueueSupport
         );
-        MobileAddressModule mobileAddressModule = new MobileAddressModule(jdbcTemplate);
+        MobileAddressModule mobileAddressModule = new MobileAddressModule(jdbcTemplate, new com.jzqs.app.order.persistence.OrderDispatchRepository(jdbcTemplate));
         NightlyReminderModule nightlyReminderModule = mock(NightlyReminderModule.class);
         mobileAuthService = mock(MobileAuthService.class);
         return new MobilePortalServiceImpl(

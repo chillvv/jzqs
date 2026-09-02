@@ -308,7 +308,9 @@ public class OrderQueryRepository {
             FROM meal_slot_orders mso
             JOIN daily_orders do ON do.id = mso.daily_order_id
             JOIN customers c ON c.id = do.customer_id
-            JOIN customer_addresses ca ON ca.id = mso.address_id
+            -- LEFT JOIN 防御：地址被物理删除（悬空 address_id）时订单仍必须出现在列表中，
+            -- 只显示空地址并提示商家改址；INNER JOIN 会把订单整体藏掉，造成与看板对不上（9.2 事故）
+            LEFT JOIN customer_addresses ca ON ca.id = mso.address_id
             LEFT JOIN menu_week_items ms ON ms.serve_date = do.serve_date
                 AND ms.meal_period = mso.meal_period
                 AND ms.slot_status = 'ACTIVE'

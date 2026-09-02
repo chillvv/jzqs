@@ -44,7 +44,9 @@ class CustomerAssetServiceIntegrationTest {
                 "13900009913",
                 "高新区测试路 13 号",
                 "高新区",
-                true
+                true,
+                null,
+                null
             )
         );
 

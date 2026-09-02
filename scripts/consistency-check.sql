@@ -282,6 +282,18 @@ LEFT JOIN customers c ON c.id = rab.customer_id
 LEFT JOIN customer_addresses ca ON ca.id = rab.address_id
 WHERE c.id IS NULL OR ca.id IS NULL;
 
+-- 3.12 餐次订单指向已删地址（9.2 事故：吴天豪 3 个进行中订单因地址被物理删除,
+--      订单中心 INNER JOIN 地址表把它们整体藏掉, 订单中心 79 vs 看板 82 对不上）
+SELECT '3.12' AS check_id,
+       '餐次订单指向已删地址' AS issue,
+       mso.id AS row_id,
+       mso.address_id AS missing_parent_id,
+       mso.status
+FROM meal_slot_orders mso
+LEFT JOIN customer_addresses ca ON ca.id = mso.address_id
+WHERE mso.address_id IS NOT NULL
+  AND ca.id IS NULL;
+
 -- =============================================================================
 -- 四、空值语义异常:字段非 NULL 但值在业务上不合法
 -- =============================================================================

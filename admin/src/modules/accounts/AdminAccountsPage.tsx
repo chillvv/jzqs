@@ -105,6 +105,22 @@ export function AdminAccountsPage() {
     loadUsers().catch(() => undefined);
   }, [loadUsers]);
 
+  // 切回页面（重新聚焦/切换标签页）时自动刷新列表，
+  // 保证多浏览器/多标签页之间的账号数据同步，避免基于过期数据操作报"不存在"
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadUsers().catch(() => undefined);
+      }
+    };
+    window.addEventListener("focus", handleVisibilityChange);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", handleVisibilityChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadUsers]);
+
   async function handleCreateSubmit() {
     const displayName = createForm.displayName.trim();
     const phone = createForm.phone.trim();
@@ -212,7 +228,17 @@ export function AdminAccountsPage() {
       setEditingUser(null);
       await loadUsers();
     } catch (err) {
-      toast(extractAdminApiErrorMessage(err, "删除账号失败"), "error");
+      const message = extractAdminApiErrorMessage(err, "删除账号失败");
+      if (message.includes("不存在")) {
+        // 账号已被其他设备/浏览器删除：刷新列表让过期数据消失，避免用户反复遇到报错
+        setDeleteTarget(null);
+        setDeleteConfirmText("");
+        setEditingUser(null);
+        toast("该账号已被删除，列表已刷新", "error");
+        await loadUsers();
+      } else {
+        toast(message, "error");
+      }
     } finally {
       setSubmittingDelete(false);
     }

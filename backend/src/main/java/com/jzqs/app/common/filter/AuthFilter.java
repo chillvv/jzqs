@@ -55,7 +55,9 @@ public class AuthFilter implements Filter {
         "/uploads/",
         "/ws/realtime",
         "/actuator/health",
-        "/error"
+        "/error",
+        // 骑手端 web-view 加载的地图导航中转页（Spring Boot 静态资源），需游客可访问
+        "/map-nav.html"
     );
 
     // 顾客首页和菜单在当前版本允许游客访问

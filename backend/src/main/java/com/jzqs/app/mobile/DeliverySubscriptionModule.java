@@ -178,20 +178,24 @@ class DeliverySubscriptionModule {
 
     private int sendScheduledMessagesInternal(String mealPeriod, LocalDate serveDate, LocalDateTime now) {
         String releaseTime = resolveConfiguredReleaseTime(mealPeriod).toString();
-        // 扫描"已送达、回执尚未对用户可见、且已到餐期释放时间"的订单。
-        // 不限定必须有订阅记录：无论有无订阅，到点都应把回执对用户可见（自动释放），
-        // 这样订单会从后台"待释放"列表消失；订阅消息仅在有授权时补发。
+        // 扫描"已送达、且已到餐期释放时间"的订单，补发尚未送达的取餐订阅消息。
+        // 不限定必须有订阅记录：无论有无订阅，到点都应把回执对用户可见（自动释放）。
+        // 注意：送达时间晚于释放时间的订单（如 11:48 送达、午餐 11:30 释放），回执会在送达瞬间
+        // 立即对用户可见，从而绕过"visible=FALSE -> 定时任务释放并发送"的流程；若只扫 visible=FALSE
+        // 的订单，这些单的订阅消息会被永久漏发。因此这里同时覆盖
+        // "回执已可见、但订阅消息尚未发送(cds.sent_at 为空 / 状态非 SENT)"的订单。
         List<Long> orderIds = jdbcTemplate.query(
             """
             SELECT mso.id
             FROM meal_slot_orders mso
             JOIN daily_orders do ON do.id = mso.daily_order_id
             JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
+            LEFT JOIN customer_delivery_subscriptions cds ON cds.meal_slot_order_id = mso.id
             WHERE mso.status = 'DELIVERED'
               AND mso.meal_period = ?
               AND do.serve_date = ?
-              AND dr.visible_to_customer = FALSE
               AND TIMESTAMP(do.serve_date, ?) <= ?
+              AND (dr.visible_to_customer = FALSE OR cds.sent_at IS NULL OR cds.status <> 'SENT')
             ORDER BY mso.id
             """,
             (rs, rowNum) -> rs.getLong(1),
@@ -202,18 +206,19 @@ class DeliverySubscriptionModule {
         );
         int sentCount = 0;
         for (Long orderId : orderIds) {
-            // 先把回执对用户可见（与后台手动"立即释放"等价），保证订单即时从待释放列表消失
+            // 先把回执对用户可见（与后台手动"立即释放"等价），保证订单即时从待释放列表消失；
+            // 已可见的订单保持原 visible_at 不变，仅补齐尚未可见的。
             jdbcTemplate.update(
                 """
                 UPDATE delivery_receipts
-                SET visible_at = ?,
+                SET visible_at = COALESCE(visible_at, ?),
                     visible_to_customer = TRUE
-                WHERE meal_slot_order_id = ? AND visible_to_customer = FALSE
+                WHERE meal_slot_order_id = ?
                 """,
                 Timestamp.valueOf(now),
                 orderId
             );
-            // 再尝试发送取餐提醒订阅消息（无授权记录时仅释放、不发送）
+            // 再尝试发送取餐提醒订阅消息（无授权记录时仅释放、不发送；已发送过的不会重复发送）
             if (trySendDeliverySubscription(orderId, now)) {
                 sentCount++;
             }

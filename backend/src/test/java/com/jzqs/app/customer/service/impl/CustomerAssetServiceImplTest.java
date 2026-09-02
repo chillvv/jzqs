@@ -21,6 +21,7 @@ import com.jzqs.app.customer.mapper.WalletTransactionMapper;
 import com.jzqs.app.customer.model.entity.CustomerEntity;
 import com.jzqs.app.customer.model.entity.MealWalletEntity;
 import com.jzqs.app.customer.model.entity.WalletTransactionEntity;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -70,7 +71,7 @@ class CustomerAssetServiceImplTest {
         when(mealWalletMapper.selectOne(any())).thenReturn(wallet);
         when(walletTransactionMapper.selectList(any())).thenReturn(List.of());
         when(jdbcTemplate.query(
-            eq("SELECT id, contact_name, contact_phone, address_line, area_code, is_default FROM customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, id ASC"),
+            eq("SELECT id, contact_name, contact_phone, address_line, area_code, is_default, latitude, longitude FROM customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, id ASC"),
             any(RowMapper.class),
             eq(382L)
         )).thenReturn(List.of());
@@ -109,7 +110,7 @@ class CustomerAssetServiceImplTest {
         when(mealWalletMapper.selectOne(any())).thenReturn(wallet);
         when(walletTransactionMapper.selectList(any())).thenReturn(List.of());
         lenient().when(jdbcTemplate.query(
-            eq("SELECT id, contact_name, contact_phone, address_line, area_code, is_default FROM customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, id ASC"),
+            eq("SELECT id, contact_name, contact_phone, address_line, area_code, is_default, latitude, longitude FROM customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, id ASC"),
             any(RowMapper.class),
             eq(382L)
         )).thenReturn(List.of());
@@ -214,7 +215,9 @@ class CustomerAssetServiceImplTest {
                 "13800000382",
                 "高新区科技园A座8层",
                 "高新区",
-                true
+                true,
+                null,
+                null
             )
         );
 
@@ -246,7 +249,9 @@ class CustomerAssetServiceImplTest {
                 "13900000382",
                 "天府三街B座",
                 "高新区",
-                false
+                false,
+                null,
+                null
             )
         );
 
@@ -257,7 +262,7 @@ class CustomerAssetServiceImplTest {
         verify(jdbcTemplate).update(
             eq("""
                 UPDATE customer_addresses
-                SET contact_name = ?, contact_phone = ?, address_line = ?, area_code = ?, is_default = ?
+                SET contact_name = ?, contact_phone = ?, address_line = ?, area_code = ?, is_default = ?, latitude = ?, longitude = ?
                 WHERE id = ? AND customer_id = ?
                 """),
             eq("竹子"),
@@ -265,6 +270,8 @@ class CustomerAssetServiceImplTest {
             eq("天府三街B座"),
             eq("高新区"),
             eq(false),
+            eq((BigDecimal) null),
+            eq((BigDecimal) null),
             eq(18L),
             eq(382L)
         );

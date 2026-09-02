@@ -5,6 +5,7 @@ import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.mobile.api.MobileAddressResponse;
 import com.jzqs.app.mobile.api.MobileDefaultAddressResponse;
 import com.jzqs.app.mobile.api.MobileOrderAddressChangeResponse;
+import com.jzqs.app.order.persistence.OrderDispatchRepository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
@@ -19,12 +20,14 @@ class MobileAddressModule {
     private static final int MAX_ADDRESSES_PER_CUSTOMER = 5;
 
     private final JdbcTemplate jdbcTemplate;
+    private final OrderDispatchRepository orderDispatchRepository;
 
-    MobileAddressModule(JdbcTemplate jdbcTemplate) {
+    MobileAddressModule(JdbcTemplate jdbcTemplate, OrderDispatchRepository orderDispatchRepository) {
         this.jdbcTemplate = jdbcTemplate;
+        this.orderDispatchRepository = orderDispatchRepository;
     }
 
-    private record CustomerMealPeriodRow(long customerId, String mealPeriod) {}
+    private record CustomerMealPeriodRow(long customerId, String mealPeriod, String status) {}
 
     private static String normalizeMealPeriod(String mealPeriod) {
         if (mealPeriod == null) {
@@ -176,7 +179,25 @@ class MobileAddressModule {
         if (count == null || count == 0) {
             throw new BusinessException(ErrorCode.ADDRESS_NOT_FOUND, "未找到该地址");
         }
+        // 地址删除防护：进行中（待派/配送中）的订单仍引用该地址时禁止删除，
+        // 否则订单中心/骑手中心按地址 INNER JOIN 查询会把这些订单"藏"起来，
+        // 造成三端数量对不上（9.2 事故：吴天豪 3 个进行中订单因地址被删而从订单中心消失）。
+        Integer activeOrders = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM meal_slot_orders WHERE address_id = ? AND status IN ('PENDING_DISPATCH', 'DISPATCHING')",
+            Integer.class,
+            addressId
+        );
+        if (activeOrders != null && activeOrders > 0) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID,
+                "该地址有 " + activeOrders + " 个进行中的订单正在使用，暂时无法删除；请先更换这些订单的地址");
+        }
         jdbcTemplate.update("DELETE FROM customer_addresses WHERE id = ? AND customer_id = ?", addressId, customerId);
+        // 订阅默认地址指向被删地址时置空，避免订阅自动下单生成无地址订单
+        jdbcTemplate.update(
+            "UPDATE subscription_rules SET default_address_id = NULL WHERE default_address_id = ? AND customer_id = ?",
+            addressId,
+            customerId
+        );
     }
 
     MobileDefaultAddressResponse setDefaultAddress(long customerId, long addressId) {
@@ -261,23 +282,26 @@ class MobileAddressModule {
 
     /**
      * 区域记忆以「地址」为单位，而非「用户」。换地址后的区域重分配规则：
-     * - 新地址之前派过单（记忆表有记录）→ 直接取其自身的区域，订单快照同步为新地址区域；
-     * - 新地址从未派过单（记忆表无记录）→ 不继承旧地址的区域，写入一条 area_code 为空的
-     *   「地址变更待确认」绑定，由商家后台手动分配；对应已派单订单的快照区域置为待分配标记，
-     *   不再沿用旧区域。
-     * - 若订单尚未派单（无 dispatch_assignments 行），自动派单环节会基于新 address_id 实时 JOIN，无需处理。
+     * - 新地址之前派过单（记忆表有已确认记录）→ 撤销当前派单并回退待派状态，
+     *   由分单工作台的自动归区（ensureRememberedAssignments）按新地址记忆重新归区、
+     *   派到记忆区域的默认骑手；
+     * - 新地址从未派过单（记忆表无已确认记录）→ 不继承旧地址的区域，写入一条 area_code
+     *   为空的「地址变更待确认」绑定，订单撤销派单后停留在「待分配」，
+     *   由商家在工作台手动归区兜底（异常单列表会提示"新地址，尚未确认区域"）。
+     * 两种情况都会撤销原有派单快照（含骑手批次项、空批次清理）。
+     * 禁止把快照写成不存在的假区域：旧实现写入魔法值 'PENDING'，导致骑手中心
+     * 按真实区域对账少单、工作台"待分配"又因派单行存在而不可见的静默死锁（9.1 事故 503；
+     * 9.2 复发：换到无记忆地址的 3 单快照被写成 'PENDING'，骑手中心多出一个不存在的区域）。
      */
-    private static final String AREA_PENDING = "PENDING";
-
     private void reconcileDispatchArea(long orderId, long newAddressId) {
         CustomerMealPeriodRow row = jdbcTemplate.query(
-            "SELECT do.customer_id, mso.meal_period FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE mso.id = ?",
+            "SELECT do.customer_id, mso.meal_period, mso.status FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE mso.id = ?",
             ps -> ps.setLong(1, orderId),
             rs -> {
                 if (!rs.next()) {
                     return null;
                 }
-                return new CustomerMealPeriodRow(rs.getLong("customer_id"), rs.getString("meal_period"));
+                return new CustomerMealPeriodRow(rs.getLong("customer_id"), rs.getString("meal_period"), rs.getString("status"));
             }
         );
         if (row == null) {
@@ -303,14 +327,14 @@ class MobileAddressModule {
             mealPeriod,
             mealPeriod
         ).stream().findFirst().orElse(null);
-        if (newArea == null || newArea.isBlank()) {
-            // 新地址无已确认记忆：不沿用旧地址区域，留空待商家手动分配，
-            // 并同步写入/刷新「地址变更待确认」绑定，供分单工作台与异常单展示。
+        boolean hasRememberedArea = newArea != null && !newArea.isBlank();
+        if (!hasRememberedArea) {
+            // 新地址无已确认记忆：不沿用旧地址区域，写入/刷新「地址变更待确认」空壳绑定，
+            // 供分单工作台与异常单展示（订单停留在待分配，由商家手动归区）。
             jdbcTemplate.update(
                 // 列序：customer_id, address_id, meal_period, address_fingerprint,
                 //       area_code, rider_profile_id, manually_confirmed, updated_reason, updated_at
-                // 修复：此前 SELECT 只给了 8 个值导致列错位，且 area_code 列 NOT NULL 不允许 NULL。
-                //       正确值：address_fingerprint=''、area_code=''（空壳）、rider_profile_id=NULL。
+                // area_code 列 NOT NULL 不允许 NULL，空壳语义用 ''（rider_profile_id=NULL）。
                 "INSERT INTO rider_address_bindings (customer_id, address_id, meal_period, address_fingerprint, area_code, rider_profile_id, manually_confirmed, updated_reason, updated_at) "
                     + "SELECT do.customer_id, ?, ?, '', '', NULL, FALSE, 'ADDRESS_CHANGED_PENDING_CONFIRM', CURRENT_TIMESTAMP "
                     + "FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE mso.id = ? "
@@ -319,20 +343,20 @@ class MobileAddressModule {
                 mealPeriod,
                 orderId
             );
-            newArea = AREA_PENDING;
             log.info("换地址后新地址无已确认记忆，写入空壳绑定(area_code='')待商家分配: orderId={} customer={} address={} mealPeriod={}",
                 orderId, customerId, newAddressId, mealPeriod);
         }
-        // 仅当订单已派单（存在 dispatch_assignments 行）时才刷新区域快照；
-        // 未派单订单由自动派单环节基于新 address_id 实时 JOIN，无需处理。
-        int updatedSnapshots = jdbcTemplate.update(
-            "UPDATE dispatch_assignments SET area_code = ? WHERE meal_slot_order_id = ?",
-            newArea,
-            orderId
-        );
-        if (updatedSnapshots > 0) {
-            log.info("换地址后派单区域快照已刷新: orderId={} 新区域={} 快照行数={}",
-                orderId, newArea, updatedSnapshots);
+        // 撤销该订单的原有派单（含骑手批次项、空批次清理），仅限未配送终态的订单；
+        // 商家端可修改任意日期订单，已送达(DELIVERED)订单的派单/回执记录必须保留。
+        // 注意：绝不把快照改写成 'PENDING' 假区域——撤销派单让订单回工作台「待分配」才是正确语义。
+        if ("PENDING_DISPATCH".equals(row.status()) || "DISPATCHING".equals(row.status())) {
+            orderDispatchRepository.resetDispatchFlow(orderId);
+            jdbcTemplate.update(
+                "UPDATE meal_slot_orders SET status = 'PENDING_DISPATCH' WHERE id = ? AND status = 'DISPATCHING'",
+                orderId
+            );
+            log.info("换地址后撤销原派单、订单回退待派状态: orderId={} customer={} 新addressId={} 记忆区域={}",
+                orderId, customerId, newAddressId, hasRememberedArea ? newArea : "无(待商家分配)");
         }
     }
 

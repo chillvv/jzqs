@@ -30,6 +30,7 @@ import com.jzqs.app.customer.model.entity.CustomerEntity;
 import com.jzqs.app.customer.model.entity.MealWalletEntity;
 import com.jzqs.app.customer.model.entity.WalletTransactionEntity;
 import com.jzqs.app.customer.service.CustomerAssetService;
+import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.Timestamp;
 import java.time.LocalDate;
@@ -163,14 +164,16 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             wallet = createInitialWallet(customerId);
         }
         List<CustomerAddressDetailResponse> addresses = jdbcTemplate.query(
-            "SELECT id, contact_name, contact_phone, address_line, area_code, is_default FROM customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, id ASC",
+            "SELECT id, contact_name, contact_phone, address_line, area_code, is_default, latitude, longitude FROM customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, id ASC",
             (rs, rowNum) -> new CustomerAddressDetailResponse(
                 rs.getLong("id"),
                 rs.getString("contact_name"),
                 rs.getString("contact_phone"),
                 rs.getString("address_line"),
                 rs.getString("area_code"),
-                rs.getBoolean("is_default")
+                rs.getBoolean("is_default"),
+                rs.getBigDecimal("latitude"),
+                rs.getBigDecimal("longitude")
             ),
             customerId
         );
@@ -415,15 +418,17 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         long addressId = insertAndReturnId(
             """
                 INSERT INTO customer_addresses (
-                    customer_id, contact_name, contact_phone, address_line, area_code, is_default
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    customer_id, contact_name, contact_phone, address_line, area_code, is_default, latitude, longitude
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
             customerId,
             address.contactName(),
             address.contactPhone(),
             address.addressLine(),
             address.areaCode(),
-            address.isDefault()
+            address.isDefault(),
+            address.latitude(),
+            address.longitude()
         );
         return new CustomerAddressActionResponse(customerId, addressId, "CREATED");
     }
@@ -440,7 +445,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         jdbcTemplate.update(
             """
                 UPDATE customer_addresses
-                SET contact_name = ?, contact_phone = ?, address_line = ?, area_code = ?, is_default = ?
+                SET contact_name = ?, contact_phone = ?, address_line = ?, area_code = ?, is_default = ?, latitude = ?, longitude = ?
                 WHERE id = ? AND customer_id = ?
                 """,
             address.contactName(),
@@ -448,6 +453,8 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             address.addressLine(),
             address.areaCode(),
             address.isDefault(),
+            address.latitude(),
+            address.longitude(),
             addressId,
             customerId
         );
@@ -473,7 +480,24 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             addressId,
             customerId
         );
+        // 地址删除防护：进行中（待派/配送中）的订单仍引用该地址时禁止删除，
+        // 否则订单中心/骑手中心按地址 JOIN 的查询会把订单"藏"起来（9.2 孤儿地址事故）。
+        Integer activeOrders = jdbcTemplate.queryForObject(
+            "SELECT COUNT(*) FROM meal_slot_orders WHERE address_id = ? AND status IN ('PENDING_DISPATCH', 'DISPATCHING')",
+            Integer.class,
+            addressId
+        );
+        if (activeOrders != null && activeOrders > 0) {
+            throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID,
+                "该地址有 " + activeOrders + " 个进行中的订单正在使用，暂时无法删除；请先为这些订单更换地址");
+        }
         jdbcTemplate.update("DELETE FROM customer_addresses WHERE id = ? AND customer_id = ?", addressId, customerId);
+        // 订阅默认地址指向被删地址时置空，避免订阅自动下单生成无地址订单
+        jdbcTemplate.update(
+            "UPDATE subscription_rules SET default_address_id = NULL WHERE default_address_id = ? AND customer_id = ?",
+            addressId,
+            customerId
+        );
         if (Boolean.TRUE.equals(wasDefault)) {
             List<Long> remainingIds = jdbcTemplate.query(
                 "SELECT id FROM customer_addresses WHERE customer_id = ? ORDER BY id ASC",
@@ -914,7 +938,38 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         String addressLine = blankToNull(request == null ? null : request.addressLine());
         String areaCode = blankToDefault(request == null ? null : request.areaCode(), "");
         boolean isDefault = Boolean.TRUE.equals(request != null ? request.isDefault() : null);
-        return new AddressPayload(contact.name(), contact.phone(), requireCustomerAddressLine(addressLine), areaCode, isDefault);
+        BigDecimal latitude = sanitizeLatitude(request == null ? null : request.latitude());
+        BigDecimal longitude = sanitizeLongitude(latitude, request == null ? null : request.longitude());
+        // 经纬度必须成对：任一缺失/非法都整体视为未定位，避免只存单边坐标误导骑手导航
+        if (latitude == null || longitude == null) {
+            latitude = null;
+            longitude = null;
+        }
+        return new AddressPayload(contact.name(), contact.phone(), requireCustomerAddressLine(addressLine), areaCode, isDefault, latitude, longitude);
+    }
+
+    // 坐标来自商家端地图点位（拾取器回填或手动输入）；范围非法（0,0 或越界）一律视为未定位存 NULL，
+    // 避免骑手端拿坏坐标导航到错误位置。校验规则与顾客小程序端（MobileAddressModule）保持一致。
+    private BigDecimal sanitizeLatitude(BigDecimal latitude) {
+        if (latitude == null) {
+            return null;
+        }
+        double value = latitude.doubleValue();
+        if (value < -90 || value > 90 || value == 0) {
+            return null;
+        }
+        return latitude;
+    }
+
+    private BigDecimal sanitizeLongitude(BigDecimal latitude, BigDecimal longitude) {
+        if (latitude == null || longitude == null) {
+            return null;
+        }
+        double value = longitude.doubleValue();
+        if (value < -180 || value > 180 || value == 0) {
+            return null;
+        }
+        return longitude;
     }
 
     private ContactSnapshot resolveCustomerContact(long customerId) {
@@ -1173,7 +1228,9 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         String contactPhone,
         String addressLine,
         String areaCode,
-        boolean isDefault
+        boolean isDefault,
+        BigDecimal latitude,
+        BigDecimal longitude
     ) {
     }
 

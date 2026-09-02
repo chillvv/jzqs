@@ -38,6 +38,8 @@ export type CustomerAddressItem = {
   addressLine: string;
   areaCode?: string | null;
   isDefault: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 export type CustomerAddressMutationPayload = {
@@ -46,6 +48,8 @@ export type CustomerAddressMutationPayload = {
   addressLine: string;
   areaCode?: string | null;
   isDefault: boolean;
+  latitude?: number | null;
+  longitude?: number | null;
 };
 
 export type CustomerAddressMutationResponse = {

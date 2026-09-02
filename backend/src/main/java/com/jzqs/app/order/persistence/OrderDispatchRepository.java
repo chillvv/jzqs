@@ -43,9 +43,18 @@ public class OrderDispatchRepository {
             jdbcTemplate.update("DELETE FROM dispatch_batch_items WHERE meal_slot_order_id = ?", orderId);
             for (Long batchId : batchIds) {
                 refreshDispatchBatchMetrics(batchId);
+                removeBatchIfEmpty(batchId);
             }
         }
         jdbcTemplate.update("DELETE FROM dispatch_assignments WHERE meal_slot_order_id = ?", orderId);
+    }
+
+    private void removeBatchIfEmpty(long batchId) {
+        jdbcTemplate.update(
+            "DELETE FROM dispatch_batches WHERE id = ? AND NOT EXISTS (SELECT 1 FROM dispatch_batch_items WHERE batch_id = ?)",
+            batchId,
+            batchId
+        );
     }
 
     public void updateSpecialDispatch(long orderId, String deliveryMealPeriod) {

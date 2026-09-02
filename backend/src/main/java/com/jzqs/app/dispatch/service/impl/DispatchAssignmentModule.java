@@ -647,6 +647,8 @@ class DispatchAssignmentModule {
                                 id DESC
                         ) AS rn
                     FROM rider_address_bindings
+                    WHERE rider_profile_id IS NOT NULL
+                      AND (meal_period <=> ? OR meal_period IS NULL)
                 ) rab
                     ON rab.customer_id = doo.customer_id
                    AND rab.address_id = mso.address_id
@@ -666,6 +668,7 @@ class DispatchAssignmentModule {
                 rs.getString("meal_period"),
                 rs.getString("area_code")
             ),
+            finalMealPeriod,
             finalMealPeriod,
             finalMealPeriod,
             finalMealPeriod

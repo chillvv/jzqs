@@ -76,7 +76,9 @@ const emptyAddressForm = {
   contactPhone: "",
   addressLine: "",
   areaCode: "",
-  isDefault: false
+  isDefault: false,
+  latitude: "",
+  longitude: ""
 };
 
 function normalizeCustomerName(value: string) {
@@ -254,8 +256,18 @@ function buildAddressForm(address?: CustomerAddressItem | null) {
     contactPhone: address.contactPhone,
     addressLine: address.addressLine,
     areaCode: address.areaCode ?? "",
-    isDefault: address.isDefault
+    isDefault: address.isDefault,
+    latitude: address.latitude != null ? String(address.latitude) : "",
+    longitude: address.longitude != null ? String(address.longitude) : ""
   };
+}
+
+function parseCoordinate(value: string): number | null {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const num = Number(text);
+  if (!Number.isFinite(num) || num === 0) return null;
+  return num;
 }
 
 export function CustomerAssetPage() {
@@ -376,12 +388,17 @@ export function CustomerAssetPage() {
   function buildAddressPayload(form: typeof emptyAddressForm): CustomerAddressMutationPayload {
     const boundName = normalizeCustomerName(String(detail?.name || activeItem?.name || ""));
     const boundPhone = normalizeCustomerPhone(String(detail?.phone || activeItem?.phone || ""));
+    const latitude = parseCoordinate(form.latitude);
+    const longitude = parseCoordinate(form.longitude);
+    const hasCoords = latitude !== null && longitude !== null;
     return {
       contactName: boundName,
       contactPhone: boundPhone,
       addressLine: form.addressLine.trim(),
       areaCode: form.areaCode.trim(),
-      isDefault: form.isDefault
+      isDefault: form.isDefault,
+      latitude: hasCoords ? latitude : null,
+      longitude: hasCoords ? longitude : null
     };
   }
 
@@ -1363,6 +1380,16 @@ export function CustomerAssetPage() {
                             <div className="customer-detail-note-block__value">
                               {address.addressLine}
                               {address.areaCode ? ` (${address.areaCode})` : ""}
+                              <span
+                                style={{
+                                  marginLeft: 8,
+                                  fontSize: 12,
+                                  fontWeight: 600,
+                                  color: address.latitude != null && address.longitude != null ? "#16a34a" : "#dc2626"
+                                }}
+                              >
+                                {address.latitude != null && address.longitude != null ? "已定位" : "未定位"}
+                              </span>
                             </div>
                           </div>
                         ))}
@@ -1409,6 +1436,35 @@ export function CustomerAssetPage() {
                             value={addressForm.addressLine}
                             onValueChange={(value) => setAddressForm({ ...addressForm, addressLine: value })}
                           />
+                        </div>
+                        <div className="form-group" style={{ marginTop: 14 }}>
+                          <label className="form-label">地图定位（选填，用于骑手精准导航）</label>
+                          <div className="admin-panel-note" style={{ marginBottom: 8 }}>
+                            留空则骑手端按地址文字搜索。可点击「地图拾取坐标」在腾讯地图选点后，把经纬度回填到下方输入框。
+                          </div>
+                          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                            <SafeInput
+                              className="form-control"
+                              style={{ flex: "1 1 150px" }}
+                              value={addressForm.latitude}
+                              onValueChange={(value) => setAddressForm({ ...addressForm, latitude: value })}
+                              placeholder="纬度，如 30.654321"
+                            />
+                            <SafeInput
+                              className="form-control"
+                              style={{ flex: "1 1 150px" }}
+                              value={addressForm.longitude}
+                              onValueChange={(value) => setAddressForm({ ...addressForm, longitude: value })}
+                              placeholder="经度，如 104.012345"
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-outline"
+                              onClick={() => window.open("https://lbs.qq.com/getPoint/", "_blank", "noopener,noreferrer")}
+                            >
+                              地图拾取坐标
+                            </button>
+                          </div>
                         </div>
                         <div className="customer-edit-form-grid" style={{ marginTop: 14 }}>
                           <div className="form-group">

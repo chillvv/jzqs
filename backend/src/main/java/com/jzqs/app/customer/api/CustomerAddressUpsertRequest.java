@@ -1,6 +1,7 @@
 package com.jzqs.app.customer.api;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import java.math.BigDecimal;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record CustomerAddressUpsertRequest(
@@ -8,6 +9,8 @@ public record CustomerAddressUpsertRequest(
     String contactPhone,
     String addressLine,
     String areaCode,
-    Boolean isDefault
+    Boolean isDefault,
+    BigDecimal latitude,
+    BigDecimal longitude
 ) {
 }

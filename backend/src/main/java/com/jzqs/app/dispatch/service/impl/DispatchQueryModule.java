@@ -327,6 +327,7 @@ class DispatchQueryModule {
                     ) AS rn
                 FROM rider_address_bindings
                 WHERE rider_profile_id IS NOT NULL
+                  AND (meal_period <=> ? OR meal_period IS NULL)
             ) rab
                 ON rab.customer_id = doo.customer_id
                AND rab.address_id = mso.address_id
@@ -351,7 +352,7 @@ class DispatchQueryModule {
             rs.getString("suggested_area_code"),
             rs.getString("suggested_rider_name"),
             rs.getBoolean("remembered_address")
-        ), finalMealPeriod);
+        ), finalMealPeriod, finalMealPeriod);
     }
 
     List<DispatchPendingItemResponse> pendingItems(String mealPeriod, String serveDate) {
@@ -383,6 +384,7 @@ class DispatchQueryModule {
                     ) AS rn
                 FROM rider_address_bindings
                 WHERE rider_profile_id IS NOT NULL
+                  AND (meal_period <=> ? OR meal_period IS NULL)
             ) rab
                 ON rab.customer_id = doo.customer_id
                AND rab.address_id = mso.address_id
@@ -400,7 +402,7 @@ class DispatchQueryModule {
             rs.getLong("order_id"),
             rs.getString("customer_name"),
             rs.getString("delivery_address")
-        ), finalMealPeriod, targetDate, finalMealPeriod, finalMealPeriod);
+        ), finalMealPeriod, finalMealPeriod, targetDate, finalMealPeriod, finalMealPeriod);
     }
 
     List<DispatchAreaBindingResponse> areaBindings(String mealPeriod, String serveDate) {
