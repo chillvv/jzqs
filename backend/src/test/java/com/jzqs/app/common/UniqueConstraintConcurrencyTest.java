@@ -77,6 +77,11 @@ class UniqueConstraintConcurrencyTest extends BaseDbIntegrationTest {
     @DisplayName("并发插入 subscription_rules：同一客户至多一条规则（V21 唯一约束，防 TooManyResults）")
     void subscriptionRulesAllowOnlyOnePerCustomer() throws Exception {
         resetTables();
+        // subscription_rules.customer_id 有外键（V29 fk_subscription_rules_customer），先建父客户
+        jdbc.update(
+            "INSERT INTO customers (id, name, phone, source, active, customer_status, is_priority_customer) "
+                + "VALUES (1, '测试客户', '13800138000', 'TEST', 1, 'ACTIVE', 0)"
+        );
 
         int success = launchRace(() -> jdbc.update(
             "INSERT INTO subscription_rules (customer_id, active, lunch_enabled, dinner_enabled) "

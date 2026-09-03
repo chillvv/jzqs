@@ -164,7 +164,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             wallet = createInitialWallet(customerId);
         }
         List<CustomerAddressDetailResponse> addresses = jdbcTemplate.query(
-            "SELECT id, contact_name, contact_phone, address_line, area_code, is_default, latitude, longitude FROM customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, id ASC",
+            "SELECT id, contact_name, contact_phone, address_line, area_code, is_default, latitude, longitude FROM customer_addresses WHERE customer_id = ? AND active = TRUE ORDER BY is_default DESC, id ASC",
             (rs, rowNum) -> new CustomerAddressDetailResponse(
                 rs.getLong("id"),
                 rs.getString("contact_name"),
@@ -467,7 +467,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         requireActiveCustomer(customerId);
         requireExistingCustomerAddress(customerId, addressId);
         Integer addressCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM customer_addresses WHERE customer_id = ?",
+            "SELECT COUNT(*) FROM customer_addresses WHERE customer_id = ? AND active = TRUE",
             Integer.class,
             customerId
         );
@@ -475,13 +475,13 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "至少保留一个地址");
         }
         Boolean wasDefault = jdbcTemplate.queryForObject(
-            "SELECT is_default FROM customer_addresses WHERE id = ? AND customer_id = ?",
+            "SELECT is_default FROM customer_addresses WHERE id = ? AND customer_id = ? AND active = TRUE",
             Boolean.class,
             addressId,
             customerId
         );
         // 地址删除防护：进行中（待派/配送中）的订单仍引用该地址时禁止删除，
-        // 否则订单中心/骑手中心按地址 JOIN 的查询会把订单"藏"起来（9.2 孤儿地址事故）。
+        // 否则骑手端/订单中心按地址查询时这些订单会失去可送达地址，配送目标悬空。
         Integer activeOrders = jdbcTemplate.queryForObject(
             "SELECT COUNT(*) FROM meal_slot_orders WHERE address_id = ? AND status IN ('PENDING_DISPATCH', 'DISPATCHING')",
             Integer.class,
@@ -491,16 +491,31 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             throw new BusinessException(ErrorCode.ORDER_STATUS_INVALID,
                 "该地址有 " + activeOrders + " 个进行中的订单正在使用，暂时无法删除；请先为这些订单更换地址");
         }
-        jdbcTemplate.update("DELETE FROM customer_addresses WHERE id = ? AND customer_id = ?", addressId, customerId);
+        // 软删除：保留地址行，历史订单 address_id 永不悬空，各端口 INNER JOIN 照常显示。
+        jdbcTemplate.update(
+            "UPDATE customer_addresses SET active = FALSE, is_default = FALSE WHERE id = ? AND customer_id = ?",
+            addressId,
+            customerId
+        );
         // 订阅默认地址指向被删地址时置空，避免订阅自动下单生成无地址订单
         jdbcTemplate.update(
             "UPDATE subscription_rules SET default_address_id = NULL WHERE default_address_id = ? AND customer_id = ?",
             addressId,
             customerId
         );
+        // 清理该地址的骑手派单记忆与门牌参考图（地址停用后无意义）。
+        jdbcTemplate.update(
+            "DELETE FROM rider_address_bindings WHERE customer_id = ? AND address_id = ?",
+            customerId,
+            addressId
+        );
+        jdbcTemplate.update(
+            "DELETE FROM address_reference_images WHERE customer_address_id = ?",
+            addressId
+        );
         if (Boolean.TRUE.equals(wasDefault)) {
             List<Long> remainingIds = jdbcTemplate.query(
-                "SELECT id FROM customer_addresses WHERE customer_id = ? ORDER BY id ASC",
+                "SELECT id FROM customer_addresses WHERE customer_id = ? AND active = TRUE ORDER BY id ASC",
                 (rs, rowNum) -> rs.getLong("id"),
                 customerId
             );
@@ -923,7 +938,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
 
     private void requireExistingCustomerAddress(long customerId, long addressId) {
         Integer count = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM customer_addresses WHERE id = ? AND customer_id = ?",
+            "SELECT COUNT(*) FROM customer_addresses WHERE id = ? AND customer_id = ? AND active = TRUE",
             Integer.class,
             addressId,
             customerId
@@ -1295,6 +1310,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         jdbcTemplate.update("DELETE FROM subscription_confirmations WHERE customer_id = ?", customerId);
         jdbcTemplate.update("DELETE FROM subscription_import_skips WHERE customer_id = ?", customerId);
         jdbcTemplate.update("DELETE FROM rider_address_bindings WHERE customer_id = ?", customerId);
+        jdbcTemplate.update("DELETE FROM address_reference_images WHERE customer_address_id IN (SELECT id FROM customer_addresses WHERE customer_id = ?)", customerId);
         jdbcTemplate.update("DELETE FROM aftersale_cases WHERE customer_id = ?", customerId);
         jdbcTemplate.update("DELETE FROM order_notes WHERE customer_id = ?", customerId);
         // 2) 删除订单：先删 meal_slot_orders（依赖 daily_orders），再删 daily_orders

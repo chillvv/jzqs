@@ -3,6 +3,7 @@ package com.jzqs.app.common.test;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import java.util.List;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -11,7 +12,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
  * 后端集成测试基类：直连真实 MySQL 测试库（jzqs_test，schema 由全部 Flyway 迁移脚本构建，
  * 与生产一致）。通过环境变量可覆盖连接：TEST_DB_URL / TEST_DB_USER / TEST_DB_PASSWORD。
  *
- * 测试库初始化：backend/scripts/init-test-db.sh
+ * schema 不依赖外部脚本：initDb 里用 Flyway 编程式迁移自建（V25 自带孤儿清理，
+ * 与应用启动时的自举路径一致），因此本地与 CI（deploy.yml 的 mysql 服务 3307）开箱即用。
  */
 public abstract class BaseDbIntegrationTest {
 
@@ -49,16 +51,24 @@ public abstract class BaseDbIntegrationTest {
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl(System.getenv().getOrDefault(
             "TEST_DB_URL",
-            "jdbc:mysql://127.0.0.1:3306/jzqs_test?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai"
+            "jdbc:mysql://127.0.0.1:3307/jzqs_test?createDatabaseIfNotExist=true"
+                + "&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai"
+                + "&allowPublicKeyRetrieval=true&useSSL=false"
         ));
-        config.setUsername(System.getenv().getOrDefault("TEST_DB_USER", "jzqs"));
-        config.setPassword(System.getenv().getOrDefault("TEST_DB_PASSWORD", "jzqs_password_123"));
+        config.setUsername(System.getenv().getOrDefault("TEST_DB_USER", "root"));
+        config.setPassword(System.getenv().getOrDefault("TEST_DB_PASSWORD", "root"));
         config.setMaximumPoolSize(10);
         config.setMinimumIdle(1);
         config.setPoolName("jzqs-test");
         config.setConnectionTimeout(10_000);
         dataSource = new HikariDataSource(config);
         jdbc = new JdbcTemplate(dataSource);
+        // 自建/补齐 schema：顺序执行全部 Flyway 迁移（幂等，重复跑只会跳过已应用版本）
+        Flyway.configure()
+            .dataSource(config.getJdbcUrl(), config.getUsername(), config.getPassword())
+            .locations("classpath:db/migration")
+            .load()
+            .migrate();
     }
 
     @AfterAll

@@ -98,7 +98,7 @@ class MobileCustomerQueryModule {
                                     THEN CONCAT(ca.address_line, ' ', ca.door_number)
                                     ELSE ca.address_line END
                         FROM customer_addresses ca
-                        WHERE ca.customer_id = c.id
+                        WHERE ca.customer_id = c.id AND ca.active = TRUE
                         ORDER BY ca.is_default DESC, ca.id ASC
                         LIMIT 1
                     ) AS default_address,

@@ -35,7 +35,7 @@ public class OrderSupportRepository {
 
     public Long findDefaultAddressId(long customerId) {
         return jdbcTemplate.query(
-            "SELECT id FROM customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, id ASC LIMIT 1",
+            "SELECT id FROM customer_addresses WHERE customer_id = ? AND active = TRUE ORDER BY is_default DESC, id ASC LIMIT 1",
             ps -> ps.setLong(1, customerId),
             rs -> rs.next() ? rs.getLong("id") : null
         );
@@ -43,7 +43,7 @@ public class OrderSupportRepository {
 
     public List<String> findAddressLines(long addressId, long customerId) {
         return jdbcTemplate.queryForList(
-            "SELECT address_line FROM customer_addresses WHERE id = ? AND customer_id = ?",
+            "SELECT address_line FROM customer_addresses WHERE id = ? AND customer_id = ? AND active = TRUE",
             String.class,
             addressId,
             customerId

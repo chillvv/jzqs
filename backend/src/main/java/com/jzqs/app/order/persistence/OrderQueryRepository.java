@@ -500,7 +500,8 @@ public class OrderQueryRepository {
             """
                 SELECT id, customer_id, address_line, COALESCE(area_code, '') AS area_code, is_default
                 FROM customer_addresses
-                WHERE customer_id IN ("""
+                WHERE active = TRUE
+                  AND customer_id IN ("""
                 + placeholders
                 + """
                 )

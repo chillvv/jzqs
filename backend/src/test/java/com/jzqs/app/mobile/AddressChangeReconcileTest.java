@@ -162,15 +162,18 @@ class AddressChangeReconcileTest extends BaseDbIntegrationTest {
             .isInstanceOf(com.jzqs.app.common.error.BusinessException.class)
             .hasMessageContaining("进行中的订单");
 
-        Integer addressCount = jdbc.queryForObject(
-            "SELECT COUNT(*) FROM customer_addresses WHERE id = 101", Integer.class);
-        assertThat(addressCount).as("被进行中订单引用的地址不得被物理删除").isEqualTo(1);
+        Integer activeFlag = jdbc.queryForObject(
+            "SELECT active FROM customer_addresses WHERE id = 101", Integer.class);
+        assertThat(activeFlag).as("被进行中订单引用的地址不得被停用").isEqualTo(1);
 
-        // 订单转终态后，地址可以正常删除
+        // 订单转终态后，地址可以正常删除（软删除：行保留、active 置 0，历史订单永不悬空）
         jdbc.update("UPDATE meal_slot_orders SET status = 'REFUNDED' WHERE id = 301");
         module.deleteCustomerAddress(1, 101);
-        addressCount = jdbc.queryForObject(
+        Integer remainingRows = jdbc.queryForObject(
             "SELECT COUNT(*) FROM customer_addresses WHERE id = 101", Integer.class);
-        assertThat(addressCount).as("无进行中订单引用的地址可正常删除").isEqualTo(0);
+        assertThat(remainingRows).as("软删除后地址行仍保留，历史订单 JOIN 不悬空").isEqualTo(1);
+        activeFlag = jdbc.queryForObject(
+            "SELECT active FROM customer_addresses WHERE id = 101", Integer.class);
+        assertThat(activeFlag).as("软删除后地址标记为停用").isEqualTo(0);
     }
 }

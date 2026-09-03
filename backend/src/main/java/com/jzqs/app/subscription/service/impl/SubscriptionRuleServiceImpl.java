@@ -270,14 +270,14 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
             // 修复：queryForObject 在无默认地址时抛 EmptyResultDataAccessException（500），
             //       改为列表查询，无记录返回 null 再走"任选地址/提示先加地址"分支。
             List<Long> defaultAddressIds = jdbcTemplate.queryForList(
-                "SELECT id FROM customer_addresses WHERE customer_id = ? AND is_default = TRUE LIMIT 1",
+                "SELECT id FROM customer_addresses WHERE customer_id = ? AND is_default = TRUE AND active = TRUE LIMIT 1",
                 Long.class,
                 customerId
             );
             Long defaultAddressId = defaultAddressIds.isEmpty() ? null : defaultAddressIds.get(0);
             if (defaultAddressId == null) {
                 List<Long> addresses = jdbcTemplate.queryForList(
-                    "SELECT id FROM customer_addresses WHERE customer_id = ? LIMIT 1",
+                    "SELECT id FROM customer_addresses WHERE customer_id = ? AND active = TRUE LIMIT 1",
                     Long.class,
                     customerId
                 );
@@ -353,7 +353,7 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
         }
 
         Integer ownedAddressCount = jdbcTemplate.queryForObject(
-            "SELECT COUNT(*) FROM customer_addresses WHERE customer_id = ?",
+            "SELECT COUNT(*) FROM customer_addresses WHERE customer_id = ? AND active = TRUE",
             Integer.class,
             request.customerId()
         );
@@ -385,7 +385,7 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
         // 检查地址是否属于该客户
         if (request.defaultAddressId() != null) {
             Integer addressCount = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM customer_addresses WHERE id = ? AND customer_id = ?",
+                "SELECT COUNT(*) FROM customer_addresses WHERE id = ? AND customer_id = ? AND active = TRUE",
                 Integer.class,
                 request.defaultAddressId(),
                 request.customerId()

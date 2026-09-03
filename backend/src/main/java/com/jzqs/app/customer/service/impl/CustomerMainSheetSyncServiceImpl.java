@@ -194,6 +194,8 @@ public class CustomerMainSheetSyncServiceImpl implements CustomerMainSheetSyncSe
         jdbcTemplate.update("DELETE FROM wallet_transactions");
         jdbcTemplate.update("DELETE FROM subscription_rules");
         jdbcTemplate.update("DELETE FROM meal_wallets");
+        jdbcTemplate.update("DELETE FROM rider_address_bindings");
+        jdbcTemplate.update("DELETE FROM address_reference_images");
         jdbcTemplate.update("DELETE FROM customer_addresses");
         jdbcTemplate.update("DELETE FROM customers");
     }

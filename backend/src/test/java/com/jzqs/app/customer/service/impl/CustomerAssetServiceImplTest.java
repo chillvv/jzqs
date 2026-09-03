@@ -71,7 +71,7 @@ class CustomerAssetServiceImplTest {
         when(mealWalletMapper.selectOne(any())).thenReturn(wallet);
         when(walletTransactionMapper.selectList(any())).thenReturn(List.of());
         when(jdbcTemplate.query(
-            eq("SELECT id, contact_name, contact_phone, address_line, area_code, is_default, latitude, longitude FROM customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, id ASC"),
+            eq("SELECT id, contact_name, contact_phone, address_line, area_code, is_default, latitude, longitude FROM customer_addresses WHERE customer_id = ? AND active = TRUE ORDER BY is_default DESC, id ASC"),
             any(RowMapper.class),
             eq(382L)
         )).thenReturn(List.of());
@@ -110,7 +110,7 @@ class CustomerAssetServiceImplTest {
         when(mealWalletMapper.selectOne(any())).thenReturn(wallet);
         when(walletTransactionMapper.selectList(any())).thenReturn(List.of());
         lenient().when(jdbcTemplate.query(
-            eq("SELECT id, contact_name, contact_phone, address_line, area_code, is_default, latitude, longitude FROM customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, id ASC"),
+            eq("SELECT id, contact_name, contact_phone, address_line, area_code, is_default, latitude, longitude FROM customer_addresses WHERE customer_id = ? AND active = TRUE ORDER BY is_default DESC, id ASC"),
             any(RowMapper.class),
             eq(382L)
         )).thenReturn(List.of());
@@ -235,7 +235,7 @@ class CustomerAssetServiceImplTest {
         customer.setActive(true);
         when(customerMapper.selectById(382L)).thenReturn(customer);
         when(jdbcTemplate.queryForObject(
-            eq("SELECT COUNT(*) FROM customer_addresses WHERE id = ? AND customer_id = ?"),
+            eq("SELECT COUNT(*) FROM customer_addresses WHERE id = ? AND customer_id = ? AND active = TRUE"),
             eq(Integer.class),
             eq(18L),
             eq(382L)

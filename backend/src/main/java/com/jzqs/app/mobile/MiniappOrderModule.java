@@ -432,7 +432,7 @@ class MiniappOrderModule {
         // - 未传地址 ID → 回退到该客户默认地址（ID 关联）。
         if (requestedAddressId != null && requestedAddressId > 0) {
             Integer owned = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM customer_addresses WHERE id = ? AND customer_id = ?",
+                "SELECT COUNT(*) FROM customer_addresses WHERE id = ? AND customer_id = ? AND active = TRUE",
                 Integer.class,
                 requestedAddressId,
                 customerId
@@ -443,7 +443,7 @@ class MiniappOrderModule {
             throw new BusinessException(ErrorCode.ADDRESS_NOT_FOUND, "配送地址不存在或不属于该客户");
         }
         Long defaultAddressId = jdbcTemplate.query(
-            "SELECT id FROM customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, id ASC",
+            "SELECT id FROM customer_addresses WHERE customer_id = ? AND active = TRUE ORDER BY is_default DESC, id ASC",
             ps -> ps.setLong(1, customerId),
             rs -> rs.next() ? rs.getLong(1) : null
         );

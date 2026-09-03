@@ -56,7 +56,7 @@ public class OrderSubscriptionRepository {
 
     public String findAddressLine(long addressId) {
         List<String> rows = jdbcTemplate.query(
-            "SELECT address_line FROM customer_addresses WHERE id = ?",
+            "SELECT address_line FROM customer_addresses WHERE id = ? AND active = TRUE",
             (rs, rowNum) -> rs.getString("address_line"),
             addressId
         );
