@@ -71,7 +71,7 @@ class CustomerAssetServiceImplTest {
         when(mealWalletMapper.selectOne(any())).thenReturn(wallet);
         when(walletTransactionMapper.selectList(any())).thenReturn(List.of());
         when(jdbcTemplate.query(
-            eq("SELECT id, contact_name, contact_phone, address_line, area_code, is_default, latitude, longitude FROM customer_addresses WHERE customer_id = ? AND active = TRUE ORDER BY is_default DESC, id ASC"),
+            eq("SELECT id, contact_name, contact_phone, address_line, door_number, area_code, is_default, latitude, longitude FROM customer_addresses WHERE customer_id = ? AND active = TRUE ORDER BY is_default DESC, id ASC"),
             any(RowMapper.class),
             eq(382L)
         )).thenReturn(List.of());
@@ -110,7 +110,7 @@ class CustomerAssetServiceImplTest {
         when(mealWalletMapper.selectOne(any())).thenReturn(wallet);
         when(walletTransactionMapper.selectList(any())).thenReturn(List.of());
         lenient().when(jdbcTemplate.query(
-            eq("SELECT id, contact_name, contact_phone, address_line, area_code, is_default, latitude, longitude FROM customer_addresses WHERE customer_id = ? AND active = TRUE ORDER BY is_default DESC, id ASC"),
+            eq("SELECT id, contact_name, contact_phone, address_line, door_number, area_code, is_default, latitude, longitude FROM customer_addresses WHERE customer_id = ? AND active = TRUE ORDER BY is_default DESC, id ASC"),
             any(RowMapper.class),
             eq(382L)
         )).thenReturn(List.of());
@@ -167,9 +167,12 @@ class CustomerAssetServiceImplTest {
                 null,
                 null,
                 "高新区测试地址 66 号",
+                null,
+                null,
                 5,
                 "首充赠送",
                 30,
+                null,
                 null,
                 null,
                 null
@@ -181,14 +184,17 @@ class CustomerAssetServiceImplTest {
         verify(jdbcTemplate).update(
             eq("""
             INSERT INTO customer_addresses (
-                customer_id, contact_name, contact_phone, address_line, area_code, is_default
-            ) VALUES (?, ?, ?, ?, ?, TRUE)
+                customer_id, contact_name, contact_phone, address_line, door_number, area_code, is_default, latitude, longitude
+            ) VALUES (?, ?, ?, ?, ?, ?, TRUE, ?, ?)
             """),
             eq(520L),
             eq("新客户"),
             eq("13600000066"),
             eq("高新区测试地址 66 号"),
-            eq("")
+            eq((String) null),
+            eq(""),
+            eq((BigDecimal) null),
+            eq((BigDecimal) null)
         );
         // 初始加餐已改为 jdbcTemplate 原子自增，不再调用 mealWalletMapper.updateById
         verify(walletTransactionMapper).insert(argThat((WalletTransactionEntity tx) ->
@@ -214,6 +220,7 @@ class CustomerAssetServiceImplTest {
                 "前台",
                 "13800000382",
                 "高新区科技园A座8层",
+                null,
                 "高新区",
                 true,
                 null,
@@ -248,6 +255,7 @@ class CustomerAssetServiceImplTest {
                 "后门",
                 "13900000382",
                 "天府三街B座",
+                null,
                 "高新区",
                 false,
                 null,
@@ -262,12 +270,13 @@ class CustomerAssetServiceImplTest {
         verify(jdbcTemplate).update(
             eq("""
                 UPDATE customer_addresses
-                SET contact_name = ?, contact_phone = ?, address_line = ?, area_code = ?, is_default = ?, latitude = ?, longitude = ?
+                SET contact_name = ?, contact_phone = ?, address_line = ?, door_number = ?, area_code = ?, is_default = ?, latitude = ?, longitude = ?
                 WHERE id = ? AND customer_id = ?
                 """),
             eq("竹子"),
             eq("13800000382"),
             eq("天府三街B座"),
+            eq((String) null),
             eq("高新区"),
             eq(false),
             eq((BigDecimal) null),

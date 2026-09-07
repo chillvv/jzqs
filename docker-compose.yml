@@ -18,6 +18,9 @@ services:
       - --innodb_buffer_pool_size=1G
       - --max_connections=200
       - --default-time-zone=+08:00
+      # Flyway 以 jzqs 用户跑触发器迁移（V37）需要：无 SUPER 时创建触发器/函数必须放宽此项
+      # （单机部署无复制副本，无 binlog 复制安全影响）
+      - --log-bin-trust-function-creators=1
     volumes:
       - mysql_data:/var/lib/mysql
     ports:
@@ -86,6 +89,10 @@ services:
   admin:
     build:
       context: ./admin
+      args:
+        # 高德地图选点（可选）：在 .env 配置后 ./build.sh admin 重建生效
+        VITE_AMAP_KEY: ${VITE_AMAP_KEY:-}
+        VITE_AMAP_SECURITY_JSCODE: ${VITE_AMAP_SECURITY_JSCODE:-}
     container_name: jzqs-admin
     restart: unless-stopped
     cpus: 0.75

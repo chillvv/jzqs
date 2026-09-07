@@ -27,6 +27,12 @@ class MobileAuthServiceTest {
     void resetAuthData() {
         jdbcTemplate.update("DELETE FROM wallet_transactions WHERE wallet_id IN (SELECT id FROM meal_wallets WHERE customer_id > 3)");
         jdbcTemplate.update("DELETE FROM meal_wallets WHERE customer_id > 3");
+        // V36 起 meal_slot_orders.address_id 有 RESTRICT 外键：必须先清订单，再清地址/客户，
+        // 否则删客户时 MySQL 级联删 customer_addresses 会被订单引用拦下。
+        jdbcTemplate.update(
+            "DELETE FROM meal_slot_orders WHERE daily_order_id IN (SELECT id FROM daily_orders WHERE customer_id > 3)");
+        jdbcTemplate.update("DELETE FROM daily_orders WHERE customer_id > 3");
+        jdbcTemplate.update("DELETE FROM customer_addresses WHERE customer_id > 3");
         jdbcTemplate.update("DELETE FROM customers WHERE id > 3");
         jdbcTemplate.update("DELETE FROM dispatch_assignments WHERE rider_profile_id IS NOT NULL");
         jdbcTemplate.update("DELETE FROM rider_profiles");

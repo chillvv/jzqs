@@ -172,9 +172,14 @@ describe("order prep helpers", () => {
         {
           id: 100,
           customerName: "张先生",
+          customerPhone: "13800000001",
           mealPeriod: "LUNCH",
           quantity: 2,
-          subscriptionRuleId: 9
+          addressLine: "测试地址",
+          userNote: "",
+          merchantRemark: "",
+          priority: false,
+          status: "PENDING"
         }
       ]
     );

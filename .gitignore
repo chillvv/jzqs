@@ -65,6 +65,11 @@ backend/*.err
 admin/*.log
 backend/*.txt
 
+# ---------- 临时/校验/测试产出物 ----------
+/tFLlFsiEYA.txt
+/admin/public/tFLlFsiEYA.txt
+/admin/vitest-result.json
+
 # ---------- 临时文件 ----------
 *.tmp
 *.temp

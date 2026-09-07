@@ -41,6 +41,8 @@ public class ManualCreateTest {
         mergeServeDate = LocalDate.now().plusDays(11);
         jdbcTemplate.update("DELETE FROM wallet_transactions WHERE wallet_id = ?", WALLET_ID);
         jdbcTemplate.update("DELETE FROM meal_wallets WHERE id = ?", WALLET_ID);
+        // V36 起地址被订单 RESTRICT 引用，先删引用该地址的订单（子表由 V25 外键级联清理）
+        jdbcTemplate.update("DELETE FROM meal_slot_orders WHERE address_id = ?", ADDRESS_ID);
         jdbcTemplate.update("DELETE FROM customer_addresses WHERE id = ?", ADDRESS_ID);
         // V1 种子中客户 id 从 382 开始，id=1 不存在，需自建（V25 外键要求父行存在）
         jdbcTemplate.update(

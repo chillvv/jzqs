@@ -18,6 +18,7 @@ class RemarkSuggestionServiceTest {
     private static final long WALLET_ID = 9921L;
     private static final long DAILY_ORDER_ID = 9921L;
     private static final long MEAL_SLOT_ORDER_ID = 9921L;
+    private static final long ADDRESS_ID = 9921L;
 
 
     @Autowired
@@ -47,6 +48,12 @@ class RemarkSuggestionServiceTest {
             WALLET_ID,
             CUSTOMER_ID
         );
+        // V36 起 meal_slot_orders.address_id 有外键，订单必须引用真实存在的地址行
+        jdbcTemplate.update(
+            "INSERT IGNORE INTO customer_addresses (id, customer_id, contact_name, contact_phone, address_line, area_code, is_default) VALUES (?, ?, '备注建议客户9921', '13900009921', '测试地址9921', '高新区', TRUE)",
+            ADDRESS_ID,
+            CUSTOMER_ID
+        );
 
         jdbcTemplate.update(
             "INSERT INTO wallet_transactions (id, wallet_id, transaction_type, meal_delta, operator_name, remark, created_at) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)",
@@ -62,7 +69,7 @@ class RemarkSuggestionServiceTest {
         );
         jdbcTemplate.update(
             "INSERT INTO meal_slot_orders (id, daily_order_id, meal_period, delivery_meal_period, quantity, address_id, note, user_note, status, source_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            MEAL_SLOT_ORDER_ID, DAILY_ORDER_ID, "LUNCH", "LUNCH", 1, 1L, "少饭9921", "不要辣9921", "PENDING_DISPATCH", "BACKEND"
+            MEAL_SLOT_ORDER_ID, DAILY_ORDER_ID, "LUNCH", "LUNCH", 1, ADDRESS_ID, "少饭9921", "不要辣9921", "PENDING_DISPATCH", "BACKEND"
         );
         jdbcTemplate.update(
             "INSERT INTO delivery_receipts (id, meal_slot_order_id, receipt_url, receipt_note, delivered_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)",

@@ -34,9 +34,14 @@ class OrderPrepNoteProjectionIntegrationTest {
         jdbcTemplate.update("DELETE FROM order_notes WHERE meal_slot_order_id = ?", ORDER_ID);
         jdbcTemplate.update("DELETE FROM meal_slot_orders WHERE id = ?", ORDER_ID);
         jdbcTemplate.update("DELETE FROM daily_orders WHERE id = ?", DAILY_ORDER_ID);
+        // V36 起地址被订单 RESTRICT 引用：先清引用该地址的订单，再按客户清，最后清地址/客户
+        jdbcTemplate.update("DELETE FROM meal_slot_orders WHERE address_id = ?", ADDRESS_ID);
+        jdbcTemplate.update(
+            "DELETE FROM meal_slot_orders WHERE daily_order_id IN (SELECT id FROM daily_orders WHERE customer_id = ?)",
+            CUSTOMER_ID);
+        jdbcTemplate.update("DELETE FROM daily_orders WHERE customer_id = ?", CUSTOMER_ID);
         jdbcTemplate.update("DELETE FROM customer_addresses WHERE id = ?", ADDRESS_ID);
         jdbcTemplate.update("DELETE FROM customer_addresses WHERE customer_id = ?", CUSTOMER_ID);
-        jdbcTemplate.update("DELETE FROM daily_orders WHERE customer_id = ?", CUSTOMER_ID);
         jdbcTemplate.update("DELETE FROM customers WHERE id = ?", CUSTOMER_ID);
 
         jdbcTemplate.update(

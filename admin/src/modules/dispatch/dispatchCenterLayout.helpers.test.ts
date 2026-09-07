@@ -62,7 +62,7 @@ describe("dispatchCenterLayout helpers", () => {
       validateCreateRiderDraft({
         riderName: "王师傅",
         phone: "1380013800",
-        areaCode: ""
+        enabled: true
       })
     ).toEqual({
       riderName: "",

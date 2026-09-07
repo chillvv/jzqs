@@ -8,6 +8,7 @@ public record CustomerAddressUpsertRequest(
     String contactName,
     String contactPhone,
     String addressLine,
+    String doorNumber,
     String areaCode,
     Boolean isDefault,
     BigDecimal latitude,

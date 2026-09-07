@@ -6,6 +6,7 @@ import {
   buildCustomerOverviewSummary,
   filterCustomerAssets,
   normalizeInitialMealsValue,
+  parseCoordinatePair,
   resolveCustomerOrderModeLabel,
   resolveCustomerSpecialMark,
   resolveCustomerStatusLabel,
@@ -113,6 +114,37 @@ describe("buildCustomerOverviewSummary", () => {
       { label: "正式用户", value: "12 人", tone: "slate" },
       { label: "固定订餐", value: "5 人", tone: "slate" }
     ]);
+  });
+});
+
+describe("parseCoordinatePair", () => {
+  it("解析英文逗号分隔的纬度,经度（坐标拾取器复制格式）", () => {
+    expect(parseCoordinatePair("30.484039,114.411133")).toEqual({
+      latitude: "30.484039",
+      longitude: "114.411133"
+    });
+  });
+
+  it("解析中文逗号与空格分隔", () => {
+    expect(parseCoordinatePair("30.484039，114.411133")).toEqual({
+      latitude: "30.484039",
+      longitude: "114.411133"
+    });
+    expect(parseCoordinatePair(" 30.484039  114.411133 ")).toEqual({
+      latitude: "30.484039",
+      longitude: "114.411133"
+    });
+  });
+
+  it("普通单字段输入（纯数字）返回 null，走原流程", () => {
+    expect(parseCoordinatePair("30.484039")).toBeNull();
+  });
+
+  it("空值与非法值返回 null", () => {
+    expect(parseCoordinatePair("")).toBeNull();
+    expect(parseCoordinatePair("abc,def")).toBeNull();
+    expect(parseCoordinatePair("0,0")).toBeNull();
+    expect(parseCoordinatePair("120,200")).toBeNull();
   });
 });
 

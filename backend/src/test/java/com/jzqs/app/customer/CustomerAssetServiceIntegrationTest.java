@@ -43,6 +43,7 @@ class CustomerAssetServiceIntegrationTest {
                 "测试联系人",
                 "13900009913",
                 "高新区测试路 13 号",
+                null,
                 "高新区",
                 true,
                 null,

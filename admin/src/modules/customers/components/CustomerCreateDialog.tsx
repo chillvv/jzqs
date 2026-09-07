@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import { X } from "lucide-react";
 import { RemarkField } from "../../../shared/components/RemarkField";
 import { SafeInput } from "../../../shared/components/SafeInput";
 import { TooltipHint } from "../../../shared/components/TooltipHint";
-import { normalizeInitialMealsValue } from "../customerAssetPage.helpers";
+import { MapLocationPickerDialog } from "./MapLocationPickerDialog";
+import { normalizeInitialMealsValue, parseCoordinatePair } from "../customerAssetPage.helpers";
 
 interface CustomerCreateForm {
   name: string;
@@ -17,6 +18,9 @@ interface CustomerCreateForm {
   initialValidityDays: string;
   initialMealRemark: string;
   addressLine: string;
+  doorNumber: string;
+  latitude: string;
+  longitude: string;
 }
 
 interface CustomerCreateDialogProps {
@@ -38,6 +42,8 @@ export function CustomerCreateDialog({
   onChange,
   normalizeCustomerPhone
 }: CustomerCreateDialogProps) {
+  const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
+
   if (!open) {
     return null;
   }
@@ -105,6 +111,46 @@ export function CustomerCreateDialog({
                   <label className="form-label"><span className="required">*</span>收货地址</label>
                   <SafeInput className="form-control" value={form.addressLine} onValueChange={(value) => onChange({ ...form, addressLine: value })} placeholder="请输入详细收货地址" />
                 </div>
+                <div className="form-group">
+                  <label className="form-label">门牌号（选填）</label>
+                  <SafeInput className="form-control" value={form.doorNumber} onValueChange={(value) => onChange({ ...form, doorNumber: value })} placeholder="如：8栋2单元1603 / 13楼1305" />
+                </div>
+              </div>
+              <div className="form-group" style={{ marginTop: "16px" }}>
+                <label className="form-label">地图定位（选填，用于骑手精准导航）</label>
+                <div className="admin-panel-note" style={{ marginBottom: 8 }}>
+                  点击「在地图上选点」搜索或点击地图位置，坐标和地址自动回填（门牌号等可在地址后补充）。
+                </div>
+                <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <SafeInput
+                    className="form-control"
+                    style={{ flex: "1 1 150px" }}
+                    value={form.latitude}
+                    onValueChange={(value) => {
+                      const pair = parseCoordinatePair(value);
+                      if (pair) {
+                        onChange({ ...form, ...pair });
+                        return;
+                      }
+                      onChange({ ...form, latitude: value });
+                    }}
+                    placeholder="纬度，如 30.654321"
+                  />
+                  <SafeInput
+                    className="form-control"
+                    style={{ flex: "1 1 150px" }}
+                    value={form.longitude}
+                    onValueChange={(value) => onChange({ ...form, longitude: value })}
+                    placeholder="经度，如 104.012345"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-outline"
+                    onClick={() => setIsMapPickerOpen(true)}
+                  >
+                    在地图上选点
+                  </button>
+                </div>
               </div>
               <div className="admin-panel-note" style={{ marginTop: "12px" }}>
                 首个收货地址会自动绑定当前客户姓名和手机号，后续在后台修改客户资料时会同步更新地址联系人与电话。
@@ -130,6 +176,24 @@ export function CustomerCreateDialog({
           <button className="btn btn-primary" disabled={submitting} onClick={onSubmit}>{submitting ? "创建中..." : "确认创建"}</button>
         </div>
       </div>
+      <MapLocationPickerDialog
+        open={isMapPickerOpen}
+        initialLatitude={form.latitude}
+        initialLongitude={form.longitude}
+        onClose={() => setIsMapPickerOpen(false)}
+        onConfirm={(latitude, longitude, resolvedAddress) => {
+          onChange({
+            ...form,
+            latitude,
+            longitude,
+            addressLine:
+              resolvedAddress && resolvedAddress.trim().length > 0
+                ? resolvedAddress
+                : form.addressLine
+          });
+          setIsMapPickerOpen(false);
+        }}
+      />
     </div>
   );
 }

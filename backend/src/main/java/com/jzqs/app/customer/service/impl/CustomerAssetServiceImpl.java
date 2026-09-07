@@ -164,12 +164,13 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             wallet = createInitialWallet(customerId);
         }
         List<CustomerAddressDetailResponse> addresses = jdbcTemplate.query(
-            "SELECT id, contact_name, contact_phone, address_line, area_code, is_default, latitude, longitude FROM customer_addresses WHERE customer_id = ? AND active = TRUE ORDER BY is_default DESC, id ASC",
+            "SELECT id, contact_name, contact_phone, address_line, door_number, area_code, is_default, latitude, longitude FROM customer_addresses WHERE customer_id = ? AND active = TRUE ORDER BY is_default DESC, id ASC",
             (rs, rowNum) -> new CustomerAddressDetailResponse(
                 rs.getLong("id"),
                 rs.getString("contact_name"),
                 rs.getString("contact_phone"),
                 rs.getString("address_line"),
+                rs.getString("door_number"),
                 rs.getString("area_code"),
                 rs.getBoolean("is_default"),
                 rs.getBigDecimal("latitude"),
@@ -240,6 +241,9 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         name = requireCustomerName(name);
         phone = requireCustomerPhone(phone);
         addressLine = requireCustomerAddressLine(addressLine);
+        // 建档首地址可选带坐标（后台地图选点回填）；成对合法才落库，否则视为未定位
+        BigDecimal createLatitude = sanitizeLatitude(request == null ? null : request.latitude());
+        BigDecimal createLongitude = sanitizeLongitude(createLatitude, request == null ? null : request.longitude());
 
         if (!phone.isBlank()) {
             boolean phoneExists = customerMapper.selectCount(new LambdaQueryWrapper<CustomerEntity>().eq(CustomerEntity::getPhone, phone)) > 0;
@@ -280,9 +284,12 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
 
         jdbcTemplate.update("""
             INSERT INTO customer_addresses (
-                customer_id, contact_name, contact_phone, address_line, area_code, is_default
-            ) VALUES (?, ?, ?, ?, ?, TRUE)
-            """, customer.getId(), name, phone, addressLine, "");
+                customer_id, contact_name, contact_phone, address_line, door_number, area_code, is_default, latitude, longitude
+            ) VALUES (?, ?, ?, ?, ?, ?, TRUE, ?, ?)
+            """, customer.getId(), name, phone, addressLine,
+            request == null || request.doorNumber() == null || request.doorNumber().isBlank()
+                ? null : request.doorNumber().trim(),
+            "", createLatitude, createLongitude);
 
         if (initialMealDelta > 0) {
             MealWalletEntity wallet = findOrCreateWallet(customer.getId());
@@ -418,13 +425,14 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         long addressId = insertAndReturnId(
             """
                 INSERT INTO customer_addresses (
-                    customer_id, contact_name, contact_phone, address_line, area_code, is_default, latitude, longitude
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    customer_id, contact_name, contact_phone, address_line, door_number, area_code, is_default, latitude, longitude
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
             customerId,
             address.contactName(),
             address.contactPhone(),
             address.addressLine(),
+            address.doorNumber(),
             address.areaCode(),
             address.isDefault(),
             address.latitude(),
@@ -445,12 +453,13 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         jdbcTemplate.update(
             """
                 UPDATE customer_addresses
-                SET contact_name = ?, contact_phone = ?, address_line = ?, area_code = ?, is_default = ?, latitude = ?, longitude = ?
+                SET contact_name = ?, contact_phone = ?, address_line = ?, door_number = ?, area_code = ?, is_default = ?, latitude = ?, longitude = ?
                 WHERE id = ? AND customer_id = ?
                 """,
             address.contactName(),
             address.contactPhone(),
             address.addressLine(),
+            address.doorNumber(),
             address.areaCode(),
             address.isDefault(),
             address.latitude(),
@@ -951,6 +960,8 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
     private AddressPayload normalizeAddressPayload(long customerId, CustomerAddressUpsertRequest request) {
         ContactSnapshot contact = resolveCustomerContact(customerId);
         String addressLine = blankToNull(request == null ? null : request.addressLine());
+        String doorNumberRaw = request == null ? null : request.doorNumber();
+        String doorNumber = doorNumberRaw == null || doorNumberRaw.isBlank() ? null : doorNumberRaw.trim();
         String areaCode = blankToDefault(request == null ? null : request.areaCode(), "");
         boolean isDefault = Boolean.TRUE.equals(request != null ? request.isDefault() : null);
         BigDecimal latitude = sanitizeLatitude(request == null ? null : request.latitude());
@@ -960,7 +971,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             latitude = null;
             longitude = null;
         }
-        return new AddressPayload(contact.name(), contact.phone(), requireCustomerAddressLine(addressLine), areaCode, isDefault, latitude, longitude);
+        return new AddressPayload(contact.name(), contact.phone(), requireCustomerAddressLine(addressLine), doorNumber, areaCode, isDefault, latitude, longitude);
     }
 
     // 坐标来自商家端地图点位（拾取器回填或手动输入）；范围非法（0,0 或越界）一律视为未定位存 NULL，
@@ -1242,6 +1253,7 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         String contactName,
         String contactPhone,
         String addressLine,
+        String doorNumber,
         String areaCode,
         boolean isDefault,
         BigDecimal latitude,

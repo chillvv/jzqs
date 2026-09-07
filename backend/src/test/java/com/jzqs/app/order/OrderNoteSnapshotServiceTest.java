@@ -42,6 +42,11 @@ class OrderNoteSnapshotServiceTest {
         jdbcTemplate.update("DELETE FROM customer_notes WHERE customer_id = ?", CUSTOMER_ID);
         jdbcTemplate.update("DELETE FROM wallet_transactions WHERE wallet_id = ?", WALLET_ID);
         jdbcTemplate.update("DELETE FROM meal_wallets WHERE id = ?", WALLET_ID);
+        // V36 起地址被订单 RESTRICT 引用：按客户清掉全部订单，不能只清这两天
+        jdbcTemplate.update(
+            "DELETE FROM meal_slot_orders WHERE daily_order_id IN (SELECT id FROM daily_orders WHERE customer_id = ?)",
+            CUSTOMER_ID);
+        jdbcTemplate.update("DELETE FROM daily_orders WHERE customer_id = ?", CUSTOMER_ID);
         jdbcTemplate.update("DELETE FROM customer_addresses WHERE id = ?", ADDRESS_ID);
 
         // 本类用 V1 基线里不存在的 customer 1（基线客户从 382 起），单跑本类时 customer 1 不存在，
@@ -198,8 +203,11 @@ class OrderNoteSnapshotServiceTest {
     void shouldKeepSuccessfulItemsWhenSubscriptionImportHasFailures() {
         long failedCustomerId = 9908L;
         LocalDate serveDate = LocalDate.now().plusDays(7);
-        jdbcTemplate.update("DELETE FROM meal_slot_orders WHERE daily_order_id IN (SELECT id FROM daily_orders WHERE customer_id = ? AND serve_date = ?)", failedCustomerId, serveDate);
-        jdbcTemplate.update("DELETE FROM daily_orders WHERE customer_id = ? AND serve_date = ?", failedCustomerId, serveDate);
+        // V36 起地址被订单 RESTRICT 引用：按客户清掉全部订单，不能只清这一天
+        jdbcTemplate.update(
+            "DELETE FROM meal_slot_orders WHERE daily_order_id IN (SELECT id FROM daily_orders WHERE customer_id = ?)",
+            failedCustomerId);
+        jdbcTemplate.update("DELETE FROM daily_orders WHERE customer_id = ?", failedCustomerId);
         jdbcTemplate.update("DELETE FROM customer_addresses WHERE customer_id = ?", failedCustomerId);
         jdbcTemplate.update("DELETE FROM meal_wallets WHERE customer_id = ?", failedCustomerId);
         jdbcTemplate.update("DELETE FROM customers WHERE id = ?", failedCustomerId);

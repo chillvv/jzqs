@@ -7,6 +7,7 @@ public record CustomerAddressDetailResponse(
     String contactName,
     String contactPhone,
     String addressLine,
+    String doorNumber,
     String areaCode,
     boolean isDefault,
     BigDecimal latitude,

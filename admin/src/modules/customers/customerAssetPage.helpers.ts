@@ -130,3 +130,31 @@ export function buildVisibleCustomerAddresses(
   }
   return addresses;
 }
+
+/**
+ * 解析「纬度,经度」合并输入（支持中英文逗号/分号/空格分隔）。
+ * 从腾讯坐标拾取器等工具复制出来的 "30.484039,114.411133" 可直接粘贴。
+ * 非法或超出范围返回 null，交回普通单字段输入流程。
+ */
+export function parseCoordinatePair(raw: string): { latitude: string; longitude: string } | null {
+  const text = (raw ?? "").trim();
+  if (!text || !/[,，;；\s]/.test(text)) {
+    return null;
+  }
+  const parts = text.split(/[,，;；\s]+/).filter((part) => part.length > 0);
+  if (parts.length !== 2) {
+    return null;
+  }
+  const lat = Number(parts[0]);
+  const lng = Number(parts[1]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    return null;
+  }
+  if (lat < -90 || lat > 90 || lat === 0) {
+    return null;
+  }
+  if (lng < -180 || lng > 180 || lng === 0) {
+    return null;
+  }
+  return { latitude: String(lat), longitude: String(lng) };
+}

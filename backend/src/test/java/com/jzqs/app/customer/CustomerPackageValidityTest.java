@@ -33,9 +33,12 @@ class CustomerPackageValidityTest {
                 "有效期建档",
                 null,
                 "高新区天府软件园 C 座",
+                null,
+                null,
                 2,
                 "建档初始加餐",
                 15,
+                null,
                 null,
                 null,
                 null

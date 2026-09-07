@@ -29,12 +29,14 @@ import {
   buildCustomerOverviewSummary,
   filterCustomerAssets,
   normalizeInitialMealsValue,
+  parseCoordinatePair,
   resolvePrimaryCustomerAddress,
   resolveCustomerStatusLabel,
   type CustomerBalanceState,
   type CustomerOrderModeFilter,
   type CustomerRemainingValidityState
 } from "./customerAssetPage.helpers";
+import { MapLocationPickerDialog } from "./components/MapLocationPickerDialog";
 import { formatDateTimeLabel } from "../../shared/utils/dateTime";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../shared/components/ui/table";
 import { AppSelect } from "../../shared/components/AppSelect";
@@ -60,7 +62,10 @@ const emptyEditForm = {
   initialMeals: "0",
   initialValidityDays: "30",
   initialMealRemark: "",
-  addressLine: ""
+  addressLine: "",
+  doorNumber: "",
+  latitude: "",
+  longitude: ""
 };
 function buildDefaultGrantForm(): GrantForm {
   return {
@@ -75,6 +80,7 @@ const emptyAddressForm = {
   contactName: "",
   contactPhone: "",
   addressLine: "",
+  doorNumber: "",
   areaCode: "",
   isDefault: false,
   latitude: "",
@@ -162,7 +168,10 @@ function buildEditForm(
     initialMeals: "0",
     initialValidityDays: "30",
     initialMealRemark: "",
-    addressLine: ""
+    addressLine: "",
+    doorNumber: "",
+    latitude: "",
+    longitude: ""
   };
 }
 
@@ -255,6 +264,7 @@ function buildAddressForm(address?: CustomerAddressItem | null) {
     contactName: address.contactName,
     contactPhone: address.contactPhone,
     addressLine: address.addressLine,
+    doorNumber: address.doorNumber ?? "",
     areaCode: address.areaCode ?? "",
     isDefault: address.isDefault,
     latitude: address.latitude != null ? String(address.latitude) : "",
@@ -304,6 +314,8 @@ export function CustomerAssetPage() {
   const [submittingProfile, setSubmittingProfile] = useState(false);
   const [submittingAddress, setSubmittingAddress] = useState(false);
   const [submittingAddressActionId, setSubmittingAddressActionId] = useState<number | null>(null);
+  const [isMapPickerOpen, setIsMapPickerOpen] = useState(false);
+  const [isCreateMapPickerOpen, setIsCreateMapPickerOpen] = useState(false);
   const [submittingGrant, setSubmittingGrant] = useState(false);
   const [submittingCreate, setSubmittingCreate] = useState(false);
   const [submittingDeduct, setSubmittingDeduct] = useState(false);
@@ -395,6 +407,7 @@ export function CustomerAssetPage() {
       contactName: boundName,
       contactPhone: boundPhone,
       addressLine: form.addressLine.trim(),
+      doorNumber: form.doorNumber.trim() || null,
       areaCode: form.areaCode.trim(),
       isDefault: form.isDefault,
       latitude: hasCoords ? latitude : null,
@@ -672,8 +685,11 @@ export function CustomerAssetPage() {
         phone: normalizeCustomerPhone(editForm.phone),
         merchantRemark: editForm.remark,
         addressLine: editForm.addressLine,
+        doorNumber: editForm.doorNumber.trim() || undefined,
         contactName: normalizeCustomerName(editForm.name),
         contactPhone: normalizeCustomerPhone(editForm.phone),
+        latitude: parseCoordinate(editForm.latitude),
+        longitude: parseCoordinate(editForm.longitude),
         initialMealDelta: meals,
         initialMealRemark: meals > 0 ? (editForm.initialMealRemark.trim() || "建档初始加餐") : "",
         initialValidityDays: meals > 0 ? validityDays : undefined
@@ -1429,25 +1445,44 @@ export function CustomerAssetPage() {
                             />
                           </div>
                         </div>
-                        <div className="form-group" style={{ marginTop: 14 }}>
-                          <label className="form-label"><span className="required">*</span>收货地址</label>
-                          <SafeInput
-                            className="form-control"
-                            value={addressForm.addressLine}
-                            onValueChange={(value) => setAddressForm({ ...addressForm, addressLine: value })}
-                          />
+                        <div className="customer-edit-form-grid" style={{ marginTop: 14 }}>
+                          <div className="form-group">
+                            <label className="form-label"><span className="required">*</span>收货地址</label>
+                            <SafeInput
+                              className="form-control"
+                              value={addressForm.addressLine}
+                              onValueChange={(value) => setAddressForm({ ...addressForm, addressLine: value })}
+                            />
+                          </div>
+                          <div className="form-group">
+                            <label className="form-label">门牌号（选填）</label>
+                            <SafeInput
+                              className="form-control"
+                              value={addressForm.doorNumber}
+                              onValueChange={(value) => setAddressForm({ ...addressForm, doorNumber: value })}
+                              placeholder="如：8栋2单元1603 / 13楼1305"
+                            />
+                          </div>
                         </div>
                         <div className="form-group" style={{ marginTop: 14 }}>
                           <label className="form-label">地图定位（选填，用于骑手精准导航）</label>
                           <div className="admin-panel-note" style={{ marginBottom: 8 }}>
-                            留空则骑手端按地址文字搜索。可点击「地图拾取坐标」在腾讯地图选点后，把经纬度回填到下方输入框。
+                            点击「在地图上选点」搜索或点击地图位置，坐标和地址自动回填（门牌号等可在地址后补充）；
+                            也可直接粘贴「纬度,经度」。与小程序地图选点同一定位口径，留空则骑手端按地址文字搜索。
                           </div>
                           <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                             <SafeInput
                               className="form-control"
                               style={{ flex: "1 1 150px" }}
                               value={addressForm.latitude}
-                              onValueChange={(value) => setAddressForm({ ...addressForm, latitude: value })}
+                              onValueChange={(value) => {
+                                const pair = parseCoordinatePair(value);
+                                if (pair) {
+                                  setAddressForm({ ...addressForm, ...pair });
+                                  return;
+                                }
+                                setAddressForm({ ...addressForm, latitude: value });
+                              }}
                               placeholder="纬度，如 30.654321"
                             />
                             <SafeInput
@@ -1460,9 +1495,9 @@ export function CustomerAssetPage() {
                             <button
                               type="button"
                               className="btn btn-outline"
-                              onClick={() => window.open("https://lbs.qq.com/getPoint/", "_blank", "noopener,noreferrer")}
+                              onClick={() => setIsMapPickerOpen(true)}
                             >
-                              地图拾取坐标
+                              在地图上选点
                             </button>
                           </div>
                         </div>
@@ -1587,6 +1622,16 @@ export function CustomerAssetPage() {
         onSubmit={() => handleCreateSubmit().catch((err) => toast(resolveErrorMessage(err, "创建客户失败"), "error"))}
         onChange={setEditForm}
         normalizeCustomerPhone={normalizeCustomerPhone}
+      />
+      <MapLocationPickerDialog
+        open={isCreateMapPickerOpen}
+        initialLatitude={editForm.latitude}
+        initialLongitude={editForm.longitude}
+        onClose={() => setIsCreateMapPickerOpen(false)}
+        onConfirm={(latitude, longitude) => {
+          setEditForm((prev) => ({ ...prev, latitude, longitude }));
+          setIsCreateMapPickerOpen(false);
+        }}
       />
 
       {isDeleteCustomerOpen && activeItem && (
@@ -1729,6 +1774,24 @@ export function CustomerAssetPage() {
           />
         </div>
       </AdminDialog>
+      <MapLocationPickerDialog
+        open={isMapPickerOpen}
+        initialLatitude={addressForm.latitude}
+        initialLongitude={addressForm.longitude}
+        onClose={() => setIsMapPickerOpen(false)}
+        onConfirm={(latitude, longitude, resolvedAddress) => {
+          setAddressForm((prev) => ({
+            ...prev,
+            latitude,
+            longitude,
+            addressLine:
+              resolvedAddress && resolvedAddress.trim().length > 0
+                ? resolvedAddress
+                : prev.addressLine
+          }));
+          setIsMapPickerOpen(false);
+        }}
+      />
     </div>
   );
 }

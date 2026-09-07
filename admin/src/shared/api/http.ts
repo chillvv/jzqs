@@ -350,8 +350,11 @@ export async function createCustomerProfile(payload: {
   phone: string;
   merchantRemark: string;
   addressLine: string;
+  doorNumber?: string;
   contactName: string;
   contactPhone: string;
+  latitude?: number | null;
+  longitude?: number | null;
   initialMealDelta?: number;
   initialMealRemark?: string;
   initialValidityDays?: number;

@@ -36,6 +36,7 @@ export type CustomerAddressItem = {
   contactName: string;
   contactPhone: string;
   addressLine: string;
+  doorNumber?: string | null;
   areaCode?: string | null;
   isDefault: boolean;
   latitude?: number | null;
@@ -46,6 +47,7 @@ export type CustomerAddressMutationPayload = {
   contactName: string;
   contactPhone: string;
   addressLine: string;
+  doorNumber?: string | null;
   areaCode?: string | null;
   isDefault: boolean;
   latitude?: number | null;
