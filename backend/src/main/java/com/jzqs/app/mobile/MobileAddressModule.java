@@ -80,6 +80,10 @@ class MobileAddressModule {
         String finalAreaCode = areaCode == null ? "" : areaCode.trim();
         BigDecimal finalLatitude = sanitizeLatitude(latitude);
         BigDecimal finalLongitude = sanitizeLongitude(finalLatitude, longitude);
+        // 未定位地址不允许保存：骑手端导航依赖坐标，V35 地址重置后一律地图选点录入
+        if (finalLatitude == null || finalLongitude == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请先地图选点定位后再保存地址");
+        }
         if (isDefault) {
             jdbcTemplate.update("UPDATE customer_addresses SET is_default = FALSE WHERE customer_id = ?", customerId);
         }
@@ -109,6 +113,14 @@ class MobileAddressModule {
             isDefault,
             finalLatitude,
             finalLongitude
+        );
+        // 固定订餐地址自动回挂：地址被删除/重置后规则的 default_address_id 为空，
+        // 顾客重新录入地址时直接回填，固定订餐无需再手动操作即恢复有可用地址
+        //（新地址属本人且 active=1，可通过 V37 触发器校验）。
+        jdbcTemplate.update(
+            "UPDATE subscription_rules SET default_address_id = ? WHERE customer_id = ? AND default_address_id IS NULL",
+            addressId,
+            customerId
         );
         log.info("客户新增地址: customer={} addressId={} area_code={} isDefault={} 定位={}",
             customerId, addressId, finalAreaCode, isDefault, finalLatitude != null);
@@ -143,6 +155,10 @@ class MobileAddressModule {
         String finalAreaCode = areaCode == null ? "" : areaCode.trim();
         BigDecimal finalLatitude = sanitizeLatitude(latitude);
         BigDecimal finalLongitude = sanitizeLongitude(finalLatitude, longitude);
+        // 未定位地址不允许保存：编辑也不能把已有坐标抹掉
+        if (finalLatitude == null || finalLongitude == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "请先地图选点定位后再保存地址");
+        }
 
         if (isDefault) {
             jdbcTemplate.update("UPDATE customer_addresses SET is_default = FALSE WHERE customer_id = ?", customerId);

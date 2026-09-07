@@ -46,8 +46,8 @@ class CustomerAssetServiceIntegrationTest {
                 null,
                 "高新区",
                 true,
-                null,
-                null
+                new java.math.BigDecimal("30.545420"),
+                new java.math.BigDecimal("104.062500")
             )
         );
 
@@ -55,13 +55,58 @@ class CustomerAssetServiceIntegrationTest {
         assertEquals("CREATED", result.status());
 
         Map<String, Object> row = jdbcTemplate.queryForMap(
-            "SELECT contact_name, contact_phone, address_line, area_code, is_default FROM customer_addresses WHERE customer_id = 9913"
+            "SELECT contact_name, contact_phone, address_line, area_code, is_default, latitude, longitude FROM customer_addresses WHERE customer_id = 9913"
         );
         assertEquals("测试客户", row.get("contact_name"));
         assertEquals("13900009913", row.get("contact_phone"));
         assertEquals("高新区测试路 13 号", row.get("address_line"));
         assertEquals("高新区", row.get("area_code"));
         assertNotNull(row.get("is_default"));
+        // 未定位地址已被禁止：新地址必须带坐标落库
+        assertNotNull(row.get("latitude"));
+        assertNotNull(row.get("longitude"));
+    }
+
+    @Test
+    void shouldRejectCustomerAddressWithoutCoordinates() {
+        org.junit.jupiter.api.Assertions.assertThrows(
+            com.jzqs.app.common.error.BusinessException.class,
+            () -> customerAssetService.createCustomerAddress(
+                9913L,
+                new CustomerAddressUpsertRequest(
+                    "测试联系人", "13900009913", "高新区测试路 13 号", null, "高新区", true, null, null
+                )
+            )
+        );
+    }
+
+    @Test
+    void shouldAttachSubscriptionRuleToNewlyCreatedAddress() {
+        // 地址重置场景：订阅规则存在但 default_address_id 为空；
+        // 后台补录地址后规则必须自动回挂到新地址，固定订餐不再"没有地址"。
+        jdbcTemplate.update(
+            "INSERT INTO subscription_rules (customer_id, active, paused, week_days, lunch_enabled, dinner_enabled, start_date, end_date, default_address_id, created_at, updated_at) "
+                + "VALUES (9913, TRUE, FALSE, '1,2,3,4,5', TRUE, FALSE, '2026-09-01', '2027-09-01', NULL, NOW(), NOW())"
+        );
+        try {
+            CustomerAddressActionResponse result = customerAssetService.createCustomerAddress(
+                9913L,
+                new CustomerAddressUpsertRequest(
+                    "测试联系人", "13900009913", "高新区测试路 13 号", null, "高新区", true,
+                    new java.math.BigDecimal("30.545420"), new java.math.BigDecimal("104.062500")
+                )
+            );
+            assertEquals("CREATED", result.status());
+
+            Long ruleAddressId = jdbcTemplate.queryForObject(
+                "SELECT default_address_id FROM subscription_rules WHERE customer_id = 9913",
+                Long.class
+            );
+            assertNotNull(ruleAddressId);
+            assertEquals(result.addressId(), ruleAddressId);
+        } finally {
+            jdbcTemplate.update("DELETE FROM subscription_rules WHERE customer_id = 9913");
+        }
     }
 
     @Test

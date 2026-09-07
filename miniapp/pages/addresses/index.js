@@ -367,20 +367,10 @@ Page({
       wx.showToast({ title: validationError, icon: 'none' });
       return;
     }
-    // 软校验：未选点（无坐标）时提醒，避免骑手找不到
+    // 未选点不允许保存：骑手端导航依赖坐标，后端同样会拒绝无坐标地址
     if (latitude == null || longitude == null) {
-      const proceed = await new Promise((resolve) => {
-        wx.showModal({
-          title: '尚未定位',
-          content: '该地址还没有地图定位，骑手可能找不到。建议先地图选点。是否仍要保存？',
-          confirmText: '仍要保存',
-          cancelText: '去选点',
-          success: (res) => resolve(!!res.confirm)
-        });
-      });
-      if (!proceed) {
-        return;
-      }
+      wx.showToast({ title: '请先点击「在地图上选点」定位后再保存', icon: 'none' });
+      return;
     }
     const payload = {
       contactName: customerProfile.name.trim(),

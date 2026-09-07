@@ -241,9 +241,12 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         name = requireCustomerName(name);
         phone = requireCustomerPhone(phone);
         addressLine = requireCustomerAddressLine(addressLine);
-        // 建档首地址可选带坐标（后台地图选点回填）；成对合法才落库，否则视为未定位
+        // 建档首地址必须带坐标（后台地图选点回填）；未定位地址不允许入库
         BigDecimal createLatitude = sanitizeLatitude(request == null ? null : request.latitude());
         BigDecimal createLongitude = sanitizeLongitude(createLatitude, request == null ? null : request.longitude());
+        if (createLatitude == null || createLongitude == null) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "建档地址必须在地图上选点定位后再保存");
+        }
 
         if (!phone.isBlank()) {
             boolean phoneExists = customerMapper.selectCount(new LambdaQueryWrapper<CustomerEntity>().eq(CustomerEntity::getPhone, phone)) > 0;
@@ -437,6 +440,14 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             address.isDefault(),
             address.latitude(),
             address.longitude()
+        );
+        // 固定订餐地址自动回挂：地址被删除/重置后规则的 default_address_id 为空，
+        // 后台重新录入地址时直接回填，订阅无需顾客操作即恢复有可用地址
+        //（新地址属本人且 active=1，可通过 V37 触发器校验）。
+        jdbcTemplate.update(
+            "UPDATE subscription_rules SET default_address_id = ? WHERE customer_id = ? AND default_address_id IS NULL",
+            addressId,
+            customerId
         );
         return new CustomerAddressActionResponse(customerId, addressId, "CREATED");
     }
@@ -966,10 +977,10 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         boolean isDefault = Boolean.TRUE.equals(request != null ? request.isDefault() : null);
         BigDecimal latitude = sanitizeLatitude(request == null ? null : request.latitude());
         BigDecimal longitude = sanitizeLongitude(latitude, request == null ? null : request.longitude());
-        // 经纬度必须成对：任一缺失/非法都整体视为未定位，避免只存单边坐标误导骑手导航
+        // 经纬度必须成对且合法（来自地图选点）。未定位地址会让骑手端导航退化为
+        // 复制地址，V35 地址重置后一律不允许再造出无坐标地址。
         if (latitude == null || longitude == null) {
-            latitude = null;
-            longitude = null;
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "收货地址必须在地图上选点定位后再保存");
         }
         return new AddressPayload(contact.name(), contact.phone(), requireCustomerAddressLine(addressLine), doorNumber, areaCode, isDefault, latitude, longitude);
     }

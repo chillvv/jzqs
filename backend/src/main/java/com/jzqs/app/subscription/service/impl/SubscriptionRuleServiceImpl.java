@@ -269,23 +269,18 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
             // Check default address
             // 修复：queryForObject 在无默认地址时抛 EmptyResultDataAccessException（500），
             //       改为列表查询，无记录返回 null 再走"任选地址/提示先加地址"分支。
-            List<Long> defaultAddressIds = jdbcTemplate.queryForList(
-                "SELECT id FROM customer_addresses WHERE customer_id = ? AND is_default = TRUE AND active = TRUE LIMIT 1",
-                Long.class,
-                customerId
-            );
-            Long defaultAddressId = defaultAddressIds.isEmpty() ? null : defaultAddressIds.get(0);
+            Long defaultAddressId = resolveDefaultAddressId(customerId);
             if (defaultAddressId == null) {
-                List<Long> addresses = jdbcTemplate.queryForList(
-                    "SELECT id FROM customer_addresses WHERE customer_id = ? AND active = TRUE LIMIT 1",
-                    Long.class,
-                    customerId
-                );
-                if (!addresses.isEmpty()) {
-                    defaultAddressId = addresses.get(0);
-                } else {
-                    throw new BusinessException(ErrorCode.ADDRESS_NOT_FOUND, "您还未添加收货地址，请先在个人中心添加");
-                }
+                throw new BusinessException(ErrorCode.ADDRESS_NOT_FOUND, "您还未添加收货地址，请先在个人中心添加");
+            }
+            entity.setDefaultAddressId(defaultAddressId);
+        } else if (request.enabled() && entity.getDefaultAddressId() == null) {
+            // 地址被软删除/重置后 default_address_id 会被置空；顾客重新录入地址并
+            // 重新开启固定订餐时自动回填，否则订阅规则将永远没有默认地址，
+            // 后台"导入订阅订单"预览始终为空、无法生成订单。
+            Long defaultAddressId = resolveDefaultAddressId(customerId);
+            if (defaultAddressId == null) {
+                throw new BusinessException(ErrorCode.ADDRESS_NOT_FOUND, "您还未添加收货地址，请先在个人中心添加");
             }
             entity.setDefaultAddressId(defaultAddressId);
         }
@@ -330,6 +325,24 @@ public class SubscriptionRuleServiceImpl implements SubscriptionRuleService {
         if (count != null && count > 0) {
             throw new BusinessException(ErrorCode.SUBSCRIPTION_RULE_ALREADY_EXISTS, "该客户已存在固定订餐计划，请直接编辑原计划");
         }
+    }
+
+    /** 解析客户默认地址 id：优先 is_default，否则任一 active 地址；无可用地址返回 null。 */
+    private Long resolveDefaultAddressId(long customerId) {
+        List<Long> defaultAddressIds = jdbcTemplate.queryForList(
+            "SELECT id FROM customer_addresses WHERE customer_id = ? AND is_default = TRUE AND active = TRUE LIMIT 1",
+            Long.class,
+            customerId
+        );
+        if (!defaultAddressIds.isEmpty()) {
+            return defaultAddressIds.get(0);
+        }
+        List<Long> addresses = jdbcTemplate.queryForList(
+            "SELECT id FROM customer_addresses WHERE customer_id = ? AND active = TRUE LIMIT 1",
+            Long.class,
+            customerId
+        );
+        return addresses.isEmpty() ? null : addresses.get(0);
     }
 
     private void applyCustomerRuleUpdate(SubscriptionRuleEntity entity, com.jzqs.app.mobile.api.MobileSubscriptionRuleRequest request) {

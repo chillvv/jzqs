@@ -167,8 +167,8 @@ class CustomerAssetServiceImplTest {
                 null,
                 null,
                 "高新区测试地址 66 号",
-                null,
-                null,
+                new BigDecimal("30.545420"),
+                new BigDecimal("104.062500"),
                 5,
                 "首充赠送",
                 30,
@@ -193,8 +193,8 @@ class CustomerAssetServiceImplTest {
             eq("高新区测试地址 66 号"),
             eq((String) null),
             eq(""),
-            eq((BigDecimal) null),
-            eq((BigDecimal) null)
+            eq(new BigDecimal("30.545420")),
+            eq(new BigDecimal("104.062500"))
         );
         // 初始加餐已改为 jdbcTemplate 原子自增，不再调用 mealWalletMapper.updateById
         verify(walletTransactionMapper).insert(argThat((WalletTransactionEntity tx) ->
@@ -223,8 +223,8 @@ class CustomerAssetServiceImplTest {
                 null,
                 "高新区",
                 true,
-                null,
-                null
+                new BigDecimal("30.545420"),
+                new BigDecimal("104.062500")
             )
         );
 
@@ -258,8 +258,8 @@ class CustomerAssetServiceImplTest {
                 null,
                 "高新区",
                 false,
-                null,
-                null
+                new BigDecimal("30.545420"),
+                new BigDecimal("104.062500")
             )
         );
 
@@ -279,10 +279,71 @@ class CustomerAssetServiceImplTest {
             eq((String) null),
             eq("高新区"),
             eq(false),
-            eq((BigDecimal) null),
-            eq((BigDecimal) null),
+            eq(new BigDecimal("30.545420")),
+            eq(new BigDecimal("104.062500")),
             eq(18L),
             eq(382L)
+        );
+    }
+
+    @Test
+    void shouldRejectCustomerAddressWithoutCoordinates() {
+        CustomerEntity customer = new CustomerEntity();
+        customer.setId(382L);
+        customer.setName("竹子");
+        customer.setPhone("13800000382");
+        customer.setActive(true);
+        when(customerMapper.selectById(382L)).thenReturn(customer);
+
+        // 新建不带坐标 → 拒绝（V35 地址重置后一律地图选点，杜绝未定位地址）
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> customerAssetService.createCustomerAddress(
+            382L,
+            new CustomerAddressUpsertRequest(
+                "前台", "13800000382", "高新区科技园A座8层", null, "高新区", true, null, null
+            )
+        )).isInstanceOf(com.jzqs.app.common.error.BusinessException.class);
+
+        // 只传纬度不传经度（不成对）→ 同样拒绝
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> customerAssetService.createCustomerAddress(
+            382L,
+            new CustomerAddressUpsertRequest(
+                "前台", "13800000382", "高新区科技园A座8层", null, "高新区", true, new BigDecimal("30.545420"), null
+            )
+        )).isInstanceOf(com.jzqs.app.common.error.BusinessException.class);
+    }
+
+    @Test
+    void shouldRejectCustomerProfileWithoutCoordinates() {
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> customerAssetService.createCustomerProfile(
+            new CustomerProfileCreateRequest(
+                "新客户", "13600000066", null, null, "高新区测试地址 66 号",
+                null, null, 5, "首充赠送", 30, null, null, null, null
+            )
+        )).isInstanceOf(com.jzqs.app.common.error.BusinessException.class);
+    }
+
+    @Test
+    void shouldAttachSubscriptionRuleToNewlyCreatedAddress() {
+        // 地址重置会把 subscription_rules.default_address_id 置空；后台重新录入地址
+        // 时必须自动回挂，否则固定订餐将一直没有地址（预览列为空、无法生成订单）。
+        CustomerEntity customer = new CustomerEntity();
+        customer.setId(382L);
+        customer.setName("竹子");
+        customer.setPhone("13800000382");
+        customer.setActive(true);
+        when(customerMapper.selectById(382L)).thenReturn(customer);
+
+        customerAssetService.createCustomerAddress(
+            382L,
+            new CustomerAddressUpsertRequest(
+                "前台", "13800000382", "高新区科技园A座8层", null, "高新区", true,
+                new BigDecimal("30.545420"), new BigDecimal("104.062500")
+            )
+        );
+
+        verify(jdbcTemplate).update(
+            eq("UPDATE subscription_rules SET default_address_id = ? WHERE customer_id = ? AND default_address_id IS NULL"),
+            any(), eq(382L)
         );
     }
 }

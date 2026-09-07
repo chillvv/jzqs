@@ -427,6 +427,11 @@ export function CustomerAssetPage() {
       toast(validationError, "error");
       return;
     }
+    // 地址必须定位：后端已拒绝无坐标地址，这里提前拦截给出明确提示
+    if (payload.latitude === null || payload.longitude === null) {
+      toast("请在地图上选点定位后再保存", "error");
+      return;
+    }
     if (submittingAddress) {
       return;
     }
@@ -457,7 +462,10 @@ export function CustomerAssetPage() {
         contactPhone: address.contactPhone,
         addressLine: address.addressLine,
         areaCode: address.areaCode ?? "",
-        isDefault: true
+        isDefault: true,
+        // 必须回传原坐标：后端 upsert 全量覆盖，缺坐标会把地址抹成未定位
+        latitude: address.latitude ?? null,
+        longitude: address.longitude ?? null
       });
       await refreshCustomerWorkspace(activeItem);
     } finally {
@@ -663,6 +671,11 @@ export function CustomerAssetPage() {
     }
     if (!editForm.addressLine) {
       toast("请填写收货地址", "error");
+      return;
+    }
+    // 建档地址必须定位：后端已拒绝无坐标地址，这里提前拦截给出明确提示
+    if (parseCoordinate(editForm.latitude) === null || parseCoordinate(editForm.longitude) === null) {
+      toast("请在地图上选点定位后再创建", "error");
       return;
     }
     const meals = Number(editForm.initialMeals);

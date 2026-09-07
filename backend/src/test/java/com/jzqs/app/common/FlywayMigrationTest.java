@@ -15,12 +15,16 @@ class FlywayMigrationTest {
 
     @Test
     void shouldApplyPhaseOneMigrationsAndSeedAdminData() throws Exception {
+        // 连接凭据与 BaseDbIntegrationTest 保持一致：环境变量可覆盖（本地 docker 密码不同），
+        // CI 的 mysql 服务默认 root/root，行为不变。
+        String dbUser = System.getenv().getOrDefault("TEST_DB_USER", "root");
+        String dbPassword = System.getenv().getOrDefault("TEST_DB_PASSWORD", "root");
         String serverJdbcUrl = "jdbc:mysql://127.0.0.1:3307/?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai";
         String databaseName = "jzqs_flyway_test";
         String jdbcUrl = "jdbc:mysql://127.0.0.1:3307/" + databaseName
             + "?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai";
 
-        try (Connection connection = DriverManager.getConnection(serverJdbcUrl, "root", "root");
+        try (Connection connection = DriverManager.getConnection(serverJdbcUrl, dbUser, dbPassword);
              Statement statement = connection.createStatement()) {
             statement.execute("DROP DATABASE IF EXISTS " + databaseName);
             statement.execute(
@@ -30,12 +34,12 @@ class FlywayMigrationTest {
         try {
             Flyway flyway = Flyway.configure()
                 .locations("classpath:db/migration")
-                .dataSource(jdbcUrl, "root", "root")
+                .dataSource(jdbcUrl, dbUser, dbPassword)
                 .load();
 
             assertDoesNotThrow(flyway::migrate);
 
-            try (Connection connection = DriverManager.getConnection(jdbcUrl, "root", "root");
+            try (Connection connection = DriverManager.getConnection(jdbcUrl, dbUser, dbPassword);
                  Statement statement = connection.createStatement()) {
 
                 try (ResultSet settingsCount = statement.executeQuery("SELECT COUNT(*) FROM admin_settings")) {
@@ -229,7 +233,7 @@ class FlywayMigrationTest {
                 }
             }
         } finally {
-            try (Connection connection = DriverManager.getConnection(serverJdbcUrl, "root", "root");
+            try (Connection connection = DriverManager.getConnection(serverJdbcUrl, dbUser, dbPassword);
                  Statement statement = connection.createStatement()) {
                 statement.execute("DROP DATABASE IF EXISTS " + databaseName);
             }
