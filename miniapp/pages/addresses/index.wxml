@@ -71,9 +71,10 @@
         <view class="locate-address-readonly">{{form.addressLine || '选点后自动填充'}}</view>
       </view>
 
-      <!-- 门牌号 -->
+      <!-- 门牌号（必填） -->
       <view class="form-block">
-        <view class="form-label">门牌号</view>
+        <view class="form-label">门牌号 <text class="required-mark">*</text></view>
+        <view class="form-hint">学校不让骑手进？请把定位选在学校大门口，并在门牌号备注好碰头位置</view>
         <view class="input-wrap">
           <input class="detail-input" data-field="doorNumber" value="{{form.doorNumber}}" bindinput="onInputChange" placeholder="如：1栋2单元3004，可备注放门口" placeholder-style="font-size:28rpx;color:#bbb;" />
         </view>

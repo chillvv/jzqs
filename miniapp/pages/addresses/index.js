@@ -45,6 +45,10 @@ function validateAddressForm(form, customerProfile) {
   if (addressLine.length > 120) {
     return '定位地址过长';
   }
+  const doorNumber = String(form.doorNumber || '').trim();
+  if (!doorNumber) {
+    return '请填写门牌号，方便骑手找到您';
+  }
   return '';
 }
 

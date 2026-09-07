@@ -262,6 +262,21 @@
   font-weight: 500;
 }
 
+/* 必填标记 */
+.required-mark {
+  color: #e64340;
+  font-weight: 600;
+}
+
+/* 表单提示（如：学校不让进就定位大门口） */
+.form-hint {
+  font-size: 22rpx;
+  color: #c8863c;
+  line-height: 1.5;
+  margin-bottom: 12rpx;
+  padding: 0 8rpx;
+}
+
 /* 定位地址（只读，多行完整显示，避免 input 单行裁剪） */
 .locate-address-readonly {
   font-size: 30rpx;
