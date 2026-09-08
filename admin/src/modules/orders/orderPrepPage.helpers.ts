@@ -53,6 +53,8 @@ export type OrderRemarkLabelItem = {
   customerPhone: string;
   deliveryAddress: string;
   remarkLine: string;
+  /** 订单餐数：>1 时标签姓名行标注 ×N 份数，单份不标 */
+  quantity: number;
 };
 
 export function formatOrderNote(value: string | null | undefined) {
@@ -201,12 +203,15 @@ export function buildOrderRemarkLabelItems(items: OrderPrepItemResponse[]): Orde
       customerName: item.customerName.trim(),
       customerPhone: item.customerPhone.trim(),
       deliveryAddress: item.deliveryAddress?.trim() || "-",
-      remarkLine: buildOrderRemarkLine(item.userNote, item.merchantRemark)
+      remarkLine: buildOrderRemarkLine(item.userNote, item.merchantRemark),
+      quantity: item.quantity
     }));
 }
 
 export function buildRemarkLabelText(item: OrderRemarkLabelItem) {
-  return [item.customerName, item.customerPhone, item.deliveryAddress, item.remarkLine].join("\n");
+  // 多份订单在姓名行追加份数（×N），方便商家分装；单份不加，保持标签简洁
+  const nameLine = item.quantity > 1 ? `${item.customerName} ×${item.quantity}` : item.customerName;
+  return [nameLine, item.customerPhone, item.deliveryAddress, item.remarkLine].join("\n");
 }
 
 export function buildRemarkLabelBatchText(items: OrderRemarkLabelItem[]) {

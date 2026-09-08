@@ -198,7 +198,8 @@ describe("order prep helpers", () => {
       customerName: "张先生",
       customerPhone: "13800000001",
       deliveryAddress: "软件园A座",
-      remarkLine: "用户备注：少饭；商家备注：辣椒分开"
+      remarkLine: "用户备注：少饭；商家备注：辣椒分开",
+      quantity: 1
     });
 
     expect(result).toBe([
@@ -207,6 +208,28 @@ describe("order prep helpers", () => {
       "软件园A座",
       "用户备注：少饭；商家备注：辣椒分开"
     ].join("\n"));
+  });
+
+  it("appends meal quantity to name line only for multi-meal orders", () => {
+    const single = buildRemarkLabelText({
+      orderId: 1,
+      customerName: "张先生",
+      customerPhone: "13800000001",
+      deliveryAddress: "软件园A座",
+      remarkLine: "用户备注：少饭",
+      quantity: 1
+    });
+    expect(single.split("\n")[0]).toBe("张先生");
+
+    const multi = buildRemarkLabelText({
+      orderId: 2,
+      customerName: "李女士",
+      customerPhone: "13800000002",
+      deliveryAddress: "腾讯大厦B座",
+      remarkLine: "商家备注：提前送",
+      quantity: 3
+    });
+    expect(multi.split("\n")[0]).toBe("李女士 ×3");
   });
 
   it("builds remark label items from orders with either user or merchant remarks", () => {
@@ -227,14 +250,16 @@ describe("order prep helpers", () => {
         customerName: "张先生",
         customerPhone: "13800000001",
         deliveryAddress: "软件园A座",
-        remarkLine: "用户备注：少饭"
+        remarkLine: "用户备注：少饭",
+        quantity: items[0].quantity
       },
       {
         orderId: 2,
         customerName: "李女士",
         customerPhone: "13800000002",
         deliveryAddress: "腾讯大厦B座",
-        remarkLine: "商家备注：提前送"
+        remarkLine: "商家备注：提前送",
+        quantity: items[1].quantity
       }
     ]);
   });
@@ -246,14 +271,16 @@ describe("order prep helpers", () => {
         customerName: "张先生",
         customerPhone: "13800000001",
         deliveryAddress: "软件园A座",
-        remarkLine: "用户备注：少饭"
+        remarkLine: "用户备注：少饭",
+        quantity: 1
       },
       {
         orderId: 2,
         customerName: "李女士",
         customerPhone: "13800000002",
         deliveryAddress: "腾讯大厦B座",
-        remarkLine: "商家备注：提前送"
+        remarkLine: "商家备注：提前送",
+        quantity: 2
       }
     ]);
 
@@ -263,7 +290,7 @@ describe("order prep helpers", () => {
       "软件园A座",
       "用户备注：少饭",
       "",
-      "李女士",
+      "李女士 ×2",
       "13800000002",
       "腾讯大厦B座",
       "商家备注：提前送"
