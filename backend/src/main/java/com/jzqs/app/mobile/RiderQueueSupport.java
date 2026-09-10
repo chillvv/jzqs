@@ -20,8 +20,11 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import org.springframework.dao.ConcurrencyFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
@@ -704,21 +707,54 @@ class RiderQueueSupport {
             rs.getString("status"),
             rs.getObject("sequence_number") == null ? null : rs.getInt("sequence_number")
         ), riderId, serveDate);
+        // 同一批次在一次刷新里只刷一次：旧实现按订单循环调用 refreshRiderBatchState，
+        // 一个 15 单的批次单次刷新要做 15 遍全批更新，是写放大与锁竞争的主要来源。
+        Set<Long> touchedBatchIds = new LinkedHashSet<>();
         for (RiderAssignmentRow assignment : assignments) {
             if (assignment.riderProfileId() == null) {
                 continue;
             }
-            ensureQueueBatchItem(
+            touchedBatchIds.addAll(ensureQueueBatchItem(
                 assignment.orderId(),
                 assignment.riderProfileId(),
                 assignment.areaCode(),
                 assignment.status(),
                 assignment.sequenceNumber()
-            );
+            ));
+        }
+        for (Long touchedBatchId : touchedBatchIds) {
+            if (touchedBatchId != null && touchedBatchId > 0L) {
+                runWithLockRetry(() -> refreshRiderBatchState(touchedBatchId));
+            }
         }
     }
 
-    private void ensureQueueBatchItem(long orderId, long riderProfileId, String areaCode, String assignmentStatus, Number assignmentSequenceNumber) {
+    /**
+     * 物化跑在读路径上，锁冲突（死锁/锁等待超时）不该以 500 抛给骑手。
+     * 物化本身幂等，冲突时重跑最多 2 次，退避 30ms / 60ms。
+     */
+    private void runWithLockRetry(Runnable action) {
+        int attempt = 0;
+        while (true) {
+            try {
+                action.run();
+                return;
+            } catch (ConcurrencyFailureException ex) {
+                attempt++;
+                if (attempt > 2) {
+                    throw ex;
+                }
+                try {
+                    Thread.sleep(30L * attempt);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw ex;
+                }
+            }
+        }
+    }
+
+    private List<Long> ensureQueueBatchItem(long orderId, long riderProfileId, String areaCode, String assignmentStatus, Number assignmentSequenceNumber) {
         MealSlotContext orderContext = loadMealSlotContext(orderId);
         long batchId = ensureQueueBatch(orderId, riderProfileId, areaCode, orderContext.serveDate(), orderContext.mealPeriod());
         String desiredItemStatus = mapBatchItemStatus(assignmentStatus);
@@ -765,7 +801,12 @@ class RiderQueueSupport {
             // 跨批次迁移时用目标批次的 MAX+1，避免与目标批次已有序号冲突；
             // 已在正确批次内时保持原序号不动，只同步状态。
             int finalSequence = movingBatch ? nextBatchSequence(batchId) : existing.currentSequence();
-            if (movingBatch || !desiredItemStatus.equals(existing.itemStatus())) {
+            // item_status = CURRENT 是“队列当前项”，由 refreshRiderBatchState 统一维护；
+            // 派单侧只表达 PENDING/DELIVERED/DEFERRED。若在这里把 CURRENT 降回 PENDING，
+            // 紧随其后的 refresh 又会把它升回 CURRENT —— 每次刷新白写两行，故跳过这种降级。
+            boolean statusNeedsSync = !desiredItemStatus.equals(existing.itemStatus())
+                && !("CURRENT".equals(existing.itemStatus()) && "PENDING".equals(desiredItemStatus));
+            if (movingBatch || statusNeedsSync) {
                 jdbcTemplate.update("""
                     UPDATE dispatch_batch_items
                     SET batch_id = ?,
@@ -776,10 +817,13 @@ class RiderQueueSupport {
                     """, batchId, finalSequence, finalSequence, desiredItemStatus, existing.id());
             }
         }
-        refreshRiderBatchState(batchId);
+        // 刷新交给调用方去重后统一执行，避免同一批次在一次刷新内被反复刷。
+        List<Long> touchedBatchIds = new ArrayList<>();
+        touchedBatchIds.add(batchId);
         if (previousBatchId != null && previousBatchId.longValue() != batchId) {
-            refreshRiderBatchState(previousBatchId);
+            touchedBatchIds.add(previousBatchId);
         }
+        return touchedBatchIds;
     }
 
     private long ensureQueueBatch(long orderId, long riderProfileId, String areaCode, LocalDate serveDate, String mealPeriod) {
@@ -881,16 +925,48 @@ class RiderQueueSupport {
     }
 
     private void refreshRiderBatchState(long batchId) {
-        jdbcTemplate.update("UPDATE dispatch_batch_items SET item_status = 'PENDING' WHERE batch_id = ? AND item_status = 'CURRENT'", batchId);
-        List<Long> currentIds = jdbcTemplate.query("""
-            SELECT id
+        // 一次读出整批明细 → 内存算期望状态 → 只对“状态确实变了”的行按主键更新。
+        // 旧实现用 `WHERE batch_id = ? AND item_status = 'CURRENT'` 这种非唯一前缀的范围更新，
+        // InnoDB 会对整批索引区间加 X 记录锁 + 间隙锁，两个并发请求即使改的是**不同订单**
+        // 也会争同一段锁区间，再叠加同一请求内“先锁单行、后锁整批”的顺序反转即成环死锁
+        // （2026-09-09 / 09-10 骑手刷不出数据的生产事故根因）。
+        List<BatchItemSnapshot> items = jdbcTemplate.query("""
+            SELECT id, batch_id, current_sequence, item_status
             FROM dispatch_batch_items
-            WHERE batch_id = ? AND item_status = 'PENDING'
-            ORDER BY current_sequence ASC
-            LIMIT 1
-            """, (rs, rowNum) -> rs.getLong("id"), batchId);
-        if (!currentIds.isEmpty()) {
-            jdbcTemplate.update("UPDATE dispatch_batch_items SET item_status = 'CURRENT' WHERE id = ?", currentIds.get(0));
+            WHERE batch_id = ?
+            ORDER BY current_sequence ASC, id ASC
+            """, (rs, rowNum) -> new BatchItemSnapshot(
+            rs.getLong("id"),
+            rs.getLong("batch_id"),
+            rs.getInt("current_sequence"),
+            rs.getString("item_status")
+        ), batchId);
+        // 语义与旧实现逐行等价：CURRENT 全部降为 PENDING，再把序号最小的 PENDING 升为 CURRENT，
+        // DELIVERED / DEFERRED 保持不变。
+        Map<Long, String> desiredStatus = new LinkedHashMap<>();
+        Long nextCurrentId = null;
+        for (BatchItemSnapshot item : items) {
+            String currentStatus = item.itemStatus();
+            desiredStatus.put(item.id(), "CURRENT".equals(currentStatus) ? "PENDING" : currentStatus);
+        }
+        for (BatchItemSnapshot item : items) {
+            if ("PENDING".equals(desiredStatus.get(item.id()))) {
+                nextCurrentId = item.id();
+                break;
+            }
+        }
+        if (nextCurrentId != null) {
+            desiredStatus.put(nextCurrentId, "CURRENT");
+        }
+        for (BatchItemSnapshot item : items) {
+            String wantedStatus = desiredStatus.get(item.id());
+            if (wantedStatus != null && !wantedStatus.equals(item.itemStatus())) {
+                jdbcTemplate.update(
+                    "UPDATE dispatch_batch_items SET item_status = ? WHERE id = ?",
+                    wantedStatus,
+                    item.id()
+                );
+            }
         }
         Integer deliveredCount = jdbcTemplate.queryForObject("""
                 SELECT COALESCE(SUM(mso.quantity), 0)
@@ -924,47 +1000,88 @@ class RiderQueueSupport {
         } else {
             batchStatus = "IN_PROGRESS";
         }
-        jdbcTemplate.update("""
-            UPDATE dispatch_batches
-            SET total_count = ?,
-                delivered_count = ?,
-                current_sequence = ?,
-                batch_status = ?
+        int nextTotalCount = totalCount == null ? 0 : totalCount;
+        int nextDeliveredCount = deliveredCount == null ? 0 : deliveredCount;
+        int nextCurrentSequence = nextSequence == null ? 0 : nextSequence;
+        // 批头仅在数值真的变化时才写：稳态（骑手反复刷新但没人完成订单）完全不写，
+        // 也就不会再每 8 秒去占一次批次头行的锁。
+        List<BatchHeaderSnapshot> headers = jdbcTemplate.query("""
+            SELECT total_count, delivered_count, current_sequence, batch_status
+            FROM dispatch_batches
             WHERE id = ?
-            """,
-            totalCount == null ? 0 : totalCount,
-            deliveredCount == null ? 0 : deliveredCount,
-            nextSequence == null ? 0 : nextSequence,
-            batchStatus,
-            batchId
-        );
+            """, (rs, rowNum) -> new BatchHeaderSnapshot(
+            rs.getInt("total_count"),
+            rs.getInt("delivered_count"),
+            rs.getInt("current_sequence"),
+            rs.getString("batch_status")
+        ), batchId);
+        BatchHeaderSnapshot header = headers.isEmpty() ? null : headers.get(0);
+        if (header == null
+            || header.totalCount() != nextTotalCount
+            || header.deliveredCount() != nextDeliveredCount
+            || header.currentSequence() != nextCurrentSequence
+            || !batchStatus.equals(header.batchStatus())) {
+            jdbcTemplate.update("""
+                UPDATE dispatch_batches
+                SET total_count = ?,
+                    delivered_count = ?,
+                    current_sequence = ?,
+                    batch_status = ?
+                WHERE id = ?
+                """,
+                nextTotalCount,
+                nextDeliveredCount,
+                nextCurrentSequence,
+                batchStatus,
+                batchId
+            );
+        }
         syncDispatchAssignmentsFromBatch(batchId);
     }
 
     private void syncDispatchAssignmentsFromBatch(long batchId) {
-        jdbcTemplate.query("""
-                SELECT meal_slot_order_id, current_sequence, item_status
-                FROM dispatch_batch_items
-                WHERE batch_id = ?
-                ORDER BY current_sequence ASC, id ASC
+        // 与批头同理：先读现值，只回写真的变化的派单行（旧实现无脑 UPDATE 每条明细）。
+        List<BatchAssignmentSyncRow> rows = jdbcTemplate.query("""
+                SELECT dbi.meal_slot_order_id AS meal_slot_order_id,
+                       dbi.current_sequence AS current_sequence,
+                       dbi.item_status AS item_status,
+                       da.id AS assignment_id,
+                       da.sequence_number AS assignment_sequence,
+                       da.status AS assignment_status
+                FROM dispatch_batch_items dbi
+                LEFT JOIN dispatch_assignments da ON da.meal_slot_order_id = dbi.meal_slot_order_id
+                WHERE dbi.batch_id = ?
+                ORDER BY dbi.current_sequence ASC, dbi.id ASC
                 """,
-            ps -> ps.setLong(1, batchId),
-            rs -> {
-                while (rs.next()) {
-                    jdbcTemplate.update("""
-                            UPDATE dispatch_assignments
-                            SET sequence_number = ?,
-                                status = ?
-                            WHERE meal_slot_order_id = ?
-                        """,
-                        rs.getInt("current_sequence"),
-                        mapAssignmentStatus(rs.getString("item_status")),
-                        rs.getLong("meal_slot_order_id")
-                    );
-                }
-                return null;
+            (rs, rowNum) -> new BatchAssignmentSyncRow(
+                rs.getLong("meal_slot_order_id"),
+                rs.getInt("current_sequence"),
+                rs.getString("item_status"),
+                rs.getObject("assignment_id") == null ? null : rs.getLong("assignment_id"),
+                rs.getObject("assignment_sequence") == null ? null : rs.getInt("assignment_sequence"),
+                rs.getString("assignment_status")
+            ), batchId);
+        for (BatchAssignmentSyncRow row : rows) {
+            if (row.assignmentId() == null) {
+                continue;
             }
-        );
+            String wantedStatus = mapAssignmentStatus(row.itemStatus());
+            if (row.assignmentSequence() != null
+                && row.assignmentSequence() == row.currentSequence()
+                && wantedStatus.equals(row.assignmentStatus())) {
+                continue;
+            }
+            jdbcTemplate.update("""
+                    UPDATE dispatch_assignments
+                    SET sequence_number = ?,
+                        status = ?
+                    WHERE meal_slot_order_id = ?
+                """,
+                row.currentSequence(),
+                wantedStatus,
+                row.mealSlotOrderId()
+            );
+        }
     }
 
     private String mapAssignmentStatus(String itemStatus) {
@@ -1177,6 +1294,17 @@ class RiderQueueSupport {
     private record BatchItemSnapshot(long id, long batchId, int currentSequence, String itemStatus) {}
 
     private record BatchItemSequenceRow(long id, long batchId, int currentSequence) {}
+
+    private record BatchHeaderSnapshot(int totalCount, int deliveredCount, int currentSequence, String batchStatus) {}
+
+    private record BatchAssignmentSyncRow(
+        long mealSlotOrderId,
+        int currentSequence,
+        String itemStatus,
+        Long assignmentId,
+        Integer assignmentSequence,
+        String assignmentStatus
+    ) {}
 
     private record DeliveryExceptionOrderInfo(long riderProfileId, String customerPhone, String deliveryAddress) {}
 }
