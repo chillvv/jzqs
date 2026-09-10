@@ -1,8 +1,11 @@
 package com.jzqs.app.mobile;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
+import com.jzqs.app.common.realtime.RealtimeAudienceModule;
 import com.jzqs.app.common.test.BaseDbIntegrationTest;
+import com.jzqs.app.dispatch.service.impl.DispatchAddressChangeNotifier;
 import com.jzqs.app.order.persistence.OrderDispatchRepository;
 import java.time.LocalDate;
 import java.util.List;
@@ -65,7 +68,11 @@ class AddressChangeReconcileTest extends BaseDbIntegrationTest {
                 + "VALUES (1, 101, 'LUNCH', '测试路1号', '老城区', 5, 1, 'AREA_CONFIRMED')"
         );
 
-        module = new MobileAddressModule(jdbc, new OrderDispatchRepository(jdbc));
+        module = new MobileAddressModule(
+            jdbc,
+            new OrderDispatchRepository(jdbc),
+            new DispatchAddressChangeNotifier(jdbc, mock(RealtimeAudienceModule.class))
+        );
     }
 
     @Test

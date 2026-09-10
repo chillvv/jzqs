@@ -221,7 +221,9 @@ class DispatchAreaAdminModule {
                 SELECT
                     mso.id AS order_id,
                     c.name AS customer_name,
-                    ca.address_line AS delivery_address,
+                    CASE WHEN ca.door_number IS NOT NULL AND ca.door_number <> ''
+                         THEN CONCAT(ca.address_line, ' ', ca.door_number)
+                         ELSE ca.address_line END AS delivery_address,
                     da.status AS delivery_status,
                     doo.serve_date AS serve_date
                 FROM dispatch_assignments da

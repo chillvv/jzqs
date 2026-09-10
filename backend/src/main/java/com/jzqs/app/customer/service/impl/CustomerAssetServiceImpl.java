@@ -30,6 +30,7 @@ import com.jzqs.app.customer.model.entity.CustomerEntity;
 import com.jzqs.app.customer.model.entity.MealWalletEntity;
 import com.jzqs.app.customer.model.entity.WalletTransactionEntity;
 import com.jzqs.app.customer.service.CustomerAssetService;
+import com.jzqs.app.dispatch.service.impl.DispatchAddressChangeNotifier;
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.Timestamp;
@@ -68,17 +69,20 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
     private final MealWalletMapper mealWalletMapper;
     private final WalletTransactionMapper walletTransactionMapper;
     private final JdbcTemplate jdbcTemplate;
+    private final DispatchAddressChangeNotifier dispatchAddressChangeNotifier;
 
     public CustomerAssetServiceImpl(
         CustomerMapper customerMapper,
         MealWalletMapper mealWalletMapper,
         WalletTransactionMapper walletTransactionMapper,
-        JdbcTemplate jdbcTemplate
+        JdbcTemplate jdbcTemplate,
+        DispatchAddressChangeNotifier dispatchAddressChangeNotifier
     ) {
         this.customerMapper = customerMapper;
         this.mealWalletMapper = mealWalletMapper;
         this.walletTransactionMapper = walletTransactionMapper;
         this.jdbcTemplate = jdbcTemplate;
+        this.dispatchAddressChangeNotifier = dispatchAddressChangeNotifier;
     }
 
     @Override
@@ -458,6 +462,8 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
         requireActiveCustomer(customerId);
         requireExistingCustomerAddress(customerId, addressId);
         AddressPayload address = normalizeAddressPayload(customerId, request);
+        // 改址前的地址文本：改完比对，只有配送位置真的变了才通知骑手（只改联系人电话不打扰）。
+        String previousAddressText = dispatchAddressChangeNotifier.readAddressText(addressId);
         if (address.isDefault()) {
             jdbcTemplate.update("UPDATE customer_addresses SET is_default = FALSE WHERE customer_id = ?", customerId);
         }
@@ -477,6 +483,13 @@ public class CustomerAssetServiceImpl implements CustomerAssetService {
             address.longitude(),
             addressId,
             customerId
+        );
+        // 客户管理里编辑地址会静默改变所有引用该地址订单的配送目标（订单 JOIN address_id 取地址），
+        // 必须让已承接的骑手知情，否则骑手仍按旧地址送达。
+        dispatchAddressChangeNotifier.notifyCustomerAddressChanged(
+            addressId,
+            previousAddressText,
+            DispatchAddressChangeNotifier.SOURCE_ADDRESS_BOOK_UPDATED
         );
         return new CustomerAddressActionResponse(customerId, addressId, "UPDATED");
     }

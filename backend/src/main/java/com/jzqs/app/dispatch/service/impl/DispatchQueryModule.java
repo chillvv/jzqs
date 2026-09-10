@@ -44,7 +44,9 @@ class DispatchQueryModule {
                 da.id AS dispatch_id,
                 mso.id AS order_id,
                 c.name AS customer_name,
-                ca.address_line AS delivery_address,
+                CASE WHEN ca.door_number IS NOT NULL AND ca.door_number <> ''
+                     THEN CONCAT(ca.address_line, ' ', ca.door_number)
+                     ELSE ca.address_line END AS delivery_address,
                 da.rider_name,
                 da.area_code,
                 da.status AS delivery_status,
@@ -292,7 +294,9 @@ class DispatchQueryModule {
                 mso.id AS meal_slot_order_id,
                 c.name AS customer_name,
                 c.phone AS customer_phone,
-                ca.address_line AS delivery_address,
+                CASE WHEN ca.door_number IS NOT NULL AND ca.door_number <> ''
+                     THEN CONCAT(ca.address_line, ' ', ca.door_number)
+                     ELSE ca.address_line END AS delivery_address,
                 COALESCE(rab.area_code, ca.area_code) AS suggested_area_code,
                 rp_default.rider_name AS suggested_rider_name,
                 CASE
@@ -366,7 +370,11 @@ class DispatchQueryModule {
             SELECT
                 mso.id AS order_id,
                 c.name AS customer_name,
-                ca.address_line AS delivery_address
+                -- 定位地址 + 门牌号：商家分单时要区分同一学校的不同门（V33 把地址拆成 address_line + door_number），
+                -- 拼接口径与骑手端 RiderQueueSupport / 顾客端 MobileCustomerQueryModule 保持一致。
+                CASE WHEN ca.door_number IS NOT NULL AND ca.door_number <> ''
+                     THEN CONCAT(ca.address_line, ' ', ca.door_number)
+                     ELSE ca.address_line END AS delivery_address
             FROM meal_slot_orders mso
             JOIN daily_orders doo ON doo.id = mso.daily_order_id
             JOIN customers c ON c.id = doo.customer_id
@@ -560,7 +568,9 @@ class DispatchQueryModule {
                     COALESCE(NULLIF(da.sequence_number, 0), dbi.current_sequence, 0) AS sequence_number,
                     c.name AS customer_name,
                     c.phone AS customer_phone,
-                    ca.address_line AS delivery_address,
+                    CASE WHEN ca.door_number IS NOT NULL AND ca.door_number <> ''
+                         THEN CONCAT(ca.address_line, ' ', ca.door_number)
+                         ELSE ca.address_line END AS delivery_address,
                     da.status AS delivery_status,
                     da.rider_name,
                     COALESCE(mso.user_note, mso.note, '') AS user_note,

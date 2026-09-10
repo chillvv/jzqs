@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -127,6 +128,8 @@ class MobilePortalRealtimePublishingTest {
         insertCustomer(951L, "用户张先生951", "13800001951");
         insertAddress(901L, 901L, "高新区软件园A座", "高新区");
         insertAddress(902L, 902L, "高新区软件园B座", "高新区");
+        // 订单 901 的改址目标（同客户本人的另一个地址）
+        insertAddress(903L, 901L, "高新区软件园C座", "高新区");
         insertAddress(951L, 951L, "高新区科技园一期", "高新区");
         insertAddress(952L, 951L, "高新区科技园二期", "高新区");
         insertDailyOrder(901L, 901L);
@@ -228,7 +231,11 @@ class MobilePortalRealtimePublishingTest {
             realtimeAudienceModule,
             riderQueueSupport
         );
-        MobileAddressModule mobileAddressModule = new MobileAddressModule(jdbcTemplate, new com.jzqs.app.order.persistence.OrderDispatchRepository(jdbcTemplate));
+        MobileAddressModule mobileAddressModule = new MobileAddressModule(
+            jdbcTemplate,
+            new com.jzqs.app.order.persistence.OrderDispatchRepository(jdbcTemplate),
+            new com.jzqs.app.dispatch.service.impl.DispatchAddressChangeNotifier(jdbcTemplate, realtimeAudienceModule)
+        );
         NightlyReminderModule nightlyReminderModule = mock(NightlyReminderModule.class);
         mobileAuthService = mock(MobileAuthService.class);
         return new MobilePortalServiceImpl(
@@ -570,6 +577,35 @@ class MobilePortalRealtimePublishingTest {
         assertTrue(event.audiences().contains("customer:id:951"));
         assertEquals(951L, ((Number) event.payload().get("customerId")).longValue());
         assertEquals(953L, ((Number) event.payload().get("orderId")).longValue());
+    }
+
+    @Test
+    void changeOrderAddressByMerchantShouldNotifyAssignedRider() {
+        // 商家后台改址：必须把「哪一单的地址变成了什么」定点推给原骑手。
+        // 否则骑手队列里这单静默换址/消失，骑手仍按旧地址送达（2026-09 商家反馈）。
+        mobilePortalService.changeCustomerOrderAddressByMerchant(901L, 901L, 903L);
+
+        ArgumentCaptor<RealtimeEvent> eventCaptor = ArgumentCaptor.forClass(RealtimeEvent.class);
+        verify(realtimeEventPublisher, times(2)).publish(eventCaptor.capture());
+        List<RealtimeEvent> events = eventCaptor.getAllValues();
+        assertEquals(
+            List.of("dispatch.order.address.changed", "customer.order.changed"),
+            events.stream().map(RealtimeEvent::eventType).toList()
+        );
+
+        RealtimeEvent addressEvent = events.get(0);
+        assertTrue(addressEvent.audiences().contains("admin"));
+        assertTrue(
+            addressEvent.audiences().contains("rider:name:骑手小李"),
+            "必须定向推给原骑手，实际 audiences=" + addressEvent.audiences()
+        );
+        assertFalse(
+            addressEvent.audiences().contains("rider:all"),
+            "改址提醒不得广播给无关骑手"
+        );
+        assertEquals(901L, ((Number) addressEvent.payload().get("orderId")).longValue());
+        assertEquals("高新区软件园C座", addressEvent.payload().get("addressText"));
+        assertTrue(String.valueOf(addressEvent.payload().get("noticeText")).contains("高新区软件园C座"));
     }
 
     @Test

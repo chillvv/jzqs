@@ -12,6 +12,7 @@ const RIDER_VERIFY_TOKEN_URL = '/api/mobile/rider-auth/verify-token';
 const RIDER_PROFILE_URL = '/api/mobile/rider-auth/me';
 const { request: sharedRequest } = require('./request');
 const authService = require('../services/auth.service');
+const addressChangeNotice = require('./address-change-notice');
 
 class Auth {
   constructor() {
@@ -283,6 +284,8 @@ class Auth {
       this.globalData.phone = '';
       this.globalData.assignArea = '';
       this.globalData.openid = '';
+      // 清空改址提醒的「已提醒」记录：换骑手登录后不应继承上一位骑手的提醒状态
+      addressChangeNotice.reset();
     }
   }
 

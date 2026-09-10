@@ -2,6 +2,7 @@ package com.jzqs.app.mobile;
 
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
+import com.jzqs.app.dispatch.service.impl.DispatchAddressChangeNotifier;
 import com.jzqs.app.mobile.api.MobileAddressResponse;
 import com.jzqs.app.mobile.api.MobileDefaultAddressResponse;
 import com.jzqs.app.mobile.api.MobileOrderAddressChangeResponse;
@@ -21,10 +22,16 @@ class MobileAddressModule {
 
     private final JdbcTemplate jdbcTemplate;
     private final OrderDispatchRepository orderDispatchRepository;
+    private final DispatchAddressChangeNotifier dispatchAddressChangeNotifier;
 
-    MobileAddressModule(JdbcTemplate jdbcTemplate, OrderDispatchRepository orderDispatchRepository) {
+    MobileAddressModule(
+        JdbcTemplate jdbcTemplate,
+        OrderDispatchRepository orderDispatchRepository,
+        DispatchAddressChangeNotifier dispatchAddressChangeNotifier
+    ) {
         this.jdbcTemplate = jdbcTemplate;
         this.orderDispatchRepository = orderDispatchRepository;
+        this.dispatchAddressChangeNotifier = dispatchAddressChangeNotifier;
     }
 
     private record CustomerMealPeriodRow(long customerId, String mealPeriod, String status) {}
@@ -304,6 +311,15 @@ class MobileAddressModule {
             return new MobileOrderAddressChangeResponse(orderId, addressId, "ADDRESS_UNCHANGED");
         }
         jdbcTemplate.update("UPDATE meal_slot_orders SET address_id = ? WHERE id = ?", addressId, orderId);
+        // 改址必须让当事骑手知情（商家反馈：骑手队列里这单会静默换址/消失，按旧地址送错）。
+        // 必须在 reconcileDispatchArea 之前调用——它内部会 resetDispatchFlow 删除派单行，
+        // 删完就查不到原骑手了；事件由 TransactionalRealtimePublisher 延迟到事务提交后推送。
+        dispatchAddressChangeNotifier.notifyOrderAddressChanged(
+            orderId,
+            enforceWindow
+                ? DispatchAddressChangeNotifier.SOURCE_CUSTOMER_CHANGED_ADDRESS
+                : DispatchAddressChangeNotifier.SOURCE_ADMIN_CHANGED_ADDRESS
+        );
         // 换地址后让派单区域与新地址接轨：自动派单本身是实时 JOIN 新 address_id 的，
         // 这里主要修正「已派单订单」的 dispatch_assignments 区域快照，避免改址后派单区域错乱。
         reconcileDispatchArea(orderId, addressId);

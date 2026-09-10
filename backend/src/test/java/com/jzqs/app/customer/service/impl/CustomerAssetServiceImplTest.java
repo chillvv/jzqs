@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.never;
@@ -21,6 +22,7 @@ import com.jzqs.app.customer.mapper.WalletTransactionMapper;
 import com.jzqs.app.customer.model.entity.CustomerEntity;
 import com.jzqs.app.customer.model.entity.MealWalletEntity;
 import com.jzqs.app.customer.model.entity.WalletTransactionEntity;
+import com.jzqs.app.dispatch.service.impl.DispatchAddressChangeNotifier;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -47,6 +49,9 @@ class CustomerAssetServiceImplTest {
 
     @Mock
     private JdbcTemplate jdbcTemplate;
+
+    @Mock
+    private DispatchAddressChangeNotifier dispatchAddressChangeNotifier;
 
     @InjectMocks
     private CustomerAssetServiceImpl customerAssetService;
@@ -283,6 +288,12 @@ class CustomerAssetServiceImplTest {
             eq(new BigDecimal("104.062500")),
             eq(18L),
             eq(382L)
+        );
+        // 客户管理改址会静默改变订单配送目标，必须通知已承接的骑手
+        verify(dispatchAddressChangeNotifier).notifyCustomerAddressChanged(
+            eq(18L),
+            isNull(),
+            eq(DispatchAddressChangeNotifier.SOURCE_ADDRESS_BOOK_UPDATED)
         );
     }
 

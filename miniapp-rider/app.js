@@ -8,6 +8,7 @@ const {
   resolveServiceHeaders
 } = require('./utils/api-base');
 const realtime = require('./utils/realtime');
+const addressChangeNotice = require('./utils/address-change-notice');
 const onboarding = require('./utils/onboarding');
 
 const UNOPENED_RIDER_ACCOUNT_MESSAGE = '后台未开通该手机号对应的骑手账号';
@@ -78,6 +79,8 @@ App({
       getToken: () => wx.getStorageSync('auth_token') || auth.globalData.token || ''
     });
 
+    this.bindAddressChangeNotice();
+
     // 根据认证状态自动跳转
     this.authPromise.then(() => {
       this.syncRiderGlobals();
@@ -89,6 +92,20 @@ App({
           wx.reLaunch({ url: entryPage });
         }, 100);
       }
+    });
+  },
+
+  /**
+   * 全局改址提醒：后台改地址会静默撤销/改写订单的派单快照，骑手必须立刻知道新地址，
+   * 否则仍按旧地址送达。注册在 App 上而不是各页面，保证骑手无论停在哪个页面都能收到弹窗
+   *（页面内的 dispatch.* 订阅只负责刷新数据，不做提醒）。
+   *
+   * 注意：realtime.stop()（退出登录/重置登录态）会清空全部监听器，
+   * 因此每处 stop 之后都必须重新调用本方法，否则本次会话再也收不到改址弹窗。
+   */
+  bindAddressChangeNotice() {
+    realtime.subscribe((message) => {
+      addressChangeNotice.enqueue(message);
     });
   },
 
@@ -190,6 +207,7 @@ App({
 
   async logoutRider() {
     realtime.stop();
+    this.bindAddressChangeNotice();
     await auth.logout();
     this.syncRiderGlobals();
     wx.switchTab({ url: '/pages/profile/index' });
@@ -199,6 +217,7 @@ App({
     const shouldRedirect = options.redirect === true;
     const message = typeof options.message === 'string' ? options.message.trim() : '';
     realtime.stop();
+    this.bindAddressChangeNotice();
     await auth.logout();
     this.syncRiderGlobals();
     if (!shouldRedirect || this.globalData.authRedirecting) {
