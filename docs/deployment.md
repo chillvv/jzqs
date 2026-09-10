@@ -119,12 +119,33 @@ curl -s http://localhost/api/health  # 后端存活
 
 ## 六、回滚
 
+### 方式一：镜像回滚（秒级，推荐先试这个）
+
+`./build.sh backend` 在构建前会把**当前**镜像打上 `jzqs-backend:rollback` 标签
+（只保留上一版，`prune` 会跳过它）。新版本出问题时：
+
 ```bash
-# 后端：切到旧 commit 重新构建即可
+docker tag jzqs-backend:rollback jzqs-backend:local   # 把回滚点指回 local
+docker compose up -d backend                          # 用旧镜像重建容器
+docker compose ps                                     # 确认 healthy
+```
+
+注意：镜像回滚**只回滚代码，不回滚数据库**。如果新版本带过 Flyway 迁移，
+数据库结构仍是新的（见下方）。
+
+### 方式二：源码回滚
+
+```bash
 git checkout <旧commit> && ./build.sh backend
 git checkout main   # 回滚后切回主分支
+```
 
-# 数据库：Flyway 不支持自动降级，需要手动写补偿 SQL
+### 数据库
+
+Flyway 不支持自动降级，需要手动写补偿 SQL。回滚前若不确定，先从容器里导一份：
+
+```bash
+docker exec jzqs-mysql sh -c 'mysqldump -uroot -p"$MYSQL_ROOT_PASSWORD" --single-transaction jzqs' | gzip > jzqs_before_rollback.sql.gz
 ```
 
 ## 七、生产注意事项
