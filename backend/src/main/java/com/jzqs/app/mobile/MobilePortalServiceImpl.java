@@ -257,14 +257,15 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         throw new BusinessException(ErrorCode.VALIDATION_ERROR, "不支持的订阅模板：" + safeString(templateId) + " type=" + safeString(type));
     }
 
+    // 注意：不要在这两个方法上加 @Transactional。它们内部会逐单调用微信订阅消息接口，
+    // 一旦包在一个大事务里，整个批次的 HTTP 往返期间都会占着数据库连接并持有行锁，
+    // 既拖慢调度、又容易与后台手动释放互相阻塞。每单的状态更新各自短事务提交即可。
     @Override
-    @Transactional
     public int sendScheduledDeliverySubscribeMessages(String mealPeriod) {
         return deliverySubscriptionModule.sendScheduledMessages(mealPeriod);
     }
 
     @Override
-    @Transactional
     public int sendAllDeliveredPendingSubscriptions() {
         return deliverySubscriptionModule.sendAllDeliveredPendingSubscriptions();
     }

@@ -3,8 +3,10 @@ package com.jzqs.app.mobile;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -188,6 +190,100 @@ class DeliverySubscriptionModuleTest {
 
         // 已发送后再次扫描不重复发送
         assertEquals(0, module.sendScheduledMessages("LUNCH"));
+    }
+
+    @Test
+    void scheduledScanShouldStopRetryingAfterMaxRetries() {
+        // 场景：某条订阅消息已失败达到最大重试次数。
+        // 定时扫描不应再反复调用微信接口（此前会每分钟无限重试，把后台拖慢）。
+        given(settingsService.operationSettings()).willReturn(new com.jzqs.app.settings.api.OperationSettingsResponse(
+            true, "接单中", "", "", "", "[]", 3, 7, 3, false, true, "00:00", "17:30", false, "", "", "", false, "", "", "", ""
+        ));
+        jdbcTemplate.update("UPDATE customers SET current_openid = 'openid_981' WHERE id = 981");
+        jdbcTemplate.update(
+            """
+                INSERT INTO delivery_receipts (id, meal_slot_order_id, receipt_url, delivered_at, visible_to_customer)
+                VALUES (1981, 981, '/uploads/r.jpg', CURRENT_TIMESTAMP, TRUE)
+                """);
+        jdbcTemplate.update(
+            """
+                INSERT INTO customer_delivery_subscriptions (
+                    customer_id, meal_slot_order_id, template_id, status, source, authorized_at, retry_count
+                ) VALUES (?, ?, ?, 'FAILED', 'MINIAPP_ORDER_SUCCESS', CURRENT_TIMESTAMP, ?)
+                """,
+            981L,
+            981L,
+            "tmpl-exhausted",
+            DeliverySubscriptionModule.MAX_SEND_RETRIES
+        );
+
+        assertEquals(0, module.sendScheduledMessages("LUNCH"));
+
+        verify(weChatService, never()).sendDeliverySubscribeMessage(
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString()
+        );
+    }
+
+    @Test
+    void revokedSubscriptionShouldBecomeCancelledAndNeverRetried() {
+        // 场景：用户已在微信端拒收（43101）。应直接置为终态 CANCELLED，
+        // 后续扫描不再重复调用微信接口（此前会每分钟空转，产生海量错误日志）。
+        given(settingsService.operationSettings()).willReturn(new com.jzqs.app.settings.api.OperationSettingsResponse(
+            true, "接单中", "", "", "", "[]", 3, 7, 3, false, true, "00:00", "17:30", false, "", "", "", false, "", "", "", ""
+        ));
+        jdbcTemplate.update("UPDATE customers SET current_openid = 'openid_981' WHERE id = 981");
+        jdbcTemplate.update(
+            """
+                INSERT INTO delivery_receipts (id, meal_slot_order_id, receipt_url, delivered_at, visible_to_customer)
+                VALUES (1981, 981, '/uploads/r.jpg', CURRENT_TIMESTAMP, TRUE)
+                """);
+        jdbcTemplate.update(
+            """
+                INSERT INTO customer_delivery_subscriptions (
+                    customer_id, meal_slot_order_id, template_id, status, source, authorized_at
+                ) VALUES (?, ?, ?, 'AUTHORIZED', 'MINIAPP_ORDER_SUCCESS', CURRENT_TIMESTAMP)
+                """,
+            981L,
+            981L,
+            "tmpl-revoked"
+        );
+
+        doThrow(new com.jzqs.app.common.error.BusinessException(
+            com.jzqs.app.common.error.ErrorCode.SUBSCRIPTION_REVOKED_BY_USER,
+            "用户关闭了订阅消息权限"
+        )).when(weChatService).sendDeliverySubscribeMessage(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any()
+        );
+
+        assertEquals(0, module.sendScheduledMessages("LUNCH"));
+        assertEquals(
+            "CANCELLED",
+            jdbcTemplate.queryForObject(
+                "SELECT status FROM customer_delivery_subscriptions WHERE meal_slot_order_id = 981",
+                String.class
+            )
+        );
+
+        // 再次扫描不应再尝试发送
+        assertEquals(0, module.sendScheduledMessages("LUNCH"));
+        verify(weChatService, times(1)).sendDeliverySubscribeMessage(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any()
+        );
     }
 
     @org.junit.jupiter.api.AfterEach

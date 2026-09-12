@@ -6,6 +6,7 @@ import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.common.wechat.WeChatService;
 import com.jzqs.app.settings.service.SettingsService;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -19,6 +20,14 @@ import org.springframework.stereotype.Component;
 class DeliverySubscriptionModule {
     private static final Logger log = LoggerFactory.getLogger(DeliverySubscriptionModule.class);
     private static final int DELIVERY_SUBSCRIPTION_RETENTION_DAYS = 30;
+    /** 单条订阅消息的最大发送尝试次数：超过即放弃，避免用户拒收/微信异常时每分钟空转 */
+    static final int MAX_SEND_RETRIES = 10;
+    /** 单轮扫描的发送时间预算：超出即停止本轮，剩余订单下一分钟继续，保证调度永不被长时间占用 */
+    private static final long SEND_BUDGET_MILLIS = 45_000L;
+    /** 连续发送失败达到该次数即中止本轮，避免微信整体异常时把整批订单都打成失败 */
+    private static final int CONSECUTIVE_FAILURE_ABORT_THRESHOLD = 5;
+    /** 到点后仍有订单滞留超过该分钟数时告警，便于第一时间发现后台停摆 */
+    private static final long OVERDUE_ALERT_MINUTES = 5;
     /** 餐期送达状态对用户可见/订阅消息发送的释放时间默认值；实际以 admin_settings 配置（delivery_subscribe_lunch_time / delivery_subscribe_dinner_time）为准 */
     static final LocalTime RELEASE_LUNCH_TIME_DEFAULT = LocalTime.of(11, 30);
     static final LocalTime RELEASE_DINNER_TIME_DEFAULT = LocalTime.of(17, 0);
@@ -48,7 +57,8 @@ class DeliverySubscriptionModule {
                 source = VALUES(source),
                 authorized_at = VALUES(authorized_at),
                 sent_at = NULL,
-                last_error_message = NULL
+                last_error_message = NULL,
+                retry_count = 0
             """,
             customerId,
             orderId,
@@ -93,7 +103,9 @@ class DeliverySubscriptionModule {
             JOIN daily_orders do ON do.id = mso.daily_order_id
             JOIN customers c ON c.id = do.customer_id
             WHERE cds.status IN ('AUTHORIZED', 'FAILED')
+              AND cds.retry_count < ?
               AND mso.status = 'DELIVERED'
+              AND do.serve_date >= DATE_SUB(CURDATE(), INTERVAL 1 DAY)
               AND COALESCE(c.current_openid, c.openid, '') <> ''
               AND (
                     (mso.meal_period = 'LUNCH' AND TIMESTAMP(do.serve_date, ?) <= ?)
@@ -102,18 +114,13 @@ class DeliverySubscriptionModule {
             ORDER BY cds.meal_slot_order_id
             """,
             (rs, rowNum) -> rs.getLong(1),
+            MAX_SEND_RETRIES,
             lunchReleaseTime,
             Timestamp.valueOf(now),
             dinnerReleaseTime,
             Timestamp.valueOf(now)
         );
-        int sentCount = 0;
-        for (Long orderId : orderIds) {
-            if (trySendDeliverySubscription(orderId, now)) {
-                sentCount++;
-            }
-        }
-        return sentCount;
+        return sendWithinBudget(orderIds, now, "手动补发");
     }
 
     /**
@@ -178,12 +185,12 @@ class DeliverySubscriptionModule {
 
     private int sendScheduledMessagesInternal(String mealPeriod, LocalDate serveDate, LocalDateTime now) {
         String releaseTime = resolveConfiguredReleaseTime(mealPeriod).toString();
-        // 扫描"已送达、且已到餐期释放时间"的订单，补发尚未送达的取餐订阅消息。
+        // 扫描「已送达、且已到餐期释放时间」的订单，补发尚未发送的取餐订阅消息。
         // 不限定必须有订阅记录：无论有无订阅，到点都应把回执对用户可见（自动释放）。
         // 注意：送达时间晚于释放时间的订单（如 11:48 送达、午餐 11:30 释放），回执会在送达瞬间
-        // 立即对用户可见，从而绕过"visible=FALSE -> 定时任务释放并发送"的流程；若只扫 visible=FALSE
-        // 的订单，这些单的订阅消息会被永久漏发。因此这里同时覆盖
-        // "回执已可见、但订阅消息尚未发送(cds.sent_at 为空 / 状态非 SENT)"的订单。
+        // 立即对用户可见，从而绕过「visible=FALSE -> 定时任务释放并发送」的流程；若只扫 visible=FALSE
+        // 的订单，这些单的订阅消息会被永久漏发。因此这里同时覆盖「回执已可见、但订阅消息尚未发送」
+        // 的订单；其中 FAILED 仅按 MAX_SEND_RETRIES 重试有限次，SENT/CANCELLED 不再重复处理。
         List<Long> orderIds = jdbcTemplate.query(
             """
             SELECT mso.id
@@ -195,19 +202,28 @@ class DeliverySubscriptionModule {
               AND mso.meal_period = ?
               AND do.serve_date = ?
               AND TIMESTAMP(do.serve_date, ?) <= ?
-              AND (dr.visible_to_customer = FALSE OR cds.sent_at IS NULL OR cds.status <> 'SENT')
-            ORDER BY mso.id
+              AND (
+                    dr.visible_to_customer = FALSE
+                 OR cds.id IS NULL
+                 OR cds.status = 'AUTHORIZED'
+                 OR (cds.status = 'FAILED' AND cds.retry_count < ?)
+              )
+            ORDER BY CASE WHEN cds.status = 'FAILED' THEN 1 ELSE 0 END, mso.id
             """,
             (rs, rowNum) -> rs.getLong(1),
             mealPeriod,
             serveDate,
             releaseTime,
-            Timestamp.valueOf(now)
+            Timestamp.valueOf(now),
+            MAX_SEND_RETRIES
         );
-        int sentCount = 0;
+        if (orderIds.isEmpty()) {
+            return 0;
+        }
+        warnIfOverdue(mealPeriod, serveDate, now);
+        // 先把回执对用户可见（与后台手动"立即释放"等价），保证用户点开订阅消息时回执已可查看；
+        // 已可见的订单保持原 visible_at 不变，仅补齐尚未可见的。
         for (Long orderId : orderIds) {
-            // 先把回执对用户可见（与后台手动"立即释放"等价），保证订单即时从待释放列表消失；
-            // 已可见的订单保持原 visible_at 不变，仅补齐尚未可见的。
             jdbcTemplate.update(
                 """
                 UPDATE delivery_receipts
@@ -218,18 +234,67 @@ class DeliverySubscriptionModule {
                 Timestamp.valueOf(now),
                 orderId
             );
-            // 再尝试发送取餐提醒订阅消息（无授权记录时仅释放、不发送；已发送过的不会重复发送）
-            if (trySendDeliverySubscription(orderId, now)) {
-                sentCount++;
-            }
         }
+        int sentCount = sendWithinBudget(orderIds, now, mealPeriod);
         // 所有订单处理完毕后，统一清理一次过期订阅记录（原先在循环内每个订单各清一次，浪费连接）
         pruneOldDeliverySubscriptions();
         return sentCount;
     }
 
-    private boolean trySendDeliverySubscription(long mealSlotOrderId, LocalDateTime triggerTime) {
-        return trySendDeliverySubscriptionWithReason(mealSlotOrderId, triggerTime).sent();
+    /**
+     * 按预算串行发送，单轮耗时有硬上限：
+     * 微信接口异常时不会让定时任务长时间占住后台线程，剩余订单下一分钟自然补上。
+     */
+    private int sendWithinBudget(List<Long> orderIds, LocalDateTime now, String trigger) {
+        int sentCount = 0;
+        int consecutiveFailures = 0;
+        long deadline = System.currentTimeMillis() + SEND_BUDGET_MILLIS;
+        for (int i = 0; i < orderIds.size(); i++) {
+            if (System.currentTimeMillis() > deadline) {
+                log.warn("[{}] 本轮发送超出 {}ms 预算，剩余 {} 单将在下一轮补发", trigger, SEND_BUDGET_MILLIS, orderIds.size() - i);
+                break;
+            }
+            DeliverySendResult result = trySendDeliverySubscriptionWithReason(orderIds.get(i), now);
+            if (result.sent()) {
+                sentCount++;
+                consecutiveFailures = 0;
+            } else if ("SEND_FAILED".equals(result.reason())) {
+                consecutiveFailures++;
+                if (consecutiveFailures >= CONSECUTIVE_FAILURE_ABORT_THRESHOLD) {
+                    log.warn("[{}] 连续 {} 次发送失败，疑似微信接口异常，中止本轮，剩余 {} 单下一轮补发",
+                        trigger, consecutiveFailures, orderIds.size() - i - 1);
+                    break;
+                }
+            }
+        }
+        return sentCount;
+    }
+
+    /** 到点后仍有「已授权但未发送」的订单滞留时告警，便于第一时间发现后台停摆 */
+    private void warnIfOverdue(String mealPeriod, LocalDate serveDate, LocalDateTime now) {
+        long lateMinutes = Duration.between(resolveDeliveryNotifyThreshold(serveDate, mealPeriod), now).toMinutes();
+        if (lateMinutes < OVERDUE_ALERT_MINUTES) {
+            return;
+        }
+        Integer overdue = jdbcTemplate.queryForObject(
+            """
+            SELECT COUNT(*)
+            FROM customer_delivery_subscriptions cds
+            JOIN meal_slot_orders mso ON mso.id = cds.meal_slot_order_id
+            JOIN daily_orders do ON do.id = mso.daily_order_id
+            WHERE cds.status = 'AUTHORIZED'
+              AND cds.sent_at IS NULL
+              AND mso.status = 'DELIVERED'
+              AND mso.meal_period = ?
+              AND do.serve_date = ?
+            """,
+            Integer.class,
+            mealPeriod,
+            serveDate
+        );
+        if (overdue != null && overdue > 0) {
+            log.warn("[{}] 已过释放时间 {} 分钟，仍有 {} 单已送达未发送，正在补发", mealPeriod, lateMinutes, overdue);
+        }
     }
 
     private DeliverySendResult trySendDeliverySubscriptionWithReason(long mealSlotOrderId, LocalDateTime triggerTime) {
@@ -263,14 +328,37 @@ class DeliverySubscriptionModule {
                 context.id()
             );
             return new DeliverySendResult(true, "SENT");
+        } catch (BusinessException ex) {
+            if (ex.getErrorCode() == ErrorCode.SUBSCRIPTION_REVOKED_BY_USER) {
+                // 用户已在微信端关闭或用尽该模板的订阅授权，属于终态：直接作废，避免每分钟重复发送
+                jdbcTemplate.update(
+                    "UPDATE customer_delivery_subscriptions SET status = 'CANCELLED', last_error_message = ? WHERE id = ?",
+                    ex.getMessage(),
+                    context.id()
+                );
+                return new DeliverySendResult(false, "NO_CONSENT");
+            }
+            markSendFailed(context.id(), ex.getMessage());
+            return new DeliverySendResult(false, "SEND_FAILED");
         } catch (Exception ex) {
-            jdbcTemplate.update(
-                "UPDATE customer_delivery_subscriptions SET status = 'FAILED', last_error_message = ? WHERE id = ?",
-                ex.getMessage(),
-                context.id()
-            );
+            markSendFailed(context.id(), ex.getMessage());
             return new DeliverySendResult(false, "SEND_FAILED");
         }
+    }
+
+    /** 发送失败：累计重试次数，超过 {@link #MAX_SEND_RETRIES} 后扫描任务不再重复处理该记录 */
+    private void markSendFailed(long subscriptionId, String errorMessage) {
+        jdbcTemplate.update(
+            """
+            UPDATE customer_delivery_subscriptions
+            SET status = 'FAILED',
+                retry_count = retry_count + 1,
+                last_error_message = ?
+            WHERE id = ?
+            """,
+            errorMessage,
+            subscriptionId
+        );
     }
 
     private void pruneOldDeliverySubscriptions() {
