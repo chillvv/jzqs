@@ -21,6 +21,10 @@ public record DeliveryNotifyGapItem(
     String customerPhone,
     String deliveryAddress,
     String deliveredAt,
+    /** daily_orders.source：MINIAPP / BACKEND / SUBSCRIPTION */
+    String orderSource,
+    /** 该订单是否由固定订餐（订阅确认）生成，口径与订单中心 mso.confirmed_from_subscription 一致 */
+    boolean fixedSubscription,
     String reason
 ) {
 }

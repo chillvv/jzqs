@@ -5,6 +5,7 @@ import type { DeliveryNotifyGapItem } from "../../shared/api/types";
 import { toast } from "../../shared/components/Toast";
 import { useDispatchContext } from "./DispatchContext";
 import { mealPeriodLabel } from "./dispatchCenterLayout.helpers";
+import { resolveOrderSourceLabel } from "../orders/orderPrepPage.helpers";
 
 /** 未送达原因 → 运营可读的标签与处理提示（后端 DeliveryNotifyGapItem.reason） */
 const REASON_META: Record<string, { label: string; tagClass: string; hint: string }> = {
@@ -80,6 +81,8 @@ export function DispatchNotifyGapPage() {
 
   function renderGapCard(item: DeliveryNotifyGapItem) {
     const meta = reasonMeta(item.reason);
+    // 复用订单中心的来源文案（小程序 / 后台录入 / 固定订餐），运营看到的是同一套口径
+    const sourceLabel = resolveOrderSourceLabel(item);
     return (
       <div
         key={item.orderId}
@@ -93,7 +96,8 @@ export function DispatchNotifyGapPage() {
       >
         <div className="dispatch-area-orders__top">
           <strong>订单 #{item.orderId}</strong>
-          <span className={meta.tagClass}>{meta.label}</span>
+          <span className={`tag ${sourceLabel === "后台录入" ? "tag-gray" : "tag-blue"}`}>{sourceLabel}</span>
+          <span className={meta.tagClass} style={{ marginLeft: "auto" }}>{meta.label}</span>
         </div>
         <div style={{ marginTop: 6 }}>
           {item.customerName}（{item.customerPhone || "--"}）

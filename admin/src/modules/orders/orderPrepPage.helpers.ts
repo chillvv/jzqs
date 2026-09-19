@@ -106,7 +106,9 @@ export function resolveMealPeriod(item: OrderPrepItemResponse): OrderPrepMealPer
   return item.mealSummary.includes("晚餐") ? "DINNER" : "LUNCH";
 }
 
-export function resolveOrderSourceLabel(item: OrderPrepItemResponse) {
+export function resolveOrderSourceLabel(
+  item: Pick<OrderPrepItemResponse, "source" | "fixedSubscription">
+) {
   if (item.fixedSubscription) {
     return "固定订餐";
   }

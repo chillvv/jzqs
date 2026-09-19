@@ -110,6 +110,8 @@ public class DeliveryReleaseSupport {
                          THEN CONCAT(ca.address_line, ' ', ca.door_number)
                          ELSE ca.address_line END AS delivery_address,
                     dr.delivered_at AS delivered_at,
+                    doo.source AS order_source,
+                    mso.confirmed_from_subscription AS fixed_subscription,
                     CASE
                         WHEN cds.id IS NULL THEN 'NO_SUBSCRIPTION'
                         WHEN cds.status = 'CANCELLED' THEN 'REVOKED'
@@ -150,6 +152,8 @@ public class DeliveryReleaseSupport {
                 rs.getString("customer_phone"),
                 rs.getString("delivery_address"),
                 rs.getTimestamp("delivered_at") == null ? "" : rs.getTimestamp("delivered_at").toLocalDateTime().toString(),
+                rs.getString("order_source"),
+                rs.getBoolean("fixed_subscription"),
                 rs.getString("gap_reason")
             ),
             params.toArray()
