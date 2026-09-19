@@ -365,7 +365,7 @@ class OrderPrepControllerTest {
             .andExpect(jsonPath("$.data[0].mealPeriod").value("LUNCH"))
             .andExpect(jsonPath("$.data[0].reason").value("NO_SUBSCRIPTION"))
             .andExpect(jsonPath("$.data[0].customerPhone").value("13800000001"))
-            .andExpect(jsonPath("$.data[0].orderSource").value("MINIAPP"))
+            .andExpect(jsonPath("$.data[0].source").value("MINIAPP"))
             .andExpect(jsonPath("$.data[0].fixedSubscription").value(false))
             .andExpect(jsonPath("$.data[1].reason").value("REVOKED"))
             .andExpect(jsonPath("$.data[1].fixedSubscription").value(true));

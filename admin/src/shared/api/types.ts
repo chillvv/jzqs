@@ -810,7 +810,7 @@ export type DeliveryNotifyGapItem = {
   deliveryAddress: string;
   deliveredAt: string;
   /** daily_orders.source：MINIAPP / BACKEND / SUBSCRIPTION */
-  orderSource: string;
+  source: string;
   /** 是否固定订餐订单（口径与订单中心 mso.confirmed_from_subscription 一致） */
   fixedSubscription: boolean;
   /** NO_SUBSCRIPTION（无订阅授权）/ REVOKED（用户已关闭订阅）/ RETRY_EXHAUSTED（重试耗尽） */

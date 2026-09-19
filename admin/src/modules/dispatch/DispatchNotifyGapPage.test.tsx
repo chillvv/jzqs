@@ -20,7 +20,7 @@ vi.mock("../../shared/api/http", () => ({
       customerPhone: "13800000001",
       deliveryAddress: "软件园 A 座",
       deliveredAt: "2026-09-19T11:20:00",
-      orderSource: "MINIAPP",
+      source: "MINIAPP",
       fixedSubscription: false,
       reason: "NO_SUBSCRIPTION"
     },
@@ -33,7 +33,7 @@ vi.mock("../../shared/api/http", () => ({
       customerPhone: "13800000002",
       deliveryAddress: "软件园 B 座",
       deliveredAt: "2026-09-19T17:40:00",
-      orderSource: "SUBSCRIPTION",
+      source: "SUBSCRIPTION",
       fixedSubscription: true,
       reason: "REVOKED"
     }
