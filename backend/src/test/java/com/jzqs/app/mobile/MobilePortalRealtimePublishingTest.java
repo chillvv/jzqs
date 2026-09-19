@@ -324,7 +324,7 @@ class MobilePortalRealtimePublishingTest {
 
         mobilePortalService.submitRiderReceipt(901L, 901L, "/uploads/test.jpg", "放前台", deliveredAt);
 
-        verify(weChatService, never()).sendDeliverySubscribeMessage(anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
+        verify(weChatService, never()).sendDeliverySubscribeMessage(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
         assertEquals("AUTHORIZED", jdbcTemplate.queryForObject(
             "SELECT status FROM customer_delivery_subscriptions WHERE meal_slot_order_id = 901",
             String.class
@@ -349,7 +349,7 @@ class MobilePortalRealtimePublishingTest {
 
         mobilePortalService.submitRiderReceipt(901L, 901L, "/uploads/test.jpg", "放前台", deliveredAt);
 
-        verify(weChatService, never()).sendDeliverySubscribeMessage(anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
+        verify(weChatService, never()).sendDeliverySubscribeMessage(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
         assertEquals("AUTHORIZED", jdbcTemplate.queryForObject(
             "SELECT status FROM customer_delivery_subscriptions WHERE meal_slot_order_id = 901",
             String.class
@@ -376,7 +376,13 @@ class MobilePortalRealtimePublishingTest {
         assertEquals(1, mobilePortalService.sendScheduledDeliverySubscribeMessages("LUNCH"));
         assertEquals(1, mobilePortalService.sendScheduledDeliverySubscribeMessages("DINNER"));
 
-        verify(weChatService, times(2)).sendDeliverySubscribeMessage(anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
+        // 两条通知必须各自使用订单绑定的模板：午餐单 → 午餐模板，晚餐单 → 晚餐模板。
+        // 微信一次性订阅按模板计额度，晚餐单若错用午餐模板（额度已被午餐消耗）会被拒收。
+        ArgumentCaptor<String> templateCaptor = ArgumentCaptor.forClass(String.class);
+        verify(weChatService, times(2)).sendDeliverySubscribeMessage(
+            anyString(), templateCaptor.capture(), anyString(), anyString(), anyString(), anyString(), anyString()
+        );
+        assertEquals(List.of("tmpl-lunch", "tmpl-dinner"), templateCaptor.getAllValues());
         assertEquals(
             List.of("SENT", "SENT"),
             jdbcTemplate.queryForList(
@@ -394,7 +400,7 @@ class MobilePortalRealtimePublishingTest {
 
         assertEquals(0, mobilePortalService.sendScheduledDeliverySubscribeMessages("LUNCH"));
 
-        verify(weChatService, never()).sendDeliverySubscribeMessage(anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
+        verify(weChatService, never()).sendDeliverySubscribeMessage(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
     }
 
     @Test

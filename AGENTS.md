@@ -38,11 +38,12 @@ Single-context: one `CONTEXT.md` plus `docs/adr/` at the repo root. See `docs/ag
 ## 项目铁律（违反=失败）
 
 1. **证据先于断言**：禁止说"应该没问题/测试通过"，除非本轮刚跑过验证命令看到输出。
-2. **业务不变量必须变成 DB 约束**：禁止"SELECT→INSERT 预检"代替 UNIQUE。
-3. **CI 必须跑测试**：禁止 `-DskipTests`。
-4. **状态变更同步关联表**：走状态机 helper。
-5. **禁止双写/第二套实现**：单一数据源。
-6. **先验证市场，再写代码**（0-1 阶段）。
+2. **测试挑重点跑，禁止在本机/部署服务器全量跑**：后端 `mvn test`（94 个测试类）、前端 `vitest run`（不带路径，36 个文件）会瞬间打满服务器 CPU/内存，**把线上服务打挂**。改哪测哪，只跑受影响的测试类/目录；全量测试只在 CI 独立 runner 上跑。
+3. **业务不变量必须变成 DB 约束**：禁止"SELECT→INSERT 预检"代替 UNIQUE。
+4. **CI 必须跑测试**：禁止 `-DskipTests`。
+5. **状态变更同步关联表**：走状态机 helper。
+6. **禁止双写/第二套实现**：单一数据源。
+7. **先验证市场，再写代码**（0-1 阶段）。
 
 ## 领域术语纪律（Codex/Claude 必读；唯一权威来源 = `CONTEXT.md`）
 
@@ -68,4 +69,25 @@ Single-context: one `CONTEXT.md` plus `docs/adr/` at the repo root. See `docs/ag
 - 时区统一 Asia/Shanghai（`TimeUtils`，不用裸 `LocalDateTime.now()`）
 - 幂等必须落库（`idempotency_records`），不用内存实现
 - 迁移脚本只增不删；`docker-compose` 部署，`build.sh` 打包
-- 测试库端口 3307（3306 被本地 MySQL 占用）
+
+### 跑测试的方式（服务器上没有 node/mvn，一律用容器；禁止往服务器装运行时）
+
+- 测试库端口 3307（3306 被本地 MySQL 占用）。集成测试用 `TEST_DB_USER=jzqs`——**root 只允许 localhost，容器直连会被 `Access denied` 拒掉**。
+- `@SpringBootTest` 全上下文类（如 `DispatchRealtimePublishingTest`、`DispatchAreaDeleteSoftTest`）**在容器里跑不了**：`src/test/resources/application.yml` 写死了 `root/root`，报错发生在 `flywayInitializer` 建 bean 阶段。这类测试留给 CI，**不要为了跑它去改数据库账号权限**。
+- 也可以用 `./build.sh test`（只编译校验）或 `./build.sh test 'AaaTest,BbbTest'`（只跑指定类）。
+- 以下命令**必须带路径/类名**，不要裸跑 `mvn test` 或 `vitest run`（全量会把服务打挂）；全量后端测试 + E2E 由 GitHub Actions 负责：
+
+```bash
+# 1) 后端：只编译（最快，改动大时先跑这个确认编译通过）
+docker run --rm -v $(pwd)/backend:/app -v /root/.m2:/root/.m2 -w /app \
+  maven:3.9.9-eclipse-temurin-17 mvn -B -s .mvn/settings.xml -DskipTests compile
+
+# 2) 后端：只跑受影响的测试类（-Dtest 精确列类名）
+docker run --rm --network host -e TEST_DB_USER=jzqs -e TEST_DB_PASSWORD=<.env 的 MYSQL_PASSWORD> \
+  -v $(pwd)/backend:/app -v /root/.m2:/root/.m2 -w /app \
+  maven:3.9.9-eclipse-temurin-17 mvn -B -s .mvn/settings.xml -Dtest='AaaTest,BbbTest' test
+
+# 3) 前端：只跑受影响目录
+cd admin && docker run --rm -v $(pwd):/app -w /app node:20-alpine \
+  ./node_modules/.bin/vitest run src/modules/dispatch
+```

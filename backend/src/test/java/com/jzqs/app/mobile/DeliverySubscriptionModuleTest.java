@@ -139,6 +139,7 @@ class DeliverySubscriptionModuleTest {
             org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyString()
         );
     }
@@ -178,6 +179,7 @@ class DeliverySubscriptionModuleTest {
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.any()
         );
         assertEquals(
@@ -190,6 +192,52 @@ class DeliverySubscriptionModuleTest {
 
         // 已发送后再次扫描不重复发送
         assertEquals(0, module.sendScheduledMessages("LUNCH"));
+    }
+
+    @Test
+    void dinnerOrderShouldSendWithItsOwnTemplate() {
+        // 晚餐订单必须用它自己绑定的模板下发：午餐/晚餐模板的「取餐位置」字段编号不同
+        // （thing10 vs thing40），用错模板微信会直接报参数错误；且两模板额度独立，不可互相顶替。
+        given(settingsService.operationSettings()).willReturn(new com.jzqs.app.settings.api.OperationSettingsResponse(
+            true, "接单中", "", "", "", "[]", 3, 7, 3, false, true, "00:00", "17:30", false, "", "", "", false, "", "", "", ""
+        ));
+        jdbcTemplate.update("UPDATE admin_settings SET delivery_subscribe_dinner_time = '00:00' WHERE id = 1");
+        jdbcTemplate.update("UPDATE customers SET current_openid = 'openid_981' WHERE id = 981");
+        jdbcTemplate.update(
+            """
+                INSERT INTO meal_slot_orders (
+                    id, daily_order_id, meal_period, delivery_meal_period, quantity, address_id, note, user_note, status, source_type
+                ) VALUES (982, 981, 'DINNER', 'DINNER', 1, 981, '-', '-', 'DELIVERED', 'MINIAPP')
+                """);
+        jdbcTemplate.update(
+            """
+                INSERT INTO delivery_receipts (id, meal_slot_order_id, receipt_url, delivered_at, visible_to_customer)
+                VALUES (1982, 982, '/uploads/r.jpg', CURRENT_TIMESTAMP, FALSE)
+                """);
+        jdbcTemplate.update(
+            """
+                INSERT INTO customer_delivery_subscriptions (
+                    customer_id, meal_slot_order_id, template_id, status, source, authorized_at
+                ) VALUES (?, ?, ?, 'AUTHORIZED', 'MINIAPP_ORDER_SUCCESS', CURRENT_TIMESTAMP)
+                """,
+            981L,
+            982L,
+            "tmpl-dinner"
+        );
+
+        assertEquals(1, module.sendScheduledMessages("DINNER"));
+
+        org.mockito.ArgumentCaptor<String> templateCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(weChatService).sendDeliverySubscribeMessage(
+            org.mockito.ArgumentMatchers.anyString(),
+            templateCaptor.capture(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString(),
+            org.mockito.ArgumentMatchers.anyString()
+        );
+        assertEquals("tmpl-dinner", templateCaptor.getValue());
     }
 
     @Test
@@ -220,6 +268,7 @@ class DeliverySubscriptionModuleTest {
         assertEquals(0, module.sendScheduledMessages("LUNCH"));
 
         verify(weChatService, never()).sendDeliverySubscribeMessage(
+            org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyString(),
@@ -262,6 +311,7 @@ class DeliverySubscriptionModuleTest {
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.any()
         );
 
@@ -282,13 +332,63 @@ class DeliverySubscriptionModuleTest {
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.any()
+        );
+    }
+
+    @Test
+    void shouldInheritConsentFromSameTemplateWhenOrderHasNoSubscriptionRecord() {
+        // 前端落库请求丢失时订单会完全没有订阅记录（历史故障：一次下单两个餐段，其中一个的
+        // 落库请求丢失，该单永久收不到通知）。若客户在同一模板上仍有未消耗授权，后端应补写记录并下发。
+        given(settingsService.operationSettings()).willReturn(new com.jzqs.app.settings.api.OperationSettingsResponse(
+            true, "接单中", "", "", "", "[]", 3, 7, 3, false, true, "00:00", "17:30", false, "", "", "", false, "", "", "", ""
+        ));
+        given(weChatService.resolveDeliveryTemplateId(org.mockito.ArgumentMatchers.any())).willReturn("tmpl-lunch");
+        jdbcTemplate.update("UPDATE admin_settings SET delivery_subscribe_lunch_time = '00:00' WHERE id = 1");
+        jdbcTemplate.update("UPDATE customers SET current_openid = 'openid_981' WHERE id = 981");
+        jdbcTemplate.update(
+            """
+                INSERT INTO delivery_receipts (id, meal_slot_order_id, receipt_url, delivered_at, visible_to_customer)
+                VALUES (1981, 981, '/uploads/r.jpg', CURRENT_TIMESTAMP, FALSE)
+                """);
+        // 同一客户在另一天的订单上保有同模板未消耗授权（订单 981 自身的订阅记录丢失）
+        jdbcTemplate.update(
+            "INSERT INTO daily_orders (id, customer_id, serve_date, source, status, locked, created_at) VALUES (983, 981, ?, 'MINIAPP', 'PENDING_DISPATCH', FALSE, CURRENT_TIMESTAMP)",
+            LocalDate.now().minusDays(1)
+        );
+        jdbcTemplate.update(
+            """
+                INSERT INTO meal_slot_orders (
+                    id, daily_order_id, meal_period, delivery_meal_period, quantity, address_id, note, user_note, status, source_type
+                ) VALUES (983, 983, 'LUNCH', 'LUNCH', 1, 981, '-', '-', 'DELIVERED', 'MINIAPP')
+                """);
+        jdbcTemplate.update(
+            """
+                INSERT INTO customer_delivery_subscriptions (
+                    customer_id, meal_slot_order_id, template_id, status, source, authorized_at
+                ) VALUES (?, ?, ?, 'AUTHORIZED', 'MINIAPP_ORDER_SUCCESS', CURRENT_TIMESTAMP)
+                """,
+            981L,
+            983L,
+            "tmpl-lunch"
+        );
+
+        assertEquals(1, module.sendScheduledMessages("LUNCH"));
+
+        assertEquals(
+            "SENT",
+            jdbcTemplate.queryForObject(
+                "SELECT status FROM customer_delivery_subscriptions WHERE meal_slot_order_id = 981",
+                String.class
+            )
         );
     }
 
     @org.junit.jupiter.api.AfterEach
     void restoreAdminSettings() {
         jdbcTemplate.update("UPDATE admin_settings SET delivery_subscribe_lunch_time = '11:30' WHERE id = 1");
+        jdbcTemplate.update("UPDATE admin_settings SET delivery_subscribe_dinner_time = '17:30' WHERE id = 1");
         jdbcTemplate.update("UPDATE admin_settings SET delivery_subscribe_enabled = FALSE WHERE id = 1");
     }
 }

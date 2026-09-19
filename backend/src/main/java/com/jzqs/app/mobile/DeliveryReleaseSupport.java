@@ -3,6 +3,7 @@ package com.jzqs.app.mobile;
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
 import com.jzqs.app.common.realtime.RealtimeAudienceModule;
+import com.jzqs.app.order.api.DeliveryNotifyGapItem;
 import com.jzqs.app.order.api.DeliveryReleasePendingItem;
 import com.jzqs.app.order.api.DeliveryReleaseResult;
 import java.util.List;
@@ -84,6 +85,72 @@ public class DeliveryReleaseSupport {
                 rs.getString("delivery_address"),
                 rs.getTimestamp("delivered_at") == null ? "" : rs.getTimestamp("delivered_at").toLocalDateTime().toString(),
                 rs.getString("subscription_status")
+            ),
+            params.toArray()
+        );
+    }
+
+    /**
+     * 列出「骑手已送达，但取餐提醒确定发不出去、需要人工补漏」的订单，可按日期与餐段筛选。
+     *
+     * <p>只收录三类终态：无任何订阅授权记录、用户在微信端关闭了订阅授权、发送失败且重试已耗尽。
+     * 仍在重试中、或尚未到餐段释放时间的订单不会出现在这里，避免运营把正常订单误判为漏发。
+     * 运营拿到名单后可电话/微信联系客户补漏（系统本身已无法自动送达）。
+     */
+    public List<DeliveryNotifyGapItem> notifyGapOrders(String serveDate, String mealPeriod) {
+        StringBuilder sql = new StringBuilder("""
+                SELECT
+                    mso.id AS order_id,
+                    doo.serve_date AS serve_date,
+                    mso.meal_period AS meal_period,
+                    COALESCE(mso.quantity, 1) AS quantity,
+                    c.name AS customer_name,
+                    COALESCE(c.phone, '') AS customer_phone,
+                    CASE WHEN ca.door_number IS NOT NULL AND ca.door_number <> ''
+                         THEN CONCAT(ca.address_line, ' ', ca.door_number)
+                         ELSE ca.address_line END AS delivery_address,
+                    dr.delivered_at AS delivered_at,
+                    CASE
+                        WHEN cds.id IS NULL THEN 'NO_SUBSCRIPTION'
+                        WHEN cds.status = 'CANCELLED' THEN 'REVOKED'
+                        ELSE 'RETRY_EXHAUSTED'
+                    END AS gap_reason
+                FROM meal_slot_orders mso
+                JOIN daily_orders doo ON doo.id = mso.daily_order_id
+                JOIN customers c ON c.id = doo.customer_id
+                LEFT JOIN customer_addresses ca ON ca.id = mso.address_id
+                JOIN delivery_receipts dr ON dr.meal_slot_order_id = mso.id
+                LEFT JOIN customer_delivery_subscriptions cds ON cds.meal_slot_order_id = mso.id
+                WHERE mso.status = 'DELIVERED'
+                  AND (
+                       cds.id IS NULL
+                    OR cds.status = 'CANCELLED'
+                    OR (cds.status = 'FAILED' AND cds.retry_count >= ?)
+                  )
+                """);
+        List<Object> params = new java.util.ArrayList<>();
+        params.add(DeliverySubscriptionModule.MAX_SEND_RETRIES);
+        if (serveDate != null && !serveDate.isBlank()) {
+            sql.append(" AND doo.serve_date = ?");
+            params.add(java.sql.Date.valueOf(serveDate));
+        }
+        if (mealPeriod != null && !mealPeriod.isBlank()) {
+            sql.append(" AND mso.meal_period = ?");
+            params.add(mealPeriod);
+        }
+        sql.append(" ORDER BY doo.serve_date DESC, mso.meal_period, mso.id DESC");
+        return jdbcTemplate.query(
+            sql.toString(),
+            (rs, rowNum) -> new DeliveryNotifyGapItem(
+                rs.getLong("order_id"),
+                rs.getDate("serve_date").toLocalDate().toString(),
+                rs.getString("meal_period"),
+                rs.getInt("quantity"),
+                rs.getString("customer_name"),
+                rs.getString("customer_phone"),
+                rs.getString("delivery_address"),
+                rs.getTimestamp("delivered_at") == null ? "" : rs.getTimestamp("delivered_at").toLocalDateTime().toString(),
+                rs.getString("gap_reason")
             ),
             params.toArray()
         );

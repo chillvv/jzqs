@@ -5,7 +5,7 @@ import { toast } from "../../shared/components/Toast";
 import { deleteDeliveryReceiptImage, recordDeliveryReceipt, uploadDeliveryReceiptImage } from "../../shared/api/http";
 import { RemarkField } from "../../shared/components/RemarkField";
 import type { DispatchAreaBindingResponse, DispatchRiderProgressResponse } from "../../shared/api/types";
-import { hasDisplayValue, hasOrderAttention } from "./dispatchCenterLayout.helpers";
+import { hasDisplayValue, hasOrderAttention, mealPeriodLabel } from "./dispatchCenterLayout.helpers";
 import { useDispatchContext } from "./DispatchContext";
 import { useDispatchProgressLiveData } from "./dispatchLiveData";
 
@@ -62,7 +62,7 @@ type ProgressGroup = {
 
 export function DispatchProgressPage() {
   const { serveDate, mealPeriod } = useDispatchContext();
-  const { areaBindings, riderProgress, loadError, reload } = useDispatchProgressLiveData({ serveDate, mealPeriod });
+  const { areaBindings, riderProgress, overview, loadError, reload } = useDispatchProgressLiveData({ serveDate, mealPeriod });
   const [selectedGroupKey, setSelectedGroupKey] = useState<string>();
   const [selectedOrderId, setSelectedOrderId] = useState<number>();
 
@@ -251,6 +251,8 @@ export function DispatchProgressPage() {
   }
 
   const summary = useMemo(() => {
+    // 总份数只统计「已归区/已派单」的订单，与「区域管理」页保持同一口径；
+    // 未归区的订单不混进总数，改用下方说明单独提示（见 countHint）。
     const totalOrders = progressGroups.reduce((sum, item) => sum + item.totalCount, 0);
     const completedOrders = progressGroups.reduce((sum, item) => sum + item.completedCount, 0);
     const pendingOrders = progressGroups.reduce((sum, item) => sum + item.pendingCount, 0);
@@ -258,6 +260,35 @@ export function DispatchProgressPage() {
     const activeRiderCount = progressGroups.filter((item) => !item.missingRider).length;
     return { totalOrders, completedOrders, pendingOrders, activeAreaCount, activeRiderCount };
   }, [progressGroups]);
+
+  // 口径说明：只有存在待分配或跨餐配送时才出现，平时不给商家添噪音。
+  // 对账关系：订单中心份数 = 总份数 + 待分配份数 + 转出份数 - 转入份数
+  const countHint = useMemo(() => {
+    const otherMealPeriod = mealPeriod === "LUNCH" ? "DINNER" : "LUNCH";
+    const otherMealPeriodLabel = mealPeriodLabel(otherMealPeriod);
+    // 不计入总份数的两类：尚未归区、改到别餐次配送
+    const excluded: string[] = [];
+    if (overview.pendingCount > 0) {
+      excluded.push(`${overview.pendingCount} 份待分配`);
+    }
+    if (overview.crossMealDeliveryOutCount > 0) {
+      excluded.push(`${overview.crossMealDeliveryOutCount} 份改${otherMealPeriodLabel}配送`);
+    }
+    const parts: string[] = [];
+    if (excluded.length > 0) {
+      parts.push(`另有 ${excluded.join("、")}`);
+    }
+    // 计入总份数、但来自别餐次出餐的
+    if (overview.crossMealDeliveryInCount > 0) {
+      parts.push(`含 ${overview.crossMealDeliveryInCount} 份${otherMealPeriodLabel}出餐`);
+    }
+    return parts.join(" · ");
+  }, [
+    mealPeriod,
+    overview.crossMealDeliveryInCount,
+    overview.crossMealDeliveryOutCount,
+    overview.pendingCount
+  ]);
 
   return (
     <div className="admin-stack">
@@ -287,6 +318,9 @@ export function DispatchProgressPage() {
                 总份数
               </div>
               <div className="dispatch-stat-card__value">{summary.totalOrders}</div>
+              {countHint ? (
+                <div className="dispatch-stat-card__footer">{countHint}</div>
+              ) : null}
             </div>
             <div className="dispatch-stat-card">
               <div className="admin-panel-note" style={{ display: "flex", alignItems: "center", gap: "8px" }}>

@@ -343,7 +343,9 @@ class MobileAddressModule {
      */
     private void reconcileDispatchArea(long orderId, long newAddressId) {
         CustomerMealPeriodRow row = jdbcTemplate.query(
-            "SELECT do.customer_id, mso.meal_period, mso.status FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE mso.id = ?",
+            // 区域记忆按「配送餐段」记（与分单工作台、自动归区同一口径），
+            // 跨餐配送单必须用 delivery_meal_period，否则会拿出餐餐段去查/写新地址记忆，落在错误的餐段行上。
+            "SELECT do.customer_id, COALESCE(mso.delivery_meal_period, mso.meal_period) AS meal_period, mso.status FROM meal_slot_orders mso JOIN daily_orders do ON do.id = mso.daily_order_id WHERE mso.id = ?",
             ps -> ps.setLong(1, orderId),
             rs -> {
                 if (!rs.next()) {

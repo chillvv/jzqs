@@ -74,6 +74,7 @@ class DeliverySubscriptionModule {
         }
         weChatService.sendDeliverySubscribeMessage(
             context.openid(),
+            weChatService.getDeliveryTemplateId(),
             "pages/profile/index",
             "今日套餐",
             "13800138000",
@@ -316,6 +317,7 @@ class DeliverySubscriptionModule {
         try {
             weChatService.sendDeliverySubscribeMessage(
                 context.openid(),
+                resolveSendTemplateId(context),
                 weChatService.buildDeliveryPage(mealSlotOrderId),
                 context.dishNames(),
                 context.riderPhone(),
@@ -377,40 +379,47 @@ class DeliverySubscriptionModule {
 
     /**
      * 回退策略（方案 B）：当指定订单没有 customer_delivery_subscriptions 记录时，
-     * 检查其所属客户是否已有任意一条有效的取餐订阅授权（AUTHORIZED/FAILED）。
-     * 若有，则为该订单补写一条取餐订阅记录（沿用客户已授权的 template_id），
-     * 以便取餐提醒能正常下发。这样「用户在小程序点过总是允许 + 商家后台代客下单」的场景
-     * 也能收到取餐提醒，而不必每单都重复授权。
+     * 检查其所属客户在「本单餐段对应的模板」上是否已有未消耗的授权（AUTHORIZED/FAILED）。
+     * 若有，则为该订单补写一条取餐订阅记录，以便取餐提醒能正常下发。
+     * 这样「用户在小程序点过允许 + 商家后台代客下单 / 前端落库请求丢失」的场景也能收到提醒。
      *
-     * @return 补写成功后返回该订单的发送上下文；若客户从未授权过取餐模板则返回 null
+     * <p>模板按餐段确定：午餐与晚餐各用一个模板、各自独立计额度，必须逐模板校验客户是否真的授权过，
+     * 否则补写出来的记录在微信侧没有额度，发送必然 43101（用户拒收），反而制造一批假失败记录。
+     *
+     * @return 补写成功后返回该订单的发送上下文；若客户在该模板上从未授权则返回 null
      */
     private DeliverySubscriptionSendContext ensureDeliverySubscriptionFromCustomerConsent(long mealSlotOrderId) {
-        Long customerId = jdbcTemplate.queryForObject(
+        OrderConsentContext orderContext = jdbcTemplate.query(
             """
-            SELECT do.customer_id
+            SELECT do.customer_id, mso.meal_period
             FROM meal_slot_orders mso
             JOIN daily_orders do ON do.id = mso.daily_order_id
             WHERE mso.id = ?
             """,
-            (rs, rowNum) -> rs.getLong(1),
-            mealSlotOrderId
+            ps -> ps.setLong(1, mealSlotOrderId),
+            rs -> rs.next()
+                ? new OrderConsentContext(rs.getLong("customer_id"), rs.getString("meal_period"))
+                : null
         );
-        if (customerId == null) {
+        if (orderContext == null) {
             return null;
         }
-        String templateId = jdbcTemplate.query(
+        String templateId = weChatService.resolveDeliveryTemplateId(orderContext.mealPeriod());
+        Integer activeConsentCount = jdbcTemplate.queryForObject(
             """
-            SELECT template_id
+            SELECT COUNT(*)
             FROM customer_delivery_subscriptions
-            WHERE customer_id = ? AND status IN ('AUTHORIZED', 'FAILED')
-            ORDER BY authorized_at DESC
-            LIMIT 1
+            WHERE customer_id = ? AND template_id = ? AND status IN ('AUTHORIZED', 'FAILED')
             """,
-            (rs, rowNum) -> rs.getString(1),
-            customerId
-        ).stream().findFirst().orElse(null);
-        if (templateId == null) {
-            log.debug("客户 {} 没有有效的取餐订阅授权，订单 {} 不发送取餐提醒", customerId, mealSlotOrderId);
+            Integer.class,
+            orderContext.customerId(),
+            templateId
+        );
+        if (activeConsentCount == null || activeConsentCount == 0) {
+            log.debug(
+                "客户 {} 在模板 {} 上没有有效的取餐订阅授权，订单 {} 不发送取餐提醒",
+                orderContext.customerId(), templateId, mealSlotOrderId
+            );
             return null;
         }
         // 为该订单补写取餐订阅记录；meal_slot_order_id 唯一键，使用 INSERT IGNORE 防止并发/重复写入冲突
@@ -420,7 +429,7 @@ class DeliverySubscriptionModule {
                 customer_id, meal_slot_order_id, template_id, status, source, authorized_at
             ) VALUES (?, ?, ?, 'AUTHORIZED', 'INHERITED_FROM_CUSTOMER_CONSENT', CURRENT_TIMESTAMP)
             """,
-            customerId,
+            orderContext.customerId(),
             mealSlotOrderId,
             templateId
         );
@@ -435,6 +444,8 @@ class DeliverySubscriptionModule {
             """
             SELECT
                 cds.id,
+                cds.template_id,
+                mso.meal_period,
                 COALESCE(c.current_openid, c.openid, '') AS current_openid,
                 mwi.dish_items_json AS dish_items_json,
                 rp.phone AS rider_phone,
@@ -457,6 +468,8 @@ class DeliverySubscriptionModule {
             rs -> rs.next()
                 ? new DeliverySubscriptionSendContext(
                     rs.getLong("id"),
+                    rs.getString("template_id"),
+                    rs.getString("meal_period"),
                     rs.getString("current_openid"),
                     parseDishNames(rs.getString("dish_items_json")),
                     rs.getString("rider_phone"),
@@ -464,6 +477,17 @@ class DeliverySubscriptionModule {
                 )
                 : null
         );
+    }
+
+    /**
+     * 决定本条记录用哪个模板下发：优先用授权时绑定的模板（用户当时确实在该模板上点了允许）。
+     * 仅当历史记录没有模板（脏数据）时，才按餐段回退，避免用错模板字段导致微信 47003。
+     */
+    private String resolveSendTemplateId(DeliverySubscriptionSendContext context) {
+        if (context.templateId() != null && !context.templateId().isBlank()) {
+            return context.templateId().trim();
+        }
+        return weChatService.resolveDeliveryTemplateId(context.mealPeriod());
     }
 
     /** 解析 menu_week_items.dish_items_json（字符串数组），用「、」拼接为商品名；为空时回退为商家套餐描述 */
@@ -495,8 +519,10 @@ class DeliverySubscriptionModule {
             """,
             ps -> ps.setLong(1, customerId),
             rs -> rs.next()
-                ?                 new DeliverySubscriptionSendContext(
+                ? new DeliverySubscriptionSendContext(
                     0L,
+                    weChatService.getDeliveryTemplateId(),
+                    "LUNCH",
                     rs.getString("current_openid"),
                     "",
                     "",
@@ -520,10 +546,16 @@ class DeliverySubscriptionModule {
 
     private record DeliverySubscriptionSendContext(
         long id,
+        String templateId,
+        String mealPeriod,
         String openid,
         String dishNames,
         String riderPhone,
         String pickupLocation
     ) {
+    }
+
+    /** 补写订阅记录时需要的订单侧信息：客户与该单餐段（决定用哪个模板） */
+    private record OrderConsentContext(long customerId, String mealPeriod) {
     }
 }

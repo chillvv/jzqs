@@ -6,7 +6,13 @@
 #   ./build.sh backend   # 只构建并重启后端（含 Flyway 迁移）
 #   ./build.sh admin     # 只构建并重启管理后台前端
 #   ./build.sh all       # 全量构建（默认）
+#   ./build.sh test                  # 只编译后端校验（不跑测试，几秒完成）
+#   ./build.sh test 'AaaTest,BbbTest' # 只跑指定测试类
 #   ./build.sh status    # 查看当前容器状态
+#
+# ⚠️ 服务器上禁止跑全量测试：后端 94 个测试类会瞬间打满 CPU/内存，把线上服务打挂。
+#    全量后端测试 + Playwright E2E 由 GitHub Actions 负责（.github/workflows/deploy.yml
+#    的 test / e2e job，在独立 runner 上跑，与本服务器无关）。
 #
 # 说明：
 #   - 后端由 backend/Dockerfile 多阶段构建：镜像内用 Maven 从 src 重新编译打包，
@@ -45,16 +51,38 @@ save_backend_rollback_point() {
   ok "已保存回滚点：$ROLLBACK_TAG（$(docker images -q "$BACKEND_IMAGE")）"
 }
 
+# 服务器上只做「编译校验」或「指定测试类」，绝不跑全量（见文件头说明）。
+# 集成测试的库账号用 .env 里的 jzqs：root 只允许 localhost，容器直连会被 Access denied 拒掉。
 run_backend_tests() {
-  info "运行后端测试（不打包）..."
+  local test_filter="${1:-}"
+
+  # 不带参数：只编译，几秒完成，不压服务器
+  if [ -z "$test_filter" ]; then
+    info "只做后端编译校验（不跑测试）..."
+    docker run --rm \
+      -v "$PWD":/app \
+      -v "$HOME/.m2":/root/.m2 \
+      -w /app/backend \
+      "$MAVEN_IMAGE" \
+      mvn -B -s /app/backend/.mvn/settings.xml -DskipTests compile
+    ok "后端编译通过。全量测试请看 GitHub Actions 的结果"
+    return 0
+  fi
+
+  # 带参数：只跑列出的测试类，资源占用可控
+  local db_password
+  db_password="$(grep -E '^MYSQL_PASSWORD=' "$PWD/.env" | cut -d= -f2)"
+  info "只跑指定测试类：$test_filter"
   docker run --rm \
     --network host \
+    -e TEST_DB_USER=jzqs \
+    -e TEST_DB_PASSWORD="$db_password" \
     -v "$PWD":/app \
     -v "$HOME/.m2":/root/.m2 \
     -w /app/backend \
     "$MAVEN_IMAGE" \
-    mvn -B -s /app/backend/.mvn/settings.xml test
-  ok "后端测试通过"
+    mvn -B -s /app/backend/.mvn/settings.xml -Dtest="$test_filter" test
+  ok "指定测试类通过：$test_filter"
 }
 
 deploy_backend() {
@@ -126,7 +154,7 @@ ACTION="${1:-all}"
 case "$ACTION" in
   backend) deploy_backend ;;
   admin)   deploy_admin ;;
-  test)    run_backend_tests ;;
+  test)    run_backend_tests "${2:-}" ;;
   all)     deploy_backend && deploy_admin ;;
   status)  show_status ;;
   *)       warn "未知参数: $ACTION（支持 backend / admin / test / all / status）"; exit 1 ;;

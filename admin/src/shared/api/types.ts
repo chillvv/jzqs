@@ -554,6 +554,10 @@ export type DispatchOverviewResponse = {
   pendingCount: number;
   dispatchingCount: number;
   missingRiderAreaCount: number;
+  /** 跨餐配送·转出：本餐次出餐、却改到另一餐次配送的份数 */
+  crossMealDeliveryOutCount: number;
+  /** 跨餐配送·转入：别的餐次出餐、改到本餐次配送的份数 */
+  crossMealDeliveryInCount: number;
 };
 export type DispatchRiderProgressResponse = {
   riderName: string;
@@ -793,6 +797,20 @@ export type DeliveryReleasePendingItem = {
   deliveryAddress: string;
   deliveredAt: string;
   subscriptionStatus: string;
+};
+
+/** 取餐提醒未送达名单条目：已送达但订阅消息确定发不出去、需要人工补漏的订单 */
+export type DeliveryNotifyGapItem = {
+  orderId: number;
+  serveDate: string;
+  mealPeriod: string;
+  quantity: number;
+  customerName: string;
+  customerPhone: string;
+  deliveryAddress: string;
+  deliveredAt: string;
+  /** NO_SUBSCRIPTION（无订阅授权）/ REVOKED（用户已关闭订阅）/ RETRY_EXHAUSTED（重试耗尽） */
+  reason: string;
 };
 
 export type DeliveryReleaseResult = {

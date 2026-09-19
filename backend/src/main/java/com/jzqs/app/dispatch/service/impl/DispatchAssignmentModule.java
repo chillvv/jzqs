@@ -763,6 +763,7 @@ class DispatchAssignmentModule {
                     doo.serve_date,
                     mso.address_id,
                     mso.meal_period,
+                    COALESCE(mso.delivery_meal_period, mso.meal_period) AS delivery_meal_period,
                     ca.address_line
                 FROM meal_slot_orders mso
                 JOIN daily_orders doo ON doo.id = mso.daily_order_id
@@ -779,6 +780,7 @@ class DispatchAssignmentModule {
                     rs.getDate("serve_date").toLocalDate(),
                     rs.getLong("address_id"),
                     rs.getString("meal_period"),
+                    rs.getString("delivery_meal_period"),
                     rs.getString("address_line")
                 );
             }
@@ -787,8 +789,11 @@ class DispatchAssignmentModule {
 
     private void syncAddressBindingForArea(long orderId, String areaCode, String updatedBy, String updatedReason) {
         DispatchOrderContext orderContext = loadOrderContext(orderId);
-        String mealPeriod = normalizedMealPeriod(orderContext.mealPeriod());
-        syncAddressBindingForArea(orderId, areaCode, mealPeriod, updatedBy, updatedReason);
+        // 记忆键必须用「配送餐段」：分单工作台与自动归区都是按配送餐段找记忆的。
+        // 若用出餐餐段，「午餐出餐、晚餐配送」的单会错记进 LUNCH 行——既覆盖了该客户普通午餐单的记忆，
+        // 又让它在晚餐页永远命中不到自己写下的记忆。
+        String deliveryMealPeriod = normalizedMealPeriod(orderContext.deliveryMealPeriod());
+        syncAddressBindingForArea(orderId, areaCode, deliveryMealPeriod, updatedBy, updatedReason);
     }
 
     private void syncAddressBindingForArea(
@@ -977,7 +982,8 @@ class DispatchAssignmentModule {
 
     private void syncAddressBinding(long orderId, long riderProfileId, String areaCode) {
         DispatchOrderContext orderRow = loadOrderContext(orderId);
-        String mealPeriod = normalizedMealPeriod(orderRow.mealPeriod());
+        // 同 syncAddressBindingForArea：记忆按「配送餐段」记，与分单/自动归区的查找口径保持一致
+        String mealPeriod = normalizedMealPeriod(orderRow.deliveryMealPeriod());
         long customerId = orderRow.customerId();
         long addressId = orderRow.addressId();
         String addressLine = orderRow.addressLine();
@@ -1180,7 +1186,10 @@ class DispatchAssignmentModule {
         long customerId,
         LocalDate serveDate,
         long addressId,
+        // 出餐餐段：决定后厨备餐与批次日归属
         String mealPeriod,
+        // 配送餐段：决定骑手派单与地址记忆归属（跨餐配送时两者不同）
+        String deliveryMealPeriod,
         String addressLine
     ) {
     }

@@ -483,11 +483,41 @@ class MiniappOrderModule {
     }
 
     private long resolveLatestDailyOrderId(long customerId, LocalDate serveDate) {
-        Long resolvedId = findExistingDailyOrderId(customerId, serveDate);
+        Long resolvedId = findExistingDailyOrderIdForUpdate(customerId, serveDate);
         if (resolvedId == null || resolvedId <= 0) {
             throw new IllegalStateException("无法定位刚创建的日订单");
         }
         return resolvedId;
+    }
+
+    /**
+     * 唯一键竞争后的回查必须走「当前读」(FOR UPDATE)。
+     *
+     * <p>REPEATABLE READ 下，本事务在冲突发生前已经执行过普通 SELECT（餐钱包余额、地址、合并目标、
+     * 日订单预查等），一致性读快照就此固定；并发事务随后提交的日订单在该快照中不可见。
+     * 若回查仍用普通 SELECT，就永远查不到那条已提交的记录，必然误抛
+     * "无法定位刚创建的日订单" → 下单接口 500；而前端 Promise.all 会因此整段跳过订阅落库，
+     * 最终表现为"餐送到了却没有通知"（同一用户同时下午餐+晚餐时必现）。
+     *
+     * <p>冲突场景下并发事务一定已提交（否则本事务的 INSERT 会先阻塞等待其释放唯一键锁），
+     * 因此当前读必定能看到该记录。
+     */
+    private Long findExistingDailyOrderIdForUpdate(long customerId, LocalDate serveDate) {
+        return jdbcTemplate.query(
+            """
+                SELECT id
+                FROM daily_orders
+                WHERE customer_id = ? AND serve_date = ?
+                ORDER BY id DESC
+                LIMIT 1
+                FOR UPDATE
+                """,
+            ps -> {
+                ps.setLong(1, customerId);
+                ps.setObject(2, serveDate);
+            },
+            rs -> rs.next() ? rs.getLong(1) : null
+        );
     }
 
     private Long findExistingDailyOrderId(long customerId, LocalDate serveDate) {

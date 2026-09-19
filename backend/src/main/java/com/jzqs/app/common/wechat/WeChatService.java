@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -40,6 +41,18 @@ public class WeChatService {
 
     @Value("${wechat.subscribe.delivery-template-id:}")
     private String deliveryTemplateId;
+
+    /** 午餐模板「取餐位置」字段 key（不同模板字段编号不同，必须与微信后台模板一致） */
+    @Value("${wechat.subscribe.delivery-location-key:thing10}")
+    private String deliveryLocationKey;
+
+    /** 晚餐取餐提醒模板：与午餐模板分属不同模板，各自独立计额度，保证双餐段各有一条可下发 */
+    @Value("${wechat.subscribe.delivery-dinner-template-id:}")
+    private String deliveryDinnerTemplateId;
+
+    /** 晚餐模板「取餐位置」字段 key（该模板为 thing40，与午餐模板的 thing10 不同） */
+    @Value("${wechat.subscribe.delivery-dinner-location-key:thing40}")
+    private String deliveryDinnerLocationKey;
 
     @Value("${wechat.subscribe.delivery-page:pages/orders/index}")
     private String deliveryPage;
@@ -160,6 +173,7 @@ public class WeChatService {
 
     public void sendDeliverySubscribeMessage(
             String openid,
+            String templateId,
             String page,
             String dishNames,
             String riderPhone,
@@ -168,7 +182,7 @@ public class WeChatService {
         if (openid == null || openid.trim().isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "缺少订阅消息接收人");
         }
-        if (deliveryTemplateId == null || deliveryTemplateId.trim().isEmpty()) {
+        if (templateId == null || templateId.trim().isEmpty()) {
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "未配置送达提醒模板");
         }
         if (devMode) {
@@ -181,19 +195,19 @@ public class WeChatService {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setAccept(List.of(MediaType.APPLICATION_JSON));
-            String requestBody = objectMapper.writeValueAsString(
-                new SubscribeMessageRequest(
-                    openid,
-                    deliveryTemplateId,
-                    page,
-                    new SubscribeMessageData(
-                        new SubscribeMessageValue(normalizeThingValue(dishNames)),
-                        new SubscribeMessageValue(normalizePhoneValue(riderPhone)),
-                        new SubscribeMessageValue(normalizeThingValue(pickupLocation)),
-                        new SubscribeMessageValue(normalizeThingValue(hint))
-                    )
-                )
-            );
+            // 请求体的 data key 必须与模板字段一一对应：午餐/晚餐模板的「取餐位置」字段编号不同，
+            // 写错 key 微信会直接报 47003（参数值不符合规则），消息发不出去。
+            Map<String, Object> data = new LinkedHashMap<>();
+            data.put("thing6", subscribeValue(normalizeThingValue(dishNames)));
+            data.put("phone_number9", subscribeValue(normalizePhoneValue(riderPhone)));
+            data.put(resolveDeliveryLocationKey(templateId), subscribeValue(normalizeThingValue(pickupLocation)));
+            data.put("thing7", subscribeValue(normalizeThingValue(hint)));
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("touser", openid);
+            body.put("template_id", templateId);
+            body.put("page", page);
+            body.put("data", data);
+            String requestBody = objectMapper.writeValueAsString(body);
             HttpEntity<String> requestEntity = new HttpEntity<>(requestBody, headers);
             String response = restTemplate.postForObject(url, requestEntity, String.class);
             JsonNode json = objectMapper.readTree(response);
@@ -292,6 +306,35 @@ public class WeChatService {
 
     public String getDeliveryTemplateId() {
         return deliveryTemplateId;
+    }
+
+    public String getDeliveryDinnerTemplateId() {
+        return deliveryDinnerTemplateId;
+    }
+
+    /**
+     * 按餐段选择取餐提醒模板：晚餐使用独立模板，使其与午餐各自拥有独立的订阅额度。
+     * 晚餐模板未配置时回退到午餐模板，保证新增配置上线前行为不变。
+     */
+    public String resolveDeliveryTemplateId(String mealPeriod) {
+        if ("DINNER".equalsIgnoreCase(mealPeriod)
+            && deliveryDinnerTemplateId != null
+            && !deliveryDinnerTemplateId.isBlank()) {
+            return deliveryDinnerTemplateId.trim();
+        }
+        return deliveryTemplateId;
+    }
+
+    /** 取餐位置字段 key 随模板变化（午餐 thing10 / 晚餐 thing40），下发时必须用该模板自己的 key */
+    private String resolveDeliveryLocationKey(String templateId) {
+        if (templateId != null && templateId.equals(deliveryDinnerTemplateId)) {
+            return deliveryDinnerLocationKey;
+        }
+        return deliveryLocationKey;
+    }
+
+    private Map<String, Object> subscribeValue(String value) {
+        return Map.of("value", value == null ? "" : value);
     }
 
     public String getNightlyTemplateId() {

@@ -309,4 +309,15 @@ public class OrderPrepController {
     public ApiResponse<DeliveryReleaseResult> deliveryRelease(@PathVariable long orderId) {
         return ApiResponse.success(deliveryReleaseSupport.releaseOrder(orderId));
     }
+
+    /**
+     * 取餐提醒未送达名单：已送达但订阅消息确定发不出去、需要人工补漏的订单（按餐段区分）。
+     */
+    @GetMapping("/delivery-notify-gaps")
+    public ApiResponse<List<DeliveryNotifyGapItem>> deliveryNotifyGaps(
+        @RequestParam(required = false) String serveDate,
+        @RequestParam(required = false) String mealPeriod
+    ) {
+        return ApiResponse.success(deliveryReleaseSupport.notifyGapOrders(serveDate, mealPeriod));
+    }
 }

@@ -102,7 +102,15 @@ wechat:
   # 云开发环境 ID
   cloud-env-id: ${WECHAT_CLOUD_ENV_ID:cloud1-4g88w3e2dedee471}
   subscribe:
+    # 取餐提醒模板按餐段各配一个：微信一次性订阅是「一个模板授权一次 = 一条额度」，
+    # 双餐段订单若共用同一模板，一次弹窗只拿到 1 条额度却要发 2 条，第二条必然被微信拒绝(43101)。
+    # 因此午餐、晚餐各用一个模板，下单时一次弹窗同时申请，两个模板各得 1 条额度。
     delivery-template-id: ${WECHAT_DELIVERY_TEMPLATE_ID:Od1mOKtl8DPnP0-mVyKKtP4HSYyk3sPbGazcHXZntEs}
+    # 午餐模板「取餐位置」字段 key（不同模板字段编号不同，必须与微信后台模板一致）
+    delivery-location-key: ${WECHAT_DELIVERY_LOCATION_KEY:thing10}
+    delivery-dinner-template-id: ${WECHAT_DELIVERY_DINNER_TEMPLATE_ID:Od1mOKtl8DPnP0-mVyKKtGYeRd5RVDcCV40MrW8lBmU}
+    # 晚餐模板「取餐位置」字段 key（该模板为 thing40）
+    delivery-dinner-location-key: ${WECHAT_DELIVERY_DINNER_LOCATION_KEY:thing40}
     delivery-page: ${WECHAT_DELIVERY_PAGE:pages/orders/index}
     nightly-template-id: ${WECHAT_NIGHTLY_TEMPLATE_ID:gNYZT0Nu18WbkIbgX23zD-fF2h1Gt_-6E3EsWoJCLkQ}
     nightly-page: ${WECHAT_NIGHTLY_PAGE:pages/orders/index}

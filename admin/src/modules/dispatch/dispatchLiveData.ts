@@ -80,6 +80,7 @@ type AreasDispatchData = {
 type ProgressDispatchData = {
   areaBindings: DispatchAreaBindingResponse[];
   riderProgress: DispatchRiderProgressResponse[];
+  overview: DispatchOverviewResponse;
 };
 
 const homeLoaders = {
@@ -95,7 +96,9 @@ const areasLoaders = {
 
 const progressLoaders = {
   areaBindings: ({ mealPeriod, serveDate }: DispatchScope) => fetchDispatchAreaBindings(mealPeriod, serveDate),
-  riderProgress: ({ mealPeriod, serveDate }: DispatchScope) => fetchDispatchRiderProgress(mealPeriod, serveDate)
+  riderProgress: ({ mealPeriod, serveDate }: DispatchScope) => fetchDispatchRiderProgress(mealPeriod, serveDate),
+  // 骑手进度只统计已派单订单，补上「待分配」才能和订单中心的配送口径闭合对账
+  overview: ({ mealPeriod, serveDate }: DispatchScope) => fetchDispatchOverview(mealPeriod, serveDate)
 };
 
 function useDispatchLiveResource<TLoaders extends LoadersShape, TData>({
@@ -268,7 +271,8 @@ function mergeAreasData(previous: AreasDispatchData, next: PartialLoaderValues<t
 function mergeProgressData(previous: ProgressDispatchData, next: PartialLoaderValues<typeof progressLoaders>): ProgressDispatchData {
   return {
     areaBindings: next.areaBindings ? normalizeDispatchAreaBindings(next.areaBindings) : previous.areaBindings,
-    riderProgress: next.riderProgress ?? previous.riderProgress
+    riderProgress: next.riderProgress ?? previous.riderProgress,
+    overview: next.overview ? normalizeDispatchOverview(next.overview) : previous.overview
   };
 }
 
@@ -320,7 +324,8 @@ export function useDispatchProgressLiveData(scope: DispatchScope, options?: { au
     loaders: progressLoaders,
     initialData: {
       areaBindings: [],
-      riderProgress: []
+      riderProgress: [],
+      overview: normalizeDispatchOverview({})
     },
     mergeData: mergeProgressData,
     autoRefreshBlocked: options?.autoRefreshBlocked ?? false,
@@ -329,6 +334,7 @@ export function useDispatchProgressLiveData(scope: DispatchScope, options?: { au
   return {
     areaBindings: data.areaBindings,
     riderProgress: data.riderProgress,
+    overview: data.overview,
     loadError,
     reload
   };

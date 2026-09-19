@@ -56,6 +56,7 @@ import type {
   LowBalanceSubscriptionItem,
   SubscriptionPreviewCheckResponse,
   ManualCreateCustomerSearchResponse,
+  DeliveryNotifyGapItem,
   DeliveryReleasePendingItem,
   DeliveryReleaseResult,
   AdminUserItem,
@@ -936,6 +937,14 @@ export async function fetchDeliveryReleasePending(params?: { serveDate?: string;
 export async function releaseDeliveredOrder(orderId: number) {
   const response = await http.post<ApiResponse<DeliveryReleaseResult>>(
     `/api/admin/orders/${orderId}/delivery-release`
+  );
+  return response.data.data;
+}
+
+export async function fetchDeliveryNotifyGaps(params?: { serveDate?: string; mealPeriod?: string }) {
+  const response = await http.get<ApiResponse<DeliveryNotifyGapItem[]>>(
+    "/api/admin/orders/delivery-notify-gaps",
+    { params }
   );
   return response.data.data;
 }

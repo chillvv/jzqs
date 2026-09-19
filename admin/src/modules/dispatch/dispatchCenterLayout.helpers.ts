@@ -42,7 +42,8 @@ export function buildDispatchWorkspaceNav() {
     { label: "骑手进度", value: "progress" },
     { label: "区域管理", value: "areas" },
     { label: "骑手管理", value: "riders" },
-    { label: "待释放送达", value: "release" }
+    { label: "待释放送达", value: "release" },
+    { label: "未通知名单", value: "notify-gaps" }
   ];
 }
 
@@ -50,7 +51,9 @@ export function normalizeDispatchOverview(data: DispatchOverviewLike): DispatchO
   return {
     pendingCount: data.pendingCount ?? 0,
     dispatchingCount: data.dispatchingCount ?? 0,
-    missingRiderAreaCount: data.missingRiderAreaCount ?? 0
+    missingRiderAreaCount: data.missingRiderAreaCount ?? 0,
+    crossMealDeliveryOutCount: data.crossMealDeliveryOutCount ?? 0,
+    crossMealDeliveryInCount: data.crossMealDeliveryInCount ?? 0
   };
 }
 

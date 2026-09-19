@@ -98,7 +98,9 @@ describe("dispatchCenterLayout helpers", () => {
     expect(normalizeDispatchOverview({})).toEqual({
       pendingCount: 0,
       dispatchingCount: 0,
-      missingRiderAreaCount: 0
+      missingRiderAreaCount: 0,
+      crossMealDeliveryOutCount: 0,
+      crossMealDeliveryInCount: 0
     });
   });
 

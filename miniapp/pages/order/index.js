@@ -5,11 +5,15 @@ const { getCheckoutMealLimitMessage, isNightOrderClosed, getNightCloseNotice } =
 const demo = require('../../utils/demo');
 const onboarding = require('../../utils/onboarding');
 const {
+  DELIVERY_TEMPLATE_ID,
+  DELIVERY_DINNER_TEMPLATE_ID,
+  NIGHTLY_TEMPLATE_ID,
   requestCombinedSubscribeAuthorization,
   saveOrderDeliverySubscription,
   saveNightlySubscription,
   cacheDeliveryAcceptResult,
-  queryNightlySubscribeStatus
+  getCachedDeliveryAcceptResult,
+  querySubscribeAuthorization
 } = require('../../utils/delivery-subscription');
 const {
   normalizeHistoryRemarkSuggestions,
@@ -441,35 +445,67 @@ Page({
    * 请求，确保当天能收到「取餐提醒」和「每晚菜单提醒」各一条。
    * 返回 true 表示两个模板都授权成功（各获得 1 条额度），false 表示被拒绝 / 授权失败（内部已提示）。
    */
+  /**
+   * 本次下单需要用到的取餐模板：午餐餐段绑定午餐模板、晚餐餐段绑定晚餐模板。
+   * 微信一次性订阅按「模板」计额度——双餐段若共用同一模板，一次弹窗只拿到 1 条额度却要发
+   * 2 条通知，后送达的那一餐必然被微信拒绝(43101)。分模板后两餐各有一条独立额度。
+   */
+  resolveOrderDeliveryTemplates() {
+    const items = [];
+    if (this.data.qty1 > 0 && this.data.lunchItem) {
+      items.push({ mealPeriod: 'LUNCH', templateId: DELIVERY_TEMPLATE_ID });
+    }
+    if (this.data.qty2 > 0 && this.data.dinnerItem) {
+      items.push({ mealPeriod: 'DINNER', templateId: DELIVERY_DINNER_TEMPLATE_ID });
+    }
+    return items;
+  },
+
   async requestSubscribeConsent() {
     if (this.data.consentingSubscribe) {
       return this.data.nightlySubscribed;
     }
     this.setData({ consentingSubscribe: true });
     try {
-      // 一次弹窗申请「取餐 + 每晚」两个授权（此调用在用户点击栈内，必须同步触发）
-      const results = await requestCombinedSubscribeAuthorization();
-      const { delivery, nightly } = results || {};
-      if (delivery) {
-        cacheDeliveryAcceptResult(delivery);
-      }
-      if (!delivery || !nightly) {
-        // 两个模板都要授权成功；失败时明确区分「总开关关」「取餐未授权」「优惠券未授权」，精准提示
+      // 一次弹窗申请本次下单所需的所有模板（取餐午餐/晚餐 + 每晚提醒）
+      // 此调用在用户点击栈内，必须同步触发，否则微信会拦截弹窗。
+      const requiredTemplates = this.resolveOrderDeliveryTemplates();
+      const tmplIds = [...new Set([...requiredTemplates.map((item) => item.templateId), NIGHTLY_TEMPLATE_ID])];
+      const results = await requestCombinedSubscribeAuthorization(tmplIds);
+      const { accepted = {}, nightly } = results || {};
+      const deniedDeliveryTemplates = requiredTemplates
+        .filter((item) => !accepted[item.templateId])
+        .map((item) => item.templateId);
+      if (deniedDeliveryTemplates.length > 0 || !nightly) {
+        // 失败时明确区分「总开关关」「取餐模板被总是拒绝」「优惠券模板被总是拒绝」「本次点了取消」。
+        // 必须一次查询全部模板状态：只查「每晚模板」无法判断取餐模板是否被用户「总是拒绝」，
+        // 那时微信不会再弹授权框，用户反复点击都下不了单又不知道去哪开（历史卡死问题）。
         this.setData({ subscribeConsent: false, nightlySubscribed: false });
-        const status = await queryNightlySubscribeStatus().catch(() => ({ supported: false }));
-        if (status.supported && !status.mainSwitch) {
+        const authorization = await querySubscribeAuthorization()
+          .catch(() => ({ supported: false, mainSwitch: false, itemSettings: {} }));
+        const itemSettings = authorization.itemSettings || {};
+        const isTemplateRejected = (templateId) => {
+          const value = itemSettings[templateId];
+          return value === 'reject' || value === 'ban';
+        };
+        const deliveryRejected = deniedDeliveryTemplates.some(isTemplateRejected);
+        if (authorization.supported && !authorization.mainSwitch) {
           this.promptOpenSubscribeSetting('mainSwitchOff');
-        } else if (!delivery && !nightly) {
-          wx.showToast({ title: '需允许接收「取餐提醒」和「优惠券过期提醒」才能下单', icon: 'none' });
-        } else if (!delivery) {
-          wx.showToast({ title: '需允许接收「取餐提醒」才能下单', icon: 'none' });
-        } else if (status.supported && status.rejected) {
+        } else if (deliveryRejected) {
+          // 取餐模板被「总是拒绝」：只能去设置里手动改回「接收」，这是唯一能解开卡死的路径
+          this.promptOpenSubscribeSetting('deliveryRejected');
+        } else if (!nightly && isTemplateRejected(NIGHTLY_TEMPLATE_ID)) {
           this.promptOpenSubscribeSetting('rejected');
+        } else if (deniedDeliveryTemplates.length > 0) {
+          // 本次只是点了取消（未勾选「总是保持」）：微信下次仍会弹窗，重试即可，不存在卡死
+          wx.showToast({ title: '需允许接收「取餐提醒」才能下单', icon: 'none' });
         } else {
           wx.showToast({ title: '需允许接收「优惠券过期提醒」才能下单', icon: 'none' });
         }
         return false;
       }
+      // 缓存本次各模板的授权结果，下单成功后按订单所属餐段逐一落库
+      cacheDeliveryAcceptResult(accepted);
       // 「每晚提醒」授权成功（用户点了允许，获得 1 条额度），保存后端记录
       await saveNightlySubscription(nightly);
       this.setData({ nightlySubscribed: true, subscribeConsent: true });
@@ -486,17 +522,25 @@ Page({
 
   /**
    * 引导用户去微信「设置 → 订阅消息」里重新开启。
-   * reason 区分两种卡死场景，给出精准指引，避免用户开错开关而反复循环：
+   * reason 区分三种卡死场景，给出精准指引，避免用户开错开关而反复循环：
    * - 'mainSwitchOff'：订阅消息总开关被关闭（用户可能开了模板却没开总开关）；
-   * - 'rejected'：该「每晚提醒」模板被用户「总是拒绝」（用户可能开了总开关却没开模板）。
+   * - 'deliveryRejected'：该「取餐提醒」模板被用户「总是拒绝」，微信不再弹授权框，不处理就下不了单；
+   * - 'rejected'：该「优惠券过期提醒」模板被用户「总是拒绝」（用户可能开了总开关却没开模板）。
    */
   promptOpenSubscribeSetting(reason) {
-    const content = reason === 'mainSwitchOff'
-      ? '微信「订阅消息」总开关被关闭了，这会导致「取餐提醒」和「优惠券过期提醒」都无法送达。请前往设置，在「订阅消息」页面最顶部打开「接收订阅消息」总开关（注意：是最顶部的总开关，不是下面单个模板的开关）。现在前往设置？'
-      : '你之前拒绝过「优惠券过期提醒」订阅，微信不会再弹出授权框。请前往设置 → 订阅消息 → 找到「简知轻食」，把「优惠券过期提醒」重新打开为「接收」后再回来。现在前往设置？';
+    const contentByReason = {
+      mainSwitchOff: '微信「订阅消息」总开关被关闭了，这会导致「取餐提醒」和「优惠券过期提醒」都无法送达。请前往设置，在「订阅消息」页面最顶部打开「接收订阅消息」总开关（注意：是最顶部的总开关，不是下面单个模板的开关）。现在前往设置？',
+      deliveryRejected: '你之前拒绝过「取餐提醒」订阅，微信不会再弹出授权框，因此现在无法完成下单。请前往设置 → 订阅消息 → 找到「简知轻食」，把「取餐提醒」重新打开为「接收」后再回来下单。现在前往设置？',
+      rejected: '你之前拒绝过「优惠券过期提醒」订阅，微信不会再弹出授权框。请前往设置 → 订阅消息 → 找到「简知轻食」，把「优惠券过期提醒」重新打开为「接收」后再回来。现在前往设置？'
+    };
+    const titleByReason = {
+      mainSwitchOff: '开启订阅总开关',
+      deliveryRejected: '开启取餐提醒',
+      rejected: '开启优惠券提醒'
+    };
     wx.showModal({
-      title: reason === 'mainSwitchOff' ? '开启订阅总开关' : '开启优惠券提醒',
-      content,
+      title: titleByReason[reason] || '开启订阅提醒',
+      content: contentByReason[reason] || contentByReason.rejected,
       confirmText: '去设置',
       cancelText: '取消',
       confirmColor: '#B8D060',
@@ -506,7 +550,7 @@ Page({
             // 让设置页尽量展示「订阅消息」区域，方便用户找到开关
             withSubscriptions: true,
             success: () => {
-              this.refreshNightlySubscribeFromWx(reason);
+              this.refreshSubscribeSettingFromWx(reason);
             }
           });
         }
@@ -514,35 +558,56 @@ Page({
     });
   },
 
-  /** 从微信设置页返回后，重新校验真实状态，确认用户是否解决了卡点。 */
-  async refreshNightlySubscribeFromWx(reason) {
-    const status = await queryNightlySubscribeStatus().catch(() => ({ supported: false, mainSwitch: false, rejected: false }));
-    // 根据之前卡点的原因判断是否已解决（总开关已开 / 模板已不再是拒绝状态）
+  /**
+   * 从微信设置页返回后，重新校验真实状态，确认用户是否解决了卡点。
+   * 一次查出全部模板状态，按原卡点原因逐项判断；仍未解决时明确告知还差哪一项。
+   */
+  async refreshSubscribeSettingFromWx(reason) {
+    const authorization = await querySubscribeAuthorization()
+      .catch(() => ({ supported: false, mainSwitch: false, itemSettings: {} }));
+    const itemSettings = authorization.itemSettings || {};
+    const isTemplateRejected = (templateId) => {
+      const value = itemSettings[templateId];
+      return value === 'reject' || value === 'ban';
+    };
+    if (!authorization.supported) {
+      // 微信侧查不到订阅状态（极老基础库）：无法判断是否已解决，直接让用户重试，
+      // 避免把用户困在「未解决」的提示循环里
+      wx.showToast({ title: '请重新下单；若仍失败，请在设置中开启订阅消息', icon: 'none' });
+      return;
+    }
     const solved = reason === 'mainSwitchOff'
-      ? (status.supported && status.mainSwitch)
-      : (status.supported && !status.rejected);
+      ? authorization.mainSwitch
+      : reason === 'deliveryRejected'
+        ? !this.resolveOrderDeliveryTemplates().some((item) => isTemplateRejected(item.templateId))
+        : !isTemplateRejected(NIGHTLY_TEMPLATE_ID);
     if (solved) {
       wx.showToast({ title: '已开启，请重新下单', icon: 'success' });
       return;
     }
     // 从设置返回后仍未解决：明确反馈具体哪里没开对，避免用户以为已开但实际未生效而反复困惑
-    if (reason === 'mainSwitchOff') {
-      wx.showModal({
+    const unresolvedByReason = {
+      mainSwitchOff: {
         title: '总开关仍未打开',
-        content: '检测到微信「订阅消息」总开关仍处于关闭状态，「取餐提醒」和「优惠券过期提醒」依然无法送达。请重新进入设置，在「订阅消息」页面最顶部打开「接收订阅消息」总开关（最顶部的总开关，不是单个模板的开关）。',
-        showCancel: false,
-        confirmText: '我知道了',
-        confirmColor: '#B8D060'
-      });
-    } else {
-      wx.showModal({
+        content: '检测到微信「订阅消息」总开关仍处于关闭状态，「取餐提醒」和「优惠券过期提醒」依然无法送达。请重新进入设置，在「订阅消息」页面最顶部打开「接收订阅消息」总开关（最顶部的总开关，不是单个模板的开关）。'
+      },
+      deliveryRejected: {
+        title: '取餐提醒仍未开启',
+        content: '检测到「取餐提醒」仍处于拒绝接收状态，因此仍无法下单。请重新进入设置 → 订阅消息 → 「简知轻食」，把「取餐提醒」打开为「接收」。'
+      },
+      rejected: {
         title: '优惠券提醒仍未开启',
-        content: '检测到「优惠券过期提醒」仍处于拒绝接收状态。请重新进入设置 → 订阅消息 → 「简知轻食」，把「优惠券过期提醒」打开为「接收」。',
-        showCancel: false,
-        confirmText: '我知道了',
-        confirmColor: '#B8D060'
-      });
-    }
+        content: '检测到「优惠券过期提醒」仍处于拒绝接收状态。请重新进入设置 → 订阅消息 → 「简知轻食」，把「优惠券过期提醒」打开为「接收」。'
+      }
+    };
+    const feedback = unresolvedByReason[reason] || unresolvedByReason.rejected;
+    wx.showModal({
+      title: feedback.title,
+      content: feedback.content,
+      showCancel: false,
+      confirmText: '我知道了',
+      confirmColor: '#B8D060'
+    });
   },
 
   // 下单时发现地址未定位：弹引导，跳转地址页补选点（带 editId 自动打开编辑弹窗）
@@ -614,6 +679,8 @@ Page({
     }
 
     const requests = [];
+    // 与 requests 一一对应（Promise.all 保序）：记录每个餐段该用哪个取餐模板落库
+    const requestBindings = [];
     // 本次下单批次的唯一请求 ID：区分「有意加餐」与「真正的重复提交」。
     // 后端幂等 key 以 (客户+请求体+clientRequestId) 为准——相同业务参数但不同批次
     // 生成新 ID，不会被误判「请勿重复提交相同操作」；同一次操作的重试则复用同一 ID，
@@ -634,6 +701,7 @@ Page({
           clientRequestId
         }
       }));
+      requestBindings.push({ mealPeriod: 'LUNCH', templateId: DELIVERY_TEMPLATE_ID });
     }
     if (this.data.qty2 > 0 && this.data.dinnerItem) {
       requests.push(request({
@@ -650,6 +718,7 @@ Page({
           clientRequestId
         }
       }));
+      requestBindings.push({ mealPeriod: 'DINNER', templateId: DELIVERY_DINNER_TEMPLATE_ID });
     }
     if (!requests.length) {
       this.setData({ submitting: false });
@@ -659,7 +728,15 @@ Page({
     try {
       // 送达授权结果已在 requestSubscribeConsent 时写入缓存，此处随订单保存送达订阅；
       // 每晚提醒授权也已在 requestSubscribeConsent 时保存后端（AUTHORIZED），无需重复处理。
-      const orderResults = await Promise.all(requests);
+      // 用 allSettled 而非 all：午餐/晚餐是两个独立请求，其中一个失败（例如并发下单撞日订单
+      // 唯一键）不应连带另一单整段跳过订阅落库——历史上正是这样造成"餐送到了却没有通知"。
+      const settledResults = await Promise.allSettled(requests);
+      const orderResults = settledResults.map((item) => (item.status === 'fulfilled' ? item.value : null));
+      const failedMealPeriods = settledResults
+        .map((item, index) => (item.status === 'rejected' && requestBindings[index]
+          ? requestBindings[index].mealPeriod
+          : null))
+        .filter(Boolean);
       const mergedCount = orderResults.filter((item) => item && item.status === 'MERGED').length;
       // 后端短时间重复下单拦截：ALREADY_RESERVED 表示该餐次已有订单且刚下过单，
       // 本次未重复扣餐，仅返回已有订单，避免"繁忙重试"导致数量翻倍。
@@ -669,7 +746,55 @@ Page({
       const orderIds = [...new Set(orderResults
         .map((item) => item && item.orderId)
         .filter(Boolean))];
-      await saveOrderDeliverySubscription(orderIds);
+      // 按餐段把订单与对应模板的授权逐一落库：订单与模板必须一一对应，否则晚餐单绑到午餐模板上，
+      // 送达时会用错模板下发（微信 47003）或被判额度不足。落库失败会导致该单永久收不到通知，
+      // 因此 saveOrderDeliverySubscription 内部带重试。
+      const acceptedCache = getCachedDeliveryAcceptResult() || {};
+      const bindingMap = new Map();
+      orderResults.forEach((item, index) => {
+        const bind = requestBindings[index];
+        if (!item || !item.orderId || !bind || bindingMap.has(item.orderId)) {
+          return;
+        }
+        const acceptResult = acceptedCache[bind.templateId];
+        if (!acceptResult) {
+          return;
+        }
+        bindingMap.set(item.orderId, {
+          orderId: item.orderId,
+          templateId: bind.templateId,
+          acceptResult
+        });
+      });
+      await saveOrderDeliverySubscription([...bindingMap.values()]);
+
+      if (failedMealPeriods.length > 0) {
+        const toLabel = (period) => (period === 'DINNER' ? '晚餐' : '午餐');
+        const failedLabel = failedMealPeriods.map(toLabel).join('、');
+        const succeededLabel = requestBindings
+          .map((bind) => bind.mealPeriod)
+          .filter((period) => !failedMealPeriods.includes(period))
+          .map(toLabel)
+          .join('、');
+        // 一个餐段失败时另一餐段可能已成功，必须说清「部分成功 + 部分未确认」，
+        // 否则用户会以为全部失败而重新下单，造成重复扣餐。
+        wx.showModal({
+          title: succeededLabel ? '部分餐次未提交成功' : '提交结果未确认',
+          content: succeededLabel
+            ? `${succeededLabel}已预订成功；${failedLabel}提交结果未确认，可能已成功也可能未下单。请先到「我的订单」核对，未下单再重新预订，切勿连续点击。`
+            : '网络或系统繁忙，订单可能已提交成功。请先到「我的订单」确认是否已下单，若未下单再点击重试，切勿连续点击。',
+          confirmText: '去订单列表',
+          confirmColor: '#B8D060',
+          cancelText: '稍后再试',
+          success: (res) => {
+            if (res.confirm) {
+              wx.navigateTo({ url: '/pages/orders/index' });
+            }
+          }
+        });
+        this.loadOrderData();
+        return;
+      }
 
       // Save remark to history
       if (this.data.remark) {

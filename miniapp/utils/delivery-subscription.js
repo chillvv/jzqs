@@ -1,6 +1,9 @@
 const { request } = require('./request');
 
 const DELIVERY_TEMPLATE_ID = 'Od1mOKtl8DPnP0-mVyKKtP4HSYyk3sPbGazcHXZntEs';
+// 晚餐取餐提醒使用独立模板：微信一次性订阅按「模板」计额度，双餐段若共用同一模板，
+// 一次弹窗只拿到 1 条额度却要发 2 条通知，后送达的那一餐必然被微信拒绝(43101)。
+const DELIVERY_DINNER_TEMPLATE_ID = 'Od1mOKtl8DPnP0-mVyKKtGYeRd5RVDcCV40MrW8lBmU';
 const NIGHTLY_TEMPLATE_ID = 'gNYZT0Nu18WbkIbgX23zD-fF2h1Gt_-6E3EsWoJCLkQ';
 const DELIVERY_ACCEPT_CACHE_KEY = 'delivery_subscribe_accept_cache';
 const ACCEPTED_DELIVERY_SUBSCRIPTION_RESULTS = ['accept', 'acceptWithAudio', 'acceptWithAlert'];
@@ -10,33 +13,44 @@ function isAccepted(result) {
 }
 
 /**
- * 合并申请两个订阅模板（送达 + 每晚提醒），一次弹窗。
- * 返回 { delivery, nightly } 各自的授权结果。
+ * 一次弹窗申请多个订阅模板，返回每个模板各自的授权结果。
+ * @param {string[]} [tmplIds] 本次要申请的模板（取餐午餐/晚餐 + 每晚提醒）；不传则默认「午餐 + 每晚」
+ * @returns {{accepted: Object<string,string>, delivery: string, deliveryDinner: string, nightly: string}}
+ *   accepted 为「模板 ID -> 授权结果」映射，供落库时按订单餐段取对应模板。
  */
-async function requestCombinedSubscribeAuthorization(options = {}) {
+async function requestCombinedSubscribeAuthorization(tmplIds, options = {}) {
   const { throwOnUnsupported = false } = options;
+  const ids = Array.isArray(tmplIds) && tmplIds.length
+    ? tmplIds.filter(Boolean)
+    : [DELIVERY_TEMPLATE_ID, NIGHTLY_TEMPLATE_ID];
   if (typeof wx.requestSubscribeMessage !== 'function') {
     if (throwOnUnsupported) {
       throw new Error('当前版本不支持订阅消息');
     }
-    return { delivery: '', nightly: '' };
+    return { accepted: {}, delivery: '', deliveryDinner: '', nightly: '' };
   }
   const subscribeResult = await new Promise((resolve) => {
     wx.requestSubscribeMessage({
-      tmplIds: [DELIVERY_TEMPLATE_ID, NIGHTLY_TEMPLATE_ID],
+      tmplIds: ids,
       success: resolve,
       fail() {
         resolve({});
       }
     });
   });
-  const delivery = typeof subscribeResult[DELIVERY_TEMPLATE_ID] === 'string' && isAccepted(subscribeResult[DELIVERY_TEMPLATE_ID])
-    ? subscribeResult[DELIVERY_TEMPLATE_ID]
-    : '';
-  const nightly = typeof subscribeResult[NIGHTLY_TEMPLATE_ID] === 'string' && isAccepted(subscribeResult[NIGHTLY_TEMPLATE_ID])
-    ? subscribeResult[NIGHTLY_TEMPLATE_ID]
-    : '';
-  return { delivery, nightly };
+  const accepted = {};
+  ids.forEach((id) => {
+    const value = subscribeResult[id];
+    if (typeof value === 'string' && isAccepted(value)) {
+      accepted[id] = value;
+    }
+  });
+  return {
+    accepted,
+    delivery: accepted[DELIVERY_TEMPLATE_ID] || '',
+    deliveryDinner: accepted[DELIVERY_DINNER_TEMPLATE_ID] || '',
+    nightly: accepted[NIGHTLY_TEMPLATE_ID] || ''
+  };
 }
 
 async function requestSubscribeAuthorization(templateId, options = {}) {
@@ -80,21 +94,54 @@ function getCachedDeliveryAcceptResult() {
   return wx.getStorageSync(DELIVERY_ACCEPT_CACHE_KEY) || '';
 }
 
-async function saveOrderDeliverySubscription(orderIds, acceptResult) {
-  const result = acceptResult || getCachedDeliveryAcceptResult();
-  if (!Array.isArray(orderIds) || !orderIds.length || !result) {
-    return;
+/**
+ * 把订单与其对应取餐模板的授权落库。
+ * 落库失败必须重试：授权在微信侧已经生效，但记录没写进后端时，该订单送达会因查不到订阅记录
+ * 而永久不发通知（历史故障：一次下单两个餐段，其中一个订单的落库请求丢失，整单收不到提醒）。
+ * @param {Array<{orderId: number|string, templateId: string, acceptResult: string}>} bindings
+ * @returns {Promise<number>} 落库成功的订单数
+ */
+async function saveOrderDeliverySubscription(bindings) {
+  if (!Array.isArray(bindings) || !bindings.length) {
+    return 0;
   }
-  await Promise.all(orderIds.map((orderId) => request({
-    url: `/api/mobile/customer/orders/${orderId}/delivery-subscription`,
-    method: 'POST',
-    header: { 'content-type': 'application/json' },
-    data: {
-      templateId: DELIVERY_TEMPLATE_ID,
-      acceptResult: result
-    }
-  }).catch(() => null)));
+  const targets = bindings.filter((item) => item && item.orderId && item.templateId && item.acceptResult);
+  if (!targets.length) {
+    return 0;
+  }
+  const results = await Promise.all(targets.map((item) => saveOneOrderSubscription(item)));
   cacheDeliveryAcceptResult('');
+  return results.filter(Boolean).length;
+}
+
+/** 单订单落库，失败重试一次；仍失败则打印可检索日志（下单已成，不再打扰用户） */
+async function saveOneOrderSubscription({ orderId, templateId, acceptResult }) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      await request({
+        url: `/api/mobile/customer/orders/${orderId}/delivery-subscription`,
+        method: 'POST',
+        header: { 'content-type': 'application/json' },
+        // 静默：订单已下单成功，落库失败不应弹错误提示打断用户
+        hideErrorToast: true,
+        hideLoading: true,
+        data: {
+          templateId,
+          acceptResult
+        }
+      });
+      return true;
+    } catch (error) {
+      if (attempt === 2) {
+        console.error(
+          `[delivery-subscription] 取餐订阅落库失败 orderId=${orderId} templateId=${templateId}`,
+          error && error.message
+        );
+        return false;
+      }
+    }
+  }
+  return false;
 }
 
 async function saveNightlySubscription(acceptResult) {
@@ -228,6 +275,7 @@ async function queryNightlySubscribeStatus() {
 
 module.exports = {
   DELIVERY_TEMPLATE_ID,
+  DELIVERY_DINNER_TEMPLATE_ID,
   NIGHTLY_TEMPLATE_ID,
   DELIVERY_ACCEPT_CACHE_KEY,
   ACCEPTED_DELIVERY_SUBSCRIPTION_RESULTS,

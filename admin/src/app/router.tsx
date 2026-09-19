@@ -22,6 +22,7 @@ const DispatchProgressPage = lazyWithRetry(() => import("../modules/dispatch/Dis
 const DispatchAreasPage = lazyWithRetry(() => import("../modules/dispatch/DispatchAreasPage").then((m) => ({ default: m.DispatchAreasPage })));
 const DispatchRidersPage = lazyWithRetry(() => import("../modules/dispatch/DispatchRidersPage").then((m) => ({ default: m.DispatchRidersPage })));
 const DispatchReleasePage = lazyWithRetry(() => import("../modules/dispatch/DispatchReleasePage").then((m) => ({ default: m.DispatchReleasePage })));
+const DispatchNotifyGapPage = lazyWithRetry(() => import("../modules/dispatch/DispatchNotifyGapPage").then((m) => ({ default: m.DispatchNotifyGapPage })));
 const SystemSettingsSectionPage = lazyWithRetry(() => import("../modules/settings/SystemSettingsSectionPage").then((m) => ({ default: m.SystemSettingsSectionPage })));
 const OperationsAnalysisPage = lazyWithRetry(() => import("../modules/analysis/OperationsAnalysisPage").then((m) => ({ default: m.OperationsAnalysisPage })));
 const AftersalePage = lazyWithRetry(() => import("../modules/aftersales/AftersalePage").then((m) => ({ default: m.AftersalePage })));
@@ -90,7 +91,8 @@ export const appRoutes: RouteObject[] = [
           { path: "progress", element: <Suspense fallback={<PageFallback />}><DispatchProgressPage /></Suspense> },
           { path: "areas", element: <Suspense fallback={<PageFallback />}><DispatchAreasPage /></Suspense> },
           { path: "riders", element: <Suspense fallback={<PageFallback />}><DispatchRidersPage /></Suspense> },
-          { path: "release", element: <Suspense fallback={<PageFallback />}><DispatchReleasePage /></Suspense> }
+          { path: "release", element: <Suspense fallback={<PageFallback />}><DispatchReleasePage /></Suspense> },
+          { path: "notify-gaps", element: <Suspense fallback={<PageFallback />}><DispatchNotifyGapPage /></Suspense> }
         ]
       },
       { path: "analysis", element: <Suspense fallback={<PageFallback />}><OperationsAnalysisPage /></Suspense> },

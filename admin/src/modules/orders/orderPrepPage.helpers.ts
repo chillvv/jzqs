@@ -286,7 +286,6 @@ export function buildOrderPrepSummary(
   const dinnerCount = countedItems
     .filter(item => resolveMealPeriod(item) === "DINNER")
     .reduce((sum, item) => sum + item.quantity, 0);
-
   const lunchRemarkedCount = countedItems
     .filter((item) => resolveMealPeriod(item) === "LUNCH" && hasRemark(item))
     .length;

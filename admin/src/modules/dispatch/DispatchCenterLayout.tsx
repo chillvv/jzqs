@@ -1,5 +1,5 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom";
-import { LayoutDashboard, MapPinned, UserCog, Hourglass } from "lucide-react";
+import { LayoutDashboard, MapPinned, UserCog, Hourglass, Inbox } from "lucide-react";
 import { buildDispatchWorkspaceNav, DispatchMealPeriod, mealPeriodLabel } from "./dispatchCenterLayout.helpers";
 import { DispatchProvider, useDispatchContext } from "./DispatchContext";
 import { DatePicker } from "../../shared/components/DatePicker";
@@ -9,7 +9,8 @@ const navIcons: Record<string, React.ComponentType<{ size?: number | string }>> 
   "骑手进度": LayoutDashboard,
   "区域管理": MapPinned,
   "骑手管理": UserCog,
-  "待释放送达": Hourglass
+  "待释放送达": Hourglass,
+  "未通知名单": Inbox
 };
 
 // 骑手管理页不需要日期/餐期筛选

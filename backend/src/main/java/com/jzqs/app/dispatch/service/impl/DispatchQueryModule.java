@@ -203,10 +203,61 @@ class DispatchQueryModule {
             finalMealPeriod,
             finalMealPeriod
         );
+        // 跨餐配送（如「午餐出餐、晚餐配送」）会让订单中心（按出餐餐次）与骑手中心（按配送餐次）的口径错开。
+        // 两个方向都报出来，商家才能对账：
+        //   订单中心份数 = 骑手进度总份数 + 待分配份数 + 转出份数 - 转入份数
+        // 转出：本餐次出餐、改到另一餐次配送（本餐次会少算这些单）。
+        int crossMealDeliveryOutCount = queryCount(
+            """
+                SELECT COALESCE(SUM(mso.quantity), 0)
+                FROM meal_slot_orders mso
+                JOIN daily_orders doo ON doo.id = mso.daily_order_id
+                JOIN customers c ON c.id = doo.customer_id
+                WHERE mso.status NOT IN ('CANCELLED', 'REFUNDED')
+                  AND doo.serve_date = ?
+                  AND mso.meal_period = ?
+                  AND COALESCE(mso.delivery_meal_period, mso.meal_period) <> ?
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM aftersale_cases ac
+                      WHERE ac.meal_slot_order_id = mso.id
+                        AND ac.refund_blocking = TRUE
+                        AND ac.status = 'COMPLETED'
+                  )
+                """,
+            targetDate,
+            finalMealPeriod,
+            finalMealPeriod
+        );
+        // 转入：别的餐次出餐、改到本餐次配送（本餐次会多出这些单）。
+        int crossMealDeliveryInCount = queryCount(
+            """
+                SELECT COALESCE(SUM(mso.quantity), 0)
+                FROM meal_slot_orders mso
+                JOIN daily_orders doo ON doo.id = mso.daily_order_id
+                JOIN customers c ON c.id = doo.customer_id
+                WHERE mso.status NOT IN ('CANCELLED', 'REFUNDED')
+                  AND doo.serve_date = ?
+                  AND mso.meal_period <> ?
+                  AND COALESCE(mso.delivery_meal_period, mso.meal_period) = ?
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM aftersale_cases ac
+                      WHERE ac.meal_slot_order_id = mso.id
+                        AND ac.refund_blocking = TRUE
+                        AND ac.status = 'COMPLETED'
+                  )
+                """,
+            targetDate,
+            finalMealPeriod,
+            finalMealPeriod
+        );
         return new DispatchOverviewResponse(
             pendingCount,
             dispatchingCount,
-            missingRiderAreaCount
+            missingRiderAreaCount,
+            crossMealDeliveryOutCount,
+            crossMealDeliveryInCount
         );
     }
 

@@ -340,4 +340,31 @@ class OrderPrepControllerTest {
             .andExpect(status().isTooManyRequests())
             .andExpect(jsonPath("$.code").value("RATE_LIMITED"));
     }
+
+    @Test
+    void shouldReturnDeliveryNotifyGapsWithMealPeriodAndReason() throws Exception {
+        given(deliveryReleaseSupport.notifyGapOrders("2026-09-19", "LUNCH")).willReturn(List.of(
+            new DeliveryNotifyGapItem(
+                501L, "2026-09-19", "LUNCH", 1, "张先生", "13800000001",
+                "高新区科技园A座8层", "2026-09-19T11:20:00", "NO_SUBSCRIPTION"
+            ),
+            new DeliveryNotifyGapItem(
+                502L, "2026-09-19", "LUNCH", 2, "李女士", "13900000002",
+                "阳光小区3栋2单元", "2026-09-19T11:25:00", "REVOKED"
+            )
+        ));
+
+        mockMvc.perform(get("/api/admin/orders/delivery-notify-gaps")
+                .param("serveDate", "2026-09-19")
+                .param("mealPeriod", "LUNCH"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.length()").value(2))
+            .andExpect(jsonPath("$.data[0].orderId").value(501))
+            .andExpect(jsonPath("$.data[0].mealPeriod").value("LUNCH"))
+            .andExpect(jsonPath("$.data[0].reason").value("NO_SUBSCRIPTION"))
+            .andExpect(jsonPath("$.data[0].customerPhone").value("13800000001"))
+            .andExpect(jsonPath("$.data[1].reason").value("REVOKED"));
+
+        then(deliveryReleaseSupport).should().notifyGapOrders("2026-09-19", "LUNCH");
+    }
 }
