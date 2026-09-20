@@ -196,8 +196,10 @@ class DeliverySubscriptionModuleTest {
 
     @Test
     void dinnerOrderShouldSendWithItsOwnTemplate() {
-        // 晚餐订单必须用它自己绑定的模板下发：午餐/晚餐模板的「取餐位置」字段编号不同
-        // （thing10 vs thing40），用错模板微信会直接报参数错误；且两模板额度独立，不可互相顶替。
+        // 晚餐订单必须用它自己绑定的模板下发：两个取餐模板的字段编号完全不同
+        // （「取餐提醒」thing6/phone_number9/thing10/thing7，
+        //  「订餐提醒」thing7/phone_number5/thing4/thing2），用错模板微信会直接报参数错误；
+        //  且两模板额度独立，不可互相顶替。
         given(settingsService.operationSettings()).willReturn(new com.jzqs.app.settings.api.OperationSettingsResponse(
             true, "接单中", "", "", "", "[]", 3, 7, 3, false, true, "00:00", "17:30", false, "", "", "", false, "", "", "", ""
         ));
@@ -225,6 +227,10 @@ class DeliverySubscriptionModuleTest {
             "tmpl-dinner"
         );
 
+        // 裸 mock 的 buildDeliveryPage 默认返回 null，先给出真实值，page 参数才可控
+        given(weChatService.buildDeliveryPage(org.mockito.ArgumentMatchers.anyLong()))
+            .willReturn("pages/orders/index?orderId=982");
+
         assertEquals(1, module.sendScheduledMessages("DINNER"));
 
         org.mockito.ArgumentCaptor<String> templateCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
@@ -233,7 +239,9 @@ class DeliverySubscriptionModuleTest {
             templateCaptor.capture(),
             org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyString(),
-            org.mockito.ArgumentMatchers.anyString(),
+            // 骑手电话：这批测试数据没有骑手，实际传参是 null —— Mockito 的 anyString() 不匹配 null，
+            // 必须用 nullable，否则这里会误报「参数不同」而掩盖真正的模板断言。
+            org.mockito.ArgumentMatchers.nullable(String.class),
             org.mockito.ArgumentMatchers.anyString(),
             org.mockito.ArgumentMatchers.anyString()
         );
