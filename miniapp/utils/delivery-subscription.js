@@ -3,10 +3,18 @@ const { request } = require('./request');
 const DELIVERY_TEMPLATE_ID = 'Od1mOKtl8DPnP0-mVyKKtP4HSYyk3sPbGazcHXZntEs';
 // 晚餐取餐提醒使用独立模板：微信一次性订阅按「模板」计额度，双餐段若共用同一模板，
 // 一次弹窗只拿到 1 条额度却要发 2 条通知，后送达的那一餐必然被微信拒绝(43101)。
-const DELIVERY_DINNER_TEMPLATE_ID = 'Od1mOKtl8DPnP0-mVyKKtGYeRd5RVDcCV40MrW8lBmU';
+// 晚餐取餐提醒必须用「标题与午餐不同」的模板：微信规定一次授权调用里模板标题相同的
+// 只保留一个（其余返回 filter），此前晚餐沿用同一标题「取餐提醒」导致双餐段一起下单必被过滤。
+const DELIVERY_DINNER_TEMPLATE_ID = 'JnboF3P2VaeXm92BPDz7SSdv74LS_t2y7aGtR3OUQac';
 const NIGHTLY_TEMPLATE_ID = 'gNYZT0Nu18WbkIbgX23zD-fF2h1Gt_-6E3EsWoJCLkQ';
 const DELIVERY_ACCEPT_CACHE_KEY = 'delivery_subscribe_accept_cache';
 const ACCEPTED_DELIVERY_SUBSCRIPTION_RESULTS = ['accept', 'acceptWithAudio', 'acceptWithAlert'];
+
+// 微信侧「用户无法自行解决」的授权状态：ban=模板被微信后台封禁，filter=同一次弹窗里
+// 模板标题重复被微信过滤（微信要求每个 tmplId 的模板标题各不相同，重复标题只保留一个）。
+// 区别对待的原因：这两种状态下模板根本不会出现在微信「设置 → 订阅消息」里，
+// 引导用户去设置永远开不出来，若据此阻断下单等于把用户永久锁死在下单页。
+const UNAVAILABLE_SUBSCRIPTION_RESULTS = ['ban', 'filter'];
 
 function isAccepted(result) {
   return ACCEPTED_DELIVERY_SUBSCRIPTION_RESULTS.includes(result);
@@ -15,8 +23,10 @@ function isAccepted(result) {
 /**
  * 一次弹窗申请多个订阅模板，返回每个模板各自的授权结果。
  * @param {string[]} [tmplIds] 本次要申请的模板（取餐午餐/晚餐 + 每晚提醒）；不传则默认「午餐 + 每晚」
- * @returns {{accepted: Object<string,string>, delivery: string, deliveryDinner: string, nightly: string}}
- *   accepted 为「模板 ID -> 授权结果」映射，供落库时按订单餐段取对应模板。
+ * @returns {{accepted: Object<string,string>, statuses: Object<string,string>, unavailable: string[],
+ *   delivery: string, deliveryDinner: string, nightly: string}}
+ *   accepted 为「模板 ID -> 授权结果」映射，供落库时按订单餐段取对应模板；
+ *   statuses 保留微信返回的原始状态（含 reject/ban/filter），供上层区分「用户可重试」与「微信侧不可用」。
  */
 async function requestCombinedSubscribeAuthorization(tmplIds, options = {}) {
   const { throwOnUnsupported = false } = options;
@@ -27,7 +37,7 @@ async function requestCombinedSubscribeAuthorization(tmplIds, options = {}) {
     if (throwOnUnsupported) {
       throw new Error('当前版本不支持订阅消息');
     }
-    return { accepted: {}, delivery: '', deliveryDinner: '', nightly: '' };
+    return { accepted: {}, statuses: {}, unavailable: [], delivery: '', deliveryDinner: '', nightly: '' };
   }
   const subscribeResult = await new Promise((resolve) => {
     wx.requestSubscribeMessage({
@@ -39,14 +49,20 @@ async function requestCombinedSubscribeAuthorization(tmplIds, options = {}) {
     });
   });
   const accepted = {};
+  const statuses = {};
   ids.forEach((id) => {
     const value = subscribeResult[id];
-    if (typeof value === 'string' && isAccepted(value)) {
-      accepted[id] = value;
+    if (typeof value === 'string') {
+      statuses[id] = value;
+      if (isAccepted(value)) {
+        accepted[id] = value;
+      }
     }
   });
   return {
     accepted,
+    statuses,
+    unavailable: ids.filter((id) => UNAVAILABLE_SUBSCRIPTION_RESULTS.includes(statuses[id])),
     delivery: accepted[DELIVERY_TEMPLATE_ID] || '',
     deliveryDinner: accepted[DELIVERY_DINNER_TEMPLATE_ID] || '',
     nightly: accepted[NIGHTLY_TEMPLATE_ID] || ''
@@ -279,6 +295,7 @@ module.exports = {
   NIGHTLY_TEMPLATE_ID,
   DELIVERY_ACCEPT_CACHE_KEY,
   ACCEPTED_DELIVERY_SUBSCRIPTION_RESULTS,
+  UNAVAILABLE_SUBSCRIPTION_RESULTS,
   requestDeliverySubscribeAuthorization,
   requestNightlySubscribeAuthorization,
   requestCombinedSubscribeAuthorization,

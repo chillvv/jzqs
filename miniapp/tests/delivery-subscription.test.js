@@ -93,6 +93,111 @@ test('晚餐模板被拒时不出现在授权结果中，供下单流程拦截',
   assert.equal(result.nightly, 'accept');
 });
 
+test('微信把同标题模板过滤（filter）时保留原始状态并标记为不可用', async () => {
+  // 双餐段一次弹窗申请两个取餐模板，若两者模板标题相同，微信只保留一个、另一个返回 filter。
+  // 该状态必须与「用户拒绝」区分开：filter 的模板在微信设置里根本不存在，用户无法自行开启。
+  stubSubscribe((id) => (id === DELIVERY_DINNER_TEMPLATE_ID ? 'filter' : 'accept'));
+
+  const result = await requestCombinedSubscribeAuthorization([
+    DELIVERY_TEMPLATE_ID,
+    DELIVERY_DINNER_TEMPLATE_ID,
+    NIGHTLY_TEMPLATE_ID
+  ]);
+
+  assert.equal(result.statuses[DELIVERY_DINNER_TEMPLATE_ID], 'filter');
+  assert.deepEqual(result.unavailable, [DELIVERY_DINNER_TEMPLATE_ID]);
+  assert.equal(result.deliveryDinner, '');
+  assert.equal(result.delivery, 'accept');
+});
+
+function stubOrderPage() {
+  let pageConfig = null;
+  global.Page = (config) => {
+    pageConfig = config;
+  };
+  global.getApp = () => ({
+    globalData: { token: 'test-token', apiBaseUrl: 'https://example.test', serviceHeaders: {} },
+    waitForAuth: () => Promise.resolve(),
+    handleUnauthorized() {}
+  });
+  const toasts = [];
+  global.wx = {
+    requestSubscribeMessage(options) {
+      const result = {};
+      options.tmplIds.forEach((id) => {
+        result[id] = id === DELIVERY_DINNER_TEMPLATE_ID ? 'filter' : 'accept';
+      });
+      options.success(result);
+    },
+    request(options) {
+      if (requestHandler) {
+        requestHandler(options);
+        return;
+      }
+      options.success({ statusCode: 200, data: { code: 'OK', data: null } });
+    },
+    getSetting(options) {
+      options.success({ subscriptionsSetting: { mainSwitch: true, itemSettings: {} } });
+    },
+    showToast(options) {
+      toasts.push(options.title);
+    },
+    showModal() {},
+    setStorageSync() {},
+    getStorageSync() {
+      return '';
+    },
+    removeStorageSync() {},
+    showLoading() {},
+    hideLoading() {},
+    switchTab() {},
+    navigateTo() {}
+  };
+  const pagePath = path.join(__dirname, '..', 'pages', 'order', 'index.js');
+  delete require.cache[require.resolve(pagePath)];
+  require(pagePath);
+  const page = Object.assign({}, pageConfig, {
+    data: {
+      ...pageConfig.data,
+      qty1: 1,
+      qty2: 1,
+      lunchItem: { mealPeriod: 'LUNCH' },
+      dinnerItem: { mealPeriod: 'DINNER' }
+    },
+    setData(patch) {
+      Object.assign(this.data, patch);
+    }
+  });
+  return { pageConfig, page, toasts };
+}
+
+test('晚餐模板被微信过滤时仍允许下单，只提示哪项提醒没开成', async () => {
+  const { pageConfig, page, toasts } = stubOrderPage();
+
+  const allowed = await pageConfig.requestSubscribeConsent.call(page);
+
+  // 历史故障：双餐段一起下单时被「需允许接收取餐提醒」拦死，分开下单却正常。
+  // 根因是微信把同标题的取餐模板过滤掉，代码把 filter 误判成用户未授权。
+  assert.equal(allowed, true);
+  assert.ok(toasts.some((title) => title.includes('晚餐')), `应提示晚餐提醒不可用，实际提示：${toasts.join('|')}`);
+});
+
+test('用户本次点了取消（reject）时仍然拦截下单，取餐提醒不放松', async () => {
+  const { pageConfig, page, toasts } = stubOrderPage();
+  global.wx.requestSubscribeMessage = (options) => {
+    const result = {};
+    options.tmplIds.forEach((id) => {
+      result[id] = id === DELIVERY_DINNER_TEMPLATE_ID ? 'reject' : 'accept';
+    });
+    options.success(result);
+  };
+
+  const allowed = await pageConfig.requestSubscribeConsent.call(page);
+
+  assert.equal(allowed, false);
+  assert.ok(toasts.some((title) => title.includes('取餐提醒')), `应提示需允许取餐提醒，实际提示：${toasts.join('|')}`);
+});
+
 test('订阅落库首次失败会重试一次并最终成功', async () => {
   let attempts = 0;
   requestHandler = (options) => {
@@ -149,6 +254,25 @@ test('下单页按餐段把订单绑定到对应模板后落库', () => {
   assert.match(source, /requestBindings\.push\(\{ mealPeriod: 'LUNCH', templateId: DELIVERY_TEMPLATE_ID \}\)/);
   assert.match(source, /requestBindings\.push\(\{ mealPeriod: 'DINNER', templateId: DELIVERY_DINNER_TEMPLATE_ID \}\)/);
   assert.match(source, /saveOrderDeliverySubscription\(\[\.\.\.bindingMap\.values\(\)\]\)/);
+});
+
+test('晚餐模板 ID 与字段编号前后端必须一致（小程序常量 vs 后端 application.yml 默认值）', () => {
+  const backendYml = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'backend', 'src', 'main', 'resources', 'application.yml'),
+    'utf8'
+  );
+
+  // 模板 ID 两处各存一份（小程序常量、后端默认值），换模板时漏改一处会出现
+  // 「用户授权的是新模板、后端按旧模板下发」→ 微信 47003/43101，消息静默发不出去。
+  assert.ok(
+    backendYml.includes(`WECHAT_DELIVERY_DINNER_TEMPLATE_ID:${DELIVERY_DINNER_TEMPLATE_ID}`),
+    '后端 application.yml 的晚餐模板默认值必须与小程序 DELIVERY_DINNER_TEMPLATE_ID 一致'
+  );
+  // 晚餐模板「订餐提醒」的字段编号同样必须与后端一致（写错 key 微信返回 47003）
+  assert.ok(backendYml.includes('delivery-dinner-name-key: ${WECHAT_DELIVERY_DINNER_NAME_KEY:thing7}'));
+  assert.ok(backendYml.includes('delivery-dinner-phone-key: ${WECHAT_DELIVERY_DINNER_PHONE_KEY:phone_number5}'));
+  assert.ok(backendYml.includes('delivery-dinner-location-key: ${WECHAT_DELIVERY_DINNER_LOCATION_KEY:thing4}'));
+  assert.ok(backendYml.includes('delivery-dinner-hint-key: ${WECHAT_DELIVERY_DINNER_HINT_KEY:thing2}'));
 });
 
 test('下单页不复用 Promise.all，单个餐段失败不连带跳过另一单的订阅落库', () => {

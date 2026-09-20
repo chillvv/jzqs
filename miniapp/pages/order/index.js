@@ -8,6 +8,7 @@ const {
   DELIVERY_TEMPLATE_ID,
   DELIVERY_DINNER_TEMPLATE_ID,
   NIGHTLY_TEMPLATE_ID,
+  UNAVAILABLE_SUBSCRIPTION_RESULTS,
   requestCombinedSubscribeAuthorization,
   saveOrderDeliverySubscription,
   saveNightlySubscription,
@@ -472,11 +473,24 @@ Page({
       const requiredTemplates = this.resolveOrderDeliveryTemplates();
       const tmplIds = [...new Set([...requiredTemplates.map((item) => item.templateId), NIGHTLY_TEMPLATE_ID])];
       const results = await requestCombinedSubscribeAuthorization(tmplIds);
-      const { accepted = {}, nightly } = results || {};
+      const { accepted = {}, nightly, statuses = {} } = results || {};
+      // 微信侧不可用的取餐模板（ban=模板被封禁 / filter=同一次弹窗里模板标题重复被微信过滤）：
+      // 双餐段下单时一次弹窗申请「午餐 + 晚餐 + 每晚」三个模板，若两个取餐模板标题相同，
+      // 微信只保留其中一个、另一个返回 filter。此时用户去微信设置里也开不出来，
+      // 若照旧按「未授权」阻断下单，双餐段订单会被永久锁死（历史故障：一起下单被取餐提醒拦截、分开下单正常）。
+      const unusableDeliveryTemplates = requiredTemplates.filter(
+        (item) => UNAVAILABLE_SUBSCRIPTION_RESULTS.includes(statuses[item.templateId])
+      );
+      const unusableDeliveryIds = unusableDeliveryTemplates.map((item) => item.templateId);
+      const unusableLabels = unusableDeliveryTemplates.map(
+        (item) => (item.mealPeriod === 'DINNER' ? '晚餐' : '午餐')
+      );
+      const nightlyUnusable = UNAVAILABLE_SUBSCRIPTION_RESULTS.includes(statuses[NIGHTLY_TEMPLATE_ID]);
+      // 真正需要用户处理的「未授权」：排除微信侧不可用的模板，避免把微信的锅算到用户头上
       const deniedDeliveryTemplates = requiredTemplates
-        .filter((item) => !accepted[item.templateId])
+        .filter((item) => !unusableDeliveryIds.includes(item.templateId) && !accepted[item.templateId])
         .map((item) => item.templateId);
-      if (deniedDeliveryTemplates.length > 0 || !nightly) {
+      if (deniedDeliveryTemplates.length > 0 || (!nightly && !nightlyUnusable)) {
         // 失败时明确区分「总开关关」「取餐模板被总是拒绝」「优惠券模板被总是拒绝」「本次点了取消」。
         // 必须一次查询全部模板状态：只查「每晚模板」无法判断取餐模板是否被用户「总是拒绝」，
         // 那时微信不会再弹授权框，用户反复点击都下不了单又不知道去哪开（历史卡死问题）。
@@ -496,6 +510,10 @@ Page({
           this.promptOpenSubscribeSetting('deliveryRejected');
         } else if (!nightly && isTemplateRejected(NIGHTLY_TEMPLATE_ID)) {
           this.promptOpenSubscribeSetting('rejected');
+        } else if (Object.keys(statuses).length === 0) {
+          // 微信弹窗整体失败（一个模板状态都没返回，常见于网络异常/调用被系统拦截）：
+          // 不是用户拒绝，提示他重试，避免误导去微信设置里找根本不存在的开关
+          wx.showToast({ title: '微信授权未成功，请重试', icon: 'none' });
         } else if (deniedDeliveryTemplates.length > 0) {
           // 本次只是点了取消（未勾选「总是保持」）：微信下次仍会弹窗，重试即可，不存在卡死
           wx.showToast({ title: '需允许接收「取餐提醒」才能下单', icon: 'none' });
@@ -509,7 +527,7 @@ Page({
       // 「每晚提醒」授权成功（用户点了允许，获得 1 条额度），保存后端记录
       await saveNightlySubscription(nightly);
       this.setData({ nightlySubscribed: true, subscribeConsent: true });
-      wx.showToast({ title: '订阅授权成功', icon: 'success' });
+      this.notifyUnusableSubscribeTemplates(unusableLabels, nightlyUnusable);
       return true;
     } catch (error) {
       this.setData({ subscribeConsent: false, nightlySubscribed: false });
@@ -518,6 +536,27 @@ Page({
     } finally {
       this.setData({ consentingSubscribe: false });
     }
+  },
+
+  /**
+   * 微信侧不可用的订阅模板提示：ban（模板被微信后台封禁）/ filter（同一次弹窗里模板标题重复被过滤）。
+   * 这类模板不会出现在微信「设置 → 订阅消息」里，用户自己去也开不出来，属于微信侧问题，
+   * 因此不阻断下单，只说明哪一项提醒这次没拿到额度（送达时商家端「取餐提醒未送达名单」会兜底人工通知）。
+   */
+  notifyUnusableSubscribeTemplates(unusableLabels, nightlyUnusable) {
+    const labels = Array.isArray(unusableLabels) ? [...unusableLabels] : [];
+    if (nightlyUnusable) {
+      labels.push('优惠券过期提醒');
+    }
+    if (!labels.length) {
+      wx.showToast({ title: '订阅授权成功', icon: 'success' });
+      return;
+    }
+    wx.showToast({
+      title: `${labels.join('、')}微信侧暂无法开启，本次仍可下单，取餐情况以订单页为准`,
+      icon: 'none',
+      duration: 3500
+    });
   },
 
   /**

@@ -105,12 +105,23 @@ wechat:
     # 取餐提醒模板按餐段各配一个：微信一次性订阅是「一个模板授权一次 = 一条额度」，
     # 双餐段订单若共用同一模板，一次弹窗只拿到 1 条额度却要发 2 条，第二条必然被微信拒绝(43101)。
     # 因此午餐、晚餐各用一个模板，下单时一次弹窗同时申请，两个模板各得 1 条额度。
+    # ⚠️ 两个模板的「标题」必须是不同的字符串：微信规定一次授权调用里模板标题相同的只保留一个
+    # （其余返回 filter），否则双餐段一起下单时必有一餐拿不到额度。
     delivery-template-id: ${WECHAT_DELIVERY_TEMPLATE_ID:Od1mOKtl8DPnP0-mVyKKtP4HSYyk3sPbGazcHXZntEs}
-    # 午餐模板「取餐位置」字段 key（不同模板字段编号不同，必须与微信后台模板一致）
+    # 午餐模板「取餐提醒」（编号 250）字段 key：商品名 / 骑手电话 / 取餐位置 / 温馨提醒
+    delivery-name-key: ${WECHAT_DELIVERY_NAME_KEY:thing6}
+    delivery-phone-key: ${WECHAT_DELIVERY_PHONE_KEY:phone_number9}
     delivery-location-key: ${WECHAT_DELIVERY_LOCATION_KEY:thing10}
-    delivery-dinner-template-id: ${WECHAT_DELIVERY_DINNER_TEMPLATE_ID:Od1mOKtl8DPnP0-mVyKKtGYeRd5RVDcCV40MrW8lBmU}
-    # 晚餐模板「取餐位置」字段 key（该模板为 thing40）
-    delivery-dinner-location-key: ${WECHAT_DELIVERY_DINNER_LOCATION_KEY:thing40}
+    delivery-hint-key: ${WECHAT_DELIVERY_HINT_KEY:thing7}
+    # 晚餐模板必须与午餐模板「标题不同」：微信规定一次授权调用里模板标题相同的只保留一个
+    # （其余返回 filter），双餐段一次弹窗时必有一餐拿不到额度 → 下单被拦。
+    # 现晚餐用「订餐提醒」（编号 22593），标题与午餐的「取餐提醒」不同。
+    delivery-dinner-template-id: ${WECHAT_DELIVERY_DINNER_TEMPLATE_ID:JnboF3P2VaeXm92BPDz7SSdv74LS_t2y7aGtR3OUQac}
+    # 晚餐模板「订餐提醒」字段 key：套餐名称 / 联系电话 / 门店地址 / 温馨提示
+    delivery-dinner-name-key: ${WECHAT_DELIVERY_DINNER_NAME_KEY:thing7}
+    delivery-dinner-phone-key: ${WECHAT_DELIVERY_DINNER_PHONE_KEY:phone_number5}
+    delivery-dinner-location-key: ${WECHAT_DELIVERY_DINNER_LOCATION_KEY:thing4}
+    delivery-dinner-hint-key: ${WECHAT_DELIVERY_DINNER_HINT_KEY:thing2}
     delivery-page: ${WECHAT_DELIVERY_PAGE:pages/orders/index}
     nightly-template-id: ${WECHAT_NIGHTLY_TEMPLATE_ID:gNYZT0Nu18WbkIbgX23zD-fF2h1Gt_-6E3EsWoJCLkQ}
     nightly-page: ${WECHAT_NIGHTLY_PAGE:pages/orders/index}

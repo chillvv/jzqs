@@ -42,17 +42,35 @@ public class WeChatService {
     @Value("${wechat.subscribe.delivery-template-id:}")
     private String deliveryTemplateId;
 
-    /** 午餐模板「取餐位置」字段 key（不同模板字段编号不同，必须与微信后台模板一致） */
+    /** 午餐模板「商品名 / 骑手电话 / 取餐位置 / 温馨提醒」字段 key（模板「取餐提醒」编号 250） */
+    @Value("${wechat.subscribe.delivery-name-key:thing6}")
+    private String deliveryNameKey;
+
+    @Value("${wechat.subscribe.delivery-phone-key:phone_number9}")
+    private String deliveryPhoneKey;
+
     @Value("${wechat.subscribe.delivery-location-key:thing10}")
     private String deliveryLocationKey;
+
+    @Value("${wechat.subscribe.delivery-hint-key:thing7}")
+    private String deliveryHintKey;
 
     /** 晚餐取餐提醒模板：与午餐模板分属不同模板，各自独立计额度，保证双餐段各有一条可下发 */
     @Value("${wechat.subscribe.delivery-dinner-template-id:}")
     private String deliveryDinnerTemplateId;
 
-    /** 晚餐模板「取餐位置」字段 key（该模板为 thing40，与午餐模板的 thing10 不同） */
-    @Value("${wechat.subscribe.delivery-dinner-location-key:thing40}")
+    /** 晚餐模板「套餐名称 / 联系电话 / 门店地址 / 温馨提示」字段 key（模板「订餐提醒」编号 22593） */
+    @Value("${wechat.subscribe.delivery-dinner-name-key:thing7}")
+    private String deliveryDinnerNameKey;
+
+    @Value("${wechat.subscribe.delivery-dinner-phone-key:phone_number5}")
+    private String deliveryDinnerPhoneKey;
+
+    @Value("${wechat.subscribe.delivery-dinner-location-key:thing4}")
     private String deliveryDinnerLocationKey;
+
+    @Value("${wechat.subscribe.delivery-dinner-hint-key:thing2}")
+    private String deliveryDinnerHintKey;
 
     @Value("${wechat.subscribe.delivery-page:pages/orders/index}")
     private String deliveryPage;
@@ -195,13 +213,16 @@ public class WeChatService {
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             headers.setAccept(List.of(MediaType.APPLICATION_JSON));
-            // 请求体的 data key 必须与模板字段一一对应：午餐/晚餐模板的「取餐位置」字段编号不同，
+            // 请求体的 data key 必须与模板字段一一对应：两个取餐模板的字段编号完全不同
+            // （「取餐提醒」250 = thing6/phone_number9/thing10/thing7，
+            //  「订餐提醒」22593 = thing7/phone_number5/thing4/thing2），
             // 写错 key 微信会直接报 47003（参数值不符合规则），消息发不出去。
+            DeliveryTemplateKeys keys = resolveDeliveryKeys(templateId);
             Map<String, Object> data = new LinkedHashMap<>();
-            data.put("thing6", subscribeValue(normalizeThingValue(dishNames)));
-            data.put("phone_number9", subscribeValue(normalizePhoneValue(riderPhone)));
-            data.put(resolveDeliveryLocationKey(templateId), subscribeValue(normalizeThingValue(pickupLocation)));
-            data.put("thing7", subscribeValue(normalizeThingValue(hint)));
+            data.put(keys.name(), subscribeValue(normalizeThingValue(dishNames)));
+            data.put(keys.phone(), subscribeValue(normalizePhoneValue(riderPhone)));
+            data.put(keys.location(), subscribeValue(normalizeThingValue(pickupLocation)));
+            data.put(keys.hint(), subscribeValue(normalizeThingValue(hint)));
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("touser", openid);
             body.put("template_id", templateId);
@@ -325,12 +346,21 @@ public class WeChatService {
         return deliveryTemplateId;
     }
 
-    /** 取餐位置字段 key 随模板变化（午餐 thing10 / 晚餐 thing40），下发时必须用该模板自己的 key */
-    private String resolveDeliveryLocationKey(String templateId) {
-        if (templateId != null && templateId.equals(deliveryDinnerTemplateId)) {
-            return deliveryDinnerLocationKey;
-        }
-        return deliveryLocationKey;
+    /** 一个取餐模板的四个字段 key（不同模板字段编号不同，必须整组跟着模板走） */
+    private record DeliveryTemplateKeys(String name, String phone, String location, String hint) {
+    }
+
+    /** 按模板解析字段 key：晚餐模板与午餐模板是两套完全不同的字段编号，不能只换「取餐位置」 */
+    private DeliveryTemplateKeys resolveDeliveryKeys(String templateId) {
+        boolean dinner = templateId != null && templateId.equals(deliveryDinnerTemplateId);
+        return dinner
+            ? new DeliveryTemplateKeys(
+                deliveryDinnerNameKey,
+                deliveryDinnerPhoneKey,
+                deliveryDinnerLocationKey,
+                deliveryDinnerHintKey
+            )
+            : new DeliveryTemplateKeys(deliveryNameKey, deliveryPhoneKey, deliveryLocationKey, deliveryHintKey);
     }
 
     private Map<String, Object> subscribeValue(String value) {
