@@ -2,6 +2,7 @@ package com.jzqs.app.mobile;
 
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
+import com.jzqs.app.common.rider.RiderSessionService;
 import com.jzqs.app.common.util.JwtClaims;
 import com.jzqs.app.common.util.TimeUtils;
 import com.jzqs.app.common.util.JwtUtils;
@@ -29,10 +30,16 @@ public class MobileAuthServiceImpl implements MobileAuthService {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
     private final WeChatService weChatService;
     private final JdbcTemplate jdbcTemplate;
+    private final RiderSessionService riderSessionService;
 
-    public MobileAuthServiceImpl(WeChatService weChatService, JdbcTemplate jdbcTemplate) {
+    public MobileAuthServiceImpl(
+        WeChatService weChatService,
+        JdbcTemplate jdbcTemplate,
+        RiderSessionService riderSessionService
+    ) {
         this.weChatService = weChatService;
         this.jdbcTemplate = jdbcTemplate;
+        this.riderSessionService = riderSessionService;
     }
 
     @Override
@@ -192,7 +199,14 @@ public class MobileAuthServiceImpl implements MobileAuthService {
 
     @Override
     public RiderAuthStateResponse riderWxLogin(String code) {
-        String openid = buildRiderOpenid(code);
+        // 必须换成真实 openid：wx.login 的 code 是一次性的，拿 code 当 openid 会导致
+        // 每次启动都认不出骑手（历史 bug），微信身份永远沉淀不下来。
+        String openid = weChatService.resolveRiderOpenid(code);
+        if (openid == null) {
+            // 换不到 openid（骑手小程序凭据未配置 / 微信接口异常 / 开发模式）：
+            // 降级为「需要手机号登录」，让骑手仍能用手机号进去，绝不能卡在登录页。
+            return riderAuthState(null, false, true, null, null);
+        }
         Long riderId = findRiderIdByOpenid(openid);
         
         if (riderId == null) {
@@ -207,8 +221,8 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             return riderAuthState(openid, false, true, profile, null);
         }
         
-        // 已绑定手机号，生成 token
-        String token = JwtUtils.generateToken(JwtClaims.rider(riderId, profile.riderName(), profile.phone(), openid));
+        // 已绑定手机号，生成 token。本人微信自动登录不改身份，因此不递增会话版本号。
+        String token = riderSessionService.issueToken(riderId, profile.riderName(), profile.phone(), openid);
         
         // 更新最后登录时间
         LocalDateTime now = TimeUtils.now().withNano(0);
@@ -233,27 +247,14 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "该手机号未注册骑手账号");
         }
 
-        // 仅允许后台已建档骑手完成 openid 绑定
-        jdbcTemplate.update(
-            """
-                UPDATE rider_profiles
-                SET current_openid = ?,
-                    wechat_open_id = COALESCE(wechat_open_id, ?),
-                    last_login_at = ?,
-                    first_login_at = COALESCE(first_login_at, ?)
-                WHERE id = ?
-                """,
-            finalOpenid,
-            finalOpenid,
-            Timestamp.valueOf(now),
-            Timestamp.valueOf(now),
-            riderId
-        );
-        
+        // 仅允许后台已建档骑手完成 openid 绑定。
+        // 严格一人一号：换设备/换微信（openid 变化）时递增会话版本号，把此前的登录态踢下线。
+        riderSessionService.takeOverIdentity(riderId, finalOpenid, now);
+
         RiderAuthProfileResponse profile = riderProfile(riderId);
-        
+
         // 生成 token
-        String token = JwtUtils.generateToken(JwtClaims.rider(riderId, profile.riderName(), finalPhone, finalOpenid));
+        String token = riderSessionService.issueToken(riderId, profile.riderName(), finalPhone, finalOpenid);
         
         return riderAuthState(finalOpenid, true, false, profile, token);
     }
@@ -286,6 +287,13 @@ public class MobileAuthServiceImpl implements MobileAuthService {
                 throw new BusinessException(ErrorCode.VALIDATION_ERROR, "Token 无效或已过期");
             }
             
+            // 严格一人一号：版本号失配说明该账号已在别处重新登录，当前 token 作废。
+            // 老 token 不含版本号（tokenVersion 为 null）按兼容放行，骑手下次登录后自动纳入互踢。
+            Long tokenVersion = claims.tokenVersion();
+            if (!riderSessionService.isTokenCurrent(riderId, tokenVersion)) {
+                throw new BusinessException(ErrorCode.UNAUTHORIZED, JwtUtils.RIDER_TOKEN_SUPERSEDED_MESSAGE);
+            }
+
             // 查询骑手信息
             RiderAuthProfileResponse profile = riderProfile(riderId);
             
@@ -774,14 +782,6 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         return "dev_" + normalized;
     }
 
-    private String buildRiderOpenid(String code) {
-        String normalized = code == null ? "" : code.trim();
-        if (normalized.isEmpty()) {
-            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "微信登录凭证不能为空");
-        }
-        return "rider_" + normalized;
-    }
-
     private String requireOpenid(String openid) {
         String value = openid == null ? "" : openid.trim();
         if (value.isEmpty()) {
@@ -942,9 +942,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         }
 
         // 生成 JWT Token
-        String token = JwtUtils.generateToken(
-            JwtClaims.rider(newRiderId, finalName, finalPhone, finalOpenid)
-        );
+        String token = riderSessionService.issueToken(newRiderId, finalName, finalPhone, finalOpenid);
 
         return new RiderLoginResponse(
             true,
@@ -1010,21 +1008,9 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         String riderName = rider.riderName();
         String authStatus = rider.authStatus();
 
-        // 更新登录时间和 openid
+        // 更新登录时间和 openid（openid 变化即视为身份切换，踢掉旧会话）
         if (finalOpenid != null) {
-            jdbcTemplate.update(
-                """
-                    UPDATE rider_profiles
-                    SET current_openid = ?,
-                        last_login_at = ?,
-                        first_login_at = COALESCE(first_login_at, ?)
-                    WHERE id = ?
-                    """,
-                finalOpenid,
-                Timestamp.valueOf(now),
-                Timestamp.valueOf(now),
-                riderId
-            );
+            riderSessionService.takeOverIdentity(riderId, finalOpenid, now);
         } else {
             jdbcTemplate.update(
                 """
@@ -1040,9 +1026,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
         }
 
         // 生成 JWT Token
-        String token = JwtUtils.generateToken(
-            JwtClaims.rider(riderId, riderName, finalPhone, finalOpenid)
-        );
+        String token = riderSessionService.issueToken(riderId, riderName, finalPhone, finalOpenid);
 
         return new RiderLoginResponse(
             true,
@@ -1106,21 +1090,9 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             Long riderId = existingRider.riderId();
             String authStatus = existingRider.authStatus();
             
-            // 如果提供了 openid，则绑定/更新
+            // 如果提供了 openid，则绑定/更新（openid 变化即视为身份切换，踢掉旧会话）
             if (finalOpenid != null) {
-                jdbcTemplate.update(
-                    """
-                        UPDATE rider_profiles
-                        SET current_openid = ?,
-                            last_login_at = ?,
-                            first_login_at = COALESCE(first_login_at, ?)
-                        WHERE id = ?
-                        """,
-                    finalOpenid,
-                    Timestamp.valueOf(now),
-                    Timestamp.valueOf(now),
-                    riderId
-                );
+                riderSessionService.takeOverIdentity(riderId, finalOpenid, now);
             } else {
                 jdbcTemplate.update(
                     """
@@ -1136,9 +1108,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             }
 
             // 生成 JWT Token
-            String token = JwtUtils.generateToken(
-                JwtClaims.rider(riderId, existingName, finalPhone, finalOpenid)
-            );
+            String token = riderSessionService.issueToken(riderId, existingName, finalPhone, finalOpenid);
 
             return new RiderLoginResponse(
                 true,
@@ -1190,9 +1160,7 @@ public class MobileAuthServiceImpl implements MobileAuthService {
             }
 
             // 生成 JWT Token
-            String token = JwtUtils.generateToken(
-                JwtClaims.rider(newRiderId, finalName, finalPhone, finalOpenid)
-            );
+            String token = riderSessionService.issueToken(newRiderId, finalName, finalPhone, finalOpenid);
 
             return new RiderLoginResponse(
                 true,

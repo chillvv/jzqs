@@ -79,7 +79,8 @@ function request({ url, method = 'GET', data, header, requireWorkbench = true, t
             // token 失效处理
             if (res.statusCode === 401) {
               handleUnauthorized(app);
-              const errorMsg = '登录已过期，请重新登录';
+              // 后端会区分「登录已过期」和「账号已在其他设备登录」，直接用它的文案
+              const errorMsg = body.message || '登录已过期，请重新登录';
               if (!hideErrorToast && typeof wx.showToast === 'function') {
                 wx.showToast({ title: errorMsg, icon: 'none', duration: 2000 });
               }
@@ -209,7 +210,8 @@ function uploadFile({ url, filePath, name = 'file', formData, requireWorkbench =
             // token 失效处理
             if (res.statusCode === 401) {
               handleUnauthorized(app);
-              const errorMsg = '登录已过期，请重新登录';
+              // 后端会区分「登录已过期」和「账号已在其他设备登录」，直接用它的文案
+              const errorMsg = body.message || '登录已过期，请重新登录';
               if (!hideErrorToast && typeof wx.showToast === 'function') {
                 wx.showToast({ title: errorMsg, icon: 'none', duration: 2000 });
               }

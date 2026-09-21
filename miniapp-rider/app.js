@@ -79,7 +79,7 @@ App({
       getToken: () => wx.getStorageSync('auth_token') || auth.globalData.token || ''
     });
 
-    this.bindAddressChangeNotice();
+    this.bindRealtimeNotices();
 
     // 根据认证状态自动跳转
     this.authPromise.then(() => {
@@ -106,6 +106,36 @@ App({
   bindAddressChangeNotice() {
     realtime.subscribe((message) => {
       addressChangeNotice.enqueue(message);
+    });
+  },
+
+  /**
+   * 统一绑定实时订阅。realtime.stop() 会清空全部监听器，
+   * 因此每处 stop 之后都必须重新调用本方法，否则本次会话再也收不到推送。
+   */
+  bindRealtimeNotices() {
+    this.bindAddressChangeNotice();
+    this.bindSessionInvalidatedNotice();
+  },
+
+  /**
+   * 骑手账号严格一人一号：账号在别处重新登录后，后端递增会话版本号并推送本事件，
+   * 本端立刻退出登录并跳回登录页，而不是等下一次请求报 401 才发现自己已被顶下线。
+   * payload.openid 是新登录者的微信标识：等于自己的说明是自己刚登录成功，必须忽略，
+   * 否则新登录者会在建立实时连接后把自己也踢下线。
+   */
+  bindSessionInvalidatedNotice() {
+    realtime.subscribe((message) => {
+      if (!message || message.eventType !== 'rider.auth.invalidated') {
+        return;
+      }
+      const payload = message.payload || {};
+      const mine = auth.globalData.openid || '';
+      const newcomer = String(payload.openid || '').trim();
+      if (newcomer && newcomer === mine) {
+        return;
+      }
+      this.resetRiderAuthState({ redirect: true, message: '账号已在其他设备登录' });
     });
   },
 
@@ -207,7 +237,7 @@ App({
 
   async logoutRider() {
     realtime.stop();
-    this.bindAddressChangeNotice();
+    this.bindRealtimeNotices();
     await auth.logout();
     this.syncRiderGlobals();
     wx.switchTab({ url: '/pages/profile/index' });
@@ -217,7 +247,7 @@ App({
     const shouldRedirect = options.redirect === true;
     const message = typeof options.message === 'string' ? options.message.trim() : '';
     realtime.stop();
-    this.bindAddressChangeNotice();
+    this.bindRealtimeNotices();
     await auth.logout();
     this.syncRiderGlobals();
     if (!shouldRedirect || this.globalData.authRedirecting) {

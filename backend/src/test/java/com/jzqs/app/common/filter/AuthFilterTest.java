@@ -14,7 +14,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class AuthFilterTest {
 
-    private final AuthFilter filter = new AuthFilter(new ObjectMapper());
+    // 不注入数据源：骑手会话版本号校验自动跳过，只验证 token 解析与属性注入
+    private final AuthFilter filter = new AuthFilter(new ObjectMapper(), null);
 
     @Test
     void injectsCustomerIdForProtectedCustomerRoutes() throws ServletException, IOException {

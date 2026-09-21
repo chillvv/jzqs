@@ -12,6 +12,8 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 public final class JwtUtils {
+    /** 骑手 token 会话版本号失配时的统一提示（一人一号互踢） */
+    public static final String RIDER_TOKEN_SUPERSEDED_MESSAGE = "账号已在其他设备登录，请重新登录";
     private static final long EXPIRE_SECONDS = 7L * 24 * 3600;
     private static final int MIN_SECRET_LENGTH = 8;
     private static final String DEV_FALLBACK_SECRET = "dev-local-jwt-secret-change-me-2026";
@@ -33,6 +35,7 @@ public final class JwtUtils {
             .riderName(claims == null ? null : claims.riderName())
             .phone(claims == null ? null : claims.phone())
             .openid(claims == null ? null : claims.openid())
+            .tokenVersion(claims == null ? null : claims.tokenVersion())
             .exp(expireAt)
             .iat(issuedAt)
             .build();
@@ -86,6 +89,7 @@ public final class JwtUtils {
                         case "riderName" -> builder.riderName(value);
                         case "phone" -> builder.phone(value);
                         case "openid" -> builder.openid(value);
+                        case "tokenVersion" -> builder.tokenVersion(parsedLong);
                         case "exp" -> expireAt = parsedLong;
                         case "iat" -> issuedAt = parsedLong;
                         default -> {

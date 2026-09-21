@@ -2,6 +2,7 @@ package com.jzqs.app.auth;
 
 import com.jzqs.app.common.error.BusinessException;
 import com.jzqs.app.common.error.ErrorCode;
+import com.jzqs.app.common.rider.RiderSessionService;
 import com.jzqs.app.common.util.JwtClaims;
 import com.jzqs.app.common.util.JwtUtils;
 import com.jzqs.app.common.wechat.WeChatService;
@@ -27,10 +28,12 @@ public class AuthService {
 
     private final WeChatService weChatService;
     private final JdbcTemplate jdbcTemplate;
+    private final RiderSessionService riderSessionService;
 
-    public AuthService(WeChatService weChatService, JdbcTemplate jdbcTemplate) {
+    public AuthService(WeChatService weChatService, JdbcTemplate jdbcTemplate, RiderSessionService riderSessionService) {
         this.weChatService = weChatService;
         this.jdbcTemplate = jdbcTemplate;
+        this.riderSessionService = riderSessionService;
     }
 
     /**
@@ -298,7 +301,8 @@ public class AuthService {
         }
 
         // 生成 token
-        String token = JwtUtils.generateToken(JwtClaims.rider(riderId, null, null, openid));
+        // 本人微信静默登录，身份未变，不递增会话版本号
+        String token = riderSessionService.issueToken(riderId, null, null, openid);
 
         // 更新最后登录时间
         updateRiderLoginTime(riderId);
@@ -314,8 +318,10 @@ public class AuthService {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "该手机号未注册骑手账号");
         }
 
-        // 更新登录时间
+        // 更新登录时间。该入口拿不到 openid，无法判断是不是同一人，
+        // 按「新登录顶掉旧登录」处理，保证一人一号不被绕过。
         updateRiderLoginTime(riderId);
+        riderSessionService.bumpVersion(riderId);
         RiderInfo rider = getRiderInfo(riderId);
         return buildRiderAuthResponse(
             riderId,
@@ -336,17 +342,8 @@ public class AuthService {
 
         LocalDateTime now = LocalDateTime.now().withNano(0);
         if (!finalOpenid.isEmpty()) {
-            jdbcTemplate.update(
-                """
-                UPDATE rider_profiles
-                SET current_openid = ?, last_login_at = ?, first_login_at = COALESCE(first_login_at, ?)
-                WHERE id = ?
-                """,
-                finalOpenid,
-                Timestamp.valueOf(now),
-                Timestamp.valueOf(now),
-                riderId
-            );
+            // 换设备/换微信（openid 变化）时递增会话版本号，把此前的登录态踢下线
+            riderSessionService.takeOverIdentity(riderId, finalOpenid, now);
         } else {
             updateRiderLoginTime(riderId);
         }
@@ -398,7 +395,7 @@ public class AuthService {
     }
 
     private AuthBindPhoneResponse buildRiderAuthResponse(Long riderId, String phone, String riderName, String riderStatus) {
-        String token = JwtUtils.generateToken(JwtClaims.rider(riderId, riderName, phone, null));
+        String token = riderSessionService.issueToken(riderId, riderName, phone, null);
         boolean workbenchEnabled = "ACTIVE".equals(riderStatus);
         return new AuthBindPhoneResponse(
             token,
@@ -529,14 +526,11 @@ public class AuthService {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "该手机号未注册骑手账号");
         }
 
-        jdbcTemplate.update(
-            "UPDATE rider_profiles SET last_login_at = ?, first_login_at = COALESCE(first_login_at, ?) WHERE id = ?",
-            Timestamp.valueOf(now),
-            Timestamp.valueOf(now),
-            riderId
-        );
-
-        String token = JwtUtils.generateToken(JwtClaims.rider(riderId, null, null, null));
+        if (openid != null && !openid.trim().isEmpty()) {
+            riderSessionService.takeOverIdentity(riderId, openid.trim(), now);
+        } else {
+            riderSessionService.touchLoginTime(riderId, now);
+        }
 
         RiderInfo rider = getRiderInfo(riderId);
         return buildRiderAuthResponse(

@@ -39,6 +39,17 @@ public class WeChatService {
     @Value("${wechat.secret:}")
     private String secret;
 
+    /**
+     * 骑手小程序是独立的小程序、独立 appid（顾客小程序凭据对它无效），
+     * 必须用它自己的 appid+secret 才能把自己的 code 换成 openid。
+     * 未配置时 resolveRiderOpenid 返回 null，调用方降级为手机号登录。
+     */
+    @Value("${wechat.rider.appid:}")
+    private String riderAppid;
+
+    @Value("${wechat.rider.secret:}")
+    private String riderSecret;
+
     @Value("${wechat.subscribe.delivery-template-id:}")
     private String deliveryTemplateId;
 
@@ -84,8 +95,9 @@ public class WeChatService {
     @jakarta.annotation.PostConstruct
     public void logResolvedConfig() {
         // 启动时打印一次实际解析到的配置，便于确认环境变量是否真正注入容器
-        log.info("[WeChatService] 启动解析配置 devMode={}, appid={}, secretSet={}",
-                devMode, appid, (secret != null && !secret.isEmpty()));
+        log.info("[WeChatService] 启动解析配置 devMode={}, appid={}, secretSet={}, riderAppid={}, riderSecretSet={}",
+                devMode, appid, (secret != null && !secret.isEmpty()),
+                riderAppid, (riderSecret != null && !riderSecret.isEmpty()));
     }
 
     private final RestTemplate restTemplate;
@@ -135,6 +147,48 @@ public class WeChatService {
         } catch (Exception e) {
             log.error("调用微信 code2session 接口异常", e);
             throw new BusinessException(ErrorCode.VALIDATION_ERROR, "微信登录失败，请稍后重试");
+        }
+    }
+
+    /**
+     * 骑手小程序登录：用骑手小程序自己的凭据把一次性 code 换成稳定的 openid。
+     *
+     * <p>关键：绝不能拿 code 本身当 openid——wx.login 每次返回的 code 都不同且 5 分钟失效，
+     * 那样每次启动都认不出骑手，微信身份永远沉淀不下来（历史 bug 就是这么来的）。
+     *
+     * @return 真实 openid；凭据未配置或微信接口异常时返回 null，调用方必须降级为手机号登录，
+     *         绝不能因为换不到 openid 就让骑手卡在登录页。
+     */
+    public String resolveRiderOpenid(String code) {
+        if (code == null || code.trim().isEmpty()) {
+            return null;
+        }
+        if (devMode) {
+            log.info("开发模式：骑手 code2session 跳过，code={}", code);
+            return null;
+        }
+        if (riderAppid == null || riderAppid.isBlank() || riderSecret == null || riderSecret.isBlank()) {
+            log.warn("骑手小程序微信凭据未配置（wechat.rider.appid / wechat.rider.secret），骑手自动登录降级为手机号登录");
+            return null;
+        }
+        try {
+            String url = String.format("%s?appid=%s&secret=%s&js_code=%s&grant_type=authorization_code",
+                    CODE2SESSION_URL, riderAppid.trim(), riderSecret.trim(), code.trim());
+            String response = restTemplate.getForObject(url, String.class);
+            JsonNode json = objectMapper.readTree(response);
+            if (json.has("errcode") && json.get("errcode").asInt() != 0) {
+                log.error("骑手小程序 code2session 失败：{}", json.path("errmsg").asText());
+                return null;
+            }
+            String openid = json.path("openid").asText();
+            if (openid == null || openid.isBlank()) {
+                return null;
+            }
+            log.info("骑手小程序 code2session 成功：openid={}", openid);
+            return openid;
+        } catch (Exception e) {
+            log.error("调用骑手小程序 code2session 异常", e);
+            return null;
         }
     }
 

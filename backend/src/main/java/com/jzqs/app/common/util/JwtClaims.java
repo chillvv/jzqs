@@ -13,6 +13,7 @@ public record JwtClaims(
     String riderName,
     String phone,
     String openid,
+    Long tokenVersion,
     Long exp,
     Long iat
 ) {
@@ -52,6 +53,14 @@ public record JwtClaims(
     }
 
     public static JwtClaims rider(long riderId, String riderName, String phone, String openid) {
+        return rider(riderId, riderName, phone, openid, null);
+    }
+
+    /**
+     * 带会话版本号的骑手 token。版本号用于「一人一号」互踢：
+     * 登录时身份发生切换会递增库里的 token_version，旧 token 的版本号随之失配被判失效。
+     */
+    public static JwtClaims rider(long riderId, String riderName, String phone, String openid, Long tokenVersion) {
         return builder()
             .userId(riderId)
             .riderId(riderId)
@@ -59,6 +68,7 @@ public record JwtClaims(
             .riderName(riderName)
             .phone(phone)
             .openid(openid)
+            .tokenVersion(tokenVersion)
             .build();
     }
 
@@ -87,6 +97,7 @@ public record JwtClaims(
         add(payload, "riderName", riderName);
         add(payload, "phone", phone);
         add(payload, "openid", openid);
+        add(payload, "tokenVersion", tokenVersion);
         add(payload, "exp", exp);
         add(payload, "iat", iat);
         return List.copyOf(payload);
@@ -120,6 +131,7 @@ public record JwtClaims(
         private String riderName;
         private String phone;
         private String openid;
+        private Long tokenVersion;
         private Long exp;
         private Long iat;
 
@@ -171,6 +183,11 @@ public record JwtClaims(
             return this;
         }
 
+        public Builder tokenVersion(Long tokenVersion) {
+            this.tokenVersion = tokenVersion;
+            return this;
+        }
+
         public Builder exp(Long exp) {
             this.exp = exp;
             return this;
@@ -182,7 +199,7 @@ public record JwtClaims(
         }
 
         public JwtClaims build() {
-            return new JwtClaims(userId, customerId, riderId, userType, role, displayName, riderName, phone, openid, exp, iat);
+            return new JwtClaims(userId, customerId, riderId, userType, role, displayName, riderName, phone, openid, tokenVersion, exp, iat);
         }
     }
 

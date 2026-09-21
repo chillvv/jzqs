@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -68,9 +69,15 @@ public class AuthFilter implements Filter {
     );
 
     private final ObjectMapper objectMapper;
+    private final JdbcTemplate jdbcTemplate;
 
-    public AuthFilter(ObjectMapper objectMapper) {
+    /**
+     * jdbcTemplate 传 null 时（单元测试）骑手会话版本号校验自动跳过。
+     * 只保留一个构造函数，避免 Spring 误选无数据源的重载导致互踢形同虚设。
+     */
+    public AuthFilter(ObjectMapper objectMapper, JdbcTemplate jdbcTemplate) {
         this.objectMapper = objectMapper;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Override
@@ -132,7 +139,12 @@ public class AuthFilter implements Filter {
                 writeUnauthorized(httpResponse, GENERIC_UNAUTHORIZED_MESSAGE);
                 return;
             }
-            
+            // 骑手账号严格一人一号：被顶下线后必须立刻失效，不能继续接单
+            if (isRiderTokenSuperseded(claims)) {
+                writeUnauthorized(httpResponse, JwtUtils.RIDER_TOKEN_SUPERSEDED_MESSAGE);
+                return;
+            }
+
             // 将用户信息注入请求上下文
             Long userId = extractUserId(claims);
             Long customerId = claims.customerId();
@@ -220,6 +232,22 @@ public class AuthFilter implements Filter {
 
     private boolean isAdmin(JwtClaims claims) {
         return claims.isAdmin();
+    }
+
+    /**
+     * 骑手账号严格一人一号：token 携带的会话版本号与库里不一致，说明该账号已在别处重新登录，
+     * 当前 token 作废。老 token 不含版本号（null）按兼容放行；未注入数据源（单元测试）时跳过。
+     */
+    private boolean isRiderTokenSuperseded(JwtClaims claims) {
+        if (jdbcTemplate == null || claims.riderId() == null || claims.tokenVersion() == null) {
+            return false;
+        }
+        Long current = jdbcTemplate.query(
+            "SELECT token_version FROM rider_profiles WHERE id = ?",
+            ps -> ps.setLong(1, claims.riderId()),
+            rs -> rs.next() ? rs.getLong(1) : null
+        );
+        return current == null || current.longValue() != claims.tokenVersion().longValue();
     }
 
     /**
