@@ -34,6 +34,7 @@ import com.jzqs.app.dispatch.api.DispatchRiderActivateResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderAuthBindingResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderAuthTakeoverResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderAuthUnbindResponse;
+import com.jzqs.app.dispatch.api.DispatchRiderMonthlyStatsResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderProfileUpsertResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderProgressResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderStatusResponse;
@@ -48,6 +49,7 @@ import com.jzqs.app.dispatch.api.PendingRiderResponse;
 import com.jzqs.app.dispatch.service.DispatchService;
 import com.jzqs.app.settings.api.DispatchAiJobLogResponse;
 import com.jzqs.app.dispatch.service.route.DispatchRouteScoringService;
+import java.math.BigDecimal;
 import java.sql.Timestamp;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -213,6 +215,11 @@ public class DispatchServiceImpl implements DispatchService {
     }
 
     @Override
+    public DispatchRiderMonthlyStatsResponse riderMonthlyStats(String month) {
+        return dispatchRiderAdminModule.riderMonthlyStats(month);
+    }
+
+    @Override
     @Transactional
     public DispatchRiderProfileUpsertResponse createRider(
         String riderName,
@@ -220,6 +227,7 @@ public class DispatchServiceImpl implements DispatchService {
         String phone,
         String areaCode,
         String employmentStatus,
+        BigDecimal monthlySalary,
         String updatedBy
     ) {
         return dispatchRiderAdminModule.createRider(
@@ -228,6 +236,7 @@ public class DispatchServiceImpl implements DispatchService {
             phone,
             areaCode,
             employmentStatus,
+            monthlySalary,
             updatedBy,
             (bindingAreaCode, keywords, defaultRiderId, backupRiderId, operator) ->
                 updateAreaBinding(bindingAreaCode, keywords, defaultRiderId, backupRiderId, operator)
@@ -242,6 +251,7 @@ public class DispatchServiceImpl implements DispatchService {
         String displayName,
         String phone,
         String areaCode,
+        BigDecimal monthlySalary,
         String updatedBy
     ) {
         return dispatchRiderAdminModule.updateRiderProfile(
@@ -250,6 +260,7 @@ public class DispatchServiceImpl implements DispatchService {
             displayName,
             phone,
             areaCode,
+            monthlySalary,
             updatedBy,
             (bindingAreaCode, keywords, defaultRiderId, backupRiderId, operator) ->
                 updateAreaBinding(bindingAreaCode, keywords, defaultRiderId, backupRiderId, operator)

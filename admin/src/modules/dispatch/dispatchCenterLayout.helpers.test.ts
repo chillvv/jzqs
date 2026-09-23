@@ -1,16 +1,22 @@
 import { describe, expect, it } from "vitest";
 import {
   buildCreateRiderPayload,
+  clampPercent,
+  formatCostPerOrder,
+  formatMonthlySalary,
   getActiveQueueLabel,
   groupBatchesByMealPeriod,
   hasDisplayValue,
   hasOrderAttention,
   mealPeriodLabel,
   normalizeDispatchOverview,
+  parseMonthlySalaryInput,
   reorderDispatchAreaOrders,
+  resolveRiderCostTone,
   riderStatusLabel,
   riderStatusTagClass,
-  validateCreateRiderDraft
+  validateCreateRiderDraft,
+  validateMonthlySalaryInput
 } from "./dispatchCenterLayout.helpers";
 import type { DispatchBatchResponse } from "../../shared/api/types";
 
@@ -62,11 +68,13 @@ describe("dispatchCenterLayout helpers", () => {
       validateCreateRiderDraft({
         riderName: "王师傅",
         phone: "1380013800",
-        enabled: true
+        enabled: true,
+        monthlySalary: ""
       })
     ).toEqual({
       riderName: "",
-      phone: "手机号少了一位哦，请输入 11 位手机号"
+      phone: "手机号少了一位哦，请输入 11 位手机号",
+      monthlySalary: ""
     });
   });
 
@@ -105,33 +113,85 @@ describe("dispatchCenterLayout helpers", () => {
   });
 
   it("reports rider name and phone validation errors separately", () => {
-    expect(validateCreateRiderDraft({ riderName: "", phone: "13800000001", enabled: true })).toEqual({
+    expect(validateCreateRiderDraft({ riderName: "", phone: "13800000001", enabled: true, monthlySalary: "" })).toEqual({
       riderName: "请填写骑手姓名",
-      phone: ""
+      phone: "",
+      monthlySalary: ""
     });
-    expect(validateCreateRiderDraft({ riderName: "张", phone: "13800000001", enabled: true })).toEqual({
+    expect(validateCreateRiderDraft({ riderName: "张", phone: "13800000001", enabled: true, monthlySalary: "" })).toEqual({
       riderName: "姓名需为2-20字",
-      phone: ""
+      phone: "",
+      monthlySalary: ""
     });
-    expect(validateCreateRiderDraft({ riderName: "张三!", phone: "13800000001", enabled: true })).toEqual({
+    expect(validateCreateRiderDraft({ riderName: "张三!", phone: "13800000001", enabled: true, monthlySalary: "" })).toEqual({
       riderName: "姓名仅支持中文、字母、数字和间隔号",
-      phone: ""
+      phone: "",
+      monthlySalary: ""
     });
   });
 
   it("trims rider draft fields and maps the enabled flag to employment status", () => {
-    expect(buildCreateRiderPayload({ riderName: " 张三 ", phone: " 13800000001 ", enabled: true })).toEqual({
+    expect(buildCreateRiderPayload({ riderName: " 张三 ", phone: " 13800000001 ", enabled: true, monthlySalary: "" })).toEqual({
       riderName: "张三",
       displayName: "张三",
       phone: "13800000001",
-      employmentStatus: "ACTIVE"
+      employmentStatus: "ACTIVE",
+      monthlySalary: null
     });
-    expect(buildCreateRiderPayload({ riderName: "李四", phone: "13800000002", enabled: false })).toEqual({
+    expect(buildCreateRiderPayload({ riderName: "李四", phone: "13800000002", enabled: false, monthlySalary: "" })).toEqual({
       riderName: "李四",
       displayName: "李四",
       phone: "13800000002",
-      employmentStatus: "DISABLED"
+      employmentStatus: "DISABLED",
+      monthlySalary: null
     });
+  });
+
+  it("validates and parses the optional monthly salary used by rider monthly cost stats", () => {
+    // 留空 = 未设置月薪，不参与成本计算，也不该拦住提交
+    expect(validateMonthlySalaryInput("")).toBe("");
+    expect(validateMonthlySalaryInput("   ")).toBe("");
+    expect(parseMonthlySalaryInput("")).toBeNull();
+
+    expect(validateMonthlySalaryInput("6000")).toBe("");
+    expect(parseMonthlySalaryInput(" 6000.50 ")).toBe(6000.5);
+
+    expect(validateMonthlySalaryInput("abc")).toBe("月薪需为数字");
+    expect(validateMonthlySalaryInput("-1")).toBe("月薪不能为负数");
+
+    expect(formatMonthlySalary(null)).toBe("未设置");
+    expect(formatMonthlySalary(0)).toBe("未设置");
+    expect(formatMonthlySalary(6000)).toBe("¥ 6000.00");
+    expect(formatCostPerOrder(null)).toBe("--");
+    expect(formatCostPerOrder(2.5)).toBe("¥ 2.50");
+
+    expect(
+      buildCreateRiderPayload({ riderName: "王五", phone: "13800000005", enabled: true, monthlySalary: "8000" })
+    ).toEqual({
+      riderName: "王五",
+      displayName: "王五",
+      phone: "13800000005",
+      employmentStatus: "ACTIVE",
+      monthlySalary: 8000
+    });
+  });
+
+  it("keeps share bars inside 0-100 and classifies unit cost against the monthly baseline", () => {
+    expect(clampPercent(42.3)).toBe(42.3);
+    expect(clampPercent(-5)).toBe(0);
+    expect(clampPercent(120)).toBe(100);
+    expect(clampPercent(undefined)).toBe(0);
+
+    // 没有单均成本（未设月薪 / 当月无单）的骑手不参与分档
+    expect(resolveRiderCostTone(null, 5)).toBe("none");
+    // 还没有整体基准（无人设月薪）时统一按「正常」显示，避免全部标红或标绿
+    expect(resolveRiderCostTone(5, null)).toBe("mid");
+    expect(resolveRiderCostTone(5, 0)).toBe("mid");
+
+    const baseline = 10;
+    expect(resolveRiderCostTone(7, baseline)).toBe("low");
+    expect(resolveRiderCostTone(9.5, baseline)).toBe("mid");
+    expect(resolveRiderCostTone(13, baseline)).toBe("high");
   });
 
   it("groups dispatch batches by meal period", () => {

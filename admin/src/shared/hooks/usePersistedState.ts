@@ -21,7 +21,8 @@ export const PAGE_MEMORY_KEYS = {
   orderCurrentPage: `${PAGE_MEMORY_PREFIX}orders-current-page`,
   dispatchMealPeriod: `${PAGE_MEMORY_PREFIX}dispatch-meal-period`,
   dispatchRidersStatus: `${PAGE_MEMORY_PREFIX}dispatch-riders-status`,
-  dispatchRidersSearch: `${PAGE_MEMORY_PREFIX}dispatch-riders-search`
+  dispatchRidersSearch: `${PAGE_MEMORY_PREFIX}dispatch-riders-search`,
+  dispatchRidersStatsMonth: `${PAGE_MEMORY_PREFIX}dispatch-riders-stats-month`
 } as const;
 
 // 历史遗留的订单餐期记忆键：登录重置时一并清除，避免旧记忆残留。

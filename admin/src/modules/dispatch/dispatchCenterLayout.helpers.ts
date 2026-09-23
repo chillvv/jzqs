@@ -14,6 +14,8 @@ export type NewRiderDraft = {
   riderName: string;
   phone: string;
   enabled: boolean;
+  /** 月薪（元），空字符串表示未设置；用于「骑手月度配送成本」统计的单均成本计算。 */
+  monthlySalary: string;
 };
 
 export const DEFAULT_OPERATOR = "管理员";
@@ -32,7 +34,8 @@ export function createEmptyNewRiderDraft(): NewRiderDraft {
   return {
     riderName: "",
     phone: "",
-    enabled: true
+    enabled: true,
+    monthlySalary: ""
   };
 }
 
@@ -225,7 +228,8 @@ export function validateCreateRiderDraft(draft: NewRiderDraft) {
 
   return {
     riderName: riderNameError,
-    phone: phoneError
+    phone: phoneError,
+    monthlySalary: validateMonthlySalaryInput(draft.monthlySalary)
   };
 }
 
@@ -236,11 +240,102 @@ export function validateAreaName(value: string) {
   return "";
 }
 
+/** 月薪输入校验：留空表示未设置；填了必须是非负数字。 */
+export function validateMonthlySalaryInput(value: string) {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) {
+    return "";
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) {
+    return "月薪需为数字";
+  }
+  if (parsed < 0) {
+    return "月薪不能为负数";
+  }
+  if (parsed > 999999) {
+    return "月薪数值过大";
+  }
+  return "";
+}
+
+/** 月薪输入（字符串）转接口入参：空串 → null，表示「未设置月薪」。 */
+export function parseMonthlySalaryInput(value: string): number | null {
+  const trimmed = (value ?? "").trim();
+  if (!trimmed) {
+    return null;
+  }
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** 月薪展示：未设置或 0 显示为「未设置」。 */
+export function formatMonthlySalary(value: number | null | undefined) {
+  if (value == null || Number(value) <= 0) {
+    return "未设置";
+  }
+  return `¥ ${Number(value).toFixed(2)}`;
+}
+
+/** 单均人工成本展示：后端未给出（无月薪 / 当月无单）时显示占位符。 */
+export function formatCostPerOrder(value: number | null | undefined) {
+  if (value == null) {
+    return "--";
+  }
+  return `¥ ${Number(value).toFixed(2)}`;
+}
+
+/** 金额展示（保留 2 位小数），用于月度成本合计等数值。 */
+export function formatMoneyAmount(value: number | null | undefined) {
+  const parsed = Number(value);
+  if (value == null || !Number.isFinite(parsed)) {
+    return "0.00";
+  }
+  return parsed.toFixed(2);
+}
+
+/** 占比数值裁剪到 0-100，避免脏数据把占比条撑破。 */
+export function clampPercent(value: number | null | undefined) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return 0;
+  }
+  return Math.min(Math.max(parsed, 0), 100);
+}
+
+export type RiderCostTone = "none" | "low" | "mid" | "high";
+
+/**
+ * 以「整体单均成本」为基准给单个骑手的单均成本分档：
+ * 明显低于基准 = 省（low），接近基准 = 正常（mid），明显高于基准 = 偏贵（high）；
+ * 骑手没有单均成本（未设月薪或当月无单）时为 none。
+ */
+export function resolveRiderCostTone(
+  costPerOrder: number | null | undefined,
+  baseline: number | null | undefined
+): RiderCostTone {
+  if (costPerOrder == null) {
+    return "none";
+  }
+  const safeBaseline = Number(baseline);
+  if (!Number.isFinite(safeBaseline) || safeBaseline <= 0) {
+    return "mid";
+  }
+  if (costPerOrder < safeBaseline * 0.85) {
+    return "low";
+  }
+  if (costPerOrder > safeBaseline * 1.15) {
+    return "high";
+  }
+  return "mid";
+}
+
 export function buildCreateRiderPayload(draft: NewRiderDraft) {
   return {
     riderName: draft.riderName.trim(),
     displayName: draft.riderName.trim(),
     phone: draft.phone.trim(),
-    employmentStatus: draft.enabled ? "ACTIVE" : "DISABLED"
+    employmentStatus: draft.enabled ? "ACTIVE" : "DISABLED",
+    monthlySalary: parseMonthlySalaryInput(draft.monthlySalary)
   };
 }

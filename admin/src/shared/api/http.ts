@@ -23,6 +23,7 @@ import type {
   DispatchManagedRiderResponse,
   DispatchOverviewResponse,
   DispatchPendingItemResponse,
+  DispatchRiderMonthlyStatsResponse,
   DispatchRiderProgressResponse,
   DispatchReassignmentResponse,
   DispatchRiderAuthBindingResponse,
@@ -498,6 +499,14 @@ export async function fetchDispatchManagedRiders(params?: {
   return response.data.data;
 }
 
+export async function fetchDispatchRiderMonthlyStats(month?: string) {
+  const suffix = month ? `?month=${encodeURIComponent(month)}` : "";
+  const response = await http.get<ApiResponse<DispatchRiderMonthlyStatsResponse>>(
+    `/api/admin/dispatch/riders/monthly-stats${suffix}`
+  );
+  return response.data.data;
+}
+
 export async function createDispatchRider(payload: DispatchCreateRiderPayload) {
   const response = await http.post<ApiResponse<DispatchCreateRiderResponse>>("/api/admin/dispatch/riders", payload);
   return response.data.data;
@@ -508,6 +517,7 @@ export async function updateDispatchRiderProfile(riderId: number, payload: {
   displayName: string;
   phone: string;
   areaCode: string;
+  monthlySalary?: number | null;
 }) {
   const response = await http.post<ApiResponse<{ riderId: number; riderName: string; displayName: string; phone: string; areaCode: string }>>(
     `/api/admin/dispatch/riders/${riderId}/profile`,

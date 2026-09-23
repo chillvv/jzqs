@@ -593,12 +593,14 @@ export type DispatchManagedRiderResponse = {
   todayTaskCount: number;
   todayDeliveredCount: number;
   currentOpenid: string | null;
+  monthlySalary: number | null;
 };
 export type DispatchCreateRiderPayload = {
   riderName: string;
   displayName: string;
   phone: string;
   employmentStatus?: string;
+  monthlySalary?: number | null;
 };
 export type DispatchCreateRiderResponse = {
   riderId: number;
@@ -607,6 +609,24 @@ export type DispatchCreateRiderResponse = {
   phone: string;
   areaCode: string | null;
   riderStatus: string;
+};
+export type DispatchRiderMonthlyStatItem = {
+  riderId: number;
+  riderName: string;
+  areaCode: string | null;
+  authStatus: string;
+  deliveredCount: number;
+  sharePercent: number;
+  monthlySalary: number | null;
+  costPerOrder: number | null;
+};
+export type DispatchRiderMonthlyStatsResponse = {
+  month: string;
+  totalDeliveredCount: number;
+  unassignedDeliveredCount: number;
+  totalMonthlyCost: number;
+  averageCostPerOrder: number | null;
+  riders: DispatchRiderMonthlyStatItem[];
 };
 export type DispatchRiderAuthBindingResponse = {
   riderId: number;

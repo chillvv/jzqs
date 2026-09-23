@@ -32,6 +32,7 @@ import com.jzqs.app.dispatch.api.DispatchAreaBindingUpdateResultResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderActivateResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderProfileUpsertResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderStatusResponse;
+import com.jzqs.app.dispatch.api.DispatchRiderMonthlyStatsResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderProgressResponse;
 import com.jzqs.app.dispatch.api.DispatchRouteLabStartResponse;
 import com.jzqs.app.dispatch.api.DispatchRouteLabSimulateRequest;
@@ -40,6 +41,7 @@ import com.jzqs.app.dispatch.api.DispatchRouteSuggestionFeedbackResponse;
 import com.jzqs.app.dispatch.api.DispatchRouteSuggestionRequest;
 import com.jzqs.app.dispatch.api.DispatchRouteSuggestionResponse;
 import com.jzqs.app.dispatch.api.PendingRiderResponse;
+import java.math.BigDecimal;
 import java.util.List;
 
 public interface DispatchService {
@@ -99,11 +101,13 @@ public interface DispatchService {
 
     List<DispatchManagedRiderResponse> managedRiders(String authStatus, String keyword, String areaCode);
 
+    DispatchRiderMonthlyStatsResponse riderMonthlyStats(String month);
+
     List<DispatchRiderProgressResponse> riderProgress(String mealPeriod, String serveDate);
 
-    DispatchRiderProfileUpsertResponse createRider(String riderName, String displayName, String phone, String areaCode, String employmentStatus, String updatedBy);
+    DispatchRiderProfileUpsertResponse createRider(String riderName, String displayName, String phone, String areaCode, String employmentStatus, BigDecimal monthlySalary, String updatedBy);
 
-    DispatchRiderProfileUpsertResponse updateRiderProfile(long riderId, String riderName, String displayName, String phone, String areaCode, String updatedBy);
+    DispatchRiderProfileUpsertResponse updateRiderProfile(long riderId, String riderName, String displayName, String phone, String areaCode, BigDecimal monthlySalary, String updatedBy);
 
     DispatchRiderAuthBindingResponse riderAuthBinding(long riderId);
 

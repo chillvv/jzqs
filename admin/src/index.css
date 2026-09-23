@@ -7134,3 +7134,352 @@ tbody tr:last-child td {
     align-items: stretch;
   }
 }
+
+/* ============ 骑手月度配送成本（骑手管理页） ============ */
+.rider-cost-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.rider-cost-panel__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 18px 20px 0;
+}
+
+.rider-cost-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.rider-cost-panel__subtitle {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-sub);
+}
+
+.rider-cost-panel__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.rider-cost-panel__count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-sub);
+}
+
+/* KPI 卡片：比页面顶部的 stat-card 更紧凑，形成层次差 */
+.rider-cost-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+  padding: 16px 20px;
+}
+
+.rider-cost-kpi {
+  padding: 13px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(var(--primary-rgb), 0.16);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, var(--primary-lightest) 100%);
+  box-shadow: 0 2px 8px rgba(var(--primary-rgb), 0.05);
+  min-width: 0;
+}
+
+.rider-cost-kpi__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-sub);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.rider-cost-kpi__value {
+  margin-top: 6px;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--text-main);
+}
+
+.rider-cost-kpi__unit {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-sub);
+}
+
+.rider-cost-kpi__hint {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-subtle);
+}
+
+.rider-cost-kpi--cost .rider-cost-kpi__value {
+  color: var(--error-500);
+}
+
+.rider-cost-kpi--unit .rider-cost-kpi__value {
+  color: var(--primary-color);
+}
+
+/* 骑手成本排行 */
+.rider-cost-list {
+  padding: 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rider-cost-list__head,
+.rider-cost-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1.1fr) minmax(200px, 2.2fr) minmax(88px, 0.75fr) minmax(130px, 0.95fr);
+  align-items: center;
+  gap: 16px;
+}
+
+.rider-cost-list__head {
+  padding: 0 12px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.4px;
+}
+
+.rider-cost-list__head span:last-child,
+.rider-cost-row__cost {
+  text-align: right;
+}
+
+.rider-cost-row {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+.rider-cost-row:hover {
+  background: rgba(var(--primary-rgb), 0.05);
+  border-color: rgba(var(--primary-rgb), 0.18);
+}
+
+.rider-cost-row--idle {
+  opacity: 0.62;
+}
+
+.rider-cost-row__rider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rider-cost-row__rank {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-sub);
+  background: var(--border-light);
+}
+
+.rider-cost-row__rank--top {
+  color: var(--text-on-primary);
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-light) 100%);
+}
+
+.rider-cost-row__name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rider-cost-row__area {
+  flex: none;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--text-subtle);
+  background: var(--border-light);
+  white-space: nowrap;
+}
+
+.rider-cost-row__volume {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.rider-cost-bar {
+  flex: 1;
+  min-width: 50px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border-light);
+  overflow: hidden;
+}
+
+.rider-cost-bar__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary-color) 0%, var(--primary-light) 100%);
+  transition: width 0.35s ease;
+}
+
+.rider-cost-row__numbers {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-sub);
+  white-space: nowrap;
+}
+
+.rider-cost-row__numbers strong {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-right: 2px;
+}
+
+.rider-cost-row__salary {
+  font-size: 13px;
+  color: var(--text-sub);
+  white-space: nowrap;
+}
+
+.rider-cost-row__salary--empty {
+  color: var(--text-muted);
+}
+
+/* 单均成本胶囊：以整体单均成本为基准分档着色 */
+.rider-cost-pill {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 3px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.rider-cost-pill__unit {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.rider-cost-pill--low {
+  color: var(--success-700);
+  background: var(--success-bg);
+}
+
+.rider-cost-pill--mid {
+  color: var(--primary-darker);
+  background: var(--primary-lighter);
+}
+
+.rider-cost-pill--high {
+  color: var(--error-700);
+  background: var(--error-bg);
+}
+
+.rider-cost-pill--none {
+  color: var(--text-subtle);
+  background: var(--border-light);
+}
+
+.rider-cost-legend {
+  padding: 10px 20px 0;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  color: var(--text-subtle);
+}
+
+.rider-cost-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.rider-cost-legend__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+}
+
+.rider-cost-note {
+  padding: 12px 20px 18px;
+  font-size: 12px;
+  color: var(--text-sub);
+  line-height: 1.6;
+}
+
+.rider-cost-empty {
+  margin: 0 20px 18px;
+  padding: 24px;
+  border-radius: 12px;
+  border: 1px dashed rgba(var(--primary-rgb), 0.28);
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-sub);
+}
+
+@media (max-width: 768px) {
+  .rider-cost-kpis {
+    padding: 14px 16px;
+  }
+
+  .rider-cost-list {
+    padding: 0 16px;
+  }
+
+  .rider-cost-list__head {
+    display: none;
+  }
+
+  .rider-cost-row {
+    grid-template-columns: 1fr auto;
+    row-gap: 8px;
+    padding: 12px;
+  }
+
+  .rider-cost-row__volume {
+    grid-column: 1 / -1;
+  }
+
+  .rider-cost-note,
+  .rider-cost-legend {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}

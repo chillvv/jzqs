@@ -1,5 +1,7 @@
 package com.jzqs.app.dispatch.api;
 
+import java.math.BigDecimal;
+
 public record DispatchManagedRiderResponse(
     long riderId,
     String riderName,
@@ -13,6 +15,7 @@ public record DispatchManagedRiderResponse(
     String lastLoginAt,
     int todayTaskCount,
     int todayDeliveredCount,
-    String currentOpenid
+    String currentOpenid,
+    BigDecimal monthlySalary
 ) {
 }

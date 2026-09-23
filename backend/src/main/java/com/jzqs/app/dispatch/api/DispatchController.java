@@ -101,6 +101,13 @@ public class DispatchController {
         return ApiResponse.success(dispatchService.riderProgress(mealPeriod, serveDate));
     }
 
+    @GetMapping("/riders/monthly-stats")
+    public ApiResponse<DispatchRiderMonthlyStatsResponse> riderMonthlyStats(
+        @RequestParam(required = false) String month
+    ) {
+        return ApiResponse.success(dispatchService.riderMonthlyStats(month));
+    }
+
     @PostMapping("/riders")
     @RateLimit(key = "admin:dispatch:create-rider", maxRequests = 3, windowSeconds = 10)
     @Idempotent(key = "admin:dispatch:create-rider", ttlSeconds = 8, includeBody = true)
@@ -113,6 +120,7 @@ public class DispatchController {
             request.phone(),
             request.areaCode(),
             request.employmentStatus(),
+            request.monthlySalary(),
             operatorName
         ));
     }
@@ -132,6 +140,7 @@ public class DispatchController {
             request.displayName(),
             request.phone(),
             request.areaCode(),
+            request.monthlySalary(),
             operatorName
         ));
     }

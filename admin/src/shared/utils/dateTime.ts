@@ -10,6 +10,13 @@ export function formatLocalDateInputValue(value: Date = new Date()) {
   return `${year}-${month}-${day}`;
 }
 
+/** 月份输入值（yyyy-MM），用于 <input type="month"> 与按月统计接口的 month 参数。 */
+export function formatLocalMonthInputValue(value: Date = new Date()) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
 export function shiftLocalDateInputValue(value: string, offsetDays: number) {
   const raw = normalizeDateInput(value);
   const [year, month, day] = raw.split("-").map(Number);

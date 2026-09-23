@@ -1,8 +1,10 @@
 package com.jzqs.app.dispatch.api;
 
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.math.BigDecimal;
 
 public record DispatchCreateRiderRequest(
     @NotBlank
@@ -18,6 +20,8 @@ public record DispatchCreateRiderRequest(
     String phone,
     String areaCode,
     String employmentStatus,
+    @DecimalMin(value = "0", message = "月薪不能为负数")
+    BigDecimal monthlySalary,
     String updatedBy
 ) {
 }

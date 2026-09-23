@@ -5,6 +5,7 @@ import {
   createDispatchRider,
   deleteDispatchRider,
   disableDispatchRider,
+  extractAdminApiErrorMessage,
   fetchDispatchManagedRiders,
   updateDispatchRiderProfile
 } from "../../shared/api/http";
@@ -13,9 +14,11 @@ import { AppSelect } from "../../shared/components/AppSelect";
 import { AdminDialog } from "../../shared/components/AdminDialog";
 import { SafeInput } from "../../shared/components/SafeInput";
 import { toast } from "../../shared/components/Toast";
+import { DispatchRiderMonthlyCostPanel } from "./components/DispatchRiderMonthlyCostPanel";
 import {
   buildCreateRiderPayload,
   createEmptyNewRiderDraft,
+  formatMonthlySalary,
   riderStatusLabel,
   riderStatusTagClass,
   validateCreateRiderDraft,
@@ -24,10 +27,6 @@ import {
 import { usePersistedState, PAGE_MEMORY_KEYS } from "../../shared/hooks/usePersistedState";
 
 const selectStyle: React.CSSProperties = { width: "100%" };
-
-function getErrorMessage(error: any, fallback: string) {
-  return error?.response?.data?.message || error?.message || fallback;
-}
 
 const STATUS_FILTER_OPTIONS = [
   { label: "全部人员", value: "全部" },
@@ -47,11 +46,12 @@ export function DispatchRidersPage() {
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [deleteConfirmRider, setDeleteConfirmRider] = useState<DispatchManagedRiderResponse | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [statsRefreshToken, setStatsRefreshToken] = useState(0);
   const fieldErrors = validateCreateRiderDraft(draft);
-  const canSubmit = !fieldErrors.riderName && !fieldErrors.phone;
+  const canSubmit = !fieldErrors.riderName && !fieldErrors.phone && !fieldErrors.monthlySalary;
 
   useEffect(() => {
-    reload().catch((err) => toast(getErrorMessage(err, "加载骑手列表失败"), "error"));
+    reload().catch((err) => toast(extractAdminApiErrorMessage(err, "加载骑手列表失败"), "error"));
   }, []);
 
   useEffect(() => {
@@ -85,6 +85,8 @@ export function DispatchRidersPage() {
   async function reload() {
     const data = await fetchDispatchManagedRiders();
     setRiders(data);
+    // 月薪、骑手名单变化都会影响月度成本口径，列表刷新后同步刷新统计面板
+    setStatsRefreshToken((token) => token + 1);
   }
 
   function openAdd() {
@@ -97,7 +99,8 @@ export function DispatchRidersPage() {
     setDraft({
       riderName: rider.riderName,
       phone: rider.phone || "",
-      enabled: rider.authStatus === "ACTIVE"
+      enabled: rider.authStatus === "ACTIVE",
+      monthlySalary: rider.monthlySalary != null ? String(rider.monthlySalary) : ""
     });
     setEditRider(rider);
     setShowAddModal(true);
@@ -116,7 +119,8 @@ export function DispatchRidersPage() {
           riderName: payload.riderName,
           displayName: payload.displayName,
           phone: payload.phone,
-          areaCode: editRider.areaCode || ""
+          areaCode: editRider.areaCode || "",
+          monthlySalary: payload.monthlySalary
         });
         if (draft.enabled && editRider.authStatus !== "ACTIVE") {
           await activateDispatchRider(editRider.riderId, {
@@ -133,7 +137,7 @@ export function DispatchRidersPage() {
       await reload();
       toast(editRider ? "骑手信息已更新" : "骑手已创建");
     } catch (err: any) {
-      toast(getErrorMessage(err, editRider ? "保存骑手失败" : "创建骑手失败"), "error");
+      toast(extractAdminApiErrorMessage(err, editRider ? "保存骑手失败" : "创建骑手失败"), "error");
     } finally {
       setSaving(false);
     }
@@ -152,7 +156,7 @@ export function DispatchRidersPage() {
       }
       await reload();
     } catch (err: any) {
-      toast(getErrorMessage(err, "操作失败"), "error");
+      toast(extractAdminApiErrorMessage(err, "操作失败"), "error");
     } finally {
       setTogglingId(null);
     }
@@ -167,7 +171,7 @@ export function DispatchRidersPage() {
       await reload();
       toast("骑手已删除");
     } catch (err: any) {
-      toast(getErrorMessage(err, "删除骑手失败"), "error");
+      toast(extractAdminApiErrorMessage(err, "删除骑手失败"), "error");
     } finally {
       setDeleting(false);
     }
@@ -197,6 +201,8 @@ export function DispatchRidersPage() {
           <div className="stat-footer">全部骑手合计</div>
         </div>
       </div>
+
+      <DispatchRiderMonthlyCostPanel refreshToken={statsRefreshToken} />
 
       <div className="toolbar">
         <div className="dispatch-toolbar">
@@ -329,6 +335,26 @@ export function DispatchRidersPage() {
             placeholder="后台建档后供骑手登录绑定"
           />
           {fieldErrors.phone && <div className="form-error">{fieldErrors.phone}</div>}
+        </label>
+
+        <label className="admin-field">
+          <span className="admin-field-label">月薪（元）</span>
+          <SafeInput
+            type="number"
+            step="0.01"
+            min="0"
+            wrapperClassName={fieldErrors.monthlySalary ? "admin-input--error" : ""}
+            value={draft.monthlySalary}
+            onValueChange={(value) => setDraft((d) => ({ ...d, monthlySalary: value }))}
+            placeholder="留空表示暂不设置"
+          />
+          {fieldErrors.monthlySalary ? (
+            <div className="form-error">{fieldErrors.monthlySalary}</div>
+          ) : (
+            <div className="dispatch-section__note">
+              用于「骑手月度配送成本」的单均成本：月薪 ÷ 当月单量
+            </div>
+          )}
         </label>
 
         <label className="admin-field" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>

@@ -7,16 +7,23 @@ import com.jzqs.app.dispatch.api.DispatchRiderActivateResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderAuthBindingResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderAuthTakeoverResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderAuthUnbindResponse;
+import com.jzqs.app.dispatch.api.DispatchRiderMonthlyStatItem;
+import com.jzqs.app.dispatch.api.DispatchRiderMonthlyStatsResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderProfileUpsertResponse;
 import com.jzqs.app.dispatch.api.DispatchRiderStatusResponse;
 import com.jzqs.app.dispatch.api.PendingRiderResponse;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -77,6 +84,7 @@ class DispatchRiderAdminModule {
                     rp.current_openid,
                     rp.first_login_at,
                     rp.last_login_at,
+                    rp.monthly_salary,
                     COALESCE((
                         SELECT SUM(db.total_count)
                         FROM dispatch_batches db
@@ -123,8 +131,124 @@ class DispatchRiderAdminModule {
             formatTimestamp(rs.getTimestamp("last_login_at")),
             rs.getInt("today_task_count"),
             rs.getInt("today_delivered_count"),
-            rs.getString("current_openid")
+            rs.getString("current_openid"),
+            rs.getBigDecimal("monthly_salary")
         ), args.toArray());
+    }
+
+    /**
+     * 骑手月度配送人工成本统计。
+     * 单量口径：dispatch_assignments.status = 'DELIVERED' 的餐段订单数（一个餐段订单 = 1 单），
+     * 按 daily_orders.serve_date 落在目标月份；取消/退款的订单派单行已被删除，天然不计入。
+     * 占比分母为该月全部已送达单量（含未归属骑手的孤儿单），保证各骑手占比之和不超过 100%。
+     */
+    DispatchRiderMonthlyStatsResponse riderMonthlyStats(String month) {
+        YearMonth targetMonth = parseMonth(month);
+        java.sql.Date monthStart = java.sql.Date.valueOf(targetMonth.atDay(1));
+        java.sql.Date monthEnd = java.sql.Date.valueOf(targetMonth.atEndOfMonth());
+
+        Map<String, Object> totals = jdbcTemplate.queryForMap(
+            """
+                SELECT
+                    COUNT(*) AS total_delivered,
+                    COALESCE(SUM(CASE WHEN da.rider_profile_id IS NULL THEN 1 ELSE 0 END), 0) AS unassigned_delivered
+                FROM dispatch_assignments da
+                JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
+                JOIN daily_orders doo ON doo.id = mso.daily_order_id
+                WHERE da.status = 'DELIVERED'
+                  AND doo.serve_date BETWEEN ? AND ?
+                """,
+            monthStart,
+            monthEnd
+        );
+        int totalDelivered = ((Number) totals.get("total_delivered")).intValue();
+        int unassignedDelivered = ((Number) totals.get("unassigned_delivered")).intValue();
+
+        List<DispatchRiderMonthlyStatItem> riders = jdbcTemplate.query(
+            """
+                SELECT
+                    rp.id,
+                    rp.rider_name,
+                    rp.default_area_code,
+                    rp.auth_status,
+                    rp.monthly_salary,
+                    COALESCE(stats.delivered_count, 0) AS delivered_count
+                FROM rider_profiles rp
+                LEFT JOIN (
+                    SELECT da.rider_profile_id AS rider_id, COUNT(*) AS delivered_count
+                    FROM dispatch_assignments da
+                    JOIN meal_slot_orders mso ON mso.id = da.meal_slot_order_id
+                    JOIN daily_orders doo ON doo.id = mso.daily_order_id
+                    WHERE da.status = 'DELIVERED'
+                      AND da.rider_profile_id IS NOT NULL
+                      AND doo.serve_date BETWEEN ? AND ?
+                    GROUP BY da.rider_profile_id
+                ) stats ON stats.rider_id = rp.id
+                ORDER BY delivered_count DESC, rp.id ASC
+                """,
+            (rs, rowNum) -> {
+                int deliveredCount = rs.getInt("delivered_count");
+                BigDecimal monthlySalary = rs.getBigDecimal("monthly_salary");
+                return new DispatchRiderMonthlyStatItem(
+                    rs.getLong("id"),
+                    rs.getString("rider_name"),
+                    rs.getString("default_area_code"),
+                    rs.getString("auth_status"),
+                    deliveredCount,
+                    sharePercent(deliveredCount, totalDelivered),
+                    monthlySalary,
+                    costPerOrder(monthlySalary, deliveredCount)
+                );
+            },
+            monthStart,
+            monthEnd
+        );
+
+        BigDecimal totalMonthlyCost = riders.stream()
+            .map(DispatchRiderMonthlyStatItem::monthlySalary)
+            .filter(java.util.Objects::nonNull)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal averageCostPerOrder = totalDelivered <= 0 || totalMonthlyCost.signum() <= 0
+            ? null
+            : totalMonthlyCost.divide(BigDecimal.valueOf(totalDelivered), 2, RoundingMode.HALF_UP);
+
+        return new DispatchRiderMonthlyStatsResponse(
+            targetMonth.toString(),
+            totalDelivered,
+            unassignedDelivered,
+            totalMonthlyCost,
+            averageCostPerOrder,
+            riders
+        );
+    }
+
+    private static YearMonth parseMonth(String month) {
+        if (month == null || month.isBlank()) {
+            return YearMonth.now();
+        }
+        try {
+            return YearMonth.parse(month.trim());
+        } catch (DateTimeParseException ex) {
+            throw new BusinessException(ErrorCode.VALIDATION_ERROR, "月份格式应为 YYYY-MM");
+        }
+    }
+
+    /** 单量占比（%），保留 1 位小数。 */
+    private static BigDecimal sharePercent(int deliveredCount, int totalDelivered) {
+        if (totalDelivered <= 0) {
+            return BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
+        }
+        return BigDecimal.valueOf(deliveredCount)
+            .multiply(BigDecimal.valueOf(100))
+            .divide(BigDecimal.valueOf(totalDelivered), 1, RoundingMode.HALF_UP);
+    }
+
+    /** 单均人工成本 = 月薪 ÷ 当月单量；月薪未设置或当月无单时为 null。 */
+    private static BigDecimal costPerOrder(BigDecimal monthlySalary, int deliveredCount) {
+        if (monthlySalary == null || monthlySalary.signum() <= 0 || deliveredCount <= 0) {
+            return null;
+        }
+        return monthlySalary.divide(BigDecimal.valueOf(deliveredCount), 2, RoundingMode.HALF_UP);
     }
 
     DispatchRiderProfileUpsertResponse createRider(
@@ -133,6 +257,7 @@ class DispatchRiderAdminModule {
         String phone,
         String areaCode,
         String employmentStatus,
+        BigDecimal monthlySalary,
         String updatedBy,
         AreaBindingUpdater areaBindingUpdater
     ) {
@@ -151,11 +276,12 @@ class DispatchRiderAdminModule {
                     default_area_code,
                     display_order,
                     remark,
+                    monthly_salary,
                     auth_status,
                     assigned_at,
                     assigned_by,
                     created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
             riderName,
             displayName,
@@ -164,6 +290,7 @@ class DispatchRiderAdminModule {
             normalizedAreaCode,
             0,
             null,
+            monthlySalary,
             active ? "ACTIVE" : "DISABLED",
             Timestamp.valueOf(now),
             updatedBy,
@@ -172,15 +299,16 @@ class DispatchRiderAdminModule {
         if (normalizedAreaCode != null && active) {
             areaBindingUpdater.update(normalizedAreaCode, null, riderId, null, updatedBy);
         }
-        log.info("创建骑手: riderId={} name={} phone={} area={} employment={} operator={}",
-            riderId, riderName, phone, normalizedAreaCode, employmentStatus, updatedBy);
+        log.info("创建骑手: riderId={} name={} phone={} area={} employment={} monthlySalary={} operator={}",
+            riderId, riderName, phone, normalizedAreaCode, employmentStatus, monthlySalary, updatedBy);
         return new DispatchRiderProfileUpsertResponse(
             riderId,
             riderName,
             displayName,
             phone,
             normalizedAreaCode,
-            active ? "ACTIVE" : "DISABLED"
+            active ? "ACTIVE" : "DISABLED",
+            monthlySalary
         );
     }
 
@@ -190,6 +318,7 @@ class DispatchRiderAdminModule {
         String displayName,
         String phone,
         String areaCode,
+        BigDecimal monthlySalary,
         String updatedBy,
         AreaBindingUpdater areaBindingUpdater
     ) {
@@ -213,6 +342,7 @@ class DispatchRiderAdminModule {
                     display_name = ?,
                     phone = ?,
                     default_area_code = ?,
+                    monthly_salary = ?,
                     assigned_by = ?,
                     assigned_at = CURRENT_TIMESTAMP
                 WHERE id = ?
@@ -221,6 +351,7 @@ class DispatchRiderAdminModule {
             displayName,
             phone,
             normalizedAreaCode,
+            monthlySalary,
             updatedBy,
             riderId
         );
@@ -276,7 +407,8 @@ class DispatchRiderAdminModule {
             displayName,
             phone,
             normalizedAreaCode,
-            riderStatus
+            riderStatus,
+            monthlySalary
         );
     }
 
