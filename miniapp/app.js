@@ -2,7 +2,8 @@ const auth = require('./utils/auth');
 const {
   requestCombinedSubscribeAuthorization,
   cacheDeliveryAcceptResult,
-  saveNightlySubscription
+  saveNightlySubscription,
+  flushPendingDeliverySubscriptions
 } = require('./utils/delivery-subscription');
 const {
   DEFAULT_API_BASE_URL,
@@ -71,6 +72,9 @@ App({
     // 初始化统一认证
     try {
       await auth.init();
+      // 上一次下单「授权成功但落库请求失败」的订单必须在这里补写：
+      // 落库缺失会让该单送达时查不到订阅记录而永久不推送（这是纯 HTTP 补写，不涉及微信授权弹窗，无需用户点击）。
+      flushPendingDeliverySubscriptions().catch(() => null);
       if (!auth.shouldRedirectToAuth()) {
         // 注意：微信要求 wx.requestSubscribeMessage 必须由「用户点击」行为触发，
         // 不能在登录/启动等自动流程中静默调用（会被微信拦截，返回 fail "can only be

@@ -52,13 +52,16 @@ class DeliverySubscriptionModule {
             ) VALUES (?, ?, ?, 'AUTHORIZED', 'MINIAPP_ORDER_SUCCESS', CURRENT_TIMESTAMP)
             ON DUPLICATE KEY UPDATE
                 customer_id = VALUES(customer_id),
-                template_id = VALUES(template_id),
-                status = 'AUTHORIZED',
-                source = VALUES(source),
-                authorized_at = VALUES(authorized_at),
-                sent_at = NULL,
-                last_error_message = NULL,
-                retry_count = 0
+                -- 已成功下发过的记录不允许被重新绑定"复活"：延误的补写重试若把 SENT 重置为 AUTHORIZED，
+                -- 定时任务会给同一订单再推一条重复的取餐提醒（顾客重复取餐投诉）。
+                -- 其余状态（含 43101 作废）：用户在本次重新点了「允许」，等于拿到一条新额度，必须重置。
+                template_id = IF(status = 'SENT', template_id, VALUES(template_id)),
+                status = IF(status = 'SENT', status, 'AUTHORIZED'),
+                source = IF(status = 'SENT', source, VALUES(source)),
+                authorized_at = IF(status = 'SENT', authorized_at, VALUES(authorized_at)),
+                sent_at = IF(status = 'SENT', sent_at, NULL),
+                last_error_message = IF(status = 'SENT', last_error_message, NULL),
+                retry_count = IF(status = 'SENT', retry_count, 0)
             """,
             customerId,
             orderId,
@@ -209,7 +212,14 @@ class DeliverySubscriptionModule {
                  OR cds.status = 'AUTHORIZED'
                  OR (cds.status = 'FAILED' AND cds.retry_count < ?)
               )
-            ORDER BY CASE WHEN cds.status = 'FAILED' THEN 1 ELSE 0 END, mso.id
+            -- 额度紧张时「自己的额度必须先给自己用」：本批次优先处理已有授权记录的订单，
+            -- 缺记录的订单要靠"借用客户其他订单的授权"（见 ensureDeliverySubscriptionFromCustomerConsent），
+            -- 排在最后，避免先用掉只够发一条的额度，导致正常下单的顾客反而收不到通知。
+            ORDER BY CASE
+                        WHEN cds.id IS NULL THEN 2
+                        WHEN cds.status = 'FAILED' THEN 1
+                        ELSE 0
+                     END, mso.id
             """,
             (rs, rowNum) -> rs.getLong(1),
             mealPeriod,
@@ -329,6 +339,9 @@ class DeliverySubscriptionModule {
                 Timestamp.valueOf(triggerTime),
                 context.id()
             );
+            if (context.donorSubscriptionId() > 0) {
+                markDonorConsumed(context.donorSubscriptionId());
+            }
             return new DeliverySendResult(true, "SENT");
         } catch (BusinessException ex) {
             if (ex.getErrorCode() == ErrorCode.SUBSCRIPTION_REVOKED_BY_USER) {
@@ -405,23 +418,36 @@ class DeliverySubscriptionModule {
             return null;
         }
         String templateId = weChatService.resolveDeliveryTemplateId(orderContext.mealPeriod());
-        Integer activeConsentCount = jdbcTemplate.queryForObject(
+        // 借用的"授权凭据"必须来自用户在小程序里真正点过「允许」的记录：
+        // 由本兜底逻辑自己补写的继承记录（INHERITED_FROM_CUSTOMER_CONSENT）不能再次当作凭据，
+        // 否则一条历史授权会被无限复制成每天都"有授权"的假象（发送必然 43101），制造永久无效记录。
+        // 每条真实授权也只能被借用一次：借用成功后原单据那里的额度即已消耗（见 markDonorConsumed）。
+        List<Long> donorIds = jdbcTemplate.queryForList(
             """
-            SELECT COUNT(*)
-            FROM customer_delivery_subscriptions
-            WHERE customer_id = ? AND template_id = ? AND status IN ('AUTHORIZED', 'FAILED')
+            SELECT cds.id
+            FROM customer_delivery_subscriptions cds
+            JOIN meal_slot_orders mso ON mso.id = cds.meal_slot_order_id
+            JOIN daily_orders do ON do.id = mso.daily_order_id
+            WHERE cds.customer_id = ? AND cds.template_id = ? AND cds.status IN ('AUTHORIZED', 'FAILED')
+              AND cds.source <> 'INHERITED_FROM_CUSTOMER_CONSENT'
+              -- 只能借用"已经不可能自己再用掉"的额度：若是今天/明天的订单，它自己的取餐提醒还没发，
+              -- 借用会把它的额度花掉，让这单到点反而收不到——那是真正众正常下单的顾客。
+              AND do.serve_date < CURDATE()
+            ORDER BY cds.authorized_at
+            LIMIT 1
             """,
-            Integer.class,
+            Long.class,
             orderContext.customerId(),
             templateId
         );
-        if (activeConsentCount == null || activeConsentCount == 0) {
+        if (donorIds.isEmpty()) {
             log.debug(
                 "客户 {} 在模板 {} 上没有有效的取餐订阅授权，订单 {} 不发送取餐提醒",
                 orderContext.customerId(), templateId, mealSlotOrderId
             );
             return null;
         }
+        long donorSubscriptionId = donorIds.get(0);
         // 为该订单补写取餐订阅记录；meal_slot_order_id 唯一键，使用 INSERT IGNORE 防止并发/重复写入冲突
         int inserted = jdbcTemplate.update(
             """
@@ -433,10 +459,39 @@ class DeliverySubscriptionModule {
             mealSlotOrderId,
             templateId
         );
+        DeliverySubscriptionSendContext context = findDeliverySubscriptionSendContext(mealSlotOrderId);
         if (inserted > 0) {
             pruneOldDeliverySubscriptions();
         }
-        return findDeliverySubscriptionSendContext(mealSlotOrderId);
+        if (context == null) {
+            return null;
+        }
+        return new DeliverySubscriptionSendContext(
+            context.id(),
+            context.templateId(),
+            context.mealPeriod(),
+            context.openid(),
+            context.dishNames(),
+            context.riderPhone(),
+            context.pickupLocation(),
+            donorSubscriptionId
+        );
+    }
+
+    /**
+     * 标记被借用的授权额度已消耗：一次「允许」只够发一条，借用出去后原订单那边的额度就没有了。
+     * 不标记会让同一条额度反复被不同订单借用，把本该收得到通知的正常订单拖成 43101。
+     */
+    private void markDonorConsumed(long donorSubscriptionId) {
+        jdbcTemplate.update(
+            """
+            UPDATE customer_delivery_subscriptions
+            SET status = 'CANCELLED',
+                last_error_message = '该次授权额度已被同模板的其他订单使用'
+            WHERE id = ? AND status IN ('AUTHORIZED', 'FAILED')
+            """,
+            donorSubscriptionId
+        );
     }
 
     private DeliverySubscriptionSendContext findDeliverySubscriptionSendContext(long mealSlotOrderId) {
@@ -473,7 +528,8 @@ class DeliverySubscriptionModule {
                     rs.getString("current_openid"),
                     parseDishNames(rs.getString("dish_items_json")),
                     rs.getString("rider_phone"),
-                    rs.getString("pickup_location")
+                    rs.getString("pickup_location"),
+                    0L
                 )
                 : null
         );
@@ -526,7 +582,8 @@ class DeliverySubscriptionModule {
                     rs.getString("current_openid"),
                     "",
                     "",
-                    ""
+                    "",
+                    0L
                 )
                 : null
         );
@@ -551,7 +608,9 @@ class DeliverySubscriptionModule {
         String openid,
         String dishNames,
         String riderPhone,
-        String pickupLocation
+        String pickupLocation,
+        /** 本条记录是靠借用他人额度下发时，被借用的那条授权记录 ID；0 表示使用的是自己的授权 */
+        long donorSubscriptionId
     ) {
     }
 

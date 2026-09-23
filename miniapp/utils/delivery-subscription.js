@@ -8,6 +8,9 @@ const DELIVERY_TEMPLATE_ID = 'Od1mOKtl8DPnP0-mVyKKtP4HSYyk3sPbGazcHXZntEs';
 const DELIVERY_DINNER_TEMPLATE_ID = 'JnboF3P2VaeXm92BPDz7SSdv74LS_t2y7aGtR3OUQac';
 const NIGHTLY_TEMPLATE_ID = 'gNYZT0Nu18WbkIbgX23zD-fF2h1Gt_-6E3EsWoJCLkQ';
 const DELIVERY_ACCEPT_CACHE_KEY = 'delivery_subscribe_accept_cache';
+// 落库失败的订阅绑定队列：授权在微信侧已生效但记录没写进后端时，该订单送达会永久收不到通知。
+// 必须持久化并在下次进入小程序时静默补写（不是重新弹授权框，只是补那条落库请求）。
+const PENDING_BINDINGS_KEY = 'delivery_subscribe_pending_bindings';
 const ACCEPTED_DELIVERY_SUBSCRIPTION_RESULTS = ['accept', 'acceptWithAudio', 'acceptWithAlert'];
 
 // 微信侧「用户无法自行解决」的授权状态：ban=模板被微信后台封禁，filter=同一次弹窗里
@@ -117,6 +120,49 @@ function getCachedDeliveryAcceptResult() {
  * @param {Array<{orderId: number|string, templateId: string, acceptResult: string}>} bindings
  * @returns {Promise<number>} 落库成功的订单数
  */
+function readPendingBindings() {
+  try {
+    const raw = wx.getStorageSync(PENDING_BINDINGS_KEY) || '[]';
+    const list = JSON.parse(raw);
+    return Array.isArray(list) ? list : [];
+  } catch (error) {
+    return [];
+  }
+}
+
+function writePendingBindings(list) {
+  try {
+    if (!list.length) {
+      wx.removeStorageSync(PENDING_BINDINGS_KEY);
+      return;
+    }
+    // 只保留最近的若干条：队列是纠错兜底，不是历史档案，避免无限增长
+    wx.setStorageSync(PENDING_BINDINGS_KEY, JSON.stringify(list.slice(-20)));
+  } catch (error) {
+    console.error('[delivery-subscription] 写入待补写队列失败', error && error.message);
+  }
+}
+
+/**
+ * 静默补写上一次落库失败的订阅绑定。
+ * 授权一旦在微信侧生效，额度就存在；只是补写请求（不是重新弹授权框，不需要用户点击），
+ * 因此在 app 启动、订单页进入时重试是安全的，也不打扰用户。
+ * @returns {Promise<number>} 本次补写成功的条数
+ */
+async function flushPendingDeliverySubscriptions() {
+  const pending = readPendingBindings();
+  if (!pending.length) {
+    return 0;
+  }
+  const results = await Promise.all(pending.map((item) => saveOneOrderSubscription(item, { silent: true })));
+  const remaining = pending.filter((item, index) => !results[index]);
+  writePendingBindings(remaining);
+  if (remaining.length < pending.length) {
+    console.log(`[delivery-subscription] 补写取餐订阅成功 ${pending.length - remaining.length} 条`);
+  }
+  return pending.length - remaining.length;
+}
+
 async function saveOrderDeliverySubscription(bindings) {
   if (!Array.isArray(bindings) || !bindings.length) {
     return 0;
@@ -126,12 +172,16 @@ async function saveOrderDeliverySubscription(bindings) {
     return 0;
   }
   const results = await Promise.all(targets.map((item) => saveOneOrderSubscription(item)));
+  // 未成功的绑定不能丢：写进待补写队列，下次进入小程序时静默重试，
+  // 否则该订单送达时没有订阅记录，靠后台兜底也不一定补得回来。
+  const failed = targets.filter((item, index) => !results[index]);
+  writePendingBindings(failed);
   cacheDeliveryAcceptResult('');
   return results.filter(Boolean).length;
 }
 
 /** 单订单落库，失败重试一次；仍失败则打印可检索日志（下单已成，不再打扰用户） */
-async function saveOneOrderSubscription({ orderId, templateId, acceptResult }) {
+async function saveOneOrderSubscription({ orderId, templateId, acceptResult }, options = {}) {
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
       await request({
@@ -149,10 +199,17 @@ async function saveOneOrderSubscription({ orderId, templateId, acceptResult }) {
       return true;
     } catch (error) {
       if (attempt === 2) {
-        console.error(
-          `[delivery-subscription] 取餐订阅落库失败 orderId=${orderId} templateId=${templateId}`,
-          error && error.message
-        );
+        if (options.silent) {
+          console.warn(
+            `[delivery-subscription] 待补写队列再次失败 orderId=${orderId}`,
+            error && error.message
+          );
+        } else {
+          console.error(
+            `[delivery-subscription] 取餐订阅落库失败 orderId=${orderId} templateId=${templateId}`,
+            error && error.message
+          );
+        }
         return false;
       }
     }
@@ -300,6 +357,7 @@ module.exports = {
   requestNightlySubscribeAuthorization,
   requestCombinedSubscribeAuthorization,
   saveOrderDeliverySubscription,
+  flushPendingDeliverySubscriptions,
   saveNightlySubscription,
   cancelNightlySubscription,
   syncNightlySubscription,

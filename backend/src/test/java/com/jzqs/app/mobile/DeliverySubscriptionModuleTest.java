@@ -393,6 +393,268 @@ class DeliverySubscriptionModuleTest {
         );
     }
 
+    @Test
+    void alreadySentSubscriptionShouldNotBeResurrectedByLateBinding() {
+        // 场景：下单时授权落库请求丢失，顾客第二天才打开小程序、延迟补写。
+        // 此时该订单的通知可能已经发出：补写不能把 SENT 重置回 AUTHORIZED，
+        // 否则定时任务会给同一订单再推一次重复的取餐提醒。
+        jdbcTemplate.update(
+            """
+                INSERT INTO customer_delivery_subscriptions (
+                    customer_id, meal_slot_order_id, template_id, status, source, authorized_at, sent_at
+                ) VALUES (?, ?, ?, 'SENT', 'MINIAPP_ORDER_SUCCESS', ?, ?)
+                """,
+            981L,
+            981L,
+            "tmpl-already-sent",
+            Timestamp.valueOf(LocalDateTime.now().minusDays(1)),
+            Timestamp.valueOf(LocalDateTime.now().minusHours(1))
+        );
+
+        module.authorizeSubscription(981L, 981L, "tmpl-new-after-send");
+
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+            """
+                SELECT template_id, status, sent_at
+                FROM customer_delivery_subscriptions
+                WHERE meal_slot_order_id = 981
+                """
+        );
+        assertEquals("SENT", row.get("status"));
+        // 已发送的状态下，模板被后续补写覆盖也不会改写记录（额度已消耗，再发必然失败）
+        assertEquals("tmpl-already-sent", row.get("template_id"));
+        org.junit.jupiter.api.Assertions.assertNotNull(row.get("sent_at"));
+    }
+
+    @Test
+    void inheritedFallbackShouldRunAfterOrdersWithOwnAuthorization() {
+        // 场景：同一客户同一模板只有一条可用额度，但今天有两单——一单有自己的授权记录，
+        // 另一单落库丢失需要"借用"授权。必须先把额度给真正点了「允许」的那一单，
+        // 否则正常下单的顾客会收不到通知（借用是猜的，自己的授权是确定的）。
+        given(settingsService.operationSettings()).willReturn(new com.jzqs.app.settings.api.OperationSettingsResponse(
+            true, "接单中", "", "", "", "[]", 3, 7, 3, false, true, "00:00", "17:30", false, "", "", "", false, "", "", "", ""
+        ));
+        jdbcTemplate.update("UPDATE admin_settings SET delivery_subscribe_lunch_time = '00:00' WHERE id = 1");
+        jdbcTemplate.update("UPDATE customers SET current_openid = 'openid_981' WHERE id = 981");
+        given(weChatService.resolveDeliveryTemplateId(org.mockito.ArgumentMatchers.any())).willReturn("tmpl-lunch");
+        given(weChatService.buildDeliveryPage(org.mockito.ArgumentMatchers.anyLong()))
+            .willAnswer(invocation -> "pages/orders/index?orderId=" + invocation.getArgument(0));
+
+        // 982：有自己的授权记录（正常下单）
+        jdbcTemplate.update(
+            """
+                INSERT INTO meal_slot_orders (
+                    id, daily_order_id, meal_period, delivery_meal_period, quantity, address_id, note, user_note, status, source_type
+                ) VALUES (982, 981, 'LUNCH', 'LUNCH', 1, 981, '-', '-', 'DELIVERED', 'MINIAPP')
+                """);
+        jdbcTemplate.update(
+            """
+                INSERT INTO delivery_receipts (id, meal_slot_order_id, receipt_url, delivered_at, visible_to_customer)
+                VALUES (1982, 982, '/uploads/r.jpg', CURRENT_TIMESTAMP, FALSE)
+                """);
+        jdbcTemplate.update(
+            """
+                INSERT INTO customer_delivery_subscriptions (
+                    customer_id, meal_slot_order_id, template_id, status, source, authorized_at
+                ) VALUES (?, ?, ?, 'AUTHORIZED', 'MINIAPP_ORDER_SUCCESS', CURRENT_TIMESTAMP)
+                """,
+            981L,
+            982L,
+            "tmpl-lunch"
+        );
+        // 981：无订阅记录，只能走继承兜底（排在自己有授权的单之后）
+        jdbcTemplate.update(
+            """
+                INSERT INTO delivery_receipts (id, meal_slot_order_id, receipt_url, delivered_at, visible_to_customer)
+                VALUES (1981, 981, '/uploads/r.jpg', CURRENT_TIMESTAMP, FALSE)
+                """);
+        // 供借用的一条真实授权（挂在昨天的订单上）
+        jdbcTemplate.update(
+            "INSERT INTO daily_orders (id, customer_id, serve_date, source, status, locked, created_at) VALUES (983, 981, ?, 'MINIAPP', 'PENDING_DISPATCH', FALSE, CURRENT_TIMESTAMP)",
+            LocalDate.now().minusDays(1)
+        );
+        jdbcTemplate.update(
+            """
+                INSERT INTO meal_slot_orders (
+                    id, daily_order_id, meal_period, delivery_meal_period, quantity, address_id, note, user_note, status, source_type
+                ) VALUES (983, 983, 'LUNCH', 'LUNCH', 1, 981, '-', '-', 'DELIVERED', 'MINIAPP')
+                """);
+        jdbcTemplate.update(
+            """
+                INSERT INTO customer_delivery_subscriptions (
+                    customer_id, meal_slot_order_id, template_id, status, source, authorized_at
+                ) VALUES (?, ?, ?, 'AUTHORIZED', 'MINIAPP_ORDER_SUCCESS', CURRENT_TIMESTAMP)
+                """,
+            981L,
+            983L,
+            "tmpl-lunch"
+        );
+
+        assertEquals(2, module.sendScheduledMessages("LUNCH"));
+
+        org.mockito.InOrder inOrder = org.mockito.Mockito.inOrder(weChatService);
+        inOrder.verify(weChatService).buildDeliveryPage(982L);
+        inOrder.verify(weChatService).buildDeliveryPage(981L);
+    }
+
+    @Test
+    void inheritedRowShouldNotServeAsConsentEvidence() {
+        // 场景：兜底补写的继承记录不能被当成"客户已授权"的凭据再次出借，
+        // 否则一条历史授权会被无限复制成每天都"有额度"的假象，每天都在发必然失败的请求。
+        given(settingsService.operationSettings()).willReturn(new com.jzqs.app.settings.api.OperationSettingsResponse(
+            true, "接单中", "", "", "", "[]", 3, 7, 3, false, true, "00:00", "17:30", false, "", "", "", false, "", "", "", ""
+        ));
+        jdbcTemplate.update("UPDATE admin_settings SET delivery_subscribe_lunch_time = '00:00' WHERE id = 1");
+        jdbcTemplate.update("UPDATE customers SET current_openid = 'openid_981' WHERE id = 981");
+        given(weChatService.resolveDeliveryTemplateId(org.mockito.ArgumentMatchers.any())).willReturn("tmpl-lunch");
+        jdbcTemplate.update(
+            """
+                INSERT INTO delivery_receipts (id, meal_slot_order_id, receipt_url, delivered_at, visible_to_customer)
+                VALUES (1981, 981, '/uploads/r.jpg', CURRENT_TIMESTAMP, FALSE)
+                """);
+        jdbcTemplate.update(
+            "INSERT INTO daily_orders (id, customer_id, serve_date, source, status, locked, created_at) VALUES (983, 981, ?, 'MINIAPP', 'PENDING_DISPATCH', FALSE, CURRENT_TIMESTAMP)",
+            LocalDate.now().minusDays(1)
+        );
+        jdbcTemplate.update(
+            """
+                INSERT INTO meal_slot_orders (
+                    id, daily_order_id, meal_period, delivery_meal_period, quantity, address_id, note, user_note, status, source_type
+                ) VALUES (983, 983, 'LUNCH', 'LUNCH', 1, 981, '-', '-', 'DELIVERED', 'MINIAPP')
+                """);
+        jdbcTemplate.update(
+            """
+                INSERT INTO customer_delivery_subscriptions (
+                    customer_id, meal_slot_order_id, template_id, status, source, authorized_at
+                ) VALUES (?, ?, ?, 'AUTHORIZED', 'INHERITED_FROM_CUSTOMER_CONSENT', CURRENT_TIMESTAMP)
+                """,
+            981L,
+            983L,
+            "tmpl-lunch"
+        );
+
+        assertEquals(0, module.sendScheduledMessages("LUNCH"));
+        // 没有任何真实授权凭据，就不应补写出一条注定失败的继承记录
+        assertEquals(
+            0,
+            jdbcTemplate.queryForList(
+                "SELECT id FROM customer_delivery_subscriptions WHERE meal_slot_order_id = 981"
+            ).size()
+        );
+        verify(weChatService, never()).sendDeliverySubscribeMessage(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any()
+        );
+    }
+
+    @Test
+    void shouldNotBorrowConsentFromUpcomingOrder() {
+        // 场景：顾客为明天的餐点了「允许」，那条授权是明天那单自己的额度。
+        // 今天有条没记录的单不能借用它——借用会把明天那单的额度花掉，让正常下单的顾客明天收不到通知。
+        given(settingsService.operationSettings()).willReturn(new com.jzqs.app.settings.api.OperationSettingsResponse(
+            true, "接单中", "", "", "", "[]", 3, 7, 3, false, true, "00:00", "17:30", false, "", "", "", false, "", "", "", ""
+        ));
+        jdbcTemplate.update("UPDATE admin_settings SET delivery_subscribe_lunch_time = '00:00' WHERE id = 1");
+        jdbcTemplate.update("UPDATE customers SET current_openid = 'openid_981' WHERE id = 981");
+        given(weChatService.resolveDeliveryTemplateId(org.mockito.ArgumentMatchers.any())).willReturn("tmpl-lunch");
+        jdbcTemplate.update(
+            """
+                INSERT INTO delivery_receipts (id, meal_slot_order_id, receipt_url, delivered_at, visible_to_customer)
+                VALUES (1981, 981, '/uploads/r.jpg', CURRENT_TIMESTAMP, FALSE)
+                """);
+        // 明天的订单：持有真实授权，且还没到自己的餐期
+        jdbcTemplate.update(
+            "INSERT INTO daily_orders (id, customer_id, serve_date, source, status, locked, created_at) VALUES (984, 981, ?, 'MINIAPP', 'PENDING_DISPATCH', FALSE, CURRENT_TIMESTAMP)",
+            LocalDate.now().plusDays(1)
+        );
+        jdbcTemplate.update(
+            """
+                INSERT INTO meal_slot_orders (
+                    id, daily_order_id, meal_period, delivery_meal_period, quantity, address_id, note, user_note, status, source_type
+                ) VALUES (984, 984, 'LUNCH', 'LUNCH', 1, 981, '-', '-', 'PENDING_DISPATCH', 'MINIAPP')
+                """);
+        jdbcTemplate.update(
+            """
+                INSERT INTO customer_delivery_subscriptions (
+                    customer_id, meal_slot_order_id, template_id, status, source, authorized_at
+                ) VALUES (?, ?, ?, 'AUTHORIZED', 'MINIAPP_ORDER_SUCCESS', CURRENT_TIMESTAMP)
+                """,
+            981L,
+            984L,
+            "tmpl-lunch"
+        );
+
+        assertEquals(0, module.sendScheduledMessages("LUNCH"));
+        verify(weChatService, never()).sendDeliverySubscribeMessage(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any()
+        );
+        // 明天那单的授权必须原封不动
+        assertEquals(
+            "AUTHORIZED",
+            jdbcTemplate.queryForObject(
+                "SELECT status FROM customer_delivery_subscriptions WHERE meal_slot_order_id = 984",
+                String.class
+            )
+        );
+    }
+
+    @Test
+    void borrowedConsentShouldBeMarkedConsumedAfterSuccessfulSend() {
+        // 场景：一次「允许」只够发一条。借用出去后必须把原授权记录标记为已消耗，
+        // 否则同一条额度会被反复借用，导致本该收得到通知的订单变成 43101。
+        given(settingsService.operationSettings()).willReturn(new com.jzqs.app.settings.api.OperationSettingsResponse(
+            true, "接单中", "", "", "", "[]", 3, 7, 3, false, true, "00:00", "17:30", false, "", "", "", false, "", "", "", ""
+        ));
+        jdbcTemplate.update("UPDATE admin_settings SET delivery_subscribe_lunch_time = '00:00' WHERE id = 1");
+        jdbcTemplate.update("UPDATE customers SET current_openid = 'openid_981' WHERE id = 981");
+        given(weChatService.resolveDeliveryTemplateId(org.mockito.ArgumentMatchers.any())).willReturn("tmpl-lunch");
+        jdbcTemplate.update(
+            """
+                INSERT INTO delivery_receipts (id, meal_slot_order_id, receipt_url, delivered_at, visible_to_customer)
+                VALUES (1981, 981, '/uploads/r.jpg', CURRENT_TIMESTAMP, FALSE)
+                """);
+        jdbcTemplate.update(
+            "INSERT INTO daily_orders (id, customer_id, serve_date, source, status, locked, created_at) VALUES (983, 981, ?, 'MINIAPP', 'PENDING_DISPATCH', FALSE, CURRENT_TIMESTAMP)",
+            LocalDate.now().minusDays(1)
+        );
+        jdbcTemplate.update(
+            """
+                INSERT INTO meal_slot_orders (
+                    id, daily_order_id, meal_period, delivery_meal_period, quantity, address_id, note, user_note, status, source_type
+                ) VALUES (983, 983, 'LUNCH', 'LUNCH', 1, 981, '-', '-', 'DELIVERED', 'MINIAPP')
+                """);
+        jdbcTemplate.update(
+            """
+                INSERT INTO customer_delivery_subscriptions (
+                    customer_id, meal_slot_order_id, template_id, status, source, authorized_at
+                ) VALUES (?, ?, ?, 'AUTHORIZED', 'MINIAPP_ORDER_SUCCESS', CURRENT_TIMESTAMP)
+                """,
+            981L,
+            983L,
+            "tmpl-lunch"
+        );
+
+        assertEquals(1, module.sendScheduledMessages("LUNCH"));
+        assertEquals(
+            "CANCELLED",
+            jdbcTemplate.queryForObject(
+                "SELECT status FROM customer_delivery_subscriptions WHERE meal_slot_order_id = 983",
+                String.class
+            )
+        );
+    }
+
     @org.junit.jupiter.api.AfterEach
     void restoreAdminSettings() {
         jdbcTemplate.update("UPDATE admin_settings SET delivery_subscribe_lunch_time = '11:30' WHERE id = 1");

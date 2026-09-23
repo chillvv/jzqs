@@ -46,6 +46,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -53,6 +55,8 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class MobilePortalServiceImpl implements MobilePortalService {
+    private static final Logger log = LoggerFactory.getLogger(MobilePortalServiceImpl.class);
+
     private final JdbcTemplate jdbcTemplate;
     private final OrderPrepService orderPrepService;
     private final RiderQueueSupport riderQueueSupport;
@@ -186,11 +190,11 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         }
         Integer count = jdbcTemplate.queryForObject(
             """
-                SELECT COUNT(*)
-                FROM meal_slot_orders mso
-                JOIN daily_orders do ON do.id = mso.daily_order_id
-                WHERE mso.id = ? AND do.customer_id = ?
-                """,
+            SELECT COUNT(*)
+            FROM meal_slot_orders mso
+            JOIN daily_orders do ON do.id = mso.daily_order_id
+            WHERE mso.id = ? AND do.customer_id = ?
+            """,
             Integer.class,
             orderId,
             customerId
@@ -198,7 +202,25 @@ public class MobilePortalServiceImpl implements MobilePortalService {
         if (count == null || count == 0) {
             throw new BusinessException(ErrorCode.CUSTOMER_NOT_FOUND, "未找到对应订单");
         }
-        deliverySubscriptionModule.authorizeSubscription(customerId, orderId, templateId);
+        // 模板必须与该单餐段当前使用的模板一致：换模板（或老版本小程序带着旧模板 ID）会让订单绑到
+        // 已失效的模板上，送达时要么 47003 字段不匹配、要么额度不足 43101，顾客永久收不到通知。
+        // 这里以服务端当前配置为准纠正，保证落库记录始终可发送。
+        String mealPeriod = jdbcTemplate.queryForObject(
+            "SELECT meal_period FROM meal_slot_orders WHERE id = ?",
+            String.class,
+            orderId
+        );
+        String expectedTemplateId = weChatService.resolveDeliveryTemplateId(mealPeriod);
+        String effectiveTemplateId = templateId;
+        if (expectedTemplateId != null && !expectedTemplateId.isBlank()
+            && !expectedTemplateId.equals(effectiveTemplateId)) {
+            log.warn(
+                "订单 {} 绑定的订阅模板与该餐段当前模板不一致，已按餐段纠正: orderMealPeriod={}, clientTemplateId={}, expectedTemplateId={}",
+                orderId, mealPeriod, effectiveTemplateId, expectedTemplateId
+            );
+            effectiveTemplateId = expectedTemplateId;
+        }
+        deliverySubscriptionModule.authorizeSubscription(customerId, orderId, effectiveTemplateId);
         return new MobileDeliverySubscriptionAuthorizeResponse(orderId, "AUTHORIZED");
     }
 
